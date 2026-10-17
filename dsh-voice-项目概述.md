@@ -1,0 +1,707 @@
+# dsh-voice 项目概述（给 Claude Code 的工作说明）
+
+> **核实日期：2026-10-17。** 本文每个数字都来自当天读源码或实际运行。与 `dsh-voice-polish/README.md`、`dsh-voice/native/macos/README.md` 冲突时，**以源码和本文为准**：两个 README 有多处过时（见 §8.3）。
+>
+> **仓库根目录：** 克隆下来的 `typeleast/` 文件夹。下文相对路径都以它为起点。
+
+---
+
+## 最新状态（2026-10-17，覆盖下文中已过时的部分）
+
+下文 §0–§11 是当天较早的审查快照。之后又做了下面这些改动，**冲突时以本节为准**：
+
+- **模型**：用户选定云端 DeepSeek（`deepseek-account` / `deepseek-flash`）。语音识别保持本地 SenseVoice int8。整理调用改为 `reasoningEffort: "off"`：DSH 适配器默认会开 "high" 思考，思考 token 吃掉 800 的输出额度，这就是约 40% 回落的根因。线上实测 12/12 不回落，每次约 0.4–1.6 s。
+- **重复的 dsh-voice**：原因是 `build/dsh-voice.app` 留在了会被 Spotlight 索引的目录里。现在 `build.sh` 在 `build/dist.noindex/` 里打包，安装后删除并注销这个副本，先退出旧进程再重新启动新的。
+- **整理**：
+  - `lib/prompt.js` 新增 `detectStructure()`：识别「第一/第二」「首先…最后」「我说三点」等。识别到时，在 JSON 之外再明确要求输出 `1. 2. 3.`，一行一条。
+  - 新增 `registerFor()`，按目标 App 给出语气：email、chat、code、ai-prompt、document、general。**原始 bundle id 不再发给模型**，因为曾被抄进正文，出现过「接到 VSCode 那边」。
+  - 新增同音字规则：上下文里的词只有发音相近时才能替换识别出来的词。
+- **校验**（`lib/validate.js`）：
+  - 列表序号（`1.`、`2）`、`3、`，包括行内的）不算数字。
+  - 序数词「第二点」不算数字。
+  - 与列表条目数一致的「以下三点」不算编造。
+  - 「两个」和「2 个」视为同一个数。
+  - 此前每个编号列表都会被判为编造并回落。
+- **tidy**：被谈论的口水词（加引号或用顿号列举的）会保留，不再残留成「、啊、」。
+- **上下文**：
+  - 原生端读取光标附近的文字（前约 600 字、后约 200 字）、选中文字和窗口标题，放在 `x-voice-context`（base64 JSON）里发送。
+  - 宿主端截断并脱敏后，作为 `fieldContext` 交给模型。
+  - 只有往 DSH 本身听写时，才附带 DSH 聊天记录。
+- **新端点**：`GET/PUT /api/voice-polish/dictionary`，由原生端的词典页整体同步。纯词条（不带 `=`）现在也能持久化。
+- **原生 App**（Typeless 风格，SwiftUI）：
+  - 主窗口：首页、历史、词典，设置在左下角。
+  - 首次启动有新手引导。
+  - 语音条：录音时是 ✕ + 波形 + ■，最后 15 秒显示倒计时；空闲时可以常驻一个小语音条。
+  - 默认热键是**单按 Fn**（`FnKeyMonitor`，只需辅助功能权限），⌥Space 作备用，⌃⌘V 粘贴上一条。
+  - 编号列表在备忘录、邮件、Pages、Word 里以富文本粘贴。
+  - 自动学词：改过的词按发音相似度判断，作为「自动添加」词汇加入词典，不会生成 A=B 替换规则。
+  - 录音时可以把其他声音静音；可以选择麦克风，并有电平条；历史有保留期限可选。
+- **测试**：宿主 116/116，原生 189/189（`test.sh` 白名单新增 FnKey、FieldContext、EditLearner、Inserter、Settings）。`Tools/render.sh` 用示例数据离屏渲染所有页面的 PNG，用于检查设计。
+- **线上测试的副作用**：线上测试会把结果写进宿主历史，而模型会把最近的听写当作用户的词汇。测试完必须清掉这些条目：先停 DSH，删掉测试条目，再启动 DSH。这次已经清过一次（删掉 54 条测试记录，用户真实记录保留）。
+
+---
+
+## 更新（2026-10-17 晚）：端口、自己的 API Key、只用 Erduo 提示词
+
+- **「DSH 显示无法启动」的真正原因**：DSH 每次启动都会随机换端口（每次都不一样），而 App 写死了一个固定端口，所以 DSH 明明正常，App 却显示「整理服务未运行」。修复是 DSH 自带的 Agent 写的，我补全、测试并装好了：
+  - 宿主每次启动把端口写进 `~/.dsh/voice-polish/runtime.json`；
+  - App 先读这个文件，读不到再用 `lsof` 找 DSH 的监听端口；请求因连不上失败时，重新找一次端口再试一次。
+  - 自检（`DSH_VOICE_SELFCHECK=1`）会打印找到的端口。
+- **自己的 API Key**：
+  - App 设置里新增「整理模型」：可以选「DeepSeek 账号（通过 DSH）」或「自己的 API Key」。预设有 DeepSeek 官方、智谱、Kimi、通义千问、OpenRouter、OpenAI、本机 Ollama，也可以填任意 OpenAI 兼容地址。
+  - Key 存在钥匙串里（服务名 `TypeLeast.llm-api-key`）。每次听写时随 `x-voice-llm` 头（base64 JSON）发给本机宿主，宿主只用于这一次调用，不写入历史和日志。
+  - 远程地址必须是 https，http 只允许本机地址。
+  - 宿主侧：新增 `lib/openai-compat.js`；新增 `POST /test-llm`（测试连接，不写历史）。模型列表由 App 直接请求服务商的 `GET /models`。
+- **只用 Erduo 提示词**（按用户要求）：内置提示词（三档强度、列表检测、按 App 调语气、常见英文词表）已删除。system 是 Erduo 原文 + 示例，后面只在有内容时追加词典和光标附近文字的补充段；user 消息只有识别原文。App 的整理强度只剩「Erduo 整理 / 原话转写」。实测（同一批录音）：日常 6 句全部正确、无回落，要点保留为一段话、不编号；中英混合 17/20（加了内置规则时是 19/20），错的是 TR、KTI、fragment，可以把 PR、KPI、Figma 加进词典解决。只用于个人，见 `THIRD-PARTY-NOTICES.md`。
+  - 删除内置提示词之前的对比（同一批录音）：两者中英混合都是 19/20；内置提示词整理出的列表更干净，Erduo 会在编号后面保留「第一」「首先」「First,」。
+- **测试**：宿主 140/140，原生 224/224。线上测试记录已清除。
+
+---
+
+## 更新（2026-10-17）
+
+- **改名为 TypeLeast**：App 文件现在是 `~/Applications/TypeLeast.app`，可执行文件也叫 `TypeLeast`。界面里显示的名字都改了。bundle id 仍然是 `com.dsh.voice`，所以设置、历史和词典都保留着。源码目录名不变。`build.sh` 会退出并删除旧的 `dsh-voice.app`，并把它从系统登记里注销。
+- **中英混合**：
+  - 基线测试用 `say` 的中文语音念 10 句中英混说的话，共 23 个英文词。识别阶段对 13 个，整理后对 18 个。
+  - 校验里「是不是被翻译了」的判断，改为按英文**单词**计数。原来按字母计数，「iPhone/Notion」这种修正会被误判成翻译，整条退回原文。
+  - 提示词里加了英文被识别坏的三种常见形式：同音汉字、残缺拼写、缩写字母错。payload 里加了 `commonEnglishTerms` 参考词表，只有发音对得上时才能用。
+  - tidy 新增 `normalizeTermCase()`，把 iPhone、GitHub、API、PPT 这类专有名词改成标准大小写，代码式写法（`json.loads`、`/api/`）不动。
+  - 宿主测试 124/124，原生测试 209/209。
+  - **复测结果（DSH 重启后）**：同一组 10 句整理后 23/23 全对，但提示词里的例子取自这组的错误，所以这个数字偏高。另换 10 句没见过的作对照：识别阶段约 8/20，整理后 18/20。仍错的两处：fiigment 被改成 feature（应为 Figma）；"call" 被翻成了「会议」。测试记录已清除。
+
+---
+
+## 0. 先看这三条结论
+
+### 0.1 接了大模型吗？接了，而且确实在调用，但今天约 4 成调用失败
+
+- 整理走的是 DSH 进程里的 `ctx.llm.stream()`，路由 `deepseek-account`，模型 `deepseek-flash`。它用的是 DSH 里已经登录的 DeepSeek 账号，插件本身不持有任何 API key（见 `dsh-voice-polish/lib/llm.js` 的 `completeText()` 和 `lib/service.js` 的 `polish()`）。
+- 线上 `/health` 实测返回：`provider: deepseek-account`、`model: deepseek-flash`、`speech.providerId: sensevoice-local`、`ok: true`。
+- `~/.dsh/voice-polish/history.jsonl` 里共 32 条记录：
+
+| 结果 | 条数 |
+|---|---|
+| deepseek-flash 整理成功（整理耗时中位数 2.2 s，最长 4.4 s） | 17 |
+| **`model-unavailable` 回落为原文** | **12** |
+| 被校验器判为编造（`invented-content`），回落为原文 | 1 |
+| `strength=off`（按设计不调模型） | 1 |
+| 转写为空（`empty-transcript`） | 1 |
+
+- 也就是说，今天约 4 成的模型调用失败了。用户拿到的是"只去掉口水词的原文"，这很可能就是"感觉没接大模型"的原因。
+- 这 12 次失败里有 11 次发生在 4.6–5.3 s 之间，只有 1 次恰好在 6.0 s（那一次才是旧的 6 s 超时）。其余 11 次**比 6 s 和 12 s 两个超时都短**；profile patch 最后一次修改（现在是 12 s）之后，仍然在 4.7 s 失败。**所以主要原因不是超时。**
+- 真实错误只写进了 `logger.warn` 和内存里的 `stats.lastError`。这两处既不落盘，也不出现在 `/health` 里，所以**根因目前未知**。处理办法见 §8.2 第 1 条和 §10.4 的 P0。
+- **更新：** 细分原因的代码已经写好（§4.3、§5 第 6 步），但要重启 DSH 才会加载。重启后跑一次 `live-aggressive.mjs`，再看 `/health` 的 `recentFailures` 和 history 的 `detail`，才能知道这 12 次失败到底是什么。
+- **更新：最可能的根因已在源码里找到，但还没在线上证实。** DSH 自带的 DeepSeek 适配器在调用方不传 `reasoningEffort` 时默认用 `"high"`，而思考 token 也计入 `max_tokens`；我们一直没传，`maxOutputTokens` 又只有 800。插件已新增配置 `reasoningEffort`，默认 `"off"`（详见 §8.2 表第 1 行）。
+
+### 0.2 为什么 App 里有两个 dsh-voice？因为同一个 App 的两个副本同时在跑
+
+> **当前状态（后来）：** 我写这份文档时，另一方（另一个会话或者用户本人）后来重新构建并安装了 App，删掉了 `build/dsh-voice.app`，并重启了正式副本。现在**只剩一个进程**（`~/Applications/dsh-voice.app`；又重装重启了一次）。下面是当时的状态和原因，"辅助功能"列表里那条旧记录可能还在，需要手动删除。
+
+| 副本 | 启动顺序 | 路径 |
+|---|---|---|
+| 1 | 先 | `~/Applications/dsh-voice.app`（`build.sh` 安装的正式副本） |
+| 2 | 后 | `dsh-voice/native/macos/build/dsh-voice.app`（编译产物，被直接启动了） |
+
+- 两个副本的二进制完全相同（`cmp` 一致），bundle id 都是 `com.dsh.voice`，都是 ad-hoc 签名。`build.sh` 先在 `build/` 里打包，再拷到 `~/Applications/`。那次很可能是验收或调试时直接 `open` 了 `build/` 里的副本。
+- 后果：
+  - 菜单栏会出现**两个麦克风图标**。
+  - 两个进程都用 Carbon 注册了同一组热键（Fn、⌥Space），按下后只有其中一个会收到，究竟是哪个说不准。
+  - 「系统设置 → 隐私与安全性 → 辅助功能」里可能出现**两条 dsh-voice**（每个路径一条）。你授权的那条，不一定是实际收到热键的那个进程，于是就会出现"已授权却显示『已粘贴（未验证）』"这种怪现象。
+  - 两个进程共用同一份 UserDefaults（bundle id 相同），设置和本地历史会互相覆盖。
+- 我也检查了 DSH 一侧：profile patch 里只有**一个** `voice-polish` 插件条目，宿主侧不存在重复。
+- 修复方法（如果再次出现）：
+
+```bash
+pkill -f "native/macos/build/dsh-voice.app"
+```
+
+  然后在「辅助功能」列表里删掉指向 `build/` 路径的那一条，只保留 `~/Applications/dsh-voice.app`。预防办法见 §11 第 4 条。
+
+### 0.3 和 Typeless 的差距主要不在模型，而在"上下文"和"闭环"
+
+Typeless 会读取**目标输入框里的文字、窗口标题和网页 URL** 作为上下文（`ax_text`/`ax_html`/`focused_app_window_*`），还会在插入后**回读用户改了什么**（`edited_text`）来自动学词。
+
+dsh-voice 现在的上下文是"DSH 聊天会话的最近几轮 + 自己最近的听写 + 词典"。往 Mail、微信、VS Code 里口述时，DSH 聊天记录基本不相关。详细证据见 §10.2，改进路线见 §10.4。
+
+---
+
+## 1. 定位与目标
+
+- **产品：** 本地 SenseVoice 转写，加大模型整理，再粘贴到任意 App 的光标处。对标 Typeless（https://www.typeless.com）。
+- **用户最在意的两件事：**
+  1. **准确度**：转写对、纠错对、专有名词拼写对。
+  2. **高度整理**：把口述整理成 `1. 2. 3.` 编号，或一行一条；把口述的需求整理成结构清晰的提示词。
+- **硬约束：**
+  - 音频不出本机；
+  - 不新增模型下载，不新增凭据；
+  - **不改 DSH 的 `app.asar`**（DSH 升级不受影响）；
+  - 只支持 macOS 13+。
+- **当前不做：** 翻译、选中文本问答、生成式写作、跨设备同步、云端转写、Windows/Linux。
+
+---
+
+## 2. 真实架构：两段式
+
+```
+┌──────────── dsh-voice.app（菜单栏，Swift/AppKit，无第三方依赖）────────────┐
+│ Carbon 热键 → AVAudioEngine 录音 → 重采样为 16 kHz 单声道 PCM16 → 44 字节头 WAV │
+│ → POST http://127.0.0.1:<port>/api/voice-polish/dictate  (Bearer token)      │
+│ ← {text, raw, fallback, …} → 写剪贴板 + 合成 ⌘V + 0.6 s 后还原剪贴板             │
+└───────────────────────────────────┬─────────────────────────────────────────┘
+                                    │ 回环 HTTP
+┌──────────── DSH 进程（/Applications/DeepSeek Harness.app）──────────────────┐
+│ voice-polish 宿主插件 = dsh-voice-polish/lib/index.js（Cordis 插件）          │
+│   ctx.speechToText（sensevoice-local）→ 原文                                  │
+│   上下文装配（词典 + DSH 会话 + 最近听写，全部脱敏）                              │
+│   → ctx.llm.stream(deepseek-account / deepseek-flash)                         │
+│   → tidy（确定性去口水/去重复）→ validate（防编造）→ 失败则回落原文                │
+│   → 先写 ~/.dsh/voice-polish/history.jsonl，再返回                              │
+│   路由挂在 DSH 已有的 web server 上（端口不固定），不另开端口                      │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.1 为什么整理放在 DSH 一侧
+
+- **零新增模型：** SenseVoice 已经由 DSH 管理（`~/.dsh/speech-to-text/sensevoice`），插件直接用 `ctx.speechToText`。
+- **零新增凭据：** `ctx.llm` 复用 DSH 已登录的 `deepseek-account`。插件里唯一的"密钥"是本机回环用的随机 token。
+- **原生 App 可以保持很薄：** 只负责热键、录音、粘贴，只用系统框架。
+- **代价：**
+  - DSH 必须在运行，否则转写和整理都不可用，菜单显示"整理服务未运行"，并提供"启动 DSH"按钮。
+  - 插件不能 import DSH 的任何包（见 §8.1 第 2 条）。
+
+### 2.2 挂载方式
+
+- 挂载入口在 `~/.dsh/profiles/desktop/cordis.patch.yml` 末尾的 `- insert:` 块，插件 id 是 `voice-polish`，`name` 写的是 `lib/index.js` 的绝对路径。
+- 依赖声明为 `inject = ["llm", "speechToText"]`；HTTP 路由要等 `webServer` 可用后才注册（`ctx.inject(["webServer"], …)`）。
+- 插件同时执行 `ctx.provide("voicePolish", service)`，DSH 内的其他插件可以直接调用同一个服务。
+- **当前生效配置**（profile patch 显式设置的部分）：
+
+  ```
+  provider deepseek-account
+  model deepseek-flash
+  timeoutMs 12000
+  strength prompt
+  contextTurns 6
+  contextChars 4000
+  redactSecrets true
+  ```
+
+  其余项取代码默认值：`maxOutputTokens 800`、`language auto`、`historyDays 14`、`maxAudioBytes 4194304`、`maxDurationSeconds 120`、`logRaw true`。
+
+---
+
+## 3. 完整文件清单
+
+### 3.1 宿主插件 `dsh-voice-polish/`
+
+| 文件 | 职责 |
+|---|---|
+| `package.json` | ESM 包 `@local/dsh-voice-polish` 0.1.0，`main: lib/index.js`，没有任何依赖 |
+| `cordis.patch.yml` | **探针用的覆盖层**，用 `--patch` 叠加到隔离 harness 上，**不是生产配置**。注意它写的是 `timeoutMs: 6000`，见 §8.1 第 4 条 |
+| `README.md` | 用户说明（部分过时，见 §8.3） |
+| `lib/index.js` | 插件入口：`inject`、`apply(ctx, config)`；创建 History 和 Service；`ctx.provide("voicePolish")`；等 `webServer` 后注册 `/api/voice-polish` 前缀路由；启动时加载历史、词典和 token |
+| `lib/config.js` | 手写的 StandardSchemaV1 配置校验（之后**不再**带 `toJSON()`，见 §8.1 第 6 条；JSON Schema 视图改由 `configJsonSchema()` 导出，只给测试和文档用）；定义 `STRENGTHS = off/conservative/prompt/maximal`、`LANGUAGES = auto/zh/en/yue/ja/ko`；包含全部默认值和跨字段规则 |
+| `lib/service.js` | `VoicePolishService`：`polish()`（文本 → 整理）、`transcribeAndPolish()`（WAV → 文本）、`transcribe()`、`buildContext()`、`learn()`/词典持久化、`snapshot()`、并发控制（同时最多处理 2 个，最多排队 4 个）、`recordAndReturn()`（每条出口路径都先写历史） |
+| `lib/prompt.js` | 系统提示词（共享规则 + 三档强度）；`buildUserMessage()` 把原文和上下文**包成 JSON 数据**，防止口述内容被当成指令；`PROMPT_VERSION = "2026-10-17.2"` |
+| `lib/llm.js` | 不 import 任何东西的 LLM 适配：手工构造 `RequestMessage`，手工拼装流式分片（`text-delta`/`block-end`/`usage`/`finish`）；用 deadline 处理超时；只对网络和限流类错误重试一次；`resolveRoute()` 在配置的路由不存在时退到第一个 provider |
+| `lib/validate.js` | 输出校验：剥掉代码围栏和引号、语言是否被改、**编造事实检测**（数字、中文数词、日期词、标识符）、自我更正授权窗口、细粒度 novelty、截断、保守档的语义漂移、过长 |
+| `lib/tidy.js` | 确定性后处理：`collapseRepeats()`（相邻重复句、口吃、半截开头）和 `stripParticles()`（呃嗯唔哦噢唉诶呀呐嘛呢吧，保护"哪吒"等词，并修补残留标点）。**刻意不删**"然后/就是/其实/那个" |
+| `lib/context.js` | `redactSecrets()` 脱敏规则；`conversationContext()`：取 DSH 会话最近 N 轮，限制字数；`resolveSession()`：sessionId → 当前 initiator → 最后一个会话；`dictationContext()`：最近听写的原文/整理结果对，≤12 条，≤400 字 |
+| `lib/http.js` | 回环路由：Host 白名单（防 DNS rebinding）、Bearer 校验、请求体上限、五个端点、错误码映射 |
+| `lib/token.js` | `ensureToken()`：生成 64 位十六进制 token，写入 `~/.dsh/voice-polish/api-token`（0600）；`authorize()`：常数时间比较 |
+| `lib/wav.js` | 规范 WAV 校验（见 §4.5） |
+| `lib/history.js` | 只追加的 JSONL 历史：14 天保留、5 MiB 上限、每次写完都 chmod 0600；崩溃导致的半行会被容错跳过 |
+| `test/*.test.js` | 共 10 个文件：config、context、history、http、llm、prompt、service、tidy、validate、wav。**108 项测试**（实测），零网络 |
+| `scripts/asar-read.mjs` | 只读解析 asar 的工具（`ls`/`head`/`verify`/`extract`），用来研究 DSH 的实现，**也能用来看 Typeless 的 asar** |
+| `scripts/e2e-probe.mjs` | 端到端契约探针，对隔离 harness 运行（默认端口 3099，状态目录在系统临时目录下的 `voice-polish-harness/state`） |
+| `scripts/live-acceptance.mjs` | 对正在运行的 DSH 跑 4 个验收用例（自我更正、清单变列表、散文保持散文、需求变提示词），**会消耗真实账号额度** |
+| `scripts/live-aggressive.mjs` | 用 3 段编写的中文口述样例测线上整理效果（只打印，不判定） |
+| `scripts/compare-strengths.mjs` | 同一段话分别跑 conservative/prompt/maximal 三档并对比（线上） |
+| `scripts/check-facts.mjs` | 离线：编造事实检测的样例表 |
+| `scripts/check-redaction.mjs` | 离线：抓取发给模型的真实负载，确认密钥和密码已被抹掉 |
+| `scripts/tune-novelty.mjs` | 离线：用模仿真实口述的例句（含口水词、自我更正）校准 novelty 阈值（合法改写和编造之间的间隔） |
+| `scripts/make-tone-wav.mjs` | 生成规范的 16 kHz 测试音频，`assertCanonical()` 校验文件头 |
+
+### 3.2 原生 App `dsh-voice/native/macos/`
+
+| 文件 | 职责 |
+|---|---|
+| `Info.plist` | `com.dsh.voice`，`LSUIElement=true`（没有 Dock 图标），macOS 13.0+，只声明麦克风用途 |
+| `build.sh` | 用 `swiftc` 编译 `Sources/*.swift`（**通配**）→ 打包 → ad-hoc 签名 → 拷到 `~/Applications/dsh-voice.app`；`--no-install`、`--test` |
+| `test.sh` | 编译测试程序 `build/dsh-voice-tests`。**源文件是显式白名单**：DshClient、Wav、AudioConvert、Recorder、RecordingBar 加 `Tests/*.swift`（见 §8.1 第 5 条） |
+| `Sources/main.swift` | 入口；`setActivationPolicy(.accessory)` |
+| `Sources/AppDelegate.swift` | 生命周期、热键注册、状态汇总（`applyState`）、单次 `/health`（启动时、唤醒时、手动触发，**不轮询**）、菜单动作、辅助功能"一键重置"、启动 DSH；环境变量 `DSH_VOICE_SELFCHECK=1` 时打印自检信息后退出 |
+| `Sources/AppDelegate+Dictation.swift` | 录音、请求、插入的状态机：`idle → recording → thinking → idle`；在开始录音**之前**记下前台 App 的 bundle id；Esc 只在录音期间注册；三种插入模式 |
+| `Sources/HotKey.swift` | `HotKeyCentre`：Carbon `RegisterEventHotKey`，**不用 event tap**；包含按键名表 |
+| `Sources/Recorder.swift` | AVAudioEngine 输入 tap（4096 帧）→ 转换 → 内存缓冲；120 s 上限（到点自动结束）；短于 0.15 s 视为太短；计算 RMS 电平给指示条用 |
+| `Sources/AudioConvert.swift` | 任意输入格式 → 16 kHz 单声道 Int16，可以脱离麦克风单测 |
+| `Sources/Wav.swift` | 44 字节规范头的写入和解析，`isCanonical()` |
+| `Sources/DshClient.swift` | 冻结的 HTTP 契约客户端：每次请求时读取 token，401 后重读一次再重试；health/dictate/history/learn；宽容解码；`DshError` |
+| `Sources/Inserter.swift` | 剪贴板快照和还原、合成 ⌘V（`CGEvent` → `.cghidEventTap`）、安全输入检测、`tccutil reset Accessibility`、打开系统设置的深链接 |
+| `Sources/RecordingBar.swift` | 屏幕底部的浮动胶囊（录音波形、计时、整理中转圈、结果闪现）；`.nonactivatingPanel`，永不抢焦点；纯函数部分可以无界面测试 |
+| `Sources/MenuController.swift` | 菜单栏图标和菜单（状态、提示、常驻的辅助功能那一行、最近一条、历史子菜单、设置、启动 DSH、健康检查） |
+| `Sources/Settings.swift` | UserDefaults：热键（主键默认 **⌥Space**，副键默认 **Fn**；更早的版本正好相反）、语言、强度（`maximal`/`prompt`/`conservative`/`off`，默认 `prompt`；`maximal` 是后来加的）、插入方式、还原剪贴板、提示音、`warmUpPill`（默认开，启动 2 s 后预先创建指示条，约 40 MB，后来新增）、保留音频 24 h、开机自启、输入设备、录音时长上限、本地词典 |
+| `Sources/SettingsWindow.swift` | 设置窗口：热键录制、各类下拉框、SMAppService 自启、词典编辑（调用 `POST /learn`）、`/health` 状态 |
+| `Sources/History.swift` | 本地最近 50 条（UserDefaults 键 `voice.history.v1`）；清理 24 h 前的临时 WAV |
+| `Sources/PreviewPanel.swift` | "预览"插入模式用的非激活浮窗 |
+| `Tests/main.swift` | **158 项检查**：契约 JSON、请求头、401 重读 token、错误映射、WAV 布局、48 kHz 立体声 float32 → 16 kHz 重采样、指示条状态机和焦点策略 |
+| `Tests/StubServer.swift` | 回环 HTTP 桩服务器 |
+| `README.md` | 原生端说明和契约覆盖表（部分过时） |
+| `build/` | 编译产物。`build.sh` 会在这里生成 `dsh-voice.app`，`test.sh` 会生成 `dsh-voice-tests`（之后这里只剩 `dsh-voice-tests`）。**不要直接运行 `build/dsh-voice.app`**（见 §0.2） |
+
+### 3.3 运行时数据
+
+| 位置 | 内容 |
+|---|---|
+| `~/.dsh/profiles/desktop/cordis.patch.yml` | 生产挂载配置（删掉 `- insert:` 块即可停用） |
+| `~/.dsh/voice-polish/api-token` | 64 位十六进制，0600 |
+| `~/.dsh/voice-polish/history.jsonl` | 宿主侧历史（已脱敏），0600，保留 14 天 |
+| `~/.dsh/voice-polish/dictionary.json` | 通过 `/learn` 学到的 `from=to` 词条（目前不存在，因为还没学过） |
+| `~/Library/Preferences/com.dsh.voice.plist` | 原生端的 UserDefaults：设置和最近 50 条历史（**未脱敏**） |
+| `$TMPDIR/dsh-voice-<ms>.wav` | 录音临时文件；发送后删除，开启"保留 24 h"时则保留 |
+
+---
+
+## 4. 关键契约（原生端和宿主端都把它当冻结契约，改动必须两边同步）
+
+### 4.1 地址与鉴权
+
+- 基础地址：`http://127.0.0.1:<port>`（DSH 自己的 web server）。前缀：`/api/voice-polish`。端口每次启动都会变，宿主把它写进 `~/.dsh/voice-polish/runtime.json`，Swift 端和线上脚本都从这里读（见第 7 条）。
+- 每个请求都必须带 `Authorization: Bearer <64 位十六进制>`。token 文件是 `~/.dsh/voice-polish/api-token`，用 `timingSafeEqual` 比较。
+- **DNS rebinding 防护：** `Host` 头必须是 `127.0.0.1`、`localhost`、`[::1]` 或 `::1`，否则返回 403 `forbidden-host`。今天已实测：`Host: evil.example.com` 返回 403。
+- **必须自己做鉴权的原因：** 插件路由会先于 DSH web app 自己的鉴权匹配，所以要由插件完成鉴权。
+
+### 4.2 五个端点
+
+| 方法 | 路径 | 请求 | 响应 200 |
+|---|---|---|---|
+| GET | `/health` | — | 见 §4.3 |
+| GET | `/history?limit=N` | N 取 1–200，默认 20 | `{items:[{id, ts(毫秒数), app, language, strength, raw, text, fallback, reason, detail, model, provider, ms}]}`，最新的在前（`detail` 之后新增；更早的记录没有这个键） |
+| POST | `/learn` | JSON `{from, to}` | `{ok:true, dictionary:["from=to", …]}`（字符串数组；Swift 端两种形状都能解析） |
+| POST | `/polish` | JSON `{text, appHint?, strength?, sessionId?, requestId?}`，≤256 KiB | `{requestId, text, raw, fallback, fallbackReason?, model, provider, ms:{transcribe, polish, total}}` |
+| POST | `/dictate` | 请求体是 WAV；请求头 `content-type: audio/wav`、`x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-request-id` | `{requestId, text, raw, fallback, fallbackReason?, model, provider, strength, ms:{transcribe, polish, total}, metrics}` |
+
+- 两条约定：
+  - `fallback=true` 时，`text` 里**已经换成了原文**（多数情况下经过 tidy），客户端直接插入 `text` 就行。
+  - `raw` 总是 SenseVoice 的原始转写。
+- 错误统一返回 `{error, code}`：
+
+| 状态码 | code | 含义 |
+|---|---|---|
+| 403 | `forbidden-host` | Host 不是回环地址 |
+| 401 | `unauthorized` | token 缺失或错误 |
+| 404 | `not-found` | 未知路径或方法错误 |
+| 413 | `payload-too-large` | JSON > 256 KiB，或 WAV > `maxAudioBytes + 46` |
+| 400 | `invalid-audio` / `audio-too-large` | WAV 不规范，或超过时长/字节上限 |
+| 429 | `busy` | 已有 2 个在处理且 4 个在排队，或排队超过 15 s |
+| 503 | `speech-not-ready` | SenseVoice 还没就绪（同时会触发 `prepare()`，下一次通常就能成功） |
+| 500 | `error` | 其他错误 |
+
+### 4.3 `/health` 字段
+
+今天实测值（旧代码，还没有 `stats` 和 `recentFailures`）：
+
+```json
+{"ok":true,"version":"0.1.0","provider":"deepseek-account","model":"deepseek-flash",
+ "speech":{"providerId":"sensevoice-local","phase":"standby","ready":true,
+           "languages":["auto","zh","en","yue","ja","ko"]},
+ "strength":"prompt","dictionarySize":0,"pending":0,"queue":0,"pid":4321}
+```
+
+之后的代码（`lib/http.js`）在末尾**新增**三个字段，上面的字段一个不变（Swift 端 `HealthResponse` 只解码 `ok/version/provider/model/speech/pid`，多出的键会被忽略）。**要重启 DSH 才会生效**，用 `pid` 确认：
+
+```json
+ "reasoningEffort":"off",
+ "stats":{"dictations":0,"polished":0,"fallback":0,"lastError":null,"lastMs":null,
+          "modelCalls":3,"modelFallbacks":1},
+ "recentFailures":[{"ts":1790000000000,"reason":"model-max-tokens",
+                    "detail":"model output hit its token limit (4712 ms)",
+                    "app":null,"strength":"prompt","ms":4890}]
+```
+
+（上面这段是示意格式，不是线上实测。）
+
+- `ok` 只等于 `speech.ready`（`phase` 为 `ready`、`standby` 或 `waking` 时视为就绪）。**它不反映模型是否可用。**
+- `stats`：`dictations`/`polished`/`fallback`/`lastMs` 只在 `/dictate`（`transcribeAndPolish`）里累加；`modelCalls`/`modelFallbacks` 在每次调到模型的 `polish()` 里累加，**所以 `/polish`（`live-*.mjs` 走的就是它）也算在内**；`lastError` 是最近一次模型异常的 `"<reason>: <detail>"`。计数只在内存里，DSH 重启归零。
+- `recentFailures`：最近 5 次"调到了模型、但最终回落"的记录（模型异常和校验不通过都算），最新的在前，每条 `{ts, reason, detail, app, strength, ms}`。`ms` 是整个 `polish()` 的耗时；`detail` 末尾括号里的毫秒数是 `completeText()` 自己的耗时（含重试），两者之差就是组装上下文的时间。**不含口述文本**（有测试保证）。
+- `reasoningEffort`：整理调用实际请求的推理档位配置（新增）。profile patch 里没写这个键，所以生效的是代码默认值 `off`。
+- reason 取值见 §5 第 6 步。
+
+### 4.4 原生端怎样理解这些状态
+
+- `/health` 返回非 200、传输错误、没有 token、401/403/404/≥500，都视为"服务没在运行"，进入降级模式。
+- `/dictate` 的超时是 120 s；`/health`、`/history`、`/learn` 是 3 s。
+- 原生端**每次都会发送 `x-voice-strength`**（取自设置，默认 `prompt`），而**这个请求头会覆盖服务端配置的 `strength`**（见 §8.2 第 3 条）。
+
+### 4.5 WAV 规格
+
+- RIFF/WAVE 格式，PCM（format=1），单声道，16000 Hz，16 bit，byteRate 32000，blockAlign 2。
+- **固定 44 字节头**：`fmt ` 在偏移 12、`data` 在偏移 36，数据长度在偏移 40。
+- 服务端按固定偏移读取，**不扫描 chunk**，所以多出一个 `LIST` 块之类的变体会被拒绝。
+- 数据长度必须 > 0；时长 ≤ 120 s；字节数 ≤ 4 MiB（4194304）。120 s 的音频是 3,840,044 字节，始终在上限之内。
+- `maxAudioBytes` 的配置下限是 46（文件头加一个采样）。
+
+---
+
+## 5. 数据流（一次口述的完整路径）
+
+1. **热键**：Carbon 热键（主键 ⌥Space；副键 Fn，能注册上但系统不会投递）→ `toggleDictation()`。如果正在整理，再按只会"嘀"一声。
+2. **开始录音**：
+   - 检查麦克风权限（未决定就弹窗，被拒就给出提示行）；
+   - **记下前台 App 的 bundle id**；
+   - `AVAudioEngine` 在输入节点上装 tap；
+   - 注册 Esc；
+   - 显示指示条，并启动 20 Hz 定时器（驱动波形，菜单只在秒数变化时刷新）。
+3. **录音过程**：每个缓冲区经 `AVAudioConverter` 转成 16 kHz 单声道 Int16，追加到内存；同时计算 RMS 平滑电平；到 120 s 自动结束。
+4. **结束录音**：
+   - 不足 0.15 s 或不足 6400 字节，报"录音太短"；
+   - 否则写入 `$TMPDIR/dsh-voice-<ms>.wav`，指示条切到"整理中"。
+5. **发送**：`DshClient.dictateSync()`，后台线程发出 `POST /dictate`；遇到 401 就重读 token 再试一次。发完删除临时 WAV，开启"保留 24 h"时例外。
+6. **宿主处理**（`transcribeAndPolish`）：
+   1. 背压检查 → 字节上限 → `validateWav()`；
+   2. **转写**：SenseVoice 没就绪时触发 `prepare()` 并返回 503；就绪时 `speech.resolve({audio, language})` → `speech.transcribe()`。**注意：这个接口只接受 audio 和 language，没有热词或词典参数，词典只能在大模型阶段生效**；
+   3. **整理** `polish()`：
+      - 原文为空 → 回落，`empty-transcript`；
+      - `off` → 只做 tidy，不调模型；
+      - `resolveRoute()` 选路由；
+      - `buildContext()`：词典 + DSH 会话最近 6 轮（≤4000 字）+ 最近 12 条听写（≤400 字）。**全部经过脱敏**；
+      - 系统提示词按强度选取；用户消息是一段 JSON：`{task, promptVersion, strength, appName, dictionary, recentDictations, recentConversation, rawTranscript}`。**发出去的原文也会先脱敏**；
+      - `completeText()`：调用 `ctx.llm.stream`，timeout 为 `timeoutMs`，`maxTokens` 为 800，`reasoningEffort` 取配置（默认 `off`；配成 `default`、或者路由回落到别的 provider 时不传，因为 DSH 的 LLM 服务对不公开推理档位的模型，只要显式传了档位就报 `UNSUPPORTED_REASONING_EFFORT`）；网络或限流错误等 300 ms 后重试一次；
+      - `tidy()` → `validateOutput()`：不通过则回落为 **tidy 过的原文**，reason 为校验原因（`invented-fact` 等），`detail` 只记指标（`ratio=… coverage=… novelty=… inventedFacts=N`）；
+   - 任何异常都回落为 **tidy 过的原文**。`completeText()` 只抛 `ModelCallError`（`lib/llm.js`），reason 按它的 `kind` 细分：`model-timeout`（自己的截止时间到了，不重试）、`model-max-tokens`、`model-tool-calls`、`model-error:<code>`（code 依次取 `code`、`cause.code`、`http-<状态码>`、错误名，否则 `unknown`）、`cancelled`；不是 `ModelCallError` 的异常记为 `internal-error`。`detail` 是错误信息 + cause 链 + 尝试次数和模型调用耗时，≤200 字，经过脱敏。之后的历史里统一记的是 `model-unavailable`；
+   4. **每条出口路径都先写 history，再返回。**
+7. **原生端收尾**：
+   - 写入本地历史（50 条）；
+   - 按插入方式处理：
+     - **autoPaste（默认）**：快照剪贴板 → 写入文本 → 如果开着安全输入就停在这一步，文本留在剪贴板 → 合成 ⌘V → 有辅助功能权限记为 `pasted`，没有就记为 `unverified`（不算失败）→ **0.6 s 后**，只有在 `pasted`、开启了还原、且这段时间剪贴板没被别人改过时，才还原原剪贴板；
+     - **clipboardOnly**：只放进剪贴板；
+     - **preview**：放进剪贴板，并弹出预览浮窗；
+   - 指示条显示结果，回落时显示琥珀色，1 s 后淡出。
+
+---
+
+## 6. 整理强度
+
+### 6.0 提示词：只用 Erduo（2026-10-18 起）
+
+system prompt 是 <https://erduo.dev/en/blog/diy-typeless-asr-prompt/>《Budget Typeless DIY》(2026-01-16, V2, GLM-4.7) 里的提示词**原文**，加上它那两条定义 JSON 输出格式的示例，temperature **0.8**。原文逐字保存在 `lib/prompts/erduo-budget-typeless.js`，来源与许可见 `THIRD-PARTY-NOTICES.md`（只限个人使用）。按用户要求，内置提示词已删除，下面 §6.1–§6.2 记录的是删除前的设计。
+
+- 用户消息只有识别出的原文，和文章的用法一致。
+- 只在有内容时追加一段可剥离的 `=== HARNESS ADDENDUM ===`：词典，以及光标附近的文字；都没有时，system prompt 与原文逐字一致。
+- 模型按原文要求返回 `{status,text,reason}`，由 `lib/parse-output.js` 解析（严格 JSON → 提取 text 字段 → 纯文本），**绝不把花括号插进文档**；全部失败时记为 `output-format` 并退回原文。
+
+### 6.1 四档强度
+
+所有档位共享同一组规则（`SHARED_RULES`）：
+
+- 保持原语言和术语；
+- **绝不新增**事实、数字、日期、人名、收件人、承诺、需求、观点；
+- 不回答、不续写、不总结、不翻译；
+- 删掉全部口水词，包括中文的"呃嗯啊呢嘛吧唔哦噢唉诶呀呐"和英文的 um/uh/er/like/you know；
+- 去掉口吃和重复；
+- 遇到自我更正，只保留最终意图；
+- 借助上下文和词典纠正识别错误；
+- 词典是硬约束；
+- 只输出纯文本：不加 markdown 围栏、引号、标题、标签。
+
+| 档位 | 提示词的差异 | 校验阈值 | 谁能选到它 |
+|---|---|---|---|
+| `off` | 不调模型，只做 tidy（README 写的"纯转写"不准确） | — | 原生端设置、API |
+| `conservative` | 尽量少改：只纠错、补标点、删口水词；**不重排、不合并或拆段、不加列表** | 细粒度 novelty ≤ 0.45；覆盖率 ≥ 0.7（输出与原文单元比 ≥ 0.25 时才检查） | 原生端设置、API |
+| `prompt`（默认） | 读起来要像一条写清楚的请求：同类内容放在一起，说了两遍的合并，顺序是背景 → 目标 → 约束；**只有明显在口述清单或步骤时，才用 `- ` 或 `1. `**；散文保持散文；口述给助手的需求整理成"情况、想要什么、限制、好结果的样子"；多用短句 | 细粒度 novelty ≤ 0.7；不检查覆盖率 | 原生端设置（默认）、API |
+| `maximal` | 推断真实意图，而不是礼貌地转写；激进聚类（散落在各处的同主题内容合到一起）；重复的诉求只保留最清楚的一条；删掉不承载意义的"就是、然后、其实、那个、这个"；最重要的放最前；可以加段落和列表；**不能加任何事实，也不能丢掉任何约束** | 细粒度 novelty ≤ 0.8；不检查覆盖率 | 原生端设置（之后）、API。注意：只改服务端配置的 `strength` 不会影响菜单栏 App，因为它发送的请求头会覆盖服务端配置 |
+
+### 6.2 校验顺序（`validateOutput`）
+
+1. 剥掉单个代码围栏和成对引号；结果为空则判 `empty-output`。
+2. 原文有效字符 < 8 时，直接通过，不做其他检查。
+3. 主要文字体系（CJK 还是拉丁）变了 → `language-changed`。
+4. 出现新的事实单元（阿拉伯数字、带量词的中文数词、周几、今天、明天、上午等日期词、`@xx`、`a.b` 形式的标识符），而原文里没有 → `invented-fact`。例外：原文里有"不对 / 应该是 / 改成 / no wait / actually …"这类更正标记时，**最后一个标记之后**的新事实算作已授权。
+5. 输出单元 ≥ 6，且细粒度 novelty 超过该档阈值 → `invented-content`。
+6. 长度比 ≤ 0.15 → `output-too-short`。
+7. 仅 `conservative`：语义漂移 → `semantic-drift`。
+8. 长度比过高 → `output-too-long`。原文 < 40 字时上限是 3 倍，否则是 2 倍。
+
+### 6.3 tidy（在模型输出之后、校验之前执行）
+
+- 先合并相邻的重复句，再删口水词。
+- 一个语气词只有贴着非汉字边界时才删；单个夹在词中间的不删。"哪吒、嘛呢、嗯哼、噢姆"受保护。
+- 删除后如果标点前的残句太短，把句号改成逗号。
+
+---
+
+## 7. 安全模型
+
+- **不监听键盘**：
+  - 热键用 Carbon `RegisterEventHotKey`，只接收注册过的组合键，看不到其他按键，所以**不需要"输入监控"权限**。
+  - 代价是单按 Fn 收不到（`RegisterEventHotKey` 返回成功，但 macOS 不会投递事件）。
+  - 对照：Typeless 能用 Fn，是因为它带了键盘事件监听库（见 §10.2）。
+- **权限只有两个：**
+  - 麦克风：必需；
+  - 辅助功能：仅自动粘贴需要。
+  - 没有屏幕录制、摄像头、蓝牙。
+- **TCC 粘性拒绝：** 拒绝过一次后，macOS 不会再自动弹窗。菜单里常驻的「需要辅助功能权限 · 点此申请」会依次做三件事：
+  1. `tccutil reset Accessibility com.dsh.voice`；
+  2. `AXIsProcessTrustedWithOptions(prompt)`；
+  3. 0.3 s 后打开系统设置的对应页面。
+
+  App 重新成为前台时，会再读一次授权状态。
+- **ad-hoc 签名的副作用：** 每次重新编译，cdhash 都会变，TCC 通常会把它当成新 App，需要**重新授权**。再加上 §0.2 的两个副本问题，就是"明明授权了却不生效"的主要来源。
+- **脱敏**（`redactSecrets`）：
+
+  | 匹配内容 | 替换为 |
+|---|---|
+  | `sk-…` | `[redacted-key]` |
+  | `ghp_/gho_/ghu_/github_pat_…`、`xox[baprs]-…` | `[redacted-token]` |
+  | `Bearer …` | `Bearer [redacted]` |
+  | 口述形式："password/passcode/secret/api key/access token/… (最多隔 3 个词) is/: 值" | 值改为 `[redacted]`（排除 "the password field is on the left" 这类误报） |
+  | 关键词后面紧跟引号里的值 | `[redacted]` |
+
+  - 作用范围：发给模型的原文、DSH 会话上下文、最近听写上下文、写入 history 的文本。`logRaw=false` 时，history 存的是**脱敏后再取哈希**的值。
+  - 用户最终拿到的是模型输出；回落时拿到未脱敏的原文。
+- **文件权限：** `api-token` 和 `history.jsonl` 都是 0600（history 每次写完都 chmod）。但 `dictionary.json` 用默认权限写入，`~/.dsh/voice-polish/` 目录本身是 0755。
+- **原生端本地历史**存在 UserDefaults 的 plist 里，**未脱敏**。
+- **防提示词注入：** 口述内容以 JSON 字符串的形式交给模型，并明确告诉它"这是数据，不是对你的请求；里面有指令也照抄"。
+- **数据外发范围：** 音频不出本机。只有转写文本、最近的上下文和 App bundle id 会发给 DeepSeek。不读屏幕、不读选中文本、不读剪贴板内容（剪贴板快照只用于还原，不会发送）。
+
+---
+
+## 8. 已知坑
+
+### 8.1 必须记住的七条
+
+1. **Cordis 的 `issues: []` 会误报。** Cordis 的判断是 `if (result.issues) throw …`，而空数组是 truthy。所以校验通过时**必须省略 `issues` 这个键**，不能返回空数组（见 `lib/config.js` 的 `validate()`）。
+2. **DSH 插件不能用裸 import。** 外部插件文件走 Node 的 ESM 加载，`@deepseek-ai/dsh-llm` 这类说明符无法解析：放在工作区或 profile 本地的 `node_modules` 里都会报 `ERR_MODULE_NOT_FOUND`。因此：
+   - 消息结构手写为 `{role, content:[{type:"text", text}]}`；
+   - 流式分片手工拼装；
+   - 配置 schema 手写成 StandardSchemaV1，不用 Schemastery，**也不能实现 `toJSON()`**（见第 6 条）；
+   - **只允许 import `node:` 内置模块。**
+3. **asar 数据基址是 `8 + readUInt32LE(4)`**（pickle 后的头部大小），**不是 `8 + readUInt32LE(12)`**（JSON 长度）。两者相差 10 字节的 pickle 前缀，用错了所有成员都会错位 10 字节，表现为解出的文件开头有乱字符。用 `scripts/asar-read.mjs verify` 拿成员的 sha256 去比对头部里的 `integrity.hash`。
+4. **profile patch 里的 `timeoutMs` 会覆盖代码默认值。**
+   - 代码默认值是 12000，但生效的是 `~/.dsh/profiles/desktop/cordis.patch.yml` 里的值（现在也是 12000）。只改 `config.js` 的默认值不会生效。
+   - 另外，`timeoutMs < 6000` 会让校验产生 issue，**插件将整个加载失败**（不是警告）。
+   - 探针覆盖层 `dsh-voice-polish/cordis.patch.yml` 仍然写的是 6000，用它跑探针时，测到的是 6 s 预算下的表现。
+5. **`test.sh` 是显式的源文件白名单。** `build.sh` 通配 `Sources/*.swift`，`test.sh` 只编译它列出的 5 个源文件加 `Tests/`。如果被测文件新引用了某个类型、而那个类型在一个新文件里，就**要把新文件加进 `test.sh`**，否则测试编译失败；而正式构建照样能过，很容易漏掉。
+6. **插件的 `Config` 不能带 `toJSON()`，否则 DSH 桌面窗口每次冷启动都会崩溃。**（定位并修复）
+   - **现象：** 弹窗「desktop welcome: Web RPC failed」，日志在 `~/Library/Logs/DeepSeek Harness/crash-*-main.log` 和 `*-web-boot.log`。之后每次冷启动都崩（截至当时共 12 份崩溃日志：8 份 main、4 份 web-boot；都在修复之前）。runtime 进程本身还活着，所以 `/health` 照样能通，很容易误判成 DSH 正常。
+   - **原因：** 窗口启动时调用 `settings.describe`。`dsh-settings` 的 `schema(entry)` 只要看到 Config 带 `toJSON` 就收下，接着 `volatileForm()` 读 `schema.meta.volatile`。我们手写的 Config 没有 `meta`，于是抛 `TypeError: Cannot read properties of undefined (reading 'volatile')`，RPC 返回 `ok:false`。之前没暴露，**推测**是因为插件一直是热加载进已经开着的 DSH 的，欢迎页早就跑过了（后台的 `invalidate()` 也会调 `describe()`，但它只记日志不崩）。
+   - **修复：** 删掉 `Config.toJSON`，设置服务就会跳过这个插件；有回归测试（`test/config.test.js`："Config does not opt into DSH's Settings forms…"）。代价是 DSH 设置页里没有 voice-polish 表单，本来也从没渲染成功过，配置只能改 profile patch。
+
+7. **DSH 的端口是每次启动动态分配的，绝不能写死。**（定位并修复）
+   - **现象：** 菜单栏 App 显示「整理服务未运行」，但 DSH 一切正常、`/api/voice-polish/health` 手动 curl 是通的。
+   - **原因：** 原生端 `DshClient.baseURL` 曾硬编码一个固定端口，而 DSH 这次启动绑定的是另一个随机端口。DSH 的 web 端口由宿主在启动时分配（profile 配置里没有钉死端口），**换一次启动就可能换一个端口**。
+   - **修复（两层）：**
+     1. 宿主侧 `lib/runtime.js` 在路由注册后把真实端口写到 `~/.dsh/voice-polish/runtime.json`（`{port, pid, version, startedAt}`，原子写、0600）。`webServer.port` 在监听完成前是 undefined，所以有上限 10 s 的重试；插件卸载时只在 `pid` 仍是自己时才删除该文件。
+     2. 原生侧 `DshClient.discoverBaseURL()` 读这个文件；文件不存在时（插件还没重载过）用 `lsof -nP -iTCP -sTCP:LISTEN -a -c DeepSeek` 从进程表拿候选端口，逐个用 `/health`（带令牌）验证，只接受 200。`healthSync()`/`dictateSync`/`historySync` 在传输失败时都会「重新发现 + 重试一次」，所以 **DSH 重启后不需要重启菜单栏 App**。
+   - **注意：** 宿主插件源码不会被 DSH 热加载，改完 `lib/*.js` 必须重启 DSH 才生效；重启后 `runtime.json` 才会出现。在那之前，原生端的进程表回退保证仍然可用。
+   - **回归证据：** 自检输出 `SELFCHECK port.published=nil / port.processTable=[<随机端口>] / port.adopted=true / health.ok=true`。
+
+### 8.2 本次审查新发现的问题（按严重度排序）
+
+> **状态更新（由另一个并行会话修改；"核实"列是我在当时对照文件和进程逐条核对的结果）：**
+>
+> | # | 那个会话的说法 | 核实 |
+> |---|---|---|
+> | 1 | 根因是 profile patch 钉着 `timeoutMs: 6000`；已改为 12000；重测 3 条失败用例都是 `fallback=false` | **❌ 与数据不符，视为未解决。** ① 12 次失败里有 11 次在 4.6–5.3 s，**比 6 s 短**；`ms.polish` 从 `polish()` 开头算起，而 deadline 要更晚才启动，所以 6 s 超时只会表现为 ≥ 6.0 s（只有那 1 次 6001 ms 符合）。② profile patch 修改之后，**仍在 4.7 s 失败**。③ `history.jsonl` 在那之后**没有任何新记录**，而每次 `polish()` 都会写历史，所以所谓重测没有经过线上服务。需要按下面第 1 条的方法暴露真实错误。**更新：暴露真实原因的代码已写好（reason 细分 + history `detail` + `/health` 的 `stats`/`recentFailures`，96/96 单测通过），但还没上线：要等用户重启 DSH 并跑一次 `live-aggressive.mjs`，看 `/health` 才知道根因。根因仍未知，在那之前不要调参。**<br>**更新（父会话读源码 + 本会话复核）：最可能的根因是推理 token 吃掉了 `max_tokens`。** 证据：① `app.asar` 里 `dsh-llm-deepseek/lib/index.js` 约第 1694 行：调用方不传 `reasoningEffort` 时，取连接默认值，连接也没配就是 `"high"`；第 1707 行据此发 `thinking:{type:"enabled"}` 和 `max_tokens: options.maxTokens`。② `deepseek-account` 路由由 `dsh-llm-deepseek-account` 通过同一个 `registerDeepSeekProvider` 注册；`dsh-base` 的 `cordis.patch.yml` 和 `~/.dsh` 里都没给它配 `thinking`/`reasoningEffort`。（profile patch 里的 `reasoningEffort: max` 属于 `agent-default-model`，不是这个路由的默认值。）③ 插件原来不传 `reasoningEffort`，`maxOutputTokens` 又只有 800。**处理：** 新增配置 `reasoningEffort`（`off/low/high/max/default`，默认 `off`），108/108 单测通过。**还没在线上证实**：两项改动一起上线，所以如果重启后回落率降到 0，只能说明假设成立，看不到原来那个 `model-max-tokens`。想直接看到原始原因，可以先在 profile patch 的 voice-polish 条目里临时加 `reasoningEffort: default` 跑一次（这一步由用户决定，本会话不改 profile patch）。 |
+> | 2 | 删掉了 `build/dsh-voice.app`（它是该会话误启动的第二个实例），只剩单进程 | **✅ 属实**：现在只有一个进程（`~/Applications` 里那个），`build/` 里只剩 `dsh-voice-tests` |
+> | 3 | `VoiceStrength` 加上了 `maximal` | **✅ 属实**：`Settings.swift`里是 `case maximal, prompt, conservative, off` |
+> | 4 | 主热键默认改为 ⌥Space，Fn 降为副键 | **✅ 属实**：`hk.main` 默认 `optionSpaceDefault`，`hk.alt` 默认 `fnDefault` |
+> | 5 | 两种回落统一走 `tidy()` | 核实时**❌ 未落地**（`lib/service.js` 当时版本第 213 行校验失败时仍返回 `base.text = rawText`）。**已修复**：校验失败也返回 `tidy(rawText)`，并带上 `postprocess`；有单测（"a rejected answer falls back to the TIDIED transcript"）。线上要重启 DSH 后才生效 |
+> | — | 指示条改为惰性创建，新增 `warmUpPill`（默认开） | **部分核实**：`AppDelegate.swift` 和 `Settings.swift` 里有 `warmUpPill` 和 2 s 后 `warmUp()`；它报的内存/CPU 数字我没有复测 |
+> | 6–10 | 未修 | 同意 |
+
+### 8.2.1 原始审查记录（较早时的状态；#2–#4 后来已修复，见上表）
+
+1. **模型调用约 40% 回落，根因不可见**（§0.1）。
+   - `polish()` 的 catch 把所有异常都归成 `model-unavailable`，包括 `max-tokens`、`tool-calls`、provider 错误；
+   - 真实信息只存在于 `logger.warn` 和 `stats.lastError`，`/health` 和 history 里都没有。
+   - 一个待验证的假设：失败集中在 4.6–5.3 s，像是生成到 `maxOutputTokens=800` 上限后以 `max-tokens` 结束（推理 token 也可能占用这部分预算）。**先把真实原因暴露出来，再修，不要直接调参。**
+2. **两个 App 副本同时运行**（§0.2）。后来已被处理，但 `build.sh` 没有防护，下次构建后仍可能复现。
+3. **原生端的 `x-voice-strength` 总会覆盖服务端的 `strength`。** `VoiceStrength` 枚举里没有 `maximal`，所以从菜单栏 App 永远用不到最激进的整理档，改 profile patch 也没用。
+4. **主热键默认是 Fn，但 Fn 实际收不到。** `Settings.hotkeyMain` 默认 `fnDefault`；顶层 README 说默认是 ⌥Space（实际上 ⌥Space 是副键）。
+5. **两种回落给的文本不一致。** 校验失败时回落的是**未经 tidy 的**原文（`base.text = rawText`），模型异常时回落的是 **tidy 过的**原文。前者会把"呃嗯"原样插进去。
+6. **`/polish` 不传取消信号。** 客户端断开后，模型调用仍会跑完。
+7. **`Inserter.assumePasteWorksWithoutAX` 是死代码。** 声明了，但 `insert()` 里从没读过它。原生 README 却说"设成 true 就能……"。
+8. **端到端探针引用的 `scripts/make-harness.mjs`、`scripts/probe-host.mjs` 不存在。** 隔离 harness 无法照着注释重建。
+9. **`/health.ok` 只代表 SenseVoice 就绪**，模型不可用时仍然是 true，菜单会显示"服务正常"。
+10. **宿主侧的 DSH 会话上下文，在往其他 App 口述时大多是噪声。** 它取的是 DSH 里最后一个会话，而不是目标 App 的内容（这也是和 Typeless 最大的差距，见 §10.3）。
+11. **（新发现）`isRetryable()` 只看外层错误。** Node `fetch()` 的网络错误是 `TypeError: fetch failed`，真正的 `ECONNRESET` 之类在 `cause` 里，所以这类错误**不会被重试**。现在它会被正确记成 `model-error:ECONNRESET`（单测 "a wrapped transport failure is named by its cause's code" 固定了这个现状），但重试策略没改。等 `/health` 显示真实原因后再决定要不要改。
+
+### 8.3 文档漂移（改代码时顺手修）
+
+| 位置 | README 的说法 | 实际情况 |
+|---|---|---|
+| `dsh-voice-polish/README.md` | 单元测试 68 项，原生测试 74 项 | 单元测试 README 已改为 108 项（实测）；原生测试仍写 74 项，实际 **158 项** |
+| 同上 | 超时默认 6 s | 代码默认 12 s，生效值 12 s（README 已改） |
+| 同上 | novelty > 0.4 判为编造 | 已改为按档位的细粒度 novelty 阈值（0.45/0.7/0.8）+ 编造事实检测 |
+| 同上 | 强度只有 off/conservative/prompt | 代码里还有 `maximal` |
+| 同上 | 端到端 21/21 | 脚本里只有 20 个 `check(` 断言；harness 脚本缺失，今天未重跑 |
+| `dsh-voice/native/macos/README.md` | 测试 74 项 | 158 项 |
+| 同上 | `assumePasteWorksWithoutAX` 可用 | 死代码 |
+
+---
+
+## 9. 测试与验收
+
+### 9.1 今天实测
+
+| 套件 | 命令 | 结果 |
+|---|---|---|
+| 宿主单元测试（零网络） | 见下方第一条命令 | **108/108 通过**（Node v24.21.0；加入回落原因细分前是 80 项，之后加了 reasoningEffort 测试，父会话也加了 prompt/validate 的测试） |
+| 原生测试（无需宿主） | 见下方第二条命令 | **158/158 通过** |
+| 线上健康检查 | `curl` `/health` | 200，`sensevoice-local` 处于 standby，ready |
+| DNS rebinding 防护 | 带 `Host: evil.example.com` 请求 `/health` | **403** |
+| 端到端契约探针 | `scripts/e2e-probe.mjs` | **未重跑**（需要隔离 harness，生成 harness 的脚本缺失）。脚本里有 20 个断言；README 声称 21/21 |
+| 线上验收 | `scripts/live-acceptance.mjs` | **未跑**（消耗真实账号额度，跑之前先问用户） |
+
+```bash
+cd dsh-voice-polish && node --test --test-reporter=spec "test/*.test.js"
+```
+
+```bash
+cd dsh-voice/native/macos && ./test.sh
+```
+
+- 两条命令都在仓库根目录下运行。宿主测试用任意 Node 22 以上版本即可（macOS、Windows 都行，测试路径加了引号，由 Node 自己展开，不依赖 shell）；没装 Node 时可以用 DSH 自带的：`/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/node/bin/node`。原生测试只能在 macOS 上跑。
+- 离线辅助脚本（零网络，随时可跑）：`scripts/check-facts.mjs`、`scripts/check-redaction.mjs`、`scripts/tune-novelty.mjs`，用同一个 node 运行。
+- 端到端探针的用法：起一个隔离 DSH composition，挂上 `dsh-voice-polish/cordis.patch.yml` 覆盖层（端口 3099，状态目录在系统临时目录下的 `voice-polish-harness/state`），然后运行 `node scripts/e2e-probe.mjs`。环境变量 `VOICE_POLISH_PORT`、`VOICE_POLISH_STATE` 可以覆盖默认值。
+
+### 9.2 真机用例（每次改整理逻辑或插入逻辑后手测）
+
+| # | 操作 | 期望 |
+|---|---|---|
+| 1 | 在备忘录里按 ⌥Space，说"嗯那个我们周二发出去，不对，周三发出去"，再按 ⌥Space | 插入"我们周三发出去。"；不含周二，不含口水词；菜单显示"已粘贴" |
+| 2 | 说"我要做三件事，第一更新解析器，第二加测试，第三写文档" | 插入三行编号或列表 |
+| 3 | 说一段叙事（例如"昨天我想了一下迁移……"） | 保持散文，**不出现**列表符号 |
+| 4 | 口述一段给 AI 的需求 | 整理成背景 → 目标 → 约束的提示词结构，不新增任何需求 |
+| 5 | 先复制一段文字，再口述并粘贴，然后 ⌘V | 剪贴板里是原来那段文字（已还原） |
+| 6 | 在密码框里口述 | 不会自动粘贴；提示"安全键盘保护，已复制到剪贴板" |
+| 7 | 退出 DSH 后口述 | 菜单显示"整理服务未运行"和"启动 DSH"；听写失败，但录音不会卡死 |
+| 8 | 录音中按 Esc，或点指示条上的 ✕ | 丢弃录音，指示条消失，**前台 App 不失去焦点** |
+| 9 | 连续说 2 分钟 | 120 s 时自动结束并开始整理 |
+| 10 | 撤销辅助功能授权，再用菜单"点此申请" | 弹出系统对话框，并打开设置页；授权后菜单那一行变为"已授权" |
+| 11 | 菜单 → 历史 → 用原文再插入 | 插入 `raw`（SenseVoice 原文） |
+| 12 | 口述"我的密码是 hunter2" | 发给模型的负载里是 `[redacted]`（可用 `scripts/check-redaction.mjs` 离线验证） |
+| 13 | 任何时候 | `ps aux` 里**只有一个** `dsh-voice` 进程 |
+
+---
+
+## 10. 对标 Typeless
+
+### 10.1 参考资料在哪里
+
+- **设计参考文档（先读它）：** 仓库根目录下的 `typeless-spec.md`。内容包括：
+  - 带证据等级 [P]/[S]/[I] 的引用来源；
+  - 激活方式、插入、整理流水线、上下文、权限、定价、痛点；
+  - Tier 0/1 功能清单；
+  - **Tier 2「不要抄什么」**；
+  - 可以直接改写成测试的验收用例。
+- **Typeless 本体：** `/Applications/Typeless.app`（今天是 v2.8.2，Electron，bundle id `now.typeless.desktop`）。
+- **Typeless 数据目录：** `~/Library/Application Support/Typeless/`。`~/Library/Application Support/now.typeless.desktop/` 是空目录。
+- **帮助中心：** https://www.typeless.com/help
+- **提前说明，免得白找：Typeless 的转写和整理都在云端。** 本机只有客户端外壳：录音、Opus 编码、读取上下文、插入、历史。App 里**没有语音模型，也没有整理用的提示词**，主进程代码还经过混淆。值得研究的是它**采集了哪些上下文、怎么插入、怎么形成闭环**，而不是模型本身。
+
+### 10.2 本机逆向发现（只看结构，不复制代码）
+
+| 观察到的东西 | 说明什么 |
+|---|---|
+| `app.asar` 里的主进程 `dist/main/index.js` 是混淆过的（用 `scripts/asar-read.mjs` 读取，integrity hash 校验通过），能看到的 API 路径有 `/ai/voice_flow`、`/transcription_history/push`、`pull`、`/user/traits`、`/app/get_blacklist_domain` | **一次云端调用**（音频 + 上下文 → 整理好的文本）完成转写和整理；`/user/traits` 对应"个性化"功能 |
+| `Resources/lib/libopusenc`、`libopuschunk`；设置项 `enabledOpusCompression`；本地 `Recordings/*.ogg` | 先在本地把录音压成 Opus 分块再上传，降低延迟。**本地确实保留了录音** |
+| `libKeyboardHelper.dylib` 导出 `startMonitor`、`updateTargetShortcuts`、`processEvents`、`getKeyboardDeviceList` | 用全局键盘监听实现 **Fn 单键**和多组快捷键（代价是监听所有按键） |
+| `libContextHelper.dylib` 导出 `getFocusedAppInfoAsync`、`getFocusedElementInfoAsync`、`getFocusedElementRelatedContentAsync`、`getFocusedVisibleTextAsync`、`setFocusedWindowEnhancedUserInterface` | **通过辅助功能读取目标输入框及其周边的可见文字**。设置 `AXEnhancedUserInterface` 是为了让 Chrome 和 Electron 应用暴露完整的无障碍树 |
+| `libInputHelper.dylib` 导出 `insertText`、`insertRichText`、`getSelectedText`、`getSelectedTextBySimulateCopyAsync`、`deleteBackward`、`getCurrentInputState` | 插入时**可以插入富文本**（真正的列表），能读取选中文字（读不到时模拟 ⌘C 取得） |
+| `libUtilHelper.dylib` 导出 `muteAudio`、`unmuteAudio`、`getAudioDevicesJSON`、`checkAccessibilityPermission` | 录音时把其他声音静音，并管理音频设备 |
+| `koffi` 和 `better-sqlite3`（位于 `app.asar.unpacked`），`Resources/drizzle/*.sql` | 原生库通过 FFI 调用；本地历史库是 `typeless.db`（权限 **0644**，所有人可读） |
+| `history` 表的列：`refined_text`、`audio`、`audio_context`、`ax_text`、`ax_html`、`focused_app_bundle_id`、`focused_app_name`、`focused_app_window_title`、`focused_app_window_web_url`、`focused_app_window_web_domain`、`edited_text`、`edited_text_status`（默认 `NOT_EXTRACTED`）、`edited_text_attempts`、`hasRevertedAI`、`detected_language`、`mode` | 每次口述都会采集：**输入框的文字和 HTML、窗口标题、网页 URL 与域名**。插入之后还会**回读用户改了什么**（`edited_text`），用于自动学词和个性化；还会记录用户是否撤销了 AI 改写 |
+| `app-storage.json` 里的 `accessibilityConfig`：按 App 和按 URL 设置的白名单、黑名单（精确、前缀、域名、正则），由服务端下发 | 由服务端决定在哪些 App 或网站读取屏幕上下文（隐私开关） |
+| `userData.dictation_settings.auto_punctuation` 和 `smart_formatting` | "智能排版"是一个服务端开关 |
+| `featureShortcutBindings`：`dictationMode`、`askAnythingMode`、`translationMode`、`pasteLastTranscript` | 四个动作各有一组快捷键，其中包括"粘贴上一条转写"这个补救键 |
+| `Info.plist` 声明了摄像头、蓝牙、屏幕录制的用途说明 | 权限申请面很大（`typeless-spec.md` §5.2 也指出过这一点） |
+
+### 10.3 差距表（只看"准确度"和"高度整理"）
+
+| 维度 | Typeless | dsh-voice 现状 | 影响 |
+|---|---|---|---|
+| 识别模型 | 云端 STT + 多家大模型供应商 | 本地 SenseVoice（`sensevoice-local`） | 原文质量是整理的下限。SenseVoice 接口没有热词 |
+| **目标输入框上下文** | 读取输入框文字和 HTML、周边可见文字、窗口标题、URL | **只发送 bundle id**；会话上下文来自 DSH 聊天，与目标 App 无关 | **专有名词纠错和语气适配的最大短板** |
+| 自动学词 | 插入后回读 `edited_text`，自动加入词典（标记为 Auto-added） | 有 `/learn`，但只能在设置窗口手动加 | 同一个词会一直错 |
+| 每个 App 的语气 | 自动按 App 调整 | 只把 bundle id 作为 `appName` 交给模型，没有映射表 | 写邮件和发微信用同一种语气 |
+| 结构化输出 | `smart_formatting`、富文本插入 | 只有 prompt/maximal 的列表规则；**只插入纯文本** | 在备忘录、邮件、文档里不是真正的列表 |
+| 可靠性 | — | **约 40% 回落**（§0.1） | 当前头号问题 |
+| 延迟 | 单次云端调用、Opus 分块上传 | 本地转写，加上 deepseek-flash（整理中位 2.2 s） | 可接受，但先要解决回落 |
+| 补救手段 | 粘贴上一条的快捷键、可从历史重试 | 菜单历史：复制、再插入、用原文再插入、用同一段音频重试 | 基本持平，缺一个快捷键 |
+
+### 10.4 路线图（按顺序做，每一步都配测试）
+
+**P0：先让现有功能可靠**
+
+1. **暴露真实失败原因：**
+   - 把 `model-unavailable` 细分成 `model-timeout`、`model-max-tokens`、`model-error:<code>`、`model-tool-calls`；
+   - `stats.lastError` 和最近几次失败的明细进入 `/health`；
+   - history 里记录 `detail`。
+
+   **代码部分已完成**，又加了 `reasoningEffort`（全套 108/108 单测通过），等用户重启 DSH 后上线。
+
+   然后用线上脚本复现、定位并修复根因（例如调整 `maxOutputTokens`、在这次调用里关闭推理，或换模型）。**修完的验收标准：用 `live-aggressive.mjs` 里那 3 段中文口述样例各跑 5 次，回落率为 0。**
+2. 杀掉多余的副本，并在 `build.sh` 安装前 `pkill -x dsh-voice`，见 §11。
+3. ~~原生端 `VoiceStrength` 加入 `maximal`；主热键默认改为 ⌥Space~~（已完成，已核实）。还需要同步两个 README 里的热键说明。
+4. ~~校验失败时也回落到 tidy 过的原文~~（已完成，有单测；重启 DSH 后生效）。
+
+- 第 1 条的后续，**推理档位**（已完成代码，未上线）：整理调用默认 `reasoningEffort: "off"`，见 §8.2 表第 1 行。验收仍按第 1 条：3 段口述各跑 5 次，回落率为 0。
+
+**P1：准确度**
+
+5. **目标输入框上下文：**
+   - 原生端在开始录音时（已经有辅助功能权限的前提下），读取 `AXFocusedUIElement` 的 `AXValue`（截取光标前后各约 1000 字）、`AXSelectedText`、窗口标题，浏览器再加 URL；
+   - 脱敏后随 `/dictate` 一起发送（改成 multipart，或新增 `x-voice-context-*` 请求头并给出长度上限）；
+   - 宿主侧作为 `fieldContext` 放进 JSON 负载；**前台 App 不是 DSH 时，不再附带 DSH 会话上下文**；
+   - 加入 App 和 URL 黑名单（密码管理器、银行类）；
+   - 同步更新 §4 的契约和两边的测试。
+6. **自动学词闭环：** 粘贴成功后几秒，用辅助功能回读输入框，和插入的文本做 diff，提取被替换的词对，再调用 `POST /learn`。词典要区分"自动"和"手动"条目；设置窗口里可以删除。
+7. **每个 App 的语气表：** bundle id → 语气提示，例如 `com.apple.mail` 用正式，`com.tencent.xinWeChat` 用口语，IDE 用技术口吻。放在宿主配置里，作为 `register` 字段进入负载。
+
+**P1：高度整理（用户点名的"标 1234 / 一行一行"）**
+
+8. **显式结构触发：**
+   - 识别口述中的序数和枚举标记（第一/第二/第三、首先/其次/最后、一是/二是、1 2 3、"分几点说"）；
+   - 命中时在负载里加 `structureHint: "numbered"`，提示词要求使用 `1. 2. 3.`，**每条单独一行**；
+   - 没命中时保持现有的"散文就保持散文"规则，避免 Typeless 那种过度列表化。
+9. **新增 `outline` 档（或作为 maximal 的子选项）：** 只要有 ≥ 2 个独立要点，就整理成一行一条；校验器沿用 maximal 的阈值。在 `compare-strengths.mjs` 里加入对比。
+10. **富文本插入：** 列表结果同时写入剪贴板的 `public.html`/RTF 和纯文本两种格式。备忘录、邮件、Pages、网页编辑器会得到真正的列表，终端和代码编辑器仍拿到纯文本。
+11. **中文结构化测试样本：** 在 `test/` 里加入真实的中文清单口述、混合口述（先叙事后列点）、嵌套要点；在 `scripts/` 里加对应的线上验收用例。
+
+**P2：功能对齐**
+
+12. "粘贴上一条"快捷键。
+13. 原生端历史保留时长可设置（对齐 Typeless 的 24 h / 1 周 / 1 月 / 永久）。
+14. 对拒绝合成粘贴的 App，回落到逐字输入。
+15. 翻译模式、对选中文本提问（目前明确不做，等 P0/P1 完成后再议）。
+
+### 10.5 不要抄什么
+
+- **过度列表化。** 评测里罚得最重的就是"什么都变成列表"。只在用户口述了清单，或明确要求时才分点。
+- **意图漂移。** 编造检测和回落机制是本项目的底线，任何提升激进度的改动都必须保留 `validate.js` 的编造事实检测，并补测试。
+- **权限扩张。** 不申请屏幕录制、摄像头、蓝牙；**不默认使用键盘事件监听**（如果要支持 Fn，做成需要用户主动开启的选项，并说明需要"输入监控"权限）。
+- **明文、全员可读的本地库。** 我们的 history 必须保持 0600，并且脱敏。
+- 在口述过程中弹出任何打断性的提示。
+
+---
+
+## 11. 给 Claude Code 的工作约定
+
+0. **可能有别的会话在同时改这些文件**（就发生过一次）。动手前先看要改的文件的修改时间，改完再看一次，避免互相覆盖。
+1. **先读后改：** 本文 → `typeless-spec.md` → 要改的源文件。§4 的契约是两端共享的，改了就要同时更新 `lib/http.js`、`DshClient.swift`、两边的测试和本文。
+2. **每次改宿主代码，都要跑全部单元测试**（当时是 108 项）（§9.1 的命令）。改了校验或整理逻辑，再跑 `check-facts.mjs`、`tune-novelty.mjs`、`check-redaction.mjs`。
+3. **每次改原生代码，都要跑 `./test.sh`（158 项）。** 新增的源文件如果被测试覆盖的文件引用，要加进 `test.sh` 的白名单。
+4. **构建和安装：** 用 `./build.sh` 安装到 `~/Applications/dsh-voice.app`，**不要直接运行 `build/dsh-voice.app`**。安装后保证只有一个进程：
+
+   ```bash
+   pkill -x dsh-voice; open ~/Applications/dsh-voice.app
+   ```
+
+   每次重新编译都可能需要重新授予辅助功能权限（ad-hoc 签名）。用菜单里的"点此申请"处理。
+5. **宿主插件重载：** DSH 会热加载 profile patch 的改动（README 声称已实测）。**改了 `lib/*.js` 之后会不会热加载，还没验证过**；稳妥起见重启 DSH，再用 `/health` 的 `pid` 和 `version` 确认新代码已生效。
+6. **会花钱或改动线上状态的操作，先问用户：** `live-acceptance.mjs`、`live-aggressive.mjs`、`compare-strengths.mjs`（消耗 DeepSeek 额度），以及修改 `~/.dsh/profiles/desktop/cordis.patch.yml`。
+7. **不要改 DSH 的 `app.asar`**，只用 `scripts/asar-read.mjs` 只读研究。研究 Typeless 时只看结构、符号和 schema，**不要把它的代码或资源复制进本项目**。
+8. **插件里只允许 `node:` 内置模块**（§8.1 第 2 条）。配置校验通过时省略 `issues` 键（§8.1 第 1 条）。
+9. **改完行为要同步两个 README 的数字和说法**，避免 §8.3 那样的漂移再次出现。

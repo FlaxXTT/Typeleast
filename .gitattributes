@@ -1,0 +1,19 @@
+# Same bytes on macOS, Linux and Windows: text is stored with LF and checked
+# out with LF everywhere, so scripts run and diffs stay clean on every system.
+* text=auto eol=lf
+
+*.sh     text eol=lf
+*.js     text eol=lf
+*.mjs    text eol=lf
+*.swift  text eol=lf
+*.md     text eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.plist  text eol=lf
+
+# Binary assets: never convert.
+*.icns   binary
+*.png    binary
+*.jpg    binary
+*.wav    binary
+*.onnx   binary

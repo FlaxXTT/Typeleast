@@ -1,0 +1,14 @@
+{
+  "name": "@local/dsh-voice-polish",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "description": "Context-aware dictation polishing service for DSH: local SenseVoice transcription plus LLM cleanup, exposed to a native menu-bar app over a loopback route."
+}

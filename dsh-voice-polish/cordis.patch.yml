@@ -1,0 +1,10 @@
+# Probe overlay: mounts the voice-polish service into any DSH profile.
+# Applied as a --patch overlay so no profile file is modified.
+- insert:
+    - id: voice-polish
+      name: ./lib/index.js
+      config:
+        provider: deepseek-account
+        model: deepseek-flash
+        maxOutputTokens: 800
+        timeoutMs: 6000
