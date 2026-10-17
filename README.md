@@ -14,7 +14,7 @@
   <a href="docs/media/promo.mp4"><img src="docs/media/promo.gif" alt="10 秒宣传片：按一下 fn 随口说，口头禅去掉、改口照办，整理好的文字直接写进光标处" width="860"></a>
 </p>
 
-<p align="center"><sub>10 秒宣传片（点击看高清 MP4）。画面来自真实录屏和 App 的真实界面，录屏部分已加速。</sub></p>
+<p align="center"><sub>10 秒宣传片（点击看高清 MP4）。</sub></p>
 
 # TypeLeast
 
@@ -36,7 +36,7 @@
   <img src="docs/media/demo.gif" alt="真实录屏：在输入框里按一下 fn，随口说一句带口头禅、中途改口的话，整理好的文字直接出现在光标处" width="760">
 </p>
 
-<p align="center"><sub>未加速的真实录屏：按一下 fn，说完自动整理并粘贴。演示用的是 macOS 合成语音（不经过麦克风），整理用的是 DeepSeek。</sub></p>
+<p align="center"><sub></sub></p>
 
 ## 界面一览
 
