@@ -21,7 +21,7 @@ internal sealed class MainWindow : Window
     private readonly AppHost host;
     private readonly Dictionary<Page, Button> nav = new();
     private readonly ContentControl content = new();
-    private readonly TextBlock badgeText = Theme.Text("", 11.5, Theme.Secondary, wrap: false);
+    private readonly TextBlock badgeText = Theme.Text("", 11.5, Theme.Grey, wrap: false);
     private readonly System.Windows.Shapes.Ellipse badgeDot = new() { Width = 7, Height = 7 };
     private readonly Dictionary<Page, IPage> pages = new();
     private Page current = Page.Home;
@@ -133,10 +133,10 @@ internal sealed class HomePage : IPage
     private readonly StackPanel root = new();
     private readonly Button tryButton;
     private readonly TextBlock heroTitle = Theme.Text("", 22, bold: true);
-    private readonly TextBlock hint = Theme.Text("", 12.5, Theme.Secondary);
+    private readonly TextBlock hint = Theme.Text("", 12.5, Theme.Grey);
     private readonly StackPanel checklist = new();
     private readonly Border setupCard;
-    private readonly TextBlock stats = Theme.Text("", 13, Theme.Secondary);
+    private readonly TextBlock stats = Theme.Text("", 13, Theme.Grey);
 
     public UIElement View => root;
 
@@ -146,7 +146,7 @@ internal sealed class HomePage : IPage
         tryButton = Theme.Primary("试一下", host.Toggle);
         var hero = Theme.Stack(8,
             heroTitle,
-            Theme.Text("在任何输入框里按一下开始说话，再按一下结束。识别在这台电脑上完成，整理好的文字会直接出现在光标处。", 13, Theme.Secondary),
+            Theme.Text("在任何输入框里按一下开始说话，再按一下结束。识别在这台电脑上完成，整理好的文字会直接出现在光标处。", 13, Theme.Grey),
             Theme.Row(10, tryButton, hint));
         root.Children.Add(Theme.Card(hero, 24));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text("完成设置", 14, bold: true), checklist));
@@ -194,7 +194,7 @@ internal sealed class HomePage : IPage
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var mark = Theme.Check(done);
         grid.Children.Add(mark);
-        var texts = Theme.Stack(2, Theme.Text(title, 13, bold: true), Theme.Text(detail, 12, Theme.Secondary));
+        var texts = Theme.Stack(2, Theme.Text(title, 13, bold: true), Theme.Text(detail, 12, Theme.Grey));
         Grid.SetColumn(texts, 1);
         grid.Children.Add(texts);
         if (action is { } a && (!done || showActionWhenDone))
@@ -235,7 +235,7 @@ internal sealed class HistoryPage : IPage
         header.Children.Add(clear);
         header.Children.Add(Theme.Text("历史", 22, bold: true));
         root.Children.Add(header);
-        root.Children.Add(Theme.Text("只保存在这台电脑上（最近 500 条）。", 12, Theme.Secondary));
+        root.Children.Add(Theme.Text("只保存在这台电脑上（最近 500 条）。", 12, Theme.Grey));
         list.Margin = new Thickness(0, 12, 0, 0);
         root.Children.Add(list);
     }
@@ -248,7 +248,7 @@ internal sealed class HistoryPage : IPage
         shownFirst = first;
         shownCount = entries.Count;
         list.Children.Clear();
-        if (entries.Count == 0) list.Children.Add(Theme.Text("还没有听写记录。", 13, Theme.Secondary));
+        if (entries.Count == 0) list.Children.Add(Theme.Text("还没有听写记录。", 13, Theme.Grey));
         foreach (var e in entries.Take(200))
         {
             var meta = e.Time.ToLocalTime().ToString("M月d日 HH:mm") + (e.App.Length > 0 ? " · " + e.App : "")
@@ -280,7 +280,7 @@ internal sealed class DictionaryPage : IPage
     {
         this.host = host;
         root.Children.Add(Theme.Text("词典", 22, bold: true));
-        root.Children.Add(Theme.Text("整理时一定按这里的写法输出。写成「听成=正确写法」可以纠正固定的识别错误，例如「德普西克=DeepSeek」。", 12.5, Theme.Secondary));
+        root.Children.Add(Theme.Text("整理时一定按这里的写法输出。写成「听成=正确写法」可以纠正固定的识别错误，例如「德普西克=DeepSeek」。", 12.5, Theme.Grey));
         var input = Theme.Input("", 320);
         void Add()
         {
@@ -304,10 +304,10 @@ internal sealed class DictionaryPage : IPage
         if (key == shown) return;
         shown = key;
         words.Children.Clear();
-        if (host.Settings.Words.Count == 0) words.Children.Add(Theme.Text("还没有词条。", 13, Theme.Secondary));
+        if (host.Settings.Words.Count == 0) words.Children.Add(Theme.Text("还没有词条。", 13, Theme.Grey));
         foreach (var w in host.Settings.Words)
         {
-            var remove = new Button { Content = "✕", Margin = new Thickness(8, 0, 0, 0), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Cursor = Cursors.Hand, Foreground = Theme.Secondary, ToolTip = "删除" };
+            var remove = new Button { Content = "✕", Margin = new Thickness(8, 0, 0, 0), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Cursor = Cursors.Hand, Foreground = Theme.Grey, ToolTip = "删除" };
             remove.Click += (_, _) => { host.RemoveWord(w); Refresh(); };
             words.Children.Add(new Border
             {

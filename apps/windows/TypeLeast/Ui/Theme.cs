@@ -18,7 +18,7 @@ internal static class Theme
     public static readonly Brush CardFill = Hex("#FFFFFF");
     public static readonly Brush Line = Hex("#E6E4DF");
     public static readonly Brush Ink = Hex("#1A1A1A");
-    public static readonly Brush Secondary = Hex("#6B6B6B");
+    public static readonly Brush Grey = Hex("#6B6B6B");
     public static readonly Brush Tertiary = Hex("#A3A3A3");
     public static readonly Brush Accent = Hex("#5B5BD6");
     public static readonly Brush Success = Hex("#2E9D5B");
@@ -165,7 +165,7 @@ internal static class Theme
     }
 
     public static TextBlock SectionTitle(string text) =>
-        new() { Text = text, FontFamily = Font, FontSize = 12, Foreground = Secondary, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 6, 0, 8) };
+        new() { Text = text, FontFamily = Font, FontSize = 12, Foreground = Grey, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 6, 0, 8) };
 
     /// <summary>A check mark (done) or an empty circle.</summary>
     public static TextBlock Check(bool done) =>

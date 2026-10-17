@@ -182,7 +182,7 @@ internal sealed class ServiceManager
             return;
         }
         Set(Phase.Starting);
-        Task.Delay(TimeSpan.FromSeconds(delay)).ContinueWith(_ =>
+        Task.Delay(TimeSpan.FromSeconds(delay)).ContinueWith(t =>
         {
             if (!stopping) _ = StartCore();
         });
