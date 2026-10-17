@@ -18,12 +18,12 @@ internal sealed class SettingsPage : IPage
 {
     private readonly AppHost host;
     private readonly StackPanel root = new();
-    private readonly TextBlock serviceStatus = Theme.Text("", 12, Theme.Secondary);
-    private readonly TextBlock speechStatus = Theme.Text("", 12, Theme.Secondary);
+    private readonly TextBlock serviceStatus = Theme.Text("", 12, Theme.Grey);
+    private readonly TextBlock speechStatus = Theme.Text("", 12, Theme.Grey);
     private readonly ProgressBar progress = new() { Width = 160, Height = 6, Minimum = 0, Maximum = 1, Visibility = Visibility.Collapsed };
     private readonly Button downloadButton;
-    private readonly TextBlock llmStatus = Theme.Text("", 12, Theme.Secondary);
-    private readonly TextBlock keyStatus = Theme.Text("", 12, Theme.Secondary);
+    private readonly TextBlock llmStatus = Theme.Text("", 12, Theme.Grey);
+    private readonly TextBlock keyStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBox baseUrl = Theme.Input("", 300);
     private readonly PasswordBox key = new() { Width = 220, Padding = new Thickness(6, 4, 6, 4), FontSize = 13 };
     private readonly TextBox model = Theme.Input("", 200);
@@ -65,10 +65,10 @@ internal sealed class SettingsPage : IPage
         login.Click += (_, _) => { s.LaunchAtLogin = login.IsChecked == true; Autostart.Apply(s.LaunchAtLogin); host.SaveSettings(); };
 
         root.Children.Add(Section("听写",
-            Theme.SettingRow("快捷键", Theme.Text("单独按一下开始，再按一下结束；录音时按 Esc 取消。右 Alt 在部分欧洲键盘上是 AltGr，这时换一个键。", 12, Theme.Secondary), hotkey),
-            Theme.SettingRow("整理方式", Theme.Text("Erduo 整理：去口水词、改通顺；原话转写：只去口水词。", 12, Theme.Secondary), strength),
+            Theme.SettingRow("快捷键", Theme.Text("单独按一下开始，再按一下结束；录音时按 Esc 取消。右 Alt 在部分欧洲键盘上是 AltGr，这时换一个键。", 12, Theme.Grey), hotkey),
+            Theme.SettingRow("整理方式", Theme.Text("Erduo 整理：去口水词、改通顺；原话转写：只去口水词。", 12, Theme.Grey), strength),
             Theme.SettingRow("麦克风", null, mic),
-            Theme.SettingRow("粘贴后恢复剪贴板", Theme.Text("粘贴完把你原来复制的文字放回剪贴板。", 12, Theme.Secondary), restore),
+            Theme.SettingRow("粘贴后恢复剪贴板", Theme.Text("粘贴完把你原来复制的文字放回剪贴板。", 12, Theme.Grey), restore),
             Theme.SettingRow("开机自动启动", null, login)));
 
         // ---- cleanup model
@@ -95,11 +95,11 @@ internal sealed class SettingsPage : IPage
         var test = Theme.Primary("测试连接", () => _ = Test());
 
         root.Children.Add(Section("整理模型",
-            Theme.Text("用你自己的 API Key 调用大模型，把识别出的话整理成通顺的书面语。Key 只存在这台电脑的 Windows 凭据管理器里，只发给本机的 TypeLeast 服务。", 12.5, Theme.Secondary),
+            Theme.Text("用你自己的 API Key 调用大模型，把识别出的话整理成通顺的书面语。Key 只存在这台电脑的 Windows 凭据管理器里，只发给本机的 TypeLeast 服务。", 12.5, Theme.Grey),
             Theme.SettingRow("服务商", null, preset),
-            Theme.SettingRow("接口地址", Theme.Text("需要 https；本机服务可以用 http://127.0.0.1", 12, Theme.Secondary), baseUrl),
+            Theme.SettingRow("接口地址", Theme.Text("需要 https；本机服务可以用 http://127.0.0.1", 12, Theme.Grey), baseUrl),
             Theme.SettingRow("API Key", keyStatus, Theme.Row(8, key, saveKey)),
-            Theme.SettingRow("模型", Theme.Text("填模型 ID，或者点「获取列表」", 12, Theme.Secondary), Theme.Row(8, model, modelList, fetch)),
+            Theme.SettingRow("模型", Theme.Text("填模型 ID，或者点「获取列表」", 12, Theme.Grey), Theme.Row(8, model, modelList, fetch)),
             Theme.Row(10, test, llmStatus),
             missing));
 
@@ -111,12 +111,12 @@ internal sealed class SettingsPage : IPage
         root.Children.Add(Section("本地服务",
             Theme.SettingRow("本地服务", serviceStatus, Theme.Row(8, chooseNode, Theme.Secondary("重新启动", host.RestartService))),
             Theme.SettingRow("语音模型（SenseVoice）", speechStatus, Theme.Row(8, progress, downloadButton)),
-            Theme.SettingRow("模型下载镜像（可选）", Theme.Text("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。", 12, Theme.Secondary), mirror)));
+            Theme.SettingRow("模型下载镜像（可选）", Theme.Text("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。", 12, Theme.Grey), mirror)));
 
         // ---- about
         var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
         root.Children.Add(Section("关于",
-            Theme.SettingRow("TypeLeast " + version, Theme.Text("识别：SenseVoice（sherpa-onnx，本机）· 整理：你自己的模型", 12, Theme.Secondary),
+            Theme.SettingRow("TypeLeast " + version, Theme.Text("识别：SenseVoice（sherpa-onnx，本机）· 整理：你自己的模型", 12, Theme.Grey),
                 Theme.Secondary("打开数据文件夹", () => Shell.Open(AppPaths.StateDirectory())))));
 
         LoadPreset();
@@ -144,7 +144,7 @@ internal sealed class SettingsPage : IPage
         key.IsEnabled = s.Preset.NeedsKey;
         keyStatus.Text = !s.Preset.NeedsKey ? "本机服务不需要 Key" : stored.Length > 0 ? "已保存在 Windows 凭据管理器" : "粘贴 Key，再点保存或测试连接";
         llmStatus.Text = s.Preset.KeyPage.Length > 0 ? "Key 在这里创建：" + s.Preset.KeyPage : "";
-        llmStatus.Foreground = Theme.Secondary;
+        llmStatus.Foreground = Theme.Grey;
         UpdateMissing();
     }
 
@@ -255,7 +255,7 @@ internal sealed class SettingsPage : IPage
     {
         var svc = host.Service;
         serviceStatus.Text = host.ServiceSummary + (svc.NodeVersion is { } v && svc.NodePath is { } p ? " · Node.js " + v + "（" + p + "）" : "");
-        serviceStatus.Foreground = svc.State == ServiceManager.Phase.Running ? Theme.Secondary : Theme.Warning;
+        serviceStatus.Foreground = svc.State == ServiceManager.Phase.Running ? Theme.Grey : Theme.Warning;
         var speech = host.Speech;
         var problem = Messages.SpeechProblem(speech);
         speechStatus.Text = problem.Length == 0 ? "已就绪，识别完全在本机进行，音频不出这台电脑" : problem;
