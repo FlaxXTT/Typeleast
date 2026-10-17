@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Logic with no Windows dependency: the service client, settings, presets and
+       the decisions the app makes. Unit tested by TypeLeast.Core.Tests on any OS. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TypeLeast.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,94 @@
+name: Release
+
+# Push a tag like v1.2.0 (or run this by hand) to build and publish:
+#   TypeLeast-<v>-macOS-AppleSilicon.dmg / .zip
+#   TypeLeast-<v>-macOS-Intel.dmg / .zip
+#   TypeLeast-<v>-Windows-x64-Setup.exe
+#   TypeLeast-<v>-Windows-x64-Portable.zip
+#   SHA256SUMS.txt
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish, e.g. v1.2.0 (created on the current commit if missing)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  # The Node.js shipped inside the apps (an LTS release; checked against nodejs.org's SHA-256 list).
+  NODE_BUNDLE_VERSION: "24.21.0"
+
+jobs:
+  macos:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Package
+        run: NODE_VERSION="$NODE_BUNDLE_VERSION" apps/macos/package.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            out/*.dmg
+            out/*.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Package
+        shell: pwsh
+        run: ./apps/windows/package.ps1 -NodeVersion $env:NODE_BUNDLE_VERSION -OutDir "$env:GITHUB_WORKSPACE\out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            out/*.exe
+            out/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --title "TypeLeast ${TAG#v}" \
+            --notes-file .github/release-notes.md \
+            --target "$GITHUB_SHA"

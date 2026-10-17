@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Windows 11 tray app. WPF for the windows, WinForms only for the tray icon. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Explicit usings only: WPF and WinForms share many type names. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>TypeLeast</AssemblyName>
+    <RootNamespace>TypeLeast</RootNamespace>
+    <ApplicationIcon>Assets\TypeLeast.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Lets CI and other systems compile it; it runs on Windows only. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TypeLeast.Core\TypeLeast.Core.csproj" />
+    <!-- NAudio (MIT): microphone capture through the Windows wave API. -->
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+  </ItemGroup>
+</Project>

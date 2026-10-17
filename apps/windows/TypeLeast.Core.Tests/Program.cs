@@ -1,0 +1,317 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using TypeLeast.Core;
+
+// Program.cs (Core.Tests) - unit proofs for the Windows app's logic and its client of
+// the local service. A plain console runner: no test framework to download.
+
+var passed = 0;
+var failed = 0;
+
+void Check(string name, bool ok, string detail = "")
+{
+    if (ok) { passed++; Console.WriteLine("PASS " + name); }
+    else { failed++; Console.WriteLine("FAIL " + name + (detail.Length > 0 ? " :: " + detail : "")); }
+}
+
+void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Default.Equals(got, want), $"got={got} want={want}");
+
+// ---- 1. WAV: the one shape the service accepts
+
+{
+    var pcm = new byte[16000 * 2];
+    var wav = Wav.FromPcm16(pcm);
+    Eq("wav header is 44 bytes", wav.Length, 44 + pcm.Length);
+    Check("wav is canonical", Wav.IsCanonical(wav));
+    Eq("one second of samples", Wav.Seconds(pcm.Length), 1.0);
+    Check("an odd trailing byte is dropped", Wav.IsCanonical(Wav.FromPcm16(new byte[11])));
+    Check("garbage is not canonical", !Wav.IsCanonical(Encoding.ASCII.GetBytes("not a wav file at all, no no no no no no no")));
+    Eq("silence has no level", Wav.Level(pcm), 0.0);
+    var loud = new byte[200];
+    for (var i = 0; i < 100; i++) BitConverter.TryWriteBytes(loud.AsSpan(i * 2, 2), (short)20000);
+    Check("a loud signal has a high level", Wav.Level(loud) > 0.9);
+}
+
+// ---- 2. the single-key tap (Right Alt by default)
+
+{
+    var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    var tap = new TapDetector(TapDetector.VirtualKey(DictationKey.RightAlt));
+    Eq("right alt is VK_RMENU", tap.TargetVk, 0xA5);
+    Check("down alone is not a tap", !tap.OnKey(0xA5, true, false, t0));
+    Check("a quick down-up is a tap", tap.OnKey(0xA5, false, false, t0.AddMilliseconds(120)));
+    tap.OnKey(0xA5, true, false, t0);
+    Check("auto-repeat while held is ignored", !tap.OnKey(0xA5, true, false, t0.AddMilliseconds(40)));
+    Check("still a tap after auto-repeat", tap.OnKey(0xA5, false, false, t0.AddMilliseconds(200)));
+    tap.OnKey(0xA5, true, false, t0);
+    tap.OnKey(0x45, true, false, t0.AddMilliseconds(50)); // AltGr+E
+    Check("another key while held is a combination, not a tap", !tap.OnKey(0xA5, false, false, t0.AddMilliseconds(120)));
+    tap.OnKey(0xA5, true, false, t0);
+    Check("holding too long is not a tap", !tap.OnKey(0xA5, false, false, t0.AddMilliseconds(900)));
+    tap.OnKey(0xA5, true, false, t0);
+    tap.OnKey(0xE8, true, true, t0.AddMilliseconds(5)); // our own menu-mask key
+    Check("keys the app injected itself do not spoil the tap", tap.OnKey(0xA5, false, false, t0.AddMilliseconds(100)));
+    Check("an up without a down is not a tap", !tap.OnKey(0xA5, false, false, t0));
+    Eq("labels are Chinese", TapDetector.Label(DictationKey.RightCtrl), "右 Ctrl");
+}
+
+// ---- 3. Node.js, the service folder, the ready line
+
+{
+    Check("v24.21.0 parses", ServiceLocator.ParseNodeVersion("v24.21.0\r\n") == (24, 21, 0));
+    Check("garbage is no version", ServiceLocator.ParseNodeVersion("'node' is not recognized") is null);
+    Check("Node 22 is supported", ServiceLocator.IsSupported("v22.0.0"));
+    Check("Node 20 is too old", !ServiceLocator.IsSupported("v20.18.1"));
+    Eq("the ready line gives the port", ServiceLocator.ParseReadyLine("{\"event\":\"ready\",\"port\":51234,\"pid\":4321}"), (int?)51234);
+    Eq("a log line is not a ready line", ServiceLocator.ParseReadyLine("[typeleast] listening"), (int?)null);
+    Eq("restarts back off", ServiceLocator.RestartDelay(4), (double?)30);
+    Eq("then give up", ServiceLocator.RestartDelay(5), (double?)null);
+
+    var appDir = @"C:\Apps\TypeLeast";
+    var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ProgramFiles"] = @"C:\Program Files",
+        ["LOCALAPPDATA"] = @"C:\Users\someone\AppData\Local",
+        ["NVM_HOME"] = @"C:\Users\someone\AppData\Roaming\nvm",
+        ["PATH"] = @"C:\Windows\system32;""C:\Tools\node"";",
+    };
+    var nvm = new Dictionary<string, string[]> { [@"C:\Users\someone\AppData\Roaming\nvm"] = new[] { "v20.1.0", "v24.2.0", "v22.9.0", "settings.txt" } };
+    var list = ServiceLocator.NodeCandidates(appDir, env, dir => nvm.TryGetValue(dir, out var v) ? v : Array.Empty<string>());
+    Eq("the Node.js shipped with the app comes first", list[0], Path.Combine(appDir, "node", "node.exe"));
+    Check("the official installer location is tried", list.Contains(Path.Combine(@"C:\Program Files", "nodejs", "node.exe")));
+    var nvmFirst = list.FindIndex(p => p.Contains(@"\nvm\"));
+    Eq("nvm versions are tried newest first", list[nvmFirst], Path.Combine(@"C:\Users\someone\AppData\Roaming\nvm", "v24.2.0", "node.exe"));
+    Check("quoted PATH entries are unquoted", list.Contains(Path.Combine(@"C:\Tools\node", "node.exe")));
+    Eq("no duplicates", list.Count, list.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+    bool Exists(string p) => p == Path.Combine(appDir, "service", "bin", "typeleast-service.mjs") || p == Path.Combine(@"D:\dev\service", "bin", "typeleast-service.mjs");
+    Eq("the service beside the app is used", ServiceLocator.ServiceDirectory(appDir, new Dictionary<string, string?>(), Exists), Path.Combine(appDir, "service"));
+    Eq("TYPELEAST_SERVICE_DIR wins for development",
+        ServiceLocator.ServiceDirectory(appDir, new Dictionary<string, string?> { ["TYPELEAST_SERVICE_DIR"] = @"D:\dev\service" }, Exists), @"D:\dev\service");
+    Eq("no service folder is null", ServiceLocator.ServiceDirectory(@"C:\Elsewhere", new Dictionary<string, string?>(), Exists), null);
+}
+
+// ---- 4. settings, presets, the route
+
+{
+    Check("https may carry a key", LlmPreset.IsAllowedBaseUrl("https://api.deepseek.com/v1"));
+    Check("http to another host may not", !LlmPreset.IsAllowedBaseUrl("http://api.example.com/v1"));
+    Check("http to this computer may (Ollama)", LlmPreset.IsAllowedBaseUrl("http://127.0.0.1:11434/v1"));
+    Check("every preset except custom has a usable URL", LlmPreset.All.Where(p => p.Id != "custom").All(p => LlmPreset.IsAllowedBaseUrl(p.BaseUrl)));
+    Eq("an unknown preset falls back to the first", LlmPreset.Find("gone").Id, "deepseek");
+
+    var s = new AppSettings();
+    Eq("default key is right alt", s.Hotkey, DictationKey.RightAlt);
+    Eq("no model means no route", s.ActiveRoute(_ => "sk-test"), null);
+    s.LlmModel = "deepseek-chat";
+    Eq("no key means no route", s.ActiveRoute(_ => null), null);
+    var route = s.ActiveRoute(_ => "sk-test");
+    Eq("a complete route uses the preset's URL", route?.BaseUrl, "https://api.deepseek.com/v1");
+    s.LlmPresetId = "ollama";
+    s.LlmModel = "qwen2.5:7b";
+    Eq("a local server needs no key", s.ActiveRoute(_ => null)?.Model, "qwen2.5:7b");
+    s.LlmBaseUrl = "http://example.com/v1";
+    Eq("an unsafe URL disables the route", s.ActiveRoute(_ => null), null);
+    s.LlmPresetId = "deepseek";
+    Eq("each preset keeps its own model", s.LlmModel, "deepseek-chat");
+
+    var dir = Path.Combine(Path.GetTempPath(), "typeleast-tests-" + Guid.NewGuid().ToString("N"));
+    var file = Path.Combine(dir, "app-settings.json");
+    s.Hotkey = DictationKey.F8;
+    s.Words.Add("TypeLeast");
+    s.Save(file);
+    var back = AppSettings.Load(file);
+    Eq("settings round-trip", back.Hotkey, DictationKey.F8);
+    Eq("words round-trip", back.Words.FirstOrDefault(), "TypeLeast");
+    Check("the key is never written to the settings file", !File.ReadAllText(file).Contains("sk-test"));
+    File.WriteAllText(file, "{ broken");
+    Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
+    File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
+    Eq("an old strength reads as Article", AppSettings.Load(file).Strength, "prompt");
+
+    var history = new LocalHistory(Path.Combine(dir, "app-history.json"));
+    history.Add(new HistoryEntry { Text = "第一条", Seconds = 2 });
+    history.Add(new HistoryEntry { Text = "第二条", Seconds = 3 });
+    Eq("history is newest first", new LocalHistory(Path.Combine(dir, "app-history.json")).Last?.Text, "第二条");
+    Eq("stats count characters", history.Stats().Characters, 6);
+    Directory.Delete(dir, true);
+}
+
+// ---- 5. messages
+
+{
+    Eq("ready speech has no problem", Messages.SpeechProblem(new SpeechStatus { Phase = "ready", Ready = true }), "");
+    Check("missing models are explained", Messages.SpeechProblem(new SpeechStatus { Phase = "missing-model" }).Contains("241 MB"));
+    var downloading = JsonSerializer.Deserialize<HealthResponse>(
+        "{\"ok\":false,\"service\":\"typeleast\",\"speech\":{\"phase\":\"downloading\",\"download\":{\"received\":60000000,\"total\":240000000}}}", Json.Options)!;
+    Eq("health names the service", downloading.Service, "typeleast");
+    Check("download progress decodes", Math.Abs((downloading.Speech!.DownloadFraction ?? 0) - 0.25) < 1e-9);
+    Check("progress shows in the message", Messages.SpeechProblem(downloading.Speech).Contains("25%"));
+    Check("401 is explained as a bad key", Messages.ExplainLlmCode("HTTP_401", null).Contains("Key"));
+    Eq("no fallback note on success", Messages.FallbackNote(null), null);
+    Check("missing key is explained", Messages.FallbackNote("no-api-key")!.Contains("原话"));
+    Eq("model ids come sorted", string.Join(",", LlmRoute.ModelIds("{\"data\":[{\"id\":\"b\"},{\"id\":\"a\"},{\"x\":1}]}")), "a,b");
+    Eq("bad /models body gives none", LlmRoute.ModelIds("nope").Count, 0);
+}
+
+// ---- 6. the client against a stub service
+
+{
+    var stub = new StubServer();
+    var dir = Path.Combine(Path.GetTempPath(), "typeleast-client-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    File.WriteAllText(Path.Combine(dir, "api-token"), "tok123\n");
+    File.WriteAllText(Path.Combine(dir, "runtime.json"), "{\"port\":" + stub.Port + "}");
+    var client = new ServiceClient(dir);
+    Eq("the published port is read", client.PublishedPort(), (int?)stub.Port);
+    Check("discovery points the client at it", client.DiscoverBaseUri() && client.BaseUri.Port == stub.Port);
+
+    stub.Reply = (200, "{\"ok\":true,\"service\":\"typeleast\",\"version\":\"0.2.0\",\"speech\":{\"phase\":\"ready\",\"ready\":true}}");
+    var health = await client.HealthAsync();
+    Check("health decodes", health.Ok && health.Speech?.Ready == true);
+    Eq("health path", stub.LastPath, "/api/voice-polish/health");
+    Eq("bearer token sent", stub.LastHeaders.GetValueOrDefault("authorization"), "Bearer tok123");
+    Eq("host header is loopback", stub.LastHeaders.GetValueOrDefault("host"), "127.0.0.1:" + stub.Port);
+
+    stub.Reply = (200, "{\"requestId\":\"r\",\"text\":\"好的。\",\"raw\":\"好的\",\"fallback\":false,\"ms\":{\"total\":12}}");
+    var route = new LlmRoute("https://api.example.com/v1", "m", "sk-secret");
+    var result = await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
+    Eq("dictate decodes", result.InsertableText, "好的。");
+    Eq("dictate path", stub.LastPath, "/api/voice-polish/dictate");
+    Eq("content type is wav", stub.LastHeaders.GetValueOrDefault("content-type"), "audio/wav");
+    Eq("app hint header", stub.LastHeaders.GetValueOrDefault("x-voice-app"), "notepad.exe");
+    var sent = stub.LastHeaders.GetValueOrDefault("x-voice-llm") ?? "";
+    var decoded = JsonSerializer.Deserialize<JsonElement>(Convert.FromBase64String(sent));
+    Eq("the route travels as base64 JSON", decoded.GetProperty("baseURL").GetString(), "https://api.example.com/v1");
+    Check("the body is the WAV itself", Wav.IsCanonical(stub.LastBody));
+
+    stub.Reply = (503, "{\"error\":\"speech model is not ready\",\"code\":\"speech-not-ready\"}");
+    try
+    {
+        await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "x", "prompt", null);
+        Check("503 throws", false);
+    }
+    catch (ServiceException e)
+    {
+        Eq("503 carries its code", e.Code, "speech-not-ready");
+        Check("503 means unavailable", e.ServiceUnavailable);
+    }
+
+    stub.Reply = (202, "{\"ok\":true,\"phase\":\"downloading\"}");
+    Check("model download starts", await client.DownloadModelsAsync("https://mirror.example.com"));
+    Check("the mirror is sent", Encoding.UTF8.GetString(stub.LastBody).Contains("mirror.example.com"));
+
+    stub.Stop();
+    var dead = new ServiceClient(dir);
+    dead.UsePort(1);
+    File.WriteAllText(Path.Combine(dir, "runtime.json"), "{\"port\":1}");
+    try
+    {
+        await dead.HealthAsync();
+        Check("a closed port throws", false);
+    }
+    catch (ServiceException e)
+    {
+        Check("a closed port is a transport error", e.Kind == ServiceErrorKind.Transport && e.ServiceUnavailable);
+    }
+
+    File.Delete(Path.Combine(dir, "api-token"));
+    try
+    {
+        await new ServiceClient(dir).HealthAsync();
+        Check("no token throws", false);
+    }
+    catch (ServiceException e)
+    {
+        Eq("no token is reported as such", e.Kind, ServiceErrorKind.NoToken);
+    }
+    Directory.Delete(dir, true);
+
+    Eq("an oversized context header is dropped", ServiceClient.EncodeContextHeader(new byte[ServiceClient.MaxContextHeaderBytes]), null);
+    Eq("no route means no header", ServiceClient.EncodeRouteHeader(null), null);
+}
+
+Console.WriteLine();
+Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
+return failed == 0 ? 0 : 1;
+
+/// <summary>A tiny HTTP/1.1 server on 127.0.0.1 that records one request at a time.</summary>
+sealed class StubServer
+{
+    private readonly TcpListener listener = new(IPAddress.Loopback, 0);
+    public int Port { get; }
+    public (int Status, string Body) Reply { get; set; } = (200, "{}");
+    public string LastPath { get; private set; } = "";
+    public Dictionary<string, string> LastHeaders { get; private set; } = new();
+    public byte[] LastBody { get; private set; } = Array.Empty<byte>();
+
+    public StubServer()
+    {
+        listener.Start();
+        Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        _ = Task.Run(Loop);
+    }
+
+    public void Stop() => listener.Stop();
+
+    private async Task Loop()
+    {
+        while (true)
+        {
+            TcpClient client;
+            try { client = await listener.AcceptTcpClientAsync(); }
+            catch { return; }
+            _ = Task.Run(() => Serve(client));
+        }
+    }
+
+    private async Task Serve(TcpClient client)
+    {
+        using var _ = client;
+        var stream = client.GetStream();
+        var buffer = new List<byte>();
+        var chunk = new byte[8192];
+        int headerEnd;
+        while ((headerEnd = IndexOf(buffer, "\r\n\r\n"u8.ToArray())) < 0)
+        {
+            var n = await stream.ReadAsync(chunk);
+            if (n == 0) return;
+            buffer.AddRange(chunk.AsSpan(0, n).ToArray());
+        }
+        var head = Encoding.ASCII.GetString(buffer.GetRange(0, headerEnd).ToArray()).Split("\r\n");
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in head.Skip(1))
+        {
+            var colon = line.IndexOf(':');
+            if (colon > 0) headers[line[..colon].Trim().ToLowerInvariant()] = line[(colon + 1)..].Trim();
+        }
+        var length = headers.TryGetValue("content-length", out var cl) ? int.Parse(cl) : 0;
+        var body = buffer.Skip(headerEnd + 4).ToList();
+        while (body.Count < length)
+        {
+            var n = await stream.ReadAsync(chunk);
+            if (n == 0) break;
+            body.AddRange(chunk.AsSpan(0, n).ToArray());
+        }
+        LastPath = head[0].Split(' ')[1];
+        LastHeaders = headers;
+        LastBody = body.ToArray();
+        var payload = Encoding.UTF8.GetBytes(Reply.Body);
+        var response = $"HTTP/1.1 {Reply.Status} X\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(response));
+        await stream.WriteAsync(payload);
+    }
+
+    private static int IndexOf(List<byte> haystack, byte[] needle)
+    {
+        for (var i = 0; i + needle.Length <= haystack.Count; i++)
+        {
+            var match = true;
+            for (var j = 0; j < needle.Length && match; j++) match = haystack[i + j] == needle[j];
+            if (match) return i;
+        }
+        return -1;
+    }
+}

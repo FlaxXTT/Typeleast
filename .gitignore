@@ -1,5 +1,8 @@
-# Native build output (build.sh / test.sh / Tools/render.sh)
-/dsh-voice/native/macos/build/
+# Build output (apps/macos: build.sh / test.sh / Tools/render.sh; apps/windows: dotnet)
+/apps/macos/build/
+apps/windows/**/bin/
+apps/windows/**/obj/
+/dist/
 
 # Dependencies and local artefacts
 node_modules/
@@ -12,3 +15,4 @@ node_modules/
 # Windows
 Thumbs.db
 desktop.ini
+apps/windows/dist/
