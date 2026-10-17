@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/demo.gif" alt="演示：在输入框里按一下 fn，随口说一句带口头禅、中途改口的话，整理好的文字直接出现在光标处" width="760">
+  <a href="docs/media/promo.mp4"><img src="docs/media/promo.gif" alt="10 秒宣传片：按一下 fn 随口说，口头禅去掉、改口照办，整理好的文字直接写进光标处" width="860"></a>
 </p>
 
-<p align="center"><sub>真实录屏：按一下 fn，说完自动整理并粘贴。演示用的是 macOS 合成语音，整理用的是 DeepSeek。</sub></p>
+<p align="center"><sub>10 秒宣传片（点击看高清 MP4）。画面来自真实录屏和 App 的真实界面，录屏部分已加速。</sub></p>
 
 # TypeLeast
 
@@ -27,6 +27,14 @@
 | 🔑 **用你自己的模型** | DeepSeek、智谱、Kimi、通义千问、OpenRouter、OpenAI，或本机 Ollama。按量付费，没有订阅；Key 只存在系统钥匙串 / 凭据管理器里。不填 Key 也能用，只去口水词。 |
 | ⚡ **哪里都能用** | 微信、邮件、浏览器、Word、VS Code……任何输入框。Mac 单按 fn，Windows 单按右 Alt。 |
 | 📦 **装上就能用** | 安装包自带运行环境，不需要账号，也不需要另装 Node.js 或其他宿主程序。 |
+
+## 实际效果
+
+<p align="center">
+  <img src="docs/media/demo.gif" alt="真实录屏：在输入框里按一下 fn，随口说一句带口头禅、中途改口的话，整理好的文字直接出现在光标处" width="760">
+</p>
+
+<p align="center"><sub>未加速的真实录屏：按一下 fn，说完自动整理并粘贴。演示用的是 macOS 合成语音（不经过麦克风），整理用的是 DeepSeek。</sub></p>
 
 ## 界面一览
 
@@ -237,6 +245,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 ### README 里的截图和演示
 
 - 截图：`apps/macos/Tools/render.sh` 用示例数据离屏渲染所有页面，再用 `apps/macos/Tools/demo/FrameShot.swift` 加圆角和阴影。
+- 宣传片：先用 `record-demo.sh` 录好 `demo.mov`，再用 `apps/macos/Tools/demo/MakePromo.swift` 把它和真实界面截图剪成 10 秒的 MP4 和 GIF（用法见文件开头）。
 - 演示 GIF：`apps/macos/Tools/demo/record-demo.sh <输出目录>`。它用 macOS 合成语音代替麦克风，走真实的识别、整理和粘贴流程，只录演示用的编辑器窗口。需要已安装、已授权辅助功能并配置好整理模型的 TypeLeast，以及运行脚本的终端有「屏幕录制」权限；录制约 20 秒，期间不要动鼠标键盘。
 
 ### 发布
