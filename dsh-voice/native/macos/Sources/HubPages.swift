@@ -1,0 +1,621 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+// HubPages.swift - Home, History and Dictionary, after Reference's desktop pages.
+
+// MARK: - shared helpers
+
+enum AppNames {
+    private static var cache: [String: String] = [:]
+
+    /// Names for common apps that may not be installed on this Mac (history can
+    /// outlive an uninstall, and synced machines differ).
+    private static let known: [String: String] = [
+        "com.tencent.xinWeChat": "微信", "com.tencent.qq": "QQ", "com.tencent.WeWorkMac": "企业微信",
+        "com.electron.lark": "飞书", "com.bytedance.lark": "飞书", "com.alibaba.DingTalkMac": "钉钉",
+        "com.tinyspeck.slackmacgap": "Slack", "com.hnc.Discord": "Discord", "ru.keepcoder.Telegram": "Telegram",
+        "com.apple.mail": "邮件", "com.apple.Notes": "备忘录", "com.apple.MobileSMS": "信息",
+        "notion.id": "Notion", "md.obsidian": "Obsidian", "com.deepseek.dsh": "DeepSeek Harness",
+    ]
+
+    /// "com.apple.mail" -> "邮件"; falls back to the bundle id.
+    static func name(for bundleId: String?) -> String {
+        guard let id = bundleId, !id.isEmpty else { return "未知应用" }
+        if let cached = cache[id] { return cached }
+        var name = known[id] ?? id
+        if known[id] == nil, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+            name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        }
+        cache[id] = name
+        return name
+    }
+}
+
+enum Formatters {
+    static let time: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    static let day: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M月d日 EEEE"
+        return f
+    }()
+
+    static func dayTitle(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "今天" }
+        if calendar.isDateInYesterday(date) { return "昨天" }
+        return day.string(from: date)
+    }
+
+    static func number(_ value: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        return f.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    static func duration(_ seconds: Double) -> (String, String) {
+        if seconds < 60 { return (seconds < 1 ? "0" : String(Int(seconds)), "秒") }
+        if seconds < 3600 { return (String(Int(seconds / 60)), "分钟") }
+        return (String(format: "%.1f", seconds / 3600), "小时")
+    }
+}
+
+// MARK: - Home
+
+struct HomePage: View {
+    @EnvironmentObject var model: AppModel
+
+    private var greeting: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12: return "早上好"
+        case 12..<18: return "下午好"
+        default: return "晚上好"
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                PageHeader(title: greeting, subtitle: "说话，不用打字。在任何 App 里都能用。")
+                VStack(alignment: .leading, spacing: 18) {
+                    HeroCard()
+                    if !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceUp {
+                        SetupCard()
+                    }
+                    StatsRow(stats: model.stats)
+                    RecentCard()
+                    EngineCard()
+                }
+                .padding(.horizontal, 36)
+                .padding(.bottom, 36)
+            }
+        }
+    }
+}
+
+private struct HeroCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Card(padding: 22) {
+            HStack(alignment: .center, spacing: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text("按").font(.system(size: 17, weight: .semibold))
+                        Keycap(label: model.hotkeyLabel, large: true)
+                        Text("开始听写，再按一次结束").font(.system(size: 17, weight: .semibold))
+                    }
+                    Text("说完后，整理好的文字会出现在你开始听写时光标所在的位置。按 Esc 取消。")
+                        .font(.system(size: 12.5))
+                        .foregroundColor(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Button(model.phase == .recording ? "结束听写" : "试一下") { model.actions?.toggleDictation() }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.phase == .thinking)
+            }
+        }
+    }
+}
+
+private struct SetupCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("完成设置").font(.system(size: 14, weight: .semibold))
+                SetupRow(done: model.micStatus == .authorized, title: "麦克风",
+                         detail: "用来录下你说的话，音频只在本机转写。",
+                         action: model.micStatus == .denied ? "打开设置" : "允许") {
+                    if model.micStatus == .denied { model.actions?.openMicrophoneSettings() } else { model.actions?.requestMicrophone() }
+                }
+                SetupRow(done: model.accessibilityTrusted, title: "辅助功能",
+                         detail: "用来把文字粘贴到光标处，并识别 Fn 键。", action: "授权") {
+                    model.actions?.requestAccessibility()
+                }
+                SetupRow(done: model.serviceUp, title: "整理服务（DeepSeek Harness）",
+                         detail: model.serviceUp ? "已连接" : "转写和整理在 DSH 里运行，需要先打开它。", action: "启动") {
+                    model.actions?.launchDSH()
+                }
+            }
+        }
+    }
+}
+
+private struct SetupRow: View {
+    let done: Bool
+    let title: String
+    let detail: String
+    let action: String
+    let perform: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 16))
+                .foregroundColor(done ? Theme.success : Theme.tertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                Text(detail).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+            }
+            Spacer()
+            if !done {
+                Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
+            }
+        }
+    }
+}
+
+private struct StatsRow: View {
+    let stats: DictationStats
+
+    var body: some View {
+        let saved = Formatters.duration(stats.savedSeconds)
+        HStack(spacing: 12) {
+            StatTile(value: Formatters.number(stats.words), unit: "字", label: "听写总字数")
+            StatTile(value: saved.0, unit: saved.1, label: "节省的时间")
+            StatTile(value: Formatters.number(stats.wordsPerMinute), unit: "字/分钟", label: "平均说话速度")
+            StatTile(value: Formatters.number(stats.dictations), unit: "次", label: "听写次数")
+        }
+    }
+}
+
+private struct StatTile: View {
+    let value: String
+    let unit: String
+    let label: String
+
+    var body: some View {
+        Card(padding: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(label).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value).font(.system(size: 26, weight: .bold, design: .rounded))
+                    Text(unit).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct RecentCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("最近").font(.system(size: 14, weight: .semibold))
+                Spacer()
+                if !model.history.isEmpty {
+                    Button("查看全部") { model.page = .history }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.secondary)
+                }
+            }
+            if model.history.isEmpty {
+                Card {
+                    Text("还没有听写记录。按 \(model.hotkeyLabel) 说一句话试试。")
+                        .font(.system(size: 13))
+                        .foregroundColor(Theme.secondary)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(model.history.prefix(4)) { entry in
+                        HistoryRow(entry: entry, compact: true)
+                        if entry.id != model.history.prefix(4).last?.id { Divider().padding(.leading, 66) }
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+            }
+        }
+    }
+}
+
+private struct EngineCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("引擎").font(.system(size: 14, weight: .semibold))
+                EngineRow(symbol: "waveform", title: "语音识别", value: model.speechSummary)
+                EngineRow(symbol: "sparkles", title: "整理", value: model.modelSummary)
+                EngineRow(symbol: "slider.horizontal.3", title: "整理强度",
+                          value: (VoiceStrength(rawValue: model.settings.strength) ?? .prompt).label)
+            }
+        }
+    }
+}
+
+private struct EngineRow: View {
+    let symbol: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).frame(width: 18).foregroundColor(Theme.secondary)
+            Text(title).font(.system(size: 13))
+            Spacer()
+            Text(value).font(.system(size: 12.5)).foregroundColor(Theme.secondary)
+        }
+    }
+}
+
+// MARK: - History
+
+enum HistoryFilter: Hashable { case all, polished, raw }
+
+struct HistoryPage: View {
+    @EnvironmentObject var model: AppModel
+    @State private var filter: HistoryFilter = .all
+    @State private var query = ""
+    @State private var confirmClear = false
+
+    private var filtered: [LocalHistoryEntry] {
+        model.history.filter { entry in
+            switch filter {
+            case .all: break
+            case .polished: if entry.fallback { return false }
+            case .raw: if !entry.fallback { return false }
+            }
+            guard !query.isEmpty else { return true }
+            return entry.displayText.localizedCaseInsensitiveContains(query) || entry.raw.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private struct DayGroup: Identifiable {
+        let id: String
+        let entries: [LocalHistoryEntry]
+    }
+
+    private var groups: [DayGroup] {
+        var order: [String] = []
+        var map: [String: [LocalHistoryEntry]] = [:]
+        for entry in filtered {
+            let key = Formatters.dayTitle(entry.ts)
+            if map[key] == nil { order.append(key) }
+            map[key, default: []].append(entry)
+        }
+        return order.map { DayGroup(id: $0, entries: map[$0] ?? []) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader(title: "历史", subtitle: "听写记录只保存在这台电脑上。") {
+                HStack(spacing: 10) {
+                    Picker("保留", selection: model.setting(\.historyRetention, then: {
+                        HistoryStore.shared.applyRetention(Settings.shared.historyRetention)
+                    })) {
+                        ForEach(HistoryRetention.allCases, id: \.self) { Text("保留 " + $0.label).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 130)
+                    Menu {
+                        Button("删除全部历史", role: .destructive) { confirmClear = true }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 32)
+                }
+            }
+            HStack {
+                ChipPicker(options: [(HistoryFilter.all, "全部"), (.polished, "已整理"), (.raw, "用了原文")], selection: $filter)
+                Spacer()
+                SearchField(text: $query)
+            }
+            .padding(.horizontal, 36)
+            .padding(.bottom, 12)
+
+            if filtered.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
+                    Text(query.isEmpty ? "还没有听写记录" : "没有匹配的记录").foregroundColor(Theme.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        ForEach(groups) { group in
+                            let entries = group.entries
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(group.id).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
+                                VStack(spacing: 0) {
+                                    ForEach(entries) { entry in
+                                        HistoryRow(entry: entry, compact: false)
+                                        if entry.id != entries.last?.id { Divider().padding(.leading, 66) }
+                                    }
+                                }
+                                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 36)
+                }
+            }
+        }
+        .alert("删除全部历史？", isPresented: $confirmClear) {
+            Button("删除", role: .destructive) { model.actions?.clearHistory() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会删除这台电脑上的全部听写记录和保留的录音，无法恢复。")
+        }
+    }
+}
+
+struct HistoryRow: View {
+    @EnvironmentObject var model: AppModel
+    let entry: LocalHistoryEntry
+    let compact: Bool
+    @State private var hovering = false
+    @State private var expanded = false
+    @State private var copied = false
+
+    private var canRetry: Bool {
+        guard let path = entry.audioPath else { return false }
+        return FileManager.default.fileExists(atPath: path)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(Formatters.time.string(from: entry.ts))
+                .font(.system(size: 12, design: .rounded))
+                .foregroundColor(Theme.tertiary)
+                .frame(width: 38, alignment: .leading)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(entry.displayText.isEmpty ? "（没有识别到内容）" : entry.displayText)
+                    .font(.system(size: 13.5))
+                    .foregroundColor(Theme.ink)
+                    .lineLimit(expanded ? nil : (compact ? 2 : 4))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if expanded, !entry.raw.isEmpty, entry.raw != entry.displayText {
+                    Text("原话：" + entry.raw)
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.secondary)
+                        .textSelection(.enabled)
+                }
+                HStack(spacing: 6) {
+                    Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                    if entry.fallback { Badge(text: "用了原文", tint: Theme.warning) }
+                    if copied { Badge(text: "已复制", tint: Theme.success) }
+                }
+            }
+            if hovering || copied {
+                HStack(spacing: 2) {
+                    IconButton(symbol: "doc.on.doc", help: "复制") { copy(raw: false) }
+                    if !compact {
+                        IconButton(symbol: "text.quote", help: "复制原话") { copy(raw: true) }
+                        if canRetry {
+                            IconButton(symbol: "arrow.clockwise", help: "用同一段录音重试") { model.actions?.retryEntry(id: entry.id) }
+                        }
+                        IconButton(symbol: "trash", help: "删除", role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
+        .onHover { hovering = $0 }
+        .onTapGesture { if !compact { expanded.toggle() } else { model.page = .history } }
+    }
+
+    private func copy(raw: Bool) {
+        model.actions?.copyEntry(id: entry.id, raw: raw)
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+    }
+}
+
+// MARK: - Dictionary
+
+enum WordFilter: Hashable { case all, auto, manual }
+
+struct DictionaryPage: View {
+    @EnvironmentObject var model: AppModel
+    @State private var filter: WordFilter = .all
+    @State private var query = ""
+    @State private var editing: LocalWord?
+    @State private var adding = false
+    @State private var importNote = ""
+
+    private var filtered: [LocalWord] {
+        model.words.filter { word in
+            switch filter {
+            case .all: break
+            case .auto: if word.source != .auto { return false }
+            case .manual: if word.source != .manual { return false }
+            }
+            guard !query.isEmpty else { return true }
+            return word.word.localizedCaseInsensitiveContains(query) || (word.heardAs ?? "").localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader(title: "词典", subtitle: "人名、项目代号、专业术语。你在听写后改过的词会自动加进来。") {
+                HStack(spacing: 8) {
+                    Button("导入 CSV") { importCSV() }.buttonStyle(SecondaryButtonStyle())
+                    Button {
+                        adding = true
+                    } label: {
+                        Label("新词", systemImage: "plus")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+            }
+            HStack {
+                ChipPicker(options: [(WordFilter.all, "全部"), (.auto, "自动添加"), (.manual, "手动添加")], selection: $filter)
+                Spacer()
+                if !importNote.isEmpty { Text(importNote).font(.system(size: 12)).foregroundColor(Theme.secondary) }
+                SearchField(text: $query)
+            }
+            .padding(.horizontal, 36)
+            .padding(.bottom, 12)
+
+            if model.dictionarySynced == false {
+                Text("整理服务暂时没有收到最新词典，DSH 运行后会自动同步。")
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.warning)
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 8)
+            }
+
+            if filtered.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
+                    Text(query.isEmpty ? "词典还是空的。添加常被识别错的名字和术语，整理时会优先用这些写法。" : "没有匹配的词")
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(Theme.secondary)
+                        .frame(maxWidth: 360)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(filtered) { word in
+                            WordRow(word: word, onEdit: { editing = word }, onDelete: {
+                                Settings.shared.removeWord(id: word.id)
+                                model.actions?.syncDictionary()
+                            })
+                            if word.id != filtered.last?.id { Divider().padding(.leading, 16) }
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 36)
+                }
+            }
+        }
+        .sheet(isPresented: $adding) {
+            WordEditor(title: "新词", word: "", heardAs: "") { word, heard in
+                Settings.shared.addWord(word, heardAs: heard, source: .manual)
+                model.actions?.syncDictionary()
+            }
+        }
+        .sheet(item: $editing) { word in
+            WordEditor(title: "编辑", word: word.word, heardAs: word.heardAs ?? "") { newWord, heard in
+                Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard)
+                model.actions?.syncDictionary()
+            }
+        }
+    }
+
+    private func importCSV() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.commaSeparatedText, .plainText]
+        panel.allowsMultipleSelection = false
+        panel.message = "每行一个词；或者「常被识别成,正确写法」"
+        guard panel.runModal() == .OK, let url = panel.url,
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let added = Settings.shared.importCSV(text)
+        importNote = "已导入 \(added) 个词"
+        model.actions?.syncDictionary()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { importNote = "" }
+    }
+}
+
+private struct WordRow: View {
+    let word: LocalWord
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(word.word).font(.system(size: 14, weight: .semibold))
+                if let heard = word.heardAs, !heard.isEmpty {
+                    Text("常被识别成「\(heard)」").font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                }
+            }
+            Spacer()
+            Badge(text: word.source == .auto ? "自动添加" : "手动添加",
+                  tint: word.source == .auto ? Theme.accent : Theme.secondary)
+            if hovering {
+                IconButton(symbol: "pencil", help: "编辑", action: onEdit)
+                IconButton(symbol: "trash", help: "删除", role: .destructive, action: onDelete)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+        .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct WordEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    @State var word: String
+    @State var heardAs: String
+    let onSave: (String, String?) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title).font(.system(size: 18, weight: .bold))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("词语").font(.system(size: 12, weight: .medium)).foregroundColor(Theme.secondary)
+                TextField("例如 DeepSeek、张伟、Kubernetes", text: $word)
+                    .textFieldStyle(.roundedBorder)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("常被识别成（可选）").font(.system(size: 12, weight: .medium)).foregroundColor(Theme.secondary)
+                TextField("例如 得普西克", text: $heardAs)
+                    .textFieldStyle(.roundedBorder)
+                Text("填了以后，凡是识别成这个写法的地方都会改成上面的词。")
+                    .font(.system(size: 11)).foregroundColor(Theme.tertiary)
+            }
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }.buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
+                Button(title == "新词" ? "添加" : "保存") {
+                    onSave(word, heardAs.isEmpty ? nil : heardAs)
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                .disabled(word.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+    }
+}

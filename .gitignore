@@ -1,0 +1,14 @@
+# Native build output (build.sh / test.sh / Tools/render.sh)
+/dsh-voice/native/macos/build/
+
+# Dependencies and local artefacts
+node_modules/
+*.log
+*.wav
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
