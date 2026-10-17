@@ -91,6 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.recordingBar.warmUp() }
         }
 
+        // Demo mode for screen recordings: a synthetic-voice WAV replaces the
+        // microphone and one dictation starts by itself after a short delay, into
+        // whatever app is in front. No window of TypeLeast is shown.
+        if let demoPath = ProcessInfo.processInfo.environment["TYPELEAST_DEMO_WAV"],
+           let wav = FileManager.default.contents(atPath: demoPath), Wav.isCanonical(wav) {
+            recorder.demoPCM = wav.subdata(in: 44 ..< wav.count)
+            let delay = Double(ProcessInfo.processInfo.environment["TYPELEAST_DEMO_DELAY"] ?? "") ?? 4
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.toggleDictation() }
+            return
+        }
+
         if ProcessInfo.processInfo.environment["TYPELEAST_SELFCHECK"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.runSelfCheck() }
             return
@@ -103,6 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // A demo recording shows only the voice bar over another app.
+        if recorder.demoPCM != nil { return false }
         if !flag { hub.show() }
         return true
     }

@@ -15,6 +15,10 @@ extension AppDelegate {
 
     func startRecording() {
         guard phase == .idle else { return }
+        if recorder.demoPCM != nil {
+            beginCapture()   // demo input: no microphone involved
+            return
+        }
         switch Recorder.authorizationStatus() {
         case .notDetermined:
             Recorder.requestMicrophoneAccess { [weak self] granted in

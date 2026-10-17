@@ -47,6 +47,14 @@ final class Recorder {
     /// Called with the engine just before each recording starts.
     var prepareEngine: ((AVAudioEngine) -> Void)?
 
+    /// Demo input (TYPELEAST_DEMO_WAV): 16 kHz mono PCM16 fed in at real-time pace
+    /// instead of the microphone, so a screen recording shows the real pipeline
+    /// (waveform, local recognition, cleanup, paste) without anyone's voice.
+    /// Never set in normal use.
+    var demoPCM: Data?
+    private var demoTimer: Timer?
+    private var demoOffset = 0
+
     var elapsed: Double {
         guard let s = startedAt else { return 0 }
         return Date().timeIntervalSince(s)
@@ -159,6 +167,10 @@ final class Recorder {
 
     func start() throws {
         guard !isRecording else { throw RecorderError.busy }
+        if let demo = demoPCM {
+            startDemo(demo)
+            return
+        }
         let status = Recorder.authorizationStatus()
         if status == .denied || status == .restricted { throw RecorderError.permissionDenied }
         if status == .notDetermined { throw RecorderError.permissionNotDetermined }
@@ -205,8 +217,13 @@ final class Recorder {
         guard isRecording else { throw RecorderError.tooShort(0) }
         capTimer?.invalidate()
         capTimer = nil
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        if demoPCM != nil {
+            demoTimer?.invalidate()
+            demoTimer = nil
+        } else {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
         isRecording = false
         let seconds = elapsed
         startedAt = nil
@@ -227,7 +244,9 @@ final class Recorder {
     func cancel() {
         capTimer?.invalidate()
         capTimer = nil
-        if isRecording {
+        demoTimer?.invalidate()
+        demoTimer = nil
+        if isRecording && demoPCM == nil {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
         }
@@ -235,6 +254,47 @@ final class Recorder {
         startedAt = nil
         converter = nil
         lock.lock(); pcm = Data(); smoothedLevel = 0; lock.unlock()
+    }
+
+    // MARK: demo input
+
+    private func startDemo(_ demo: Data) {
+        lock.lock(); pcm = Data(); smoothedLevel = 0; lock.unlock()
+        truncated = false
+        demoOffset = 0
+        isRecording = true
+        startedAt = Date()
+        let chunkBytes = Recorder.bytesPerSecond / 20   // 50 ms
+        var trailingTicks = 0
+        demoTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] timer in
+            guard let self = self, self.isRecording else { timer.invalidate(); return }
+            if self.demoOffset < demo.count {
+                let end = min(demo.count, self.demoOffset + chunkBytes)
+                let chunk = demo.subdata(in: demo.startIndex + self.demoOffset ..< demo.startIndex + end)
+                self.demoOffset = end
+                var sum = 0.0
+                let count = chunk.count / 2
+                chunk.withUnsafeBytes { raw in
+                    for i in 0..<count {
+                        let v = Double(Int16(littleEndian: raw.loadUnaligned(fromByteOffset: i * 2, as: Int16.self))) / 32768.0
+                        sum += v * v
+                    }
+                }
+                let rms = count > 0 ? Float((sum / Double(count)).squareRoot()) : 0
+                self.lock.lock()
+                self.pcm.append(chunk)
+                self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: Recorder.loudness(rms: rms))
+                self.lock.unlock()
+            } else {
+                // A moment of quiet after the last word, like a person about to press stop.
+                self.lock.lock(); self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: 0); self.lock.unlock()
+                trailingTicks += 1
+                if trailingTicks == 8 {
+                    timer.invalidate()
+                    self.onAutoStop?()
+                }
+            }
+        }
     }
 
     // MARK: capture

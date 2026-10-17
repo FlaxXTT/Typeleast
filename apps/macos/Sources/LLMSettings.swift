@@ -56,8 +56,11 @@ enum KeychainStore {
     static let service = "TypeLeast.llm-api-key"
     /// OSStatus of the last write, for diagnostics and for telling the user why saving failed.
     private(set) static var lastStatus: OSStatus = errSecSuccess
+    /// Screenshot/test seam: when set, the Keychain is never touched.
+    static var stub: [String: String]?
 
     static func read(account: String) -> String? {
+        if let stub = stub { return stub[account] }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -73,6 +76,10 @@ enum KeychainStore {
 
     @discardableResult
     static func write(_ value: String, account: String) -> Bool {
+        if stub != nil {
+            stub?[account] = value.isEmpty ? nil : value
+            return true
+        }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

@@ -1,11 +1,64 @@
+<p align="center">
+  <img src="docs/media/banner.png" alt="TypeLeast：说话就是打字。本机识别，你的模型整理，直接写进光标处。" width="860">
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><img alt="下载最新版" src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E6%9C%80%E6%96%B0%E7%89%88-1a1a1a"></a>
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1a1a1a?logo=apple&logoColor=white">
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-1a1a1a?logo=windows&logoColor=white">
+  <img alt="识别在本机" src="https://img.shields.io/badge/%E8%AF%86%E5%88%AB-%E6%9C%AC%E6%9C%BA-2e9d5b">
+  <img alt="自带 API Key" src="https://img.shields.io/badge/%E6%95%B4%E7%90%86-%E8%87%AA%E5%B8%A6%20API%20Key-5b5bd6">
+</p>
+
+<p align="center">
+  <img src="docs/media/demo.gif" alt="演示：在输入框里按一下 fn，随口说一句带口头禅、中途改口的话，整理好的文字直接出现在光标处" width="760">
+</p>
+
+<p align="center"><sub>真实录屏：按一下 fn，说完自动整理并粘贴。演示用的是 macOS 合成语音，整理用的是 DeepSeek。</sub></p>
+
 # TypeLeast
 
-按一下快捷键说话，再按一下结束：语音在**你自己的电脑上**识别，再用**你自己的大模型 API Key** 整理成通顺的文字（去口水词、纠正同音错字、理顺句子），直接出现在当前光标处。对标 [Typeless](https://www.typeless.com)。
+按一下快捷键说话，再按一下结束：语音在**你自己的电脑上**识别，再用**你自己的大模型 API Key** 整理成通顺的文字，直接出现在当前光标处。对标 [Typeless](https://www.typeless.com)，但识别不上云，也不用订阅。
 
-- **macOS 13+**（Apple 芯片和 Intel）和 **Windows 11**（也支持 Windows 10 1809 以上，64 位）。
-- **识别在本机**：SenseVoice 模型（中、英、日、韩、粤），通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行，音频不离开电脑。
-- **整理用你自己的模型**：DeepSeek、智谱、Kimi、通义千问、OpenRouter、OpenAI，或本机 Ollama，任何 OpenAI 兼容接口都行。不填 Key 也能用，只去口水词、不改写。
-- 不需要账号，不需要 DeepSeek Harness 或其他宿主程序。
+## 为什么用 TypeLeast
+
+| | |
+|---|---|
+| 🎙️ **随口说，它来整理** | 「嗯」「那个」「然后呢」自动去掉；说错了改口（「明天，不对，后天」），它按你最后的意思写；句子理顺、标点补好，不编造你没说的内容。 |
+| 🔒 **识别在本机** | SenseVoice 模型在你的电脑上运行（中、英、日、韩、粤），音频不离开你的电脑。 |
+| 🔑 **用你自己的模型** | DeepSeek、智谱、Kimi、通义千问、OpenRouter、OpenAI，或本机 Ollama。按量付费，没有订阅；Key 只存在系统钥匙串 / 凭据管理器里。不填 Key 也能用，只去口水词。 |
+| ⚡ **哪里都能用** | 微信、邮件、浏览器、Word、VS Code……任何输入框。Mac 单按 fn，Windows 单按右 Alt。 |
+| 📦 **装上就能用** | 安装包自带运行环境，不需要账号，也不需要另装 Node.js 或其他宿主程序。 |
+
+## 界面一览
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/home.png" alt="首页：快捷键、统计和最近的听写"></td>
+    <td width="50%"><img src="docs/media/history.png" alt="历史：每条听写的整理结果，可复制原话"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>首页：一键开始、统计、最近的听写</sub></td>
+    <td align="center"><sub>历史：整理结果和原话都能复制</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/settings.png" alt="设置：快捷键和整理模型（自己的 API Key）"></td>
+    <td width="50%"><img src="docs/media/dictionary-dark.png" alt="词典（深色模式）：专有名词和纠错规则"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>设置：选服务商、填 Key、测试连接</sub></td>
+    <td align="center"><sub>词典：人名、术语、「听成=正确写法」，支持深色模式</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/media/pill-recording.png" alt="录音条：正在听" height="64">
+  &nbsp;&nbsp;
+  <img src="docs/media/pill-thinking.png" alt="录音条：整理中" height="64">
+  <br><sub>屏幕底部的录音条：说话时显示实时波形，说完显示整理进度，不抢当前窗口的焦点。</sub>
+</p>
+
+<sub>截图里的历史和词典都是示例数据。</sub>
 
 ---
 
@@ -183,6 +236,11 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 - 开发时让 App 使用仓库里的服务：先设置 `$env:TYPELEAST_SERVICE_DIR="<仓库路径>\service"`，再运行 `dotnet run --project TypeLeast`。
 - `.\package.ps1` 生成自带 Node.js 的 `Setup.exe` 和便携版 `.zip`，输出在 `apps\windows\dist\`。
+
+### README 里的截图和演示
+
+- 截图：`apps/macos/Tools/render.sh` 用示例数据离屏渲染所有页面，再用 `apps/macos/Tools/demo/FrameShot.swift` 加圆角和阴影。
+- 演示 GIF：`apps/macos/Tools/demo/record-demo.sh <输出目录>`。它用 macOS 合成语音代替麦克风，走真实的识别、整理和粘贴流程，只录演示用的编辑器窗口。需要已安装、已授权辅助功能并配置好整理模型的 TypeLeast，以及运行脚本的终端有「屏幕录制」权限；录制约 20 秒，期间不要动鼠标键盘。
 
 ### 发布
 
