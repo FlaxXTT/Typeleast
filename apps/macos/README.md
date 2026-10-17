@@ -22,6 +22,7 @@ history and the dictionary carry over).
     ./package.sh arm64       # self-contained release for Apple silicon (.dmg + .zip, with Node.js inside)
     ./package.sh x86_64      # the same for Intel (cross-compiled)
     ./Tools/render.sh [dir]  # offscreen PNGs of every page, with sample data
+    ./Tools/demo/record-demo.sh <dir>  # the README demo GIF (synthetic voice, no microphone; see the script)
 
 `TYPELEAST_ARCH=x86_64 ./build.sh` cross-builds for the other architecture.
 
@@ -64,3 +65,12 @@ a model check.
 - Accessibility: for pasting at the caret and for the Fn key. Every rebuild
   changes the ad-hoc signature, so macOS may ask again.
 - Nothing else: no screen recording, camera or input monitoring.
+
+## Demo mode
+
+`TYPELEAST_DEMO_WAV=<16 kHz mono PCM16 WAV>` (with `TYPELEAST_DEMO_DELAY`, seconds,
+default 4) makes the app feed that file in at real-time pace instead of opening
+the microphone, start one dictation by itself into the app in front, and show no
+window of its own. `Tools/demo/record-demo.sh` uses it with macOS's synthetic
+voice, so the README demo involves nobody's real voice.
+

@@ -10,32 +10,49 @@ try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirecto
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 
-// Sample data
-let now = Date()
+// Sample data (made up; this tool never reads the app's real history, words or Keychain).
+// Times are fixed sample times, not the moment of rendering.
+let today = Calendar.current.startOfDay(for: Date())
+let sampleTimes: [Date] = [
+    today.addingTimeInterval(10 * 3600 + 24 * 60),
+    today.addingTimeInterval(-24 * 3600 + 18 * 3600 + 40 * 60),
+    today.addingTimeInterval(-24 * 3600 + 16 * 3600 + 5 * 60),
+    today.addingTimeInterval(-24 * 3600 + 11 * 3600 + 32 * 60),
+]
+let now = sampleTimes[0]
 let samples: [(String, String, String, Bool, Double)] = [
     ("com.apple.Notes", "我想说三点：\n1. 要快\n2. 要准\n3. 要便宜", "嗯我想说三点啊第一呢就是要快第二要准然后第三个就是要便宜", false, 9),
-    ("com.apple.mail", "我们周三把报告发出去。", "我们周二把报告发出去不对周三发出去", false, 4),
-    ("com.microsoft.VSCode", "我们用 DeepSeek 的模型来做整理，然后接到 Harness 那边。", "我们用德普西克的模型来做整理然后接到哈尼斯那边", false, 6),
-    ("com.tencent.xinWeChat", "昨天我想了一下迁移的事情，其实我觉得风险比我们想的要大，因为数据库每张表都要改。", "昨天我想了一下那个迁移的事情其实我觉得风险比我们想的要大因为数据库每张表都要改", true, 8),
+    ("com.apple.mail", "周五的会改到下周二上午十点。", "那个周五的会改到下周一不对是下周二上午十点", false, 5),
+    ("com.microsoft.VSCode", "把这个函数改成异步的，并加上错误处理。", "帮我把这个函数改成异步的然后呢加上错误处理", false, 4),
+    ("com.tencent.xinWeChat", "我晚点到，大概七点半，你们先点菜。", "我晚点到啊大概七点半吧你们先点菜", false, 4),
 ]
 var entries: [LocalHistoryEntry] = []
 for (i, s) in samples.enumerated() {
-    entries.append(LocalHistoryEntry(id: UUID().uuidString, ts: now.addingTimeInterval(Double(-i) * 3700), app: s.0,
+    entries.append(LocalHistoryEntry(id: UUID().uuidString, ts: sampleTimes[i], app: s.0,
                                      language: "auto", strength: "prompt", raw: s.2, text: s.1, fallback: s.3,
-                                     fallbackReason: nil, model: "deepseek-flash", msTotal: 900, audioPath: nil,
+                                     fallbackReason: nil, model: "deepseek-chat", msTotal: 900, audioPath: nil,
                                      inserted: true, seconds: s.4))
 }
 UserDefaults.standard.set(try! JSONEncoder().encode(entries), forKey: "voice.history.v1")
 Settings.shared.words = [
     LocalWord(id: "1", word: "DeepSeek", heardAs: "德普西克", source: .manual, addedAt: now),
-    LocalWord(id: "2", word: "Harness", heardAs: nil, source: .auto, addedAt: now),
-    LocalWord(id: "3", word: "SenseVoice", heardAs: nil, source: .manual, addedAt: now),
+    LocalWord(id: "2", word: "TypeLeast", heardAs: nil, source: .manual, addedAt: now),
+    LocalWord(id: "3", word: "SenseVoice", heardAs: nil, source: .auto, addedAt: now),
+    LocalWord(id: "4", word: "GitHub", heardAs: nil, source: .auto, addedAt: now),
 ]
+KeychainStore.stub = ["deepseek": "sk-0000000000000000000000000000"]
+Settings.shared.llmPresetID = "deepseek"
+Settings.shared.llmModel = "deepseek-chat"
 HistoryStore.shared.load()
 let model = AppModel.shared
 model.reloadHistory()
 model.reloadWords()
 model.serviceUp = true
+model.serviceState = .running(port: 1)
+model.nodeDescription = "v24.21.0 · App 内置"
+model.health = try? JSONDecoder().decode(HealthResponse.self, from: Data(#"{"ok":true,"service":"typeleast","version":"0.2.0","provider":"custom:api.deepseek.com","model":"deepseek-chat","speech":{"providerId":"sensevoice-local","phase":"ready","ready":true}}"#.utf8))
+model.accessibilityTrusted = true
+model.micStatus = .authorized
 
 func snapshot(_ view: NSView, size: NSSize, name: String, dark: Bool) {
     let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
