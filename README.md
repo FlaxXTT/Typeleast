@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><img alt="下载最新版" src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E6%9C%80%E6%96%B0%E7%89%88-1a1a1a"></a>
+  <a href="https://github.com/FlaxXTT/typeleast/releases/latest"><img alt="下载最新版" src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E6%9C%80%E6%96%B0%E7%89%88-1a1a1a"></a>
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1a1a1a?logo=apple&logoColor=white">
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-1a1a1a?logo=windows&logoColor=white">
   <img alt="识别在本机" src="https://img.shields.io/badge/%E8%AF%86%E5%88%AB-%E6%9C%AC%E6%9C%BA-2e9d5b">
