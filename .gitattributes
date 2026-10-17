@@ -17,3 +17,6 @@
 *.jpg    binary
 *.wav    binary
 *.onnx   binary
+*.ico    binary
+*.dmg    binary
+*.zip    binary

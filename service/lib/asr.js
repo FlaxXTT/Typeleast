@@ -1,0 +1,233 @@
+/**
+ * Local speech recognition: SenseVoice through sherpa-onnx, on this computer.
+ *
+ * The engine is the official sherpa-onnx Node addon (prebuilt for macOS arm64
+ * and x64, and Windows x64), the same engine and model DeepSeek Harness uses.
+ * Audio never leaves the machine.
+ *
+ * Recordings longer than one comfortable model window are first split at
+ * pauses by Silero VAD, so a two-minute dictation is recognised as a series of
+ * sentences rather than one oversized input.
+ *
+ * The addon is loaded lazily and injected in tests, so everything else in the
+ * service runs without it.
+ *
+ * @module typeleast-service/asr
+ */
+import { createRequire } from "node:module";
+import { downloadModels, MODELS_TOTAL_BYTES, modelPaths, modelStatus } from "./models.js";
+import { pcm16ToFloat32, SAMPLE_RATE, withLeadIn } from "./wav.js";
+
+/** Above this many seconds a recording is split at pauses before recognition. */
+export const SEGMENT_THRESHOLD_SECONDS = 20;
+
+/** Silero's window at 16 kHz. */
+const VAD_WINDOW = 512;
+
+/** Load the sherpa-onnx addon (CommonJS) from this package's dependencies. */
+function loadSherpa() {
+  return createRequire(import.meta.url)("sherpa-onnx-node");
+}
+
+/** Recogniser state for /health and the apps. */
+export class LocalRecognizer {
+  /**
+   * @param {object} options - modelsDir, numThreads, language, logger, and loadSherpa for tests.
+   */
+  constructor(options) {
+    this.modelsDir = options.modelsDir;
+    this.numThreads = options.numThreads ?? 2;
+    this.language = options.language ?? "auto";
+    this.logger = options.logger ?? { info: () => {}, warn: () => {} };
+    this.loadSherpa = options.loadSherpa ?? loadSherpa;
+    /** missing-model | loading | ready | downloading | error */
+    this.phase = "loading";
+    this.error = null;
+    this.download = null;
+    this.recognizer = null;
+    this.sherpa = null;
+    this.preparing = null;
+  }
+
+  /**
+   * Load the model if its files are present. Safe to call repeatedly: one load
+   * runs at a time, and a loaded recogniser is kept.
+   * @returns {Promise<string>} the phase afterwards.
+   */
+  prepare() {
+    if (this.recognizer) return Promise.resolve(this.phase);
+    if (this.preparing) return this.preparing;
+    this.preparing = (async () => {
+      try {
+        const status = await modelStatus(this.modelsDir);
+        if (!status.ready) {
+          this.phase = "missing-model";
+          this.error = null;
+          return this.phase;
+        }
+        this.phase = "loading";
+        const paths = modelPaths(this.modelsDir);
+        this.sherpa = this.loadSherpa();
+        const started = Date.now();
+        this.recognizer = await this.sherpa.OfflineRecognizer.createAsync({
+          featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
+          modelConfig: {
+            senseVoice: { model: paths.model, language: this.language, useInverseTextNormalization: 1 },
+            tokens: paths.tokens,
+            numThreads: this.numThreads,
+            provider: "cpu",
+            debug: 0,
+          },
+        });
+        this.phase = "ready";
+        this.error = null;
+        this.logger.info?.("typeleast: speech model loaded in %d ms", Date.now() - started);
+      } catch (error) {
+        this.phase = "error";
+        this.error = error instanceof Error ? error.message : String(error);
+        this.logger.warn?.("typeleast: speech model failed to load: %s", this.error);
+      } finally {
+        this.preparing = null;
+      }
+      return this.phase;
+    })();
+    return this.preparing;
+  }
+
+  /**
+   * Download the model files (when missing), then load them.
+   * @param {object} [options] - endpoint (a huggingface.co mirror) and fetchImpl for tests.
+   * @returns {Promise<string>} the phase afterwards.
+   */
+  async downloadAndPrepare(options = {}) {
+    if (this.phase === "downloading" || this.phase === "ready") return this.phase;
+    this.phase = "downloading";
+    this.error = null;
+    this.download = { received: 0, total: MODELS_TOTAL_BYTES };
+    try {
+      await downloadModels({
+        modelsDir: this.modelsDir,
+        endpoint: options.endpoint,
+        fetchImpl: options.fetchImpl,
+        onProgress: ({ received, total }) => {
+          this.download = { received, total };
+        },
+      });
+      this.download = null;
+      this.phase = "loading";
+      return await this.prepare();
+    } catch (error) {
+      this.phase = "error";
+      this.error = error instanceof Error ? error.message : String(error);
+      this.logger.warn?.("typeleast: model download failed: %s", this.error);
+      return this.phase;
+    }
+  }
+
+  /** The recogniser's state, shaped like the earlier host's `speech` field. */
+  snapshot() {
+    return {
+      providerId: "sensevoice-local",
+      engine: "sherpa-onnx",
+      phase: this.phase,
+      ready: this.phase === "ready",
+      languages: ["auto", "zh", "en", "yue", "ja", "ko"],
+      ...(this.error ? { error: this.error } : {}),
+      ...(this.download ? { download: { ...this.download } } : {}),
+      modelBytes: MODELS_TOTAL_BYTES,
+    };
+  }
+
+  /**
+   * Recognise one canonical WAV.
+   * @param {Buffer} audio - a WAV that passed validateWav().
+   * @returns {Promise<{text: string}>}
+   */
+  async transcribe(audio) {
+    if (!this.recognizer) {
+      void this.prepare();
+      const error = new Error(`speech model is not ready (phase: ${this.phase})`);
+      error.code = "speech-not-ready";
+      throw error;
+    }
+    // A short silent lead-in keeps the recogniser from clipping the first syllable.
+    const samples = pcm16ToFloat32(withLeadIn(audio));
+    const segments = samples.length / SAMPLE_RATE > SEGMENT_THRESHOLD_SECONDS ? this.split(samples) : [samples];
+    const texts = [];
+    for (const segment of segments) {
+      const stream = this.recognizer.createStream();
+      stream.acceptWaveform({ sampleRate: SAMPLE_RATE, samples: segment });
+      const result = await this.recognizer.decodeAsync(stream);
+      const text = String(result?.text ?? "").trim();
+      if (text.length > 0) texts.push(text);
+    }
+    return { text: joinSegments(texts) };
+  }
+
+  /**
+   * Split a long recording at pauses. Without the VAD model (or if it fails),
+   * fixed windows are used instead: worse at word boundaries, never lost audio.
+   * @param {Float32Array} samples - the whole recording.
+   * @returns {Float32Array[]} speech segments in order.
+   */
+  split(samples) {
+    try {
+      const vad = new this.sherpa.Vad(
+        {
+          sileroVad: {
+            model: modelPaths(this.modelsDir).vad,
+            threshold: 0.5,
+            minSilenceDuration: 0.4,
+            minSpeechDuration: 0.25,
+            windowSize: VAD_WINDOW,
+            maxSpeechDuration: SEGMENT_THRESHOLD_SECONDS,
+          },
+          sampleRate: SAMPLE_RATE,
+          numThreads: 1,
+          provider: "cpu",
+          debug: 0,
+        },
+        Math.ceil(samples.length / SAMPLE_RATE) + 5,
+      );
+      const segments = [];
+      const drain = () => {
+        while (!vad.isEmpty()) {
+          segments.push(Float32Array.from(vad.front(false).samples));
+          vad.pop();
+        }
+      };
+      for (let start = 0; start + VAD_WINDOW <= samples.length; start += VAD_WINDOW) {
+        vad.acceptWaveform(samples.subarray(start, start + VAD_WINDOW));
+        drain();
+      }
+      vad.flush();
+      drain();
+      return segments;
+    } catch (error) {
+      this.logger.warn?.("typeleast: VAD failed, using fixed windows: %s", error instanceof Error ? error.message : String(error));
+      return fixedWindows(samples, SEGMENT_THRESHOLD_SECONDS * SAMPLE_RATE);
+    }
+  }
+}
+
+/**
+ * Join recognised segments: Chinese and Japanese run together, while a Latin
+ * letter or digit on both sides of a joint gets a space.
+ * @param {string[]} texts - segment texts in order.
+ * @returns {string} the transcript.
+ */
+export function joinSegments(texts) {
+  let out = "";
+  for (const text of texts) {
+    if (out.length > 0 && /[A-Za-z0-9.,!?]$/.test(out) && /^[A-Za-z0-9]/.test(text)) out += " ";
+    out += text;
+  }
+  return out;
+}
+
+/** Cut samples into windows of at most `size`. */
+export function fixedWindows(samples, size) {
+  const out = [];
+  for (let start = 0; start < samples.length; start += size) out.push(samples.subarray(start, Math.min(samples.length, start + size)));
+  return out;
+}

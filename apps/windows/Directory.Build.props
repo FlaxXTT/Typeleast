@@ -1,0 +1,16 @@
+<Project>
+  <!-- Shared by every project under apps/windows. -->
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Version>1.2.0</Version>
+    <Company>TypeLeast</Company>
+    <Product>TypeLeast</Product>
+    <Copyright>TypeLeast</Copyright>
+    <!-- Reproducible, path-free binaries: no local folder names in the output. -->
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>
