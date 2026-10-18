@@ -259,8 +259,8 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 推送一个 `v` 开头的标签，GitHub Actions 会在 macOS 和 Windows 上分别打包，并把所有文件发布到 Releases：
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 ### 目录结构

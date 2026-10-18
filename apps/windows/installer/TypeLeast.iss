@@ -1,6 +1,6 @@
 ; TypeLeast installer (Inno Setup 6).
 ; Per-user install (no administrator rights) into %LOCALAPPDATA%\Programs\TypeLeast.
-; Built by apps/windows/package.ps1:  iscc /DAppVersion=1.2.0 /DSourceDir=<stage> TypeLeast.iss
+; Built by apps/windows/package.ps1:  iscc /DAppVersion=1.3.0 /DSourceDir=<stage> TypeLeast.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
