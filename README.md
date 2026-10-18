@@ -231,6 +231,7 @@ cd apps/macos
 ```
 
 - `./build.sh` 编译、把本地服务打进 App、安装到 `~/Applications/TypeLeast.app` 并启动（`--no-install` 只编译）。从源码构建的 App 使用电脑上已有的 Node.js。
+- 先运行一次 `./make-signing-cert.sh`，会在钥匙串里生成一个本机签名证书。之后每次 `./build.sh` 的签名都相同，重新编译不用再授权辅助功能和钥匙串。
 - `./package.sh arm64` 或 `./package.sh x86_64` 生成自带 Node.js 的发布包（`.dmg` 和 `.zip`），输出在 `apps/macos/build/release/`。
 
 ### Windows App

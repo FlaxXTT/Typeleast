@@ -84,9 +84,17 @@ cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"; fi
 
-# Ad-hoc signature (no identity required, no network).
-codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || codesign --force --sign - "$APP"
-echo "signed : $(codesign -dv "$APP" 2>&1 | grep -m1 'Signature' || echo 'adhoc')"
+# Sign with a fixed local certificate when there is one (see make-signing-cert.sh):
+# the signature then stays the same across rebuilds, so macOS keeps the Keychain
+# "Always Allow" and the Accessibility permission. Otherwise ad-hoc (no identity, no network).
+SIGN_IDENTITY="${TYPELEAST_SIGN_IDENTITY:-TypeLeast Local Signing}"
+if security find-certificate -c "$SIGN_IDENTITY" >/dev/null 2>&1; then
+  codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP"
+  echo "signed : $SIGN_IDENTITY"
+else
+  codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || codesign --force --sign - "$APP"
+  echo "signed : $(codesign -dv "$APP" 2>&1 | grep -m1 'Signature' || echo 'adhoc') (run make-signing-cert.sh once to keep permissions across rebuilds)"
+fi
 
 if [ "${1:-}" != "--no-install" ]; then
   # Quit the running copy (new or old name) so the new binary is the only one alive.

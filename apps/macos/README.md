@@ -17,7 +17,8 @@ history and the dictionary carry over).
 ## Build, test, package
 
     ./test.sh                # unit and contract checks, no running service needed
-    ./build.sh               # compile, bundle the service, ad-hoc sign, install ~/Applications/TypeLeast.app, relaunch
+    ./make-signing-cert.sh   # once per Mac: a local signing certificate, so rebuilds keep their permissions
+    ./build.sh               # compile, bundle the service, sign, install ~/Applications/TypeLeast.app, relaunch
     ./build.sh --no-install  # build only (build/dist.noindex/TypeLeast.app)
     ./package.sh arm64       # self-contained release for Apple silicon (.dmg + .zip, with Node.js inside)
     ./package.sh x86_64      # the same for Intel (cross-compiled)
