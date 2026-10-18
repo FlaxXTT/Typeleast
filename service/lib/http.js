@@ -70,6 +70,8 @@ function classify(error) {
   switch (code) {
     case "payload-too-large":
       return { status: 413, code };
+    case "invalid-prompt":
+      return { status: 400, code };
     case "invalid-audio":
     case "audio-too-large":
       return { status: 400, code };
@@ -186,6 +188,17 @@ export function createHandler(options) {
         const endpoint = typeof body.endpoint === "string" && /^https:\/\/[^/\s]+/i.test(body.endpoint) ? body.endpoint : undefined;
         void service.recognizer.downloadAndPrepare({ endpoint });
         reply(res, 202, { ok: true, phase: "downloading" });
+        return;
+      }
+
+      if (route === "/prompts/promptify" && req.method === "GET") {
+        reply(res, 200, service.promptifySettings());
+        return;
+      }
+
+      if (route === "/prompts/promptify" && req.method === "PUT") {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
+        reply(res, 200, await service.setPromptify(body));
         return;
       }
 

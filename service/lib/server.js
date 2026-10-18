@@ -54,10 +54,12 @@ export async function startService(options = {}) {
     config,
     history,
     dictionaryPath: join(stateDir, "dictionary.json"),
+    promptifyPath: join(stateDir, "promptify.json"),
     logger,
     version: VERSION,
   });
   await service.loadDictionary();
+  await service.loadPromptify();
   const token = await ensureToken(join(stateDir, "api-token"));
 
   const handler = createHandler({ service, logger, currentToken: async () => token });

@@ -5,7 +5,7 @@ import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSI
 
 test("article is the only prompt source", () => {
   assert.deepEqual(PROMPT_SOURCES, ["article"]);
-  assert.match(PROMPT_VERSION, /-article\+promptify$/);
+  assert.match(PROMPT_VERSION, /-article\+subject\+promptify$/);
 });
 
 test("the user message is the recognised text and nothing else", () => {
