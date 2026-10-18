@@ -192,6 +192,7 @@ export function createHandler(options) {
       }
 
       if (route === "/prompts/promptify" && req.method === "GET") {
+        await service.refreshPromptify();
         reply(res, 200, service.promptifySettings());
         return;
       }

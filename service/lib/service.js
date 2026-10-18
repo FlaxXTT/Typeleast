@@ -16,7 +16,7 @@
  * @module typeleast-service/service
  */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { redactFieldContext, redactSecrets } from "./context.js";
 import { buildUserMessage, promptVersionFor, systemPromptFor } from "./prompt.js";
@@ -65,6 +65,7 @@ export class VoicePolishService {
     /** Prompt mode (提示词模式): the user's additions and, if they replaced it, their default. */
     this.promptifyPath = options.promptifyPath ?? null;
     this.promptify = { appendix: "", override: null };
+    this.promptifyMtime = null;
     this.dictionary = [...(this.config.dictionary ?? [])];
     // dictations/polished/fallback/lastMs count /dictate; modelCalls and
     // modelFallbacks count every polish() that reached the model, /polish included.
@@ -211,6 +212,7 @@ export class VoicePolishService {
     if (this.promptifyPath !== null) {
       await mkdir(dirname(this.promptifyPath), { recursive: true });
       await writeFile(this.promptifyPath, JSON.stringify(this.promptify, null, 2) + "\n", "utf8");
+      this.promptifyMtime = await mtimeOf(this.promptifyPath);
     }
     return this.promptifySettings();
   }
@@ -218,6 +220,7 @@ export class VoicePolishService {
   /** Load the prompt-mode settings; absent or malformed means the default. */
   async loadPromptify() {
     if (this.promptifyPath === null) return;
+    this.promptifyMtime = await mtimeOf(this.promptifyPath);
     try {
       const parsed = JSON.parse(await readFile(this.promptifyPath, "utf8"));
       this.promptify = {
@@ -227,6 +230,15 @@ export class VoicePolishService {
     } catch {
       this.promptify = { appendix: "", override: null };
     }
+  }
+
+  /**
+   * Pick up edits made to promptify.json by hand (in a text editor) since it was
+   * last read, so the next request sends what the file says without a restart.
+   */
+  async refreshPromptify() {
+    if (this.promptifyPath === null) return;
+    if ((await mtimeOf(this.promptifyPath)) !== this.promptifyMtime) await this.loadPromptify();
   }
 
   /** Persist learned entries. */
@@ -279,6 +291,7 @@ export class VoicePolishService {
     this.lastRoute = { provider: base.provider, model: base.model };
 
     const context = await this.buildContext(request);
+    if (strength === "promptify") await this.refreshPromptify();
     // Erduo's prompt and demonstrations, plus an addendum with only the dictionary
     // and the text around the cursor (already redacted by buildContext).
     const system = systemPromptFor({
@@ -585,4 +598,13 @@ function hash(text) {
 /** Narrow an unknown throwable to a printable message. */
 function message(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Modification time of a file in ms, or null when it does not exist. */
+async function mtimeOf(path) {
+  try {
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return null;
+  }
 }

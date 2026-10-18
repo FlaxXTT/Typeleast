@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         NSApp.applicationIconImage = AppMark.image(size: 512)
         applyGeneralSettings()
         registerHotKeys()
+        scheduleLaunchUpdateCheck()
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
         recordingBar.onCancel = { [weak self] in self?.cancelDictation() }
@@ -574,6 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuOpenHub(_ page: HubPage) { hub.show(page: page) }
     func menuRequestAccessibility() { requestAccessibility() }
     func menuRestartService() { restartService() }
+    func menuCheckForUpdates() { checkForUpdates(interactive: true) }
 
     func menuQuit() {
         recorder.cancel()

@@ -26,6 +26,8 @@ CMD=("$SWIFTC" -swift-version 5 -O
   "$ROOT/Sources/Inserter.swift"
   "$ROOT/Sources/Settings.swift"
   "$ROOT/Sources/LLMSettings.swift"
+  "$ROOT/Sources/StartChime.swift"
+  "$ROOT/Sources/Updater.swift"
   "$ROOT/Tests/StubServer.swift"
   "$ROOT/Tests/main.swift")
 
