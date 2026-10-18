@@ -104,6 +104,9 @@ internal sealed class SettingsPage : IPage
             Theme.Row(10, test, llmStatus),
             missing));
 
+        // ---- prompt mode's system prompt
+        root.Children.Add(new PromptifyPanel(host).View);
+
         // ---- local service
         downloadButton = Theme.Primary("下载（约 241 MB）", () => _ = host.DownloadModels());
         var mirror = Theme.Input(s.ModelMirror, 240, "例如 https://hf-mirror.com");

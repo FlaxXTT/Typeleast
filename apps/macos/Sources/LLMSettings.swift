@@ -130,3 +130,14 @@ extension Settings {
         NotificationCenter.default.post(name: Settings.didChange, object: nil)
     }
 }
+
+/// The one-time code the user must type before the default can be replaced.
+enum PromptifyGuard {
+    static func makeCode() -> String {
+        String(format: "%06d", Int.random(in: 0...999_999))
+    }
+
+    static func matches(typed: String, code: String) -> Bool {
+        typed.trimmingCharacters(in: .whitespacesAndNewlines) == code
+    }
+}

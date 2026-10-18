@@ -235,6 +235,18 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("no route means no header", ServiceClient.EncodeRouteHeader(null), null);
 }
 
+// ---- 7. prompt mode settings
+
+{
+    var code = PromptifyGuard.MakeCode();
+    Check("the unlock code has six digits", code.Length == 6 && code.All(char.IsDigit));
+    Check("the right code unlocks", PromptifyGuard.Matches(" " + code + "\r\n", code));
+    Check("a wrong code does not", !PromptifyGuard.Matches(code == "000000" ? "111111" : "000000", code));
+    var s = JsonSerializer.Deserialize<PromptifySettings>("{\"default\":\"默认\",\"appendix\":\"追加\",\"override\":null,\"modified\":false,\"effective\":\"x\"}", Json.Options)!;
+    Eq("prompt settings decode", s.Appendix, "追加");
+    Eq("no override means the default is in use", s.Override, null);
+}
+
 Console.WriteLine();
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;

@@ -77,3 +77,72 @@ test("提示词模式给模型更多输出空间和时间", async () => {
   await service.polish({ rawText: RAW, strength: "prompt", llm: route });
   assert.equal(calls[1].max_tokens, 800, "其他档不变");
 });
+
+test("Article 整理多了第 5 条「统一主语」策略：接在原文之后、示例之前，原文一字不改", async () => {
+  const { ARTICLE_PROMPT, SUBJECT_CONSOLIDATION, articleSystemPrompt } = await import("../lib/prompts/article-budget-reference.js");
+  const system = articleSystemPrompt();
+  assert.ok(system.startsWith(ARTICLE_PROMPT + "\n\n5. **Subject Consolidation:**"), "紧跟原文的第 4 条之后");
+  assert.ok(system.indexOf(SUBJECT_CONSOLIDATION) < system.indexOf("# Few-Shot Examples"), "在示例之前");
+  assert.match(SUBJECT_CONSOLIDATION, /Principle:[\s\S]*Execution:[\s\S]*Cases:/, "与原文同样的三段写法");
+  assert.match(systemPromptFor({ strength: "prompt" }), /Subject Consolidation/);
+  assert.doesNotMatch(systemPromptFor({ strength: "promptify" }), /Subject Consolidation/, "提示词模式不受影响");
+});
+
+test("提示词模式的设置：默认锁定、结尾追加、可替换、可一键恢复，并能持久化", async () => {
+  const { mkdtemp, rm, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "typeleast-promptify-"));
+  const make = () => new VoicePolishService({
+    recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: "" }) },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
+    history: { append: async (e) => e, recent: async () => [] },
+    logger: { info: () => {}, warn: () => {}, debug: () => {} },
+    promptifyPath: join(dir, "promptify.json"),
+  });
+  try {
+    const service = make();
+    const start = service.promptifySettings();
+    assert.equal(start.modified, false);
+    assert.equal(start.effective, start.default);
+
+    // 追加：默认内容保持不变，追加内容在结尾单独一节。
+    let s = await service.setPromptify({ appendix: "所有提示词都用英文写。" });
+    assert.ok(s.effective.startsWith(s.default));
+    assert.ok(s.effective.endsWith("# 补充要求\n所有提示词都用英文写。"));
+    assert.equal(s.modified, false);
+
+    // 替换默认：追加内容仍然保留在结尾。
+    s = await service.setPromptify({ override: "你是我的提示词助手。" });
+    assert.equal(s.modified, true);
+    assert.ok(s.effective.startsWith("你是我的提示词助手。"));
+    assert.match(s.effective, /# 补充要求\n所有提示词都用英文写。$/);
+
+    // 重启后仍在。
+    const reloaded = make();
+    await reloaded.loadPromptify();
+    assert.equal(reloaded.promptifySettings().modified, true);
+    assert.match(await readFile(join(dir, "promptify.json"), "utf8"), /你是我的提示词助手/);
+
+    // 一键恢复默认。
+    s = await reloaded.setPromptify({ override: null });
+    assert.equal(s.modified, false);
+    assert.ok(s.effective.startsWith(s.default));
+
+    // 把默认内容原样保存不算修改；空的替换被拒绝。
+    assert.equal((await reloaded.setPromptify({ override: s.default })).modified, false);
+    await assert.rejects(reloaded.setPromptify({ override: "   " }), (e) => e.code === "invalid-prompt");
+
+    // 实际请求用的是生效的提示词。
+    assert.match(systemPromptFor({ strength: "promptify", promptify: { appendix: "A", override: "B" } }), /^B\n\n# 补充要求\nA/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("提示词模式允许按追加要求换语言（例如用英文写），但仍拦截编造的数字", () => {
+  const english = "## Role\nYou are a Python engineer.\n\n## Task\nWrite a quicksort in Python.\n\n## Output Format\nComplete code with a short explanation.";
+  assert.equal(validateOutput({ rawText: "呃，帮我写一个快速排序，用 Python。", output: english, strength: "promptify" }).ok, true);
+  assert.equal(validateOutput({ rawText: "呃，帮我写一个快速排序，用 Python。", output: english + "\nKeep it under 50 lines.", strength: "promptify" }).reason, "invented-fact");
+  assert.equal(validateOutput({ rawText: "我们周三把报告发出去，然后跟进客户的反馈意见。", output: "We will send the report on Wednesday and follow up on the client's feedback.", strength: "prompt" }).reason, "language-changed", "普通整理仍然禁止翻译");
+});
