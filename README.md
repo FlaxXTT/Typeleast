@@ -135,6 +135,7 @@
 
 - **整理方式**（三档）：
   - 「提示词模式」：把你说的话改写成一份结构化提示词，可以直接发给 AI。格式固定为 CO-STAR 框架加角色：角色、背景、任务、要求、语气与受众、输出格式。角色、语气、格式会按任务自动补全；数字、日期、人名、具体数据这类事实你没说就不写，只能靠编造才写得出的小节会整节省略。
+    - 系统提示词在「设置 → 提示词模式」里查看和追加；也可以直接编辑配置文件 `promptify.json`（Mac：`~/Library/Application Support/TypeLeast/`，Windows：`%APPDATA%\TypeLeast\`）。`appendix` 是追加在结尾的要求，`override` 是替换后的完整提示词（`null` 表示用默认）。保存后下一次整理就生效；文件写坏了会自动用默认提示词。
   - 「原话转写」：不调用大模型，只去口水词。
 - **词典**：一定要这样写的词（人名、产品名、术语），或者「听成=正确写法」这种纠错规则，例如 `德普西克=DeepSeek`。
 - **历史**：最近的听写都在主窗口「历史」里，可以复制整理结果或原话。
@@ -231,6 +232,7 @@ cd apps/macos
 ```
 
 - `./build.sh` 编译、把本地服务打进 App、安装到 `~/Applications/TypeLeast.app` 并启动（`--no-install` 只编译）。从源码构建的 App 使用电脑上已有的 Node.js。
+- 软件内更新（仅限装了 GitHub CLI 并已 `gh auth login` 的 Mac，且已用 `./make-signing-cert.sh` 生成本机证书）：菜单「检查更新…」，或「设置 → 版本与更新」，点「立即更新」。会下载发布包、核对 SHA-256、用本机证书重新签名后替换，权限不用重新授予。
 - 先运行一次 `./make-signing-cert.sh`，会在钥匙串里生成一个本机签名证书。之后每次 `./build.sh` 的签名都相同，重新编译不用再授权辅助功能和钥匙串。
 - `./package.sh arm64` 或 `./package.sh x86_64` 生成自带 Node.js 的发布包（`.dmg` 和 `.zip`），输出在 `apps/macos/build/release/`。
 

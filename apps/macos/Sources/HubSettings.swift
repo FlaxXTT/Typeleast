@@ -215,8 +215,11 @@ struct SettingsPage: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 240)
             }
+            SettingRow(title: "版本与更新", detail: "当前版本 " + Updater.currentVersion + "。点「检查更新」，有新版本时一键更新，权限不需要重新授予。") {
+                Button("检查更新") { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
+            }
             if let version = model.health?.version {
-                Text("服务版本 " + version + " · App 1.2").font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                Text("服务版本 " + version + " · App " + Updater.currentVersion).font(.system(size: 11)).foregroundColor(Theme.tertiary)
             }
         }
     }
@@ -282,8 +285,37 @@ struct ToggleRow: View {
 
     var body: some View {
         SettingRow(title: title, detail: detail) {
-            Toggle("", isOn: $isOn).toggleStyle(.switch).labelsHidden()
+            Toggle("", isOn: $isOn).toggleStyle(StateSwitchStyle()).labelsHidden()
         }
+    }
+}
+
+/// A switch whose track shows the state by colour: green when on, grey when off
+/// (the system switch follows the accent colour, which can look the same either way).
+struct StateSwitchStyle: ToggleStyle {
+    static let onColor = Theme.success
+    static let offColor = Color(nsColor: .systemGray).opacity(0.45)
+
+    func makeBody(configuration: Configuration) -> some View {
+        ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+            Capsule()
+                .fill(configuration.isOn ? Self.onColor : Self.offColor)
+                .frame(width: 36, height: 20)
+            Circle()
+                .fill(Color.white)
+                .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                .frame(width: 16, height: 16)
+                .padding(2)
+        }
+        .frame(width: 36, height: 20)
+        .contentShape(Capsule())
+        .onTapGesture {
+            withAnimation(.easeOut(duration: 0.15)) { configuration.isOn.toggle() }
+        }
+        .accessibilityElement()
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(configuration.isOn ? "开" : "关")
+        .accessibilityAction { configuration.isOn.toggle() }
     }
 }
 

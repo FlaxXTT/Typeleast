@@ -146,3 +146,46 @@ test("提示词模式允许按追加要求换语言（例如用英文写），�
   assert.equal(validateOutput({ rawText: "呃，帮我写一个快速排序，用 Python。", output: english + "\nKeep it under 50 lines.", strength: "promptify" }).reason, "invented-fact");
   assert.equal(validateOutput({ rawText: "我们周三把报告发出去，然后跟进客户的反馈意见。", output: "We will send the report on Wednesday and follow up on the client's feedback.", strength: "prompt" }).reason, "language-changed", "普通整理仍然禁止翻译");
 });
+
+test("手动编辑 promptify.json 后不用重启，下一次整理就把新内容提交给模型", async () => {
+  const { mkdtemp, rm, writeFile, utimes } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "typeleast-promptify-"));
+  const file = join(dir, "promptify.json");
+  const calls = [];
+  const service = new VoicePolishService({
+    recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: "" }) },
+    fetchImpl: async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: GOOD }, finish_reason: "stop" }] }) };
+    },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
+    history: { append: async (e) => e, recent: async () => [] },
+    logger: { info: () => {}, warn: () => {}, debug: () => {} },
+    promptifyPath: file,
+  });
+  const route = { baseURL: "https://api.example.com/v1", model: "m", apiKey: "sk-test-123456789012" };
+  try {
+    await service.loadPromptify();
+    await service.polish({ rawText: RAW, strength: "promptify", llm: route });
+    assert.doesNotMatch(calls[0].messages[0].content, /# 补充要求/);
+
+    // 用文本编辑器改文件：加一条追加要求。
+    await writeFile(file, JSON.stringify({ appendix: "每个小节都用无序列表。", override: null }), "utf8");
+    const later = new Date(Date.now() + 5000);
+    await utimes(file, later, later);
+    await service.polish({ rawText: RAW, strength: "promptify", llm: route });
+    assert.match(calls[1].messages[0].content, /# 补充要求\n每个小节都用无序列表。$/m);
+    assert.equal((await service.promptifySettings()).appendix, "每个小节都用无序列表。");
+
+    // 文件写坏了：退回默认提示词，整理照常进行。
+    await writeFile(file, "{ 坏掉的 JSON", "utf8");
+    const later2 = new Date(Date.now() + 10000);
+    await utimes(file, later2, later2);
+    await service.polish({ rawText: RAW, strength: "promptify", llm: route });
+    assert.doesNotMatch(calls[2].messages[0].content, /# 补充要求/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

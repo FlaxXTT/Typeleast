@@ -50,6 +50,7 @@ protocol AppActions: AnyObject {
     func finishOnboarding()
     func applyGeneralSettings()
     func registerHotKeys()
+    func checkForUpdates(interactive: Bool)
 }
 
 final class AppModel: ObservableObject {

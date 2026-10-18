@@ -682,6 +682,8 @@ do {
     check("every preset except custom has a usable base URL",
           LLMPreset.all.filter { $0.id != "custom" }.allSatisfy { LLMPreset.isAllowedBaseURL($0.baseURL) })
 
+    // Never the real Keychain: a test must not read (or prompt for) the user's key.
+    KeychainStore.stub = [:]
     let s = Settings.shared
     s.llmPresetID = "ollama"
     s.llmModel = ""
@@ -776,6 +778,49 @@ do {
     let s = try? JSONDecoder().decode(PromptifySettings.self, from: body)
     checkEq("prompt settings decode", s?.appendix, "追加")
     checkEq("no override means the default is in use", s?.override, nil)
+}
+
+// MARK: 21. the recording-start chime is short, bright and starts at once
+do {
+    let pcm = StartChime.pcm()
+    let samples: [Int16] = pcm.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
+    let rate = Int(StartChime.sampleRate)
+    check("the chime lasts about a quarter of a second", samples.count == Int(Double(rate) * 0.24))
+    let peak = samples.map { abs(Int($0)) }.max() ?? 0
+    check("the chime is audible but not clipped", peak > 8000 && peak < Int(Int16.max))
+    let attack = samples.prefix(rate * 3 / 1000).map { abs(Int($0)) }.max() ?? 0
+    check("the chime reaches full level within 3 ms (no slow fade-in)", attack > peak / 3)
+    let first = Array(samples.prefix(rate * 70 / 1000))
+    var crossings = 0
+    for i in 1..<first.count where (first[i - 1] < 0) != (first[i] < 0) { crossings += 1 }
+    check("the chime's pitch is above 1 kHz (bright, not dull)", crossings > 2 * 1000 * 70 / 1000)
+    let tail = samples.suffix(rate / 100).map { abs(Int($0)) }.max() ?? 0
+    check("the chime has died away by the end", tail < peak / 20)
+    check("the chime is a valid WAV", Wav.parse(Wav.wrap(pcm: pcm, sampleRate: StartChime.sampleRate)) != nil)
+}
+
+// MARK: 22. in-app update: versions, the right download, checksums
+do {
+    checkEq("a leading v is dropped", Updater.version(fromTag: "v1.4.0\n"), "1.4.0")
+    check("1.4.0 is newer than 1.3.0", Updater.isNewer("1.4.0", than: "1.3.0"))
+    check("1.10.0 is newer than 1.9.3 (numbers, not text)", Updater.isNewer("1.10.0", than: "1.9.3"))
+    check("the same version is not newer", !Updater.isNewer("1.3.0", than: "1.3.0"))
+    check("1.3 equals 1.3.0", !Updater.isNewer("1.3", than: "1.3.0") && !Updater.isNewer("1.3.0", than: "1.3"))
+    check("an older version is not offered", !Updater.isNewer("1.2.0", than: "1.3.0"))
+    checkEq("Apple silicon downloads the AppleSilicon zip", Updater.assetName(version: "1.4.0", arch: "arm64"), "TypeLeast-1.4.0-macOS-AppleSilicon.zip")
+    checkEq("Intel downloads the Intel zip", Updater.assetName(version: "1.4.0", arch: "x86_64"), "TypeLeast-1.4.0-macOS-Intel.zip")
+    let sums = "AAAA1111  TypeLeast-1.4.0-macOS-AppleSilicon.dmg\nbbbb2222  TypeLeast-1.4.0-macOS-AppleSilicon.zip\ncccc3333 *TypeLeast-1.4.0-macOS-Intel.zip\n"
+    checkEq("the zip's hash is found", Updater.checksum(for: "TypeLeast-1.4.0-macOS-AppleSilicon.zip", in: sums), "bbbb2222")
+    checkEq("binary-mode lines work too", Updater.checksum(for: "TypeLeast-1.4.0-macOS-Intel.zip", in: sums), "cccc3333")
+    checkEq("a missing file has no hash", Updater.checksum(for: "other.zip", in: sums), nil)
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("typeleast-sha-" + UUID().uuidString)
+    try? Data("abc".utf8).write(to: tmp)
+    checkEq("SHA-256 of a file", try? Updater.sha256Hex(of: tmp), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    try? FileManager.default.removeItem(at: tmp)
+    checkEq("gh is found where Homebrew puts it", Updater.findGH(home: "/Users/someone", exists: { $0 == "/usr/local/bin/gh" }, shellLookup: { nil }), "/usr/local/bin/gh")
+    checkEq("gh in the user's ~/.local/bin is found", Updater.findGH(home: "/Users/someone", exists: { $0 == "/Users/someone/.local/bin/gh" }, shellLookup: { nil }), "/Users/someone/.local/bin/gh")
+    checkEq("otherwise the login shell is asked", Updater.findGH(home: "/Users/someone", exists: { $0 == "/opt/tools/gh" }, shellLookup: { "/opt/tools/gh" }), "/opt/tools/gh")
+    checkEq("no gh, no update source", Updater.findGH(home: "/Users/someone", exists: { _ in false }, shellLookup: { nil }), nil)
 }
 
 server.stop()

@@ -23,6 +23,7 @@ protocol MenuActionTarget: AnyObject {
     func menuOpenHub(_ page: HubPage)
     func menuRequestAccessibility()
     func menuRestartService()
+    func menuCheckForUpdates()
     func menuQuit()
     /// The menu is about to show: a cheap moment to refresh the service status line.
     func menuOpened()
@@ -42,6 +43,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     private var hintItem: NSMenuItem!
     private var axItem: NSMenuItem!
     private var launchItem: NSMenuItem!
+    private var updateItem: NSMenuItem!
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -87,6 +89,8 @@ final class MenuController: NSObject, NSMenuDelegate {
         let settings = item("设置…", #selector(onOpenSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)
+        updateItem = item("检查更新…", #selector(onCheckForUpdates))
+        menu.addItem(updateItem)
         menu.addItem(.separator())
         let quit = item("退出 TypeLeast", #selector(onQuit))
         quit.keyEquivalent = "q"
@@ -124,6 +128,11 @@ final class MenuController: NSObject, NSMenuDelegate {
         statusItem.button?.toolTip = "TypeLeast · " + statusLine.title
     }
 
+    /// A newer version was found: say so on the menu item (nil: back to "检查更新…").
+    func setUpdateAvailable(_ version: String?) {
+        updateItem.title = version.map { "有新版本 " + $0 + " · 点此更新" } ?? "检查更新…"
+    }
+
     private func setIcon(_ symbol: String) {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "TypeLeast")
         image?.isTemplate = true
@@ -141,6 +150,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func onToggle() { target?.menuToggleDictation() }
+    @objc private func onCheckForUpdates() { target?.menuCheckForUpdates() }
     @objc private func onCancel() { target?.menuCancelDictation() }
     @objc private func onPasteLast() { target?.menuPasteLast() }
     @objc private func onAccessibility() { target?.menuRequestAccessibility() }

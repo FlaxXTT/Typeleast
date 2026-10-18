@@ -307,6 +307,11 @@ extension AppDelegate {
 
     func playSound(start: Bool) {
         guard settings.soundEnabled else { return }
-        NSSound(named: NSSound.Name(start ? "Tink" : "Pop"))?.play()
+        if start {
+            StartChime.sound?.stop()
+            StartChime.sound?.play()
+        } else {
+            NSSound(named: NSSound.Name("Pop"))?.play()
+        }
     }
 }
