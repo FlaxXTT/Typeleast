@@ -429,7 +429,9 @@ export function validateOutput(input) {
 
   // Language is checked before length: a translated answer also breaks the
   // length ratio, and the reason reported must name the real fault.
-  if (languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
+  // Prompt mode may legitimately be asked (in the user's own additions) to write
+  // the prompt in another language, so only its fact check applies.
+  if (strength !== "promptify" && languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
 
   const ratio = metrics.outputLength / Math.max(1, rawContent);
   metrics.ratio = ratio;

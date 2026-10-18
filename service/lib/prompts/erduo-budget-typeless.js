@@ -37,6 +37,19 @@ export const ERDUO_SOURCE = {
  * The complete system prompt: the article's prompt plus its demonstrations.
  * @returns {string} the prompt to send as `system`.
  */
+/**
+ * One strategy added by this project, not part of the article: it continues
+ * the article's numbered "Core Strategies" in the same form (Principle,
+ * Execution, Cases), so the model reads it as part of one prompt. The article's
+ * own text above stays byte for byte.
+ */
+export const SUBJECT_CONSOLIDATION = [
+  "5. **Subject Consolidation:**",
+  "   - Principle: Spoken input often repeats the same subject across consecutive clauses (\"我们……然后我们……我们还……\"), which makes written text wordy and harder to follow.",
+  "   - Execution: When the same subject (a person, a team, a product, a thing) carries several actions, states or descriptions, state the subject once and attach all of them to it in their original order; drop the repeated subjects. Keep different subjects in separate sentences, and never merge across a change of subject, a self-correction, or a contrast that would change the meaning.",
+  "   - Cases: `我们周三开会，然后我们要把报告改完，我们还得通知客户` -> `我们周三开会，要把报告改完，还得通知客户。`",
+].join("\n");
+
 export function erduoSystemPrompt() {
-  return ERDUO_PROMPT + "\n\n# Few-Shot Examples\n\n" + ERDUO_FEW_SHOT;
+  return ERDUO_PROMPT + "\n\n" + SUBJECT_CONSOLIDATION + "\n\n# Few-Shot Examples\n\n" + ERDUO_FEW_SHOT;
 }

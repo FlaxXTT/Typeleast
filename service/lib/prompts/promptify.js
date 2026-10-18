@@ -49,7 +49,7 @@ export const PROMPTIFY_PROMPT = `你是一名提示词工程师。用户会口�
 4. 「任务」一节必须有。
 
 # 改写规则
-1. 去掉口头禅和重复；用户中途改口时，只保留改口后的意思；纠正明显的同音错字。
+1. 去掉口头禅和重复；用户中途改口时，只保留改口后的意思；纠正明显的同音错字。直接写纠正后的内容，不要在提示词里提到识别错误或你做过的修改。
 2. 用户说出的每一条具体信息和约束都要保留，不能遗漏，也不能改变意思。
 3. 用用户说话的语言写：中文就用上面的中文标题；英文就用 Role、Context、Task、Requirements、Tone & Audience、Output Format。
 4. 只输出这份提示词本身：不要代码块，不要 JSON，不要前言、解释或总结。
@@ -79,6 +79,18 @@ export const PROMPTIFY_PROMPT = `你是一名提示词工程师。用户会口�
 ## 输出格式
 一段简短的总结，加上按工作项分点的正文，控制在一屏以内。`;
 
-export function promptifySystemPrompt() {
-  return PROMPTIFY_PROMPT;
+/** Longest accepted user additions and replacement, in characters. */
+export const PROMPTIFY_LIMITS = { appendix: 4000, override: 20000 };
+
+/**
+ * The prompt-mode system prompt with the user's settings applied: their
+ * replacement of the default (if they chose to replace it), then their own
+ * additions under a section of their own.
+ * @param {{appendix?: string, override?: string|null}} [custom] - user settings.
+ * @returns {string} the system prompt.
+ */
+export function promptifySystemPrompt(custom = {}) {
+  const base = typeof custom.override === "string" && custom.override.trim().length > 0 ? custom.override.trim() : PROMPTIFY_PROMPT;
+  const appendix = typeof custom.appendix === "string" ? custom.appendix.trim() : "";
+  return appendix.length > 0 ? base + "\n\n# 补充要求\n" + appendix : base;
 }
