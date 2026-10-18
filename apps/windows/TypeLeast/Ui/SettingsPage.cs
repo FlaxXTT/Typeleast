@@ -47,8 +47,9 @@ internal sealed class SettingsPage : IPage
 
         var strength = Theme.Choice(160);
         strength.Items.Add(new ComboBoxItem { Content = "Article 整理", Tag = "prompt" });
+        strength.Items.Add(new ComboBoxItem { Content = "提示词模式", Tag = "promptify" });
         strength.Items.Add(new ComboBoxItem { Content = "原话转写", Tag = "off" });
-        strength.SelectedIndex = s.Strength == "off" ? 1 : 0;
+        strength.SelectedIndex = s.Strength switch { "promptify" => 1, "off" => 2, _ => 0 };
         strength.SelectionChanged += (_, _) => { if (strength.SelectedItem is ComboBoxItem { Tag: string v }) { s.Strength = v; host.SaveSettings(); } };
 
         var mic = Theme.Choice(220);
@@ -66,7 +67,7 @@ internal sealed class SettingsPage : IPage
 
         root.Children.Add(Section("听写",
             Theme.SettingRow("快捷键", Theme.Text("单独按一下开始，再按一下结束；录音时按 Esc 取消。右 Alt 在部分欧洲键盘上是 AltGr，这时换一个键。", 12, Theme.Grey), hotkey),
-            Theme.SettingRow("整理方式", Theme.Text("Article 整理：去口水词、改通顺；原话转写：只去口水词。", 12, Theme.Grey), strength),
+            Theme.SettingRow("整理方式", Theme.Text("Article 整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。原话转写：只去口水词。", 12, Theme.Grey), strength),
             Theme.SettingRow("麦克风", null, mic),
             Theme.SettingRow("粘贴后恢复剪贴板", Theme.Text("粘贴完把你原来复制的文字放回剪贴板。", 12, Theme.Grey), restore),
             Theme.SettingRow("开机自动启动", null, login)));
