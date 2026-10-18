@@ -130,6 +130,8 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
     Eq("an old strength reads as Article", AppSettings.Load(file).Strength, "prompt");
+    File.WriteAllText(file, "{\"Strength\":\"promptify\"}");
+    Eq("prompt mode is remembered", AppSettings.Load(file).Strength, "promptify");
 
     var history = new LocalHistory(Path.Combine(dir, "app-history.json"));
     history.Add(new HistoryEntry { Text = "第一条", Seconds = 2 });

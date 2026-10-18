@@ -19,7 +19,7 @@ public enum DictationKey
 public sealed class AppSettings
 {
     public DictationKey Hotkey { get; set; } = DictationKey.RightAlt;
-    /// <summary>"prompt" (Article cleanup) or "off" (raw transcription).</summary>
+    /// <summary>"prompt" (Article cleanup), "promptify" (提示词模式) or "off" (raw transcription).</summary>
     public string Strength { get; set; } = "prompt";
     public string Language { get; set; } = "auto";
     public string LlmPresetId { get; set; } = "deepseek";
@@ -67,7 +67,7 @@ public sealed class AppSettings
             var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Json.Options);
             if (loaded is not null)
             {
-                if (loaded.Strength is not ("prompt" or "off")) loaded.Strength = "prompt";
+                if (loaded.Strength is not ("prompt" or "promptify" or "off")) loaded.Strength = "prompt";
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();

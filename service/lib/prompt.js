@@ -17,9 +17,10 @@
  */
 
 import { articleSystemPrompt } from "./prompts/article-budget-reference.js";
+import { promptifySystemPrompt } from "./prompts/promptify.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-18.2-article";
+export const PROMPT_VERSION = "2026-10-18.3-article+promptify";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["article"];
@@ -76,12 +77,15 @@ export function harnessAddendum({ dictionary, fieldContext }) {
 }
 
 /**
- * The system prompt for one request.
- * @param {object} input - the dictionary and field context the addendum needs.
+ * The system prompt for one request: Article's cleanup prompt, or for the
+ * "promptify" strength (提示词模式) the structured-prompt rewriter. Both get the
+ * same addendum (dictionary and field context).
+ * @param {object} input - strength, and the dictionary and field context the addendum needs.
  * @returns {string} the system prompt.
  */
-export function systemPromptFor({ dictionary, fieldContext } = {}) {
-  return articleSystemPrompt() + harnessAddendum({ dictionary, fieldContext });
+export function systemPromptFor({ dictionary, fieldContext, strength } = {}) {
+  const base = strength === "promptify" ? promptifySystemPrompt() : articleSystemPrompt();
+  return base + harnessAddendum({ dictionary, fieldContext });
 }
 
 /**

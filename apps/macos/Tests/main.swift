@@ -699,7 +699,10 @@ do {
     UserDefaults.standard.set("maximal", forKey: "voice.strength")
     checkEq("a strength saved by an older build reads as Article", s.strength, "prompt")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
-    checkEq("only Article and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "off"])
+    checkEq("Article, prompt mode and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "promptify", "off"])
+    UserDefaults.standard.set("promptify", forKey: "voice.strength")
+    checkEq("prompt mode is remembered", s.strength, "promptify")
+    UserDefaults.standard.removeObject(forKey: "voice.strength")
 }
 
 // MARK: 19. the local service: finding Node.js, the ready line, model status

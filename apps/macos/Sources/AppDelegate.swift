@@ -163,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                 let started = Date()
                 do {
                     let r = try client.dictateSync(wav: wav, language: "auto", appBundleId: "com.apple.Notes",
-                                                   strength: "prompt", llm: route)
+                                                   strength: env["TYPELEAST_LLMCHECK_STRENGTH"] ?? "prompt", llm: route)
                     print("LLMCHECK dictate provider=" + (r.provider ?? "?") + " model=" + (r.model ?? "?")
                           + " fallback=" + String(r.fallback) + (r.fallbackReason.map { " reason=" + $0 } ?? "")
                           + " ms=" + String(Int(Date().timeIntervalSince(started) * 1000)))
