@@ -33,10 +33,11 @@ enum VoiceLanguage: String, CaseIterable {
 /// (conservative, maximal) only change validation strictness, so the app no longer
 /// offers them; a value saved by an older build reads as `.prompt`.
 enum VoiceStrength: String, CaseIterable {
-    case prompt, off
+    case prompt, promptify, off
     var label: String {
         switch self {
         case .prompt: return "Erduo 整理"
+        case .promptify: return "提示词模式"
         case .off: return "原话转写"
         }
     }
@@ -44,6 +45,7 @@ enum VoiceStrength: String, CaseIterable {
     var detail: String {
         switch self {
         case .prompt: return "用 Erduo 的提示词：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。"
+        case .promptify: return "把你说的话改写成一份结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），可以直接发给 AI。角色、语气、格式会自动补全；数字、日期、人名等事实你没说就不写。"
         case .off: return "不调用大模型，只在本机去掉口头禅。速度最快。"
         }
     }

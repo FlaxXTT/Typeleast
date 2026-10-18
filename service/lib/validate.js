@@ -171,6 +171,13 @@ export function preciseNovelty(source, output) {
  * @param {string} text - input text.
  * @returns {Set<string>} normalised fact tokens.
  */
+/** Calendar words that name the same day or period ("这周" and "本周"). */
+const CALENDAR_SYNONYMS = {
+  本周: "这周",
+  星期一: "周一", 星期二: "周二", 星期三: "周三", 星期四: "周四", 星期五: "周五", 星期六: "周六",
+  星期日: "周日", 周天: "周日",
+};
+
 export function factTokens(text) {
   // List labels are layout, not facts: "1. 更新解析器" adds structure, not the
   // number one. Without this every numbered list the user asked for was
@@ -190,7 +197,7 @@ export function factTokens(text) {
     set.add("N:" + (value === null ? token : String(value)));
   }
   const calendar = source.match(/(?:周一|周二|周三|周四|周五|周六|周日|周天|星期一|星期二|星期三|星期四|星期五|星期六|星期日|今天|明天|后天|昨天|上周|本周|下周|这周|下个月|上个月|今年|明年|去年|上午|下午|晚上|早上|中午)/g) ?? [];
-  for (const token of calendar) set.add("D:" + token);
+  for (const token of calendar) set.add("D:" + (CALENDAR_SYNONYMS[token] ?? token));
   // Latin facts are limited to what is unambiguous: symbol-bearing identifiers.
   // Capitalised words are deliberately NOT facts. English capitalises the first
   // word of every sentence, and bullet lists capitalise each item, so treating
@@ -454,6 +461,18 @@ export function validateOutput(input) {
   // read off the structure the rewrite created, not invented.
   const items = listItemCount(text);
   const structural = items >= 2 ? invented.filter((token) => token === "N:" + items).length : 0;
+  // Prompt mode (提示词模式) adds a role, tone and output format on purpose, so
+  // it is always much longer and mostly new wording; only the decisive checks
+  // (language, invented facts) apply to it. Counting the user's own items in
+  // words ("这两项工作") is summary, not invention, so there a number counts as
+  // invented only when it is written in digits ("300 字", "5 点").
+  if (strength === "promptify") {
+    const digits = factTokens(text.replace(/[零一二三四五六七八九十百千万亿两]/g, ""));
+    const decisive = invented.filter((token) => !token.startsWith("N:") || digits.has(token));
+    if (decisive.length > authorised) return { ok: false, reason: "invented-fact", text, metrics };
+    return { ok: true, text, metrics };
+  }
+
   if (invented.length > authorised + structural) return { ok: false, reason: "invented-fact", text, metrics };
 
   const maxNovelty = THRESHOLDS.preciseNoveltyByStrength[strength] ?? THRESHOLDS.preciseNoveltyByStrength.prompt;

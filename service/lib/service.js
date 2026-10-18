@@ -227,6 +227,7 @@ export class VoicePolishService {
     const system = systemPromptFor({
       dictionary: this.dictionary,
       fieldContext: context.fieldContext ?? null,
+      strength,
     });
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
@@ -242,9 +243,10 @@ export class VoicePolishService {
         route: custom,
         system,
         user,
-        maxTokens: this.config.maxOutputTokens,
+        // Prompt mode writes a whole structured prompt: more room and more time.
+        maxTokens: strength === "promptify" ? Math.max(this.config.maxOutputTokens, 1600) : this.config.maxOutputTokens,
         temperature: this.config.temperature ?? 0.8,
-        timeoutMs: this.config.timeoutMs,
+        timeoutMs: strength === "promptify" ? Math.max(this.config.timeoutMs, 25000) : this.config.timeoutMs,
         signal: request.signal,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });
