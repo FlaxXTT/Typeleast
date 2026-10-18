@@ -764,6 +764,20 @@ do {
     check("the token lives in the state folder", ServiceClient().tokenPath.hasSuffix("TypeLeast/api-token") || ProcessInfo.processInfo.environment["TYPELEAST_HOME"] != nil)
 }
 
+// MARK: 20. prompt mode settings
+
+do {
+    let code = PromptifyGuard.makeCode()
+    check("the unlock code has six digits", code.count == 6 && code.allSatisfy(\.isNumber))
+    check("the right code unlocks", PromptifyGuard.matches(typed: " " + code + "\n", code: code))
+    check("a wrong code does not", !PromptifyGuard.matches(typed: "000000" == code ? "111111" : "000000", code: code))
+    check("an empty answer does not", !PromptifyGuard.matches(typed: "", code: code))
+    let body = Data(#"{"default":"默认","appendix":"追加","override":null,"modified":false,"effective":"默认\n\n# 补充要求\n追加"}"#.utf8)
+    let s = try? JSONDecoder().decode(PromptifySettings.self, from: body)
+    checkEq("prompt settings decode", s?.appendix, "追加")
+    checkEq("no override means the default is in use", s?.override, nil)
+}
+
 server.stop()
 print("")
 print("TESTS: " + String(passed) + " passed, " + String(failed) + " failed")

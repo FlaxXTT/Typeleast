@@ -26,6 +26,7 @@ import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { validateOutput } from "./validate.js";
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
+import { PROMPTIFY_LIMITS, PROMPTIFY_PROMPT, promptifySystemPrompt } from "./prompts/promptify.js";
 
 /** Hard ceiling on concurrent recognition+polish work. */
 const MAX_PENDING = 2;
@@ -61,6 +62,9 @@ export class VoicePolishService {
     this.lastRoute = { provider: null, model: null };
     this.startedAt = Date.now();
     this.dictionaryPath = options.dictionaryPath ?? null;
+    /** Prompt mode (提示词模式): the user's additions and, if they replaced it, their default. */
+    this.promptifyPath = options.promptifyPath ?? null;
+    this.promptify = { appendix: "", override: null };
     this.dictionary = [...(this.config.dictionary ?? [])];
     // dictations/polished/fallback/lastMs count /dictate; modelCalls and
     // modelFallbacks count every polish() that reached the model, /polish included.
@@ -172,6 +176,59 @@ export class VoicePolishService {
     }
   }
 
+  /** The prompt-mode prompt: the fixed default, the user's settings, and what is in effect. */
+  promptifySettings() {
+    return {
+      default: PROMPTIFY_PROMPT,
+      appendix: this.promptify.appendix,
+      override: this.promptify.override,
+      modified: this.promptify.override !== null,
+      effective: promptifySystemPrompt(this.promptify),
+    };
+  }
+
+  /**
+   * Change the prompt-mode settings. `appendix` replaces the additions;
+   * `override` replaces the default (a string) or restores it (null). Keys that
+   * are absent are left as they are.
+   * @param {{appendix?: string, override?: string|null}} input - the change.
+   * @returns {Promise<object>} the settings now in effect.
+   */
+  async setPromptify(input) {
+    const next = { ...this.promptify };
+    if (input && Object.prototype.hasOwnProperty.call(input, "appendix")) {
+      if (typeof input.appendix !== "string") throw Object.assign(new Error("appendix must be a string"), { code: "invalid-prompt" });
+      next.appendix = input.appendix.trim().slice(0, PROMPTIFY_LIMITS.appendix);
+    }
+    if (input && Object.prototype.hasOwnProperty.call(input, "override")) {
+      if (input.override === null) next.override = null;
+      else if (typeof input.override === "string" && input.override.trim().length > 0) next.override = input.override.trim().slice(0, PROMPTIFY_LIMITS.override);
+      else throw Object.assign(new Error("override must be a non-empty string, or null to restore the default"), { code: "invalid-prompt" });
+      // Saving the default unchanged is not a modification.
+      if (next.override === PROMPTIFY_PROMPT) next.override = null;
+    }
+    this.promptify = next;
+    if (this.promptifyPath !== null) {
+      await mkdir(dirname(this.promptifyPath), { recursive: true });
+      await writeFile(this.promptifyPath, JSON.stringify(this.promptify, null, 2) + "\n", "utf8");
+    }
+    return this.promptifySettings();
+  }
+
+  /** Load the prompt-mode settings; absent or malformed means the default. */
+  async loadPromptify() {
+    if (this.promptifyPath === null) return;
+    try {
+      const parsed = JSON.parse(await readFile(this.promptifyPath, "utf8"));
+      this.promptify = {
+        appendix: typeof parsed?.appendix === "string" ? parsed.appendix.slice(0, PROMPTIFY_LIMITS.appendix) : "",
+        override: typeof parsed?.override === "string" && parsed.override.trim().length > 0 ? parsed.override.slice(0, PROMPTIFY_LIMITS.override) : null,
+      };
+    } catch {
+      this.promptify = { appendix: "", override: null };
+    }
+  }
+
   /** Persist learned entries. */
   async persistDictionary() {
     if (this.dictionaryPath === null) return;
@@ -228,6 +285,7 @@ export class VoicePolishService {
       dictionary: this.dictionary,
       fieldContext: context.fieldContext ?? null,
       strength,
+      promptify: this.promptify,
     });
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is

@@ -38,5 +38,5 @@ test("dictionary and field context ride in a delimited addendum", () => {
 });
 
 test("history records the erduo prompt version", () => {
-  assert.match(promptVersionFor(), /-erduo\+promptify$/);
+  assert.match(promptVersionFor(), /-erduo\+subject\+promptify$/);
 });

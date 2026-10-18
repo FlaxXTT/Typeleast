@@ -605,6 +605,38 @@ final class ServiceClient {
         }
     }
 
+    /// Prompt mode (提示词模式): the fixed default, the user's additions and replacement.
+    func promptifySync() throws -> PromptifySettings {
+        try withPortRetry {
+            try withTokenRetry { token in
+                let req = try makeRequest(path: "/api/voice-polish/prompts/promptify", method: "GET", token: token, timeout: healthTimeout)
+                let (data, resp) = try performSync(req, timeout: healthTimeout)
+                guard resp.statusCode == 200 else { throw httpError(resp, data) }
+                do { return try JSONDecoder().decode(PromptifySettings.self, from: data) }
+                catch { throw ServiceError.decoding(String(describing: error)) }
+            }
+        }
+    }
+
+    /// Change the prompt-mode settings. `appendix` replaces the additions when given;
+    /// `override`: .some(text) replaces the default, .some(nil) restores it, nil leaves it.
+    func setPromptifySync(appendix: String? = nil, override: String?? = nil) throws -> PromptifySettings {
+        try withPortRetry {
+            try withTokenRetry { token in
+                var object: [String: Any] = [:]
+                if let appendix = appendix { object["appendix"] = appendix }
+                if let override = override { object["override"] = override.map { $0 as Any } ?? NSNull() }
+                let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+                let req = try makeRequest(path: "/api/voice-polish/prompts/promptify", method: "PUT", token: token,
+                                          headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)
+                let (data, resp) = try performSync(req, timeout: healthTimeout)
+                guard resp.statusCode == 200 else { throw httpError(resp, data) }
+                do { return try JSONDecoder().decode(PromptifySettings.self, from: data) }
+                catch { throw ServiceError.decoding(String(describing: error)) }
+            }
+        }
+    }
+
     /// Ask the service to make one tiny call with this route (nothing is recorded).
     func testLLMSync(route: LLMRoute) throws -> LLMTestResult {
         try withPortRetry {
@@ -650,6 +682,15 @@ struct LLMRoute: Codable, Equatable {
               let list = object["data"] as? [[String: Any]] else { return [] }
         return list.compactMap { $0["id"] as? String }.sorted()
     }
+}
+
+/// Answer of `GET/PUT /prompts/promptify`.
+struct PromptifySettings: Codable, Equatable {
+    var `default`: String
+    var appendix: String
+    var override: String?
+    var modified: Bool
+    var effective: String
 }
 
 /// Answer of `POST /test-llm`.

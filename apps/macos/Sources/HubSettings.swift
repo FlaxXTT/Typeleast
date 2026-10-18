@@ -19,6 +19,7 @@ struct SettingsPage: View {
                     shortcuts
                     ModelSection()
                     cleanup
+                    PromptifySection()
                     language
                     audio
                     insertion

@@ -20,7 +20,7 @@ import { erduoSystemPrompt } from "./prompts/erduo-budget-typeless.js";
 import { promptifySystemPrompt } from "./prompts/promptify.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-18.3-erduo+promptify";
+export const PROMPT_VERSION = "2026-10-18.4-erduo+subject+promptify";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["erduo"];
@@ -80,11 +80,11 @@ export function harnessAddendum({ dictionary, fieldContext }) {
  * The system prompt for one request: Erduo's cleanup prompt, or for the
  * "promptify" strength (提示词模式) the structured-prompt rewriter. Both get the
  * same addendum (dictionary and field context).
- * @param {object} input - strength, and the dictionary and field context the addendum needs.
+ * @param {object} input - strength, the user's prompt-mode settings, and the dictionary and field context the addendum needs.
  * @returns {string} the system prompt.
  */
-export function systemPromptFor({ dictionary, fieldContext, strength } = {}) {
-  const base = strength === "promptify" ? promptifySystemPrompt() : erduoSystemPrompt();
+export function systemPromptFor({ dictionary, fieldContext, strength, promptify } = {}) {
+  const base = strength === "promptify" ? promptifySystemPrompt(promptify) : erduoSystemPrompt();
   return base + harnessAddendum({ dictionary, fieldContext });
 }
 
