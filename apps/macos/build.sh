@@ -16,7 +16,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$ROOT/build"
+BUILD_DIR="${TYPELEAST_BUILD_DIR:-$ROOT/build}"
 STAGE_DIR="$BUILD_DIR/dist.noindex"
 APP="$STAGE_DIR/TypeLeast.app"
 SWIFTC="/usr/bin/swiftc"

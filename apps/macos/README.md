@@ -97,3 +97,7 @@ A missing key does not cause encrypted history to be overwritten. Resetting the
 Keychain can make that history unreadable. Recordings are still plaintext while
 recording and during the active request. Known terminal apps receive a single
 line without control characters; embedded terminals may not be detected.
+
+For local release builds, `TYPELEAST_BUILD_DIR` selects a separate staging folder
+and `TYPELEAST_PACKAGE_CACHE` reuses fixed-version package downloads. The default
+paths stay unchanged. Existing validation builds can therefore be kept for review.

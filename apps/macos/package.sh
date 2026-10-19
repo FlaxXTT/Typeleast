@@ -24,22 +24,26 @@ case "$ARCH" in
   *) echo "unknown arch: $ARCH (use arm64 or x86_64)" >&2; exit 2 ;;
 esac
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Info.plist")"
-WORK="$ROOT/build/package-$ARCH"
+BUILD_DIR="${TYPELEAST_BUILD_DIR:-$ROOT/build}"
+WORK="$BUILD_DIR/package-$ARCH"
+CACHE="${TYPELEAST_PACKAGE_CACHE:-$WORK}"
 rm -rf "$WORK"
-mkdir -p "$WORK" "$OUT"
+mkdir -p "$WORK" "$OUT" "$CACHE"
 
 echo "== TypeLeast $VERSION for $LABEL ($ARCH), Node.js $NODE_VERSION =="
 TYPELEAST_ARCH="$ARCH" "$ROOT/build.sh" --no-install
-APP_SRC="$ROOT/build/dist.noindex/TypeLeast.app"
+APP_SRC="$BUILD_DIR/dist.noindex/TypeLeast.app"
 APP="$WORK/TypeLeast.app"
 ditto "$APP_SRC" "$APP"
 RES="$APP/Contents/Resources"
 
 # The sherpa-onnx library for the target architecture (npm installed the host's).
 rm -rf "$RES/service/node_modules/"sherpa-onnx-darwin-*
-(cd "$WORK" && npm pack --silent "$SHERPA_PKG@$SHERPA_VERSION" >/dev/null)
+if [ ! -f "$CACHE/$SHERPA_PKG-$SHERPA_VERSION.tgz" ]; then
+  (cd "$CACHE" && npm pack --silent "$SHERPA_PKG@$SHERPA_VERSION" >/dev/null)
+fi
 mkdir -p "$RES/service/node_modules/$SHERPA_PKG"
-tar -xzf "$WORK/$SHERPA_PKG-$SHERPA_VERSION.tgz" -C "$RES/service/node_modules/$SHERPA_PKG" --strip-components 1
+tar -xzf "$CACHE/$SHERPA_PKG-$SHERPA_VERSION.tgz" -C "$RES/service/node_modules/$SHERPA_PKG" --strip-components 1
 echo "sherpa : $SHERPA_PKG $SHERPA_VERSION"
 
 # Node.js, verified against nodejs.org's published SHA-256 list.
@@ -50,10 +54,11 @@ if [ -n "${TYPELEAST_NODE_BINARY:-}" ]; then
 else
   TARBALL="node-v$NODE_VERSION-darwin-$NODE_ARCH.tar.gz"
   BASE="https://nodejs.org/dist/v$NODE_VERSION"
-  curl -fsSL "$BASE/$TARBALL" -o "$WORK/$TARBALL"
-  curl -fsSL "$BASE/SHASUMS256.txt" -o "$WORK/SHASUMS256.txt"
-  (cd "$WORK" && grep " $TARBALL\$" SHASUMS256.txt | shasum -a 256 -c -)
-  tar -xzf "$WORK/$TARBALL" -C "$WORK"
+  SUMS="node-v$NODE_VERSION-SHASUMS256.txt"
+  if [ ! -f "$CACHE/$TARBALL" ]; then curl -fsSL "$BASE/$TARBALL" -o "$CACHE/$TARBALL"; fi
+  if [ ! -f "$CACHE/$SUMS" ]; then curl -fsSL "$BASE/SHASUMS256.txt" -o "$CACHE/$SUMS"; fi
+  (cd "$CACHE" && grep " $TARBALL\$" "$SUMS" | shasum -a 256 -c -)
+  tar -xzf "$CACHE/$TARBALL" -C "$WORK"
   cp "$WORK/node-v$NODE_VERSION-darwin-$NODE_ARCH/bin/node" "$RES/node/bin/node"
   cp "$WORK/node-v$NODE_VERSION-darwin-$NODE_ARCH/LICENSE" "$RES/node/LICENSE"
   echo "node   : $TARBALL (sha256 verified)"
