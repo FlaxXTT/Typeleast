@@ -14,6 +14,7 @@
  *
  * @module typeleast-service/asr
  */
+import { LANGUAGES } from "./config.js";
 import { createRequire } from "node:module";
 import { downloadModels, MODELS_TOTAL_BYTES, modelPaths, modelStatus } from "./models.js";
 import { pcm16ToFloat32, SAMPLE_RATE, withLeadIn } from "./wav.js";
@@ -47,6 +48,8 @@ export class LocalRecognizer {
     this.recognizer = null;
     this.sherpa = null;
     this.preparing = null;
+    this.transcribing = Promise.resolve();
+    this.activeLanguage = this.language;
   }
 
   /**
@@ -143,12 +146,33 @@ export class LocalRecognizer {
    * @param {Buffer} audio - a WAV that passed validateWav().
    * @returns {Promise<{text: string}>}
    */
-  async transcribe(audio) {
+  transcribe(audio, language = this.language) {
+    if (!LANGUAGES.includes(language)) {
+      const error = new Error("unsupported recognition language");
+      error.code = "invalid-language";
+      return Promise.reject(error);
+    }
+    // One recognizer at a time. Keep a failed request from poisoning the queue.
+    const work = this.transcribing.then(() => this.transcribeSerial(audio, language));
+    this.transcribing = work.catch(() => {});
+    return work;
+  }
+
+  async transcribeSerial(audio, language) {
     if (!this.recognizer) {
       void this.prepare();
       const error = new Error(`speech model is not ready (phase: ${this.phase})`);
       error.code = "speech-not-ready";
       throw error;
+    }
+    if (language !== this.activeLanguage) {
+      // Recreate with an explicit model language: native setConfig does not
+      // guarantee that a model-specific language is updated on every backend.
+      const config = structuredClone(this.recognizer.config);
+      config.modelConfig.senseVoice.language = language;
+      const next = await this.sherpa.OfflineRecognizer.createAsync(config);
+      this.recognizer = next;
+      this.activeLanguage = language;
     }
     // A short silent lead-in keeps the recogniser from clipping the first syllable.
     const samples = pcm16ToFloat32(withLeadIn(audio));

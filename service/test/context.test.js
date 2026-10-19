@@ -62,3 +62,12 @@ test("field context header is base64 JSON, bounded, and dropped when malformed",
   assert.equal(normalizeFieldContext({ before: "  ", after: 7 }), null, "no text means no context");
   assert.equal(redactFieldContext({ before: "password is hunter2", selected: "", after: "", windowTitle: "" }, true).before, "password is [redacted]");
 });
+
+
+test("explicit Chinese credentials are redacted without changing general discussion", () => {
+  for (const text of ["密码是 fake-pass-123", "令牌：fake-token-123", "密钥为“fake value 123”"]) {
+    assert.ok(!redactSecrets(text).includes("fake"));
+    assert.ok(redactSecrets(text).includes("[redacted]"));
+  }
+  assert.equal(redactSecrets("请修改密码字段的颜色"), "请修改密码字段的颜色");
+});

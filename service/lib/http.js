@@ -66,10 +66,12 @@ function readBody(req, limit) {
 
 /** Translate a thrown value into an HTTP status and code. */
 function classify(error) {
+  if (error instanceof SyntaxError) return { status: 400, code: "invalid-json" };
   const code = error?.code ?? (error instanceof WavError ? "invalid-audio" : "error");
   switch (code) {
     case "payload-too-large":
       return { status: 413, code };
+    case "invalid-language":
     case "invalid-prompt":
       return { status: 400, code };
     case "invalid-audio":
@@ -256,8 +258,9 @@ export function createHandler(options) {
       reply(res, 404, { error: `unknown endpoint ${url.pathname}`, code: "not-found" });
     } catch (error) {
       const { status, code } = classify(error);
-      const detail = error instanceof Error ? error.message : String(error);
-      if (status >= 500) logger?.warn?.("typeleast: %s -> %s (%s)", req.url, status, detail);
+      // JSON parser errors may include submitted keys or text. Never echo the input.
+      const detail = code === "invalid-json" ? "invalid JSON body" : status >= 500 ? "internal service error" : error instanceof Error ? error.message : String(error);
+      if (status >= 500) logger?.warn?.("typeleast: request failed (%s)", code);
       if (!res.headersSent) reply(res, status, { error: detail, code });
       else res.destroy();
     }

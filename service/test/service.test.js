@@ -369,3 +369,28 @@ test("setDictionary replaces learned words, keeps configured ones, and accepts p
   assert.deepEqual(service.dictionary, ["TypeLeast"]);
   await assert.rejects(() => service.setDictionary("nope"));
 });
+
+
+test("dictation language reaches recognition and invalid languages do not run recognition", async () => {
+  const languages = [];
+  const service = makeService({ recognizer: {
+    snapshot: () => ({ ready: true }),
+    transcribe: async (_audio, language) => { languages.push(language); return { text: "hello" }; },
+  } });
+  for (const language of ["auto", "zh", "en", "yue", "ja", "ko"]) {
+    await service.transcribeAndPolish({ audio: wavOfSilence(), language, strength: "off" });
+  }
+  assert.deepEqual(languages, ["auto", "zh", "en", "yue", "ja", "ko"]);
+  await assert.rejects(service.transcribeAndPolish({ audio: wavOfSilence(), language: "bad" }), { code: "invalid-language" });
+  assert.equal(languages.length, 6);
+});
+
+
+test("dictionary secrets are redacted in the actual provider payload", async () => {
+  const model = fakeModel("hello");
+  const service = makeService({ model, config: { dictionary: ["密码是 fake-secret-123", "sk-test-abcdefghijklmnop"] } });
+  await service.polish({ rawText: "hello", llm: ROUTE });
+  const payload = JSON.stringify(model.calls);
+  assert.ok(!payload.includes("fake-secret-123"));
+  assert.ok(!payload.includes("sk-test-abcdefghijklmnop"));
+});

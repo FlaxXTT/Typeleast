@@ -124,3 +124,18 @@ test("paths outside the route prefix are not served", async () => {
     assert.equal(reply.json.code, "not-found");
   }
 });
+
+
+test("malformed JSON is a client error and does not echo secrets", async () => {
+  const { Readable } = await import("node:stream");
+  const handler = createHandler({ service: failingService(), currentToken: async () => TOKEN });
+  const req = Readable.from([Buffer.from('{"apiKey":"fake-private-credential"')]);
+  req.method = "POST";
+  req.url = "/api/voice-polish/polish";
+  req.headers = { host: "127.0.0.1:51234", authorization: `Bearer ${TOKEN}` };
+  const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(body) { this.body = body; } };
+  await handler(req, res);
+  assert.equal(res.status, 400);
+  assert.equal(JSON.parse(res.body).code, "invalid-json");
+  assert.ok(!res.body.includes("fake-private-credential"));
+});

@@ -15,6 +15,7 @@
  *
  * @module typeleast-service/service
  */
+import { LANGUAGES } from "./config.js";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -295,7 +296,7 @@ export class VoicePolishService {
     // Erduo's prompt and demonstrations, plus an addendum with only the dictionary
     // and the text around the cursor (already redacted by buildContext).
     const system = systemPromptFor({
-      dictionary: this.dictionary,
+      dictionary: context.dictionary,
       fieldContext: context.fieldContext ?? null,
       strength,
       promptify: this.promptify,
@@ -381,7 +382,7 @@ export class VoicePolishService {
       const reason = request.signal?.aborted
         ? "cancelled"
         : error instanceof ModelCallError ? failureReason(error) : "internal-error";
-      const detail = this.redactDetail(failureDetail(error));
+      const detail = this.redactDetail(failureDetail(error)).split(custom.apiKey || "\u0000").join("[redacted-key]");
       this.stats.lastError = `${reason}: ${detail}`;
       this.logger.warn?.("typeleast: polishing failed (%s: %s); using the raw transcript", reason, detail);
       // The fallback is still cleaned deterministically: a model timeout is no
@@ -476,9 +477,16 @@ export class VoicePolishService {
         throw error;
       }
       validateWav(audio, this.config.maxDurationSeconds);
-      const spoken = await this.transcribe(audio);
+      const language = request.language ?? this.config.language ?? "auto";
+      if (!LANGUAGES.includes(language)) {
+        const error = new Error("unsupported recognition language");
+        error.code = "invalid-language";
+        throw error;
+      }
+      const spoken = await this.transcribe(audio, language);
       const polished = await this.polish({
         rawText: spoken.text,
+        language,
         appHint: request.appHint,
         strength: request.strength,
         fieldContext: request.fieldContext ?? null,
@@ -515,9 +523,9 @@ export class VoicePolishService {
    * Recognise the audio locally. When the model is not loaded yet this throws
    * speech-not-ready (and loading starts), so the app can say so honestly.
    */
-  async transcribe(audio) {
+  async transcribe(audio, language) {
     const started = Date.now();
-    const spoken = await this.recognizer.transcribe(audio);
+    const spoken = await this.recognizer.transcribe(audio, language);
     return { text: String(spoken.text ?? "").trim(), ms: Date.now() - started };
   }
 
@@ -525,7 +533,7 @@ export class VoicePolishService {
   async buildContext(request) {
     const redact = this.config.redactSecrets !== false;
     return {
-      dictionary: [...this.dictionary],
+      dictionary: this.dictionary.map(entry => redact ? redactSecrets(entry) : entry),
       // The text box being dictated into is the most relevant context there is.
       fieldContext: redactFieldContext(request.fieldContext ?? null, redact),
     };

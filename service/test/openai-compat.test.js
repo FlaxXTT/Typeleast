@@ -9,6 +9,7 @@ const ROUTE = { baseURL: "https://api.example.com/v1/", model: "chat-model", api
 function fakeFetch(handler) {
   const calls = [];
   const impl = async (url, init) => {
+    assert.equal(init.redirect, "error", "private text must not follow redirects");
     calls.push({ url, init, body: JSON.parse(init.body) });
     return handler(calls.length);
   };
