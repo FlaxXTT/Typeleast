@@ -707,7 +707,7 @@ do {
     UserDefaults.standard.set("maximal", forKey: "voice.strength")
     checkEq("a strength saved by an older build reads as Article", s.strength, "prompt")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
-    checkEq("Article, prompt mode and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "promptify", "off"])
+    checkEq("Article, prompt mode, Prompt Beta and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "promptify", "promptbeta", "off"])
     UserDefaults.standard.set("promptify", forKey: "voice.strength")
     checkEq("prompt mode is remembered", s.strength, "promptify")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
@@ -872,6 +872,25 @@ do {
     checkEq("health exposes language capabilities", status.languages, ["auto", "zh", "en", "ja"])
     checkEq("natural cleanup English label", L10n.render("自然整理", arguments: [], language: "en"), "Natural cleanup")
 } catch { check("speech model client contract", false, String(describing: error)) }
+
+// MARK: 23. Prompt Beta: questions come back with a session; the answer carries it
+do {
+    let asked = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"","raw":"r","fallback":false,"beta":{"sessionId":"s-1","questions":["给谁看？","要多长？"]}}"#.utf8))
+    checkEq("questions are read", asked.betaQuestions, ["给谁看？", "要多长？"])
+    checkEq("session id is read", asked.beta?.sessionId, "s-1")
+    let done = try JSONDecoder().decode(DictateResponse.self, from: Data(###"{"text":"## 目标","raw":"r","fallback":false,"beta":{"issues":2,"patched":true}}"###.utf8))
+    checkEq("a finished prompt has no questions", done.betaQuestions, [String]())
+    let plain = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"x","raw":"x","fallback":false}"#.utf8))
+    checkEq("older services without beta still decode", plain.betaQuestions, [String]())
+    state.mode = "health"
+    _ = try? client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "promptbeta", betaSession: "s-1")
+    checkEq("the answer carries the session", state.lastRequest?.header("x-voice-beta-session"), "s-1")
+    checkEq("Prompt Beta strength is sent", state.lastRequest?.header("x-voice-strength"), "promptbeta")
+    _ = try? client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt")
+    checkEq("ordinary dictation sends no session", state.lastRequest?.header("x-voice-beta-session"), "")
+} catch {
+    check("Prompt Beta decoding", false, String(describing: error))
+}
 
 server.stop()
 print("")

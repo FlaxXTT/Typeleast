@@ -60,6 +60,7 @@ public sealed class ServiceClient
     public string? TokenOverride { get; set; }
     public TimeSpan ShortTimeout { get; set; } = TimeSpan.FromSeconds(3);
     public TimeSpan DictateTimeout { get; set; } = TimeSpan.FromSeconds(120);
+    public TimeSpan BetaTimeout { get; set; } = TimeSpan.FromSeconds(300);
 
     public ServiceClient(string? stateDirectory = null)
     {
@@ -203,7 +204,7 @@ public sealed class ServiceClient
     }
 
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
-        LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default) =>
+        LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null) =>
         WithPortRetry(async () =>
         {
             var headers = new Dictionary<string, string>
@@ -214,11 +215,27 @@ public sealed class ServiceClient
             };
             if (EncodeContextHeader(fieldContext) is { } context) headers["x-voice-context"] = context;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
+            if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             var content = new ByteArrayContent(wav);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-            var (status, body) = await SendAsync(HttpMethod.Post, "/dictate", content, headers, DictateTimeout, ct).ConfigureAwait(false);
+            // Prompt Beta makes up to four model calls in one request.
+            var timeout = strength == "promptbeta" && DictateTimeout < BetaTimeout ? BetaTimeout : DictateTimeout;
+            var (status, body) = await SendAsync(HttpMethod.Post, "/dictate", content, headers, timeout, ct).ConfigureAwait(false);
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
             return Decode<DictateResponse>(body);
+        });
+
+    /// <summary>Prompt Beta: write the prompt without answers (skip), or forget the questions (cancel).</summary>
+    public Task<DictateResponse> BetaAsync(string sessionId, bool skip, string appHint, LlmRoute? llm, CancellationToken ct = default) =>
+        WithPortRetry(async () =>
+        {
+            var headers = new Dictionary<string, string> { ["x-voice-app"] = appHint };
+            if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
+            var json = JsonSerializer.Serialize(new { sessionId });
+            var (status, body) = await SendAsync(HttpMethod.Post, skip ? "/prompts/beta/finish" : "/prompts/beta/cancel",
+                new StringContent(json, Encoding.UTF8, "application/json"), headers, BetaTimeout, ct).ConfigureAwait(false);
+            if (status != HttpStatusCode.OK) throw HttpError(status, body);
+            return skip ? Decode<DictateResponse>(body) : new DictateResponse();
         });
 
     public Task<List<string>> PutDictionaryAsync(IEnumerable<string> entries, CancellationToken ct = default) =>

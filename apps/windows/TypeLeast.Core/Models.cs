@@ -91,6 +91,15 @@ public sealed class MsBreakdown
     [JsonPropertyName("total")] public double? Total { get; set; }
 }
 
+/// <summary>Prompt Beta: questions to answer first, or what the review did.</summary>
+public sealed class BetaInfo
+{
+    [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
+    [JsonPropertyName("questions")] public List<string>? Questions { get; set; }
+    [JsonPropertyName("issues")] public int? Issues { get; set; }
+    [JsonPropertyName("patched")] public bool? Patched { get; set; }
+}
+
 public sealed class DictateResponse
 {
     [JsonPropertyName("requestId")] public string? RequestId { get; set; }
@@ -101,6 +110,11 @@ public sealed class DictateResponse
     [JsonPropertyName("model")] public string? Model { get; set; }
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
+    [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
+
+    /// <summary>Prompt Beta asked questions: nothing to paste yet.</summary>
+    [JsonIgnore] public IReadOnlyList<string> BetaQuestions =>
+        Beta?.SessionId is null ? Array.Empty<string>() : (IReadOnlyList<string>?)Beta.Questions ?? Array.Empty<string>();
 
     /// <summary>When fallback is true the service has already put the raw transcript in Text.</summary>
     [JsonIgnore] public string InsertableText => Text.Length > 0 ? Text : Raw;

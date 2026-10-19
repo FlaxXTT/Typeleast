@@ -239,6 +239,14 @@ struct DynKey: CodingKey {
     init?(intValue: Int) { self.stringValue = String(intValue); self.intValue = intValue }
 }
 
+/// Prompt Beta: questions to answer before the prompt is written, or what the review did.
+struct BetaInfo: Codable, Equatable {
+    var sessionId: String?
+    var questions: [String]?
+    var issues: Int?
+    var patched: Bool?
+}
+
 struct DictateResponse: Codable, Equatable {
     var requestId: String?
     var text: String = ""
@@ -248,9 +256,12 @@ struct DictateResponse: Codable, Equatable {
     var model: String?
     var provider: String?
     var ms: MSBreakdown?
+    var beta: BetaInfo?
+    /// Prompt Beta asked questions: nothing to insert yet.
+    var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case requestId, text, raw, fallback, fallbackReason, model, provider, ms
+        case requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -268,6 +279,7 @@ struct DictateResponse: Codable, Equatable {
         model = lenient(c, String.self, .model)
         provider = lenient(c, String.self, .provider)
         ms = lenient(c, MSBreakdown.self, .ms)
+        beta = lenient(c, BetaInfo.self, .beta)
     }
 
     /// When fallback is true the service has ALREADY substituted the raw transcript into
@@ -571,14 +583,31 @@ final class ServiceClient {
     }
 
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
-                     fieldContext: Data? = nil, llm: LLMRoute? = nil) throws -> DictateResponse {
+                     fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil) throws -> DictateResponse {
         try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
-                                            llm: llm) }
+                                            llm: llm, betaSession: betaSession) }
+    }
+
+    /// Prompt Beta: write the prompt without answering the questions (skip), or forget them (cancel).
+    func betaSync(sessionId: String, skip: Bool, appBundleId: String, llm: LLMRoute?) throws -> DictateResponse {
+        try withPortRetry { try withTokenRetry { token in
+            var headers = ["content-type": "application/json", "x-voice-app": appBundleId]
+            if let route = ServiceClient.encodeRouteHeader(llm) { headers["x-voice-llm"] = route }
+            let body = try JSONSerialization.data(withJSONObject: ["sessionId": sessionId])
+            let path = "/api/voice-polish/prompts/beta/" + (skip ? "finish" : "cancel")
+            let req = try makeRequest(path: path, method: "POST", token: token, headers: headers, body: body,
+                                      timeout: max(dictateTimeout, 300))
+            let (data, resp) = try performSync(req, timeout: max(dictateTimeout, 300))
+            guard resp.statusCode == 200 else { throw httpError(resp, data) }
+            if !skip { return DictateResponse() }
+            do { return try JSONDecoder().decode(DictateResponse.self, from: data) }
+            catch { throw ServiceError.decoding(String(describing: error)) }
+        } }
     }
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
-                             fieldContext: Data?, llm: LLMRoute?) throws -> DictateResponse {
+                             fieldContext: Data?, llm: LLMRoute?, betaSession: String?) throws -> DictateResponse {
         try withTokenRetry { token in
             var headers: [String: String] = [
                 "content-type": "audio/wav",
@@ -592,9 +621,12 @@ final class ServiceClient {
             if let route = ServiceClient.encodeRouteHeader(llm) {
                 headers["x-voice-llm"] = route
             }
+            if let betaSession { headers["x-voice-beta-session"] = betaSession }
+            // Prompt Beta makes up to four model calls in one request.
+            let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
-                                      token: token, headers: headers, body: wav, timeout: dictateTimeout)
-            let (data, resp) = try performSync(req, timeout: dictateTimeout)
+                                      token: token, headers: headers, body: wav, timeout: timeout)
+            let (data, resp) = try performSync(req, timeout: timeout)
             guard resp.statusCode == 200 else { throw httpError(resp, data) }
             do { return try JSONDecoder().decode(DictateResponse.self, from: data) }
             catch { throw ServiceError.decoding(String(describing: error)) }

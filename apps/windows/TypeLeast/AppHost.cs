@@ -39,6 +39,11 @@ internal sealed class AppHost
     private DispatcherTimer? healthTimer;
     private IntPtr targetWindow;
     private string targetApp = "";
+    // Prompt Beta questions waiting for a spoken answer, and where the prompt goes.
+    private string? betaSession;
+    private IntPtr betaWindow;
+    private string betaApp = "";
+    private BetaPanel? betaPanel;
     private bool dictionaryNeedsSync = true;
 
     public AppHost(Application app)
@@ -275,12 +280,47 @@ internal sealed class AppHost
             Raise();
             return;
         }
+        // A recording made while Prompt Beta's questions are open is the answer to them.
+        if (Settings.Strength != "promptbeta" && betaSession is not null) DropBeta();
+        var answering = Settings.Strength == "promptbeta" ? betaSession : null;
         Phase = DictationPhase.Thinking;
         bar.ShowThinking();
         Raise();
         try
         {
-            var result = await Client.DictateAsync(wav, Settings.Language, targetApp, Settings.Strength, ActiveRoute);
+            var result = await Client.DictateAsync(wav, Settings.Language, targetApp, Settings.Strength, ActiveRoute, betaSession: answering);
+            if (ShowBetaQuestions(result))
+            {
+                Phase = DictationPhase.Idle;
+                Raise();
+                return;
+            }
+            if (answering is not null)
+            {
+                targetWindow = betaWindow;
+                targetApp = betaApp;
+                ClearBeta();
+            }
+            await Deliver(result, seconds);
+        }
+        catch (ServiceException e) when (e.Status == 410 && betaSession is not null)
+        {
+            DropBeta();
+            bar.ShowResult(L10n.T("问题已过期，请重新说一遍需求"), warning: true);
+        }
+        catch (ServiceException e)
+        {
+            Log.Write("dictate.fail", (e.Code ?? e.Kind.ToString()) + " " + e.Status);
+            bar.ShowResult(e.Code == "speech-not-ready" ? Messages.SpeechProblem(Speech) : L10n.T("听写失败：") + (e.ServiceUnavailable ? L10n.T("本地服务未就绪") : e.Message), warning: true);
+        }
+        Phase = DictationPhase.Idle;
+        Raise();
+    }
+
+    /// <summary>Paste a finished result into the target window and record it.</summary>
+    private async Task Deliver(DictateResponse result, double seconds)
+    {
+        {
             var text = result.InsertableText.Trim();
             if (text.Length == 0)
             {
@@ -304,13 +344,58 @@ internal sealed class AppHost
                 bar.ShowResult(note is null ? done : done + " · " + note, warning: note is not null);
             }
         }
+    }
+
+    /// <summary>Prompt Beta asked questions: show them and keep the session. True when shown.</summary>
+    private bool ShowBetaQuestions(DictateResponse result)
+    {
+        if (result.Beta?.SessionId is not { } id || result.BetaQuestions.Count == 0) return false;
+        betaSession = id;
+        betaWindow = targetWindow;
+        betaApp = targetApp;
+        betaPanel ??= new BetaPanel(() => _ = FinishBetaWithoutAnswers(), DropBeta);
+        betaPanel.ShowQuestions(result.BetaQuestions, HotkeyLabel);
+        bar.ShowResult(L10n.T("提示词 Beta：先回答面板里的问题"), warning: false);
+        return true;
+    }
+
+    /// <summary>"跳过，直接生成": write the prompt now; unanswered points go to 「待确认」.</summary>
+    private async Task FinishBetaWithoutAnswers()
+    {
+        if (Phase != DictationPhase.Idle || betaSession is not { } id) return;
+        targetWindow = betaWindow;
+        targetApp = betaApp;
+        ClearBeta();
+        Phase = DictationPhase.Thinking;
+        bar.ShowThinking();
+        Raise();
+        try
+        {
+            await Deliver(await Client.BetaAsync(id, skip: true, targetApp, ActiveRoute), 0);
+        }
         catch (ServiceException e)
         {
-            Log.Write("dictate.fail", (e.Code ?? e.Kind.ToString()) + " " + e.Status);
-            bar.ShowResult(e.Code == "speech-not-ready" ? Messages.SpeechProblem(Speech) : L10n.T("听写失败：") + (e.ServiceUnavailable ? L10n.T("本地服务未就绪") : e.Message), warning: true);
+            Log.Write("beta.fail", (e.Code ?? e.Kind.ToString()) + " " + e.Status);
+            bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说一遍需求") : L10n.T("听写失败：") + e.Message, warning: true);
         }
         Phase = DictationPhase.Idle;
         Raise();
+    }
+
+    /// <summary>Close the questions; the service forgets the session too.</summary>
+    private void DropBeta()
+    {
+        if (betaSession is not { } id) return;
+        var app = betaApp;
+        var route = ActiveRoute;
+        ClearBeta();
+        _ = Task.Run(async () => { try { await Client.BetaAsync(id, skip: false, app, route); } catch (ServiceException) { } });
+    }
+
+    private void ClearBeta()
+    {
+        betaSession = null;
+        betaPanel?.Hide();
     }
 
     public void CopyLast()

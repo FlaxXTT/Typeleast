@@ -295,6 +295,24 @@ Console.WriteLine();
     } finally { if (File.Exists(path)) File.Delete(path); }
 }
 
+// Prompt Beta: questions come back with a session; settings keep the new strength.
+{
+    var asked = System.Text.Json.JsonSerializer.Deserialize<DictateResponse>(
+        "{\"text\":\"\",\"raw\":\"r\",\"fallback\":false,\"beta\":{\"sessionId\":\"s-1\",\"questions\":[\"给谁看？\"]}}")!;
+    Eq("beta questions are read", string.Join("|", asked.BetaQuestions), "给谁看？");
+    Eq("beta session is read", asked.Beta?.SessionId, "s-1");
+    var done = System.Text.Json.JsonSerializer.Deserialize<DictateResponse>(
+        "{\"text\":\"## 目标\",\"raw\":\"r\",\"fallback\":false,\"beta\":{\"issues\":1,\"patched\":true}}")!;
+    Eq("a finished prompt has no questions", done.BetaQuestions.Count, 0);
+    var plain = System.Text.Json.JsonSerializer.Deserialize<DictateResponse>("{\"text\":\"x\",\"raw\":\"x\",\"fallback\":false}")!;
+    Eq("older services without beta still decode", plain.BetaQuestions.Count, 0);
+    var path = Path.Combine(Path.GetTempPath(), "typeleast-beta-" + Guid.NewGuid() + ".json");
+    try {
+        new AppSettings { Strength = "promptbeta" }.Save(path);
+        Eq("Prompt Beta strength survives a reload", AppSettings.Load(path).Strength, "promptbeta");
+    } finally { if (File.Exists(path)) File.Delete(path); }
+}
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

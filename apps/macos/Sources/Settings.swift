@@ -33,11 +33,12 @@ enum VoiceLanguage: String, CaseIterable {
 /// (conservative, maximal) only change validation strictness, so the app no longer
 /// offers them; a value saved by an older build reads as `.prompt`.
 enum VoiceStrength: String, CaseIterable {
-    case prompt, promptify, off
+    case prompt, promptify, promptbeta, off
     var label: String {
         switch self {
         case .prompt: return L10n.text("自然整理")
         case .promptify: return L10n.text("提示词模式")
+        case .promptbeta: return L10n.text("提示词 Beta")
         case .off: return L10n.text("原话转写")
         }
     }
@@ -46,6 +47,7 @@ enum VoiceStrength: String, CaseIterable {
         switch self {
         case .prompt: return L10n.text("自然整理：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。")
         case .promptify: return L10n.text("把你说的话改写成一份结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），可以直接发给 AI。角色、语气、格式会自动补全；数字、日期、人名等事实你没说就不写。")
+        case .promptbeta: return L10n.text("写最好的提示词：先问你几个关键问题，口头回答后起草，再另开上下文审查并修补。目标、成功标准、约束写清楚；拿不准或矛盾的要求不会两个都塞进去。比提示词模式慢，用量约 3–4 倍。")
         case .off: return L10n.text("不调用大模型，只在本机去掉口头禅。速度最快。")
         }
     }

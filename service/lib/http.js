@@ -80,6 +80,8 @@ function classify(error) {
       return { status: 400, code };
     case "model-busy":
       return { status: 409, code };
+    case "beta-expired":
+      return { status: 410, code };
     case "busy":
       return { status: 429, code };
     case "speech-not-ready":
@@ -263,8 +265,34 @@ export function createHandler(options) {
           strength: req.headers["x-voice-strength"] ?? undefined,
           fieldContext: parseFieldContext(req.headers["x-voice-context"]),
           llm: parseRouteHeader(req.headers["x-voice-llm"]),
+          betaSession: req.headers["x-voice-beta-session"] || null,
         });
         reply(res, 200, result);
+        return;
+      }
+
+      // Prompt Beta: generate without answering the questions, or forget them.
+      if ((route === "/prompts/beta/finish" || route === "/prompts/beta/cancel") && req.method === "POST") {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
+        const sessionId = typeof body?.sessionId === "string" ? body.sessionId : "";
+        if (route === "/prompts/beta/cancel") {
+          reply(res, 200, { ok: true, cancelled: service.cancelBeta(sessionId) });
+          return;
+        }
+        const result = await service.polish({
+          rawText: "",
+          appHint: req.headers["x-voice-app"] ?? null,
+          strength: "promptbeta",
+          llm: parseRouteHeader(req.headers["x-voice-llm"]),
+          betaSession: sessionId,
+          betaSkip: true,
+          signal: undefined,
+        });
+        reply(res, 200, {
+          requestId: null, text: result.text, raw: result.raw, fallback: result.fallback,
+          fallbackReason: result.reason ?? undefined, model: result.model, provider: result.provider,
+          strength: "promptbeta", ms: result.ms, ...(result.beta ? { beta: result.beta } : {}),
+        });
         return;
       }
 
