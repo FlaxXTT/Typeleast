@@ -1,37 +1,32 @@
-TypeLeast：按一下快捷键说话，语音在你自己的电脑上识别（SenseVoice），再用你自己的大模型 API Key 整理成通顺的文字，直接出现在光标处。
+TypeLeast：按快捷键说话，本机识别，再用你自己的整理模型处理文字并插入光标处。
 
-## 这一版有什么新变化（1.5.0）
+## 1.16.0 的变化
 
-- **可选识别模型**：「设置 → 识别模型」里除了默认的 SenseVoice Small，还可以下载并启用三个本机模型，点一下就能用，不用手动解压或填路径：
-  - **FireRedASR2 CTC**（约 0.78 GB）：偏向中文和方言，也支持英文；自动检测语言。
-  - **Fun-ASR-Nano**（约 1.01 GB）：适合中英混合听写，也支持日语；可以指定中文、英文或日语。
-  - **Qwen3-ASR-0.6B**（约 0.99 GB）：多语言识别，可以指定中文、英文、粤语、日语或韩语；对中文可能输出繁体字。
-- 下载时继续用当前模型；每个文件都核对 SHA-256，加载成功后才切换，失败会保留当前模型。可以取消下载，已校验的文件下次复用。
-- 修复连续切换听写语言时内存持续增长的问题。
+- 新增独立翻译快捷键，支持 10 种目标语言。
+- 新增中文简体、台湾繁体、香港繁体，以及美式、英式英文拼写选项。
+- 首页新增活动热力图、活跃天数和连续使用天数，只保存日期和计数。
+- 新增「提示词 Beta」：先澄清需求，再起草并审查提示词；比普通整理更慢，模型调用次数更多。
+- Mac 加入菜单栏与常用编辑快捷键修复。
+- 安全加固：Mac Hardened Runtime、资源完整性检查和单实例锁；两端本地服务启动过滤危险环境变量，向已识别终端粘贴时压平换行。
+- Mac 历史及保留录音加密，Windows 历史实现当前用户 DPAPI；旧数据迁移失败保留原数据并提示，不回退为明文。服务历史默认只存文字摘要。
 
-候选模型比 SenseVoice 大，识别和切换更慢、占用内存更多（约 2–3 GB）。样例很少，不代表准确率排名，请按自己的语音试用。
+## 本次安装包与验证范围
 
-验证：服务 173 项、Mac 308 项、Windows 117 项测试；三平台 CI、真实模型加载和识别测试、三种安装包构建通过。四个模型在 Mac 上实测加载、识别和来回切换。Windows 界面未经真机操作验证；没有使用私人听写内容。
-
-完整的版本历史见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)。
-
-## 下载哪个
+本次提供 Mac 安装包；Windows 用户继续使用 [v1.5.0](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.5.0)，本次没有 Windows 1.16.0 安装包。
 
 | 系统 | 文件 |
 |---|---|
-| macOS 13 以上，Apple 芯片（M1 及以后） | `TypeLeast-…-macOS-AppleSilicon.dmg` |
-| macOS 13 以上，Intel 芯片 | `TypeLeast-…-macOS-Intel.dmg` |
-| Windows 11 / Windows 10（1809 以上），64 位 | `TypeLeast-…-Windows-x64-Setup.exe`（安装版）或 `…-Portable.zip`（解压即用） |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.16.0-macOS-AppleSilicon.dmg` 或 `.zip` |
+| macOS 13 以上，Intel | `TypeLeast-1.16.0-macOS-Intel.dmg` 或 `.zip` |
 
-安装包里已经带好 Node.js 和本地识别引擎，不需要另外安装任何东西。第一次打开时，App 会下载一次语音模型（约 241 MB，每个文件都校验 SHA-256）。
+服务 199 项、Mac 392 项、Windows 核心逻辑在 Mac 上 164 项测试通过。四个识别模型完成 28 次公开样例识别。Mac 两种架构完成编译、打包及签名验证，Apple 芯片包内 Node、本地服务及默认模型启动通过；Intel 包没有在 Intel 或 Rosetta 环境运行。本次没有使用已无额度的托管 CI。
 
-## 第一次打开
+Windows 原生加密、Windows 真机 UI、Linux 原生执行和长期压力测试尚未完成。独立更新签名与本地服务身份认证仍是已知缺口，不能视为已解决。
 
-- **macOS**：把 TypeLeast 拖进「应用程序」。这个版本没有 Apple 开发者签名，第一次打开会被拦下：到「系统设置 → 隐私与安全性」底部点「仍要打开」。也可以在终端运行 `xattr -dr com.apple.quarantine /Applications/TypeLeast.app` 后再打开。然后按提示允许麦克风和辅助功能。
-- **Windows**：安装包没有代码签名，SmartScreen 可能提示「Windows 已保护你的电脑」：点「更多信息 → 仍要运行」。安装不需要管理员权限。如果录不到声音：设置 → 隐私和安全性 → 麦克风 → 允许桌面应用访问麦克风。
+## 安装与更新
 
-## 整理模型
+Mac 安装包包含 Node.js 和识别引擎，模型沿用现有下载方式。发布包没有 Apple Developer ID 公证。已有用户可在 App 内检查更新；这台 Mac 的更新会继续使用已有的本机签名证书，不导出证书。
 
-在 App 的「设置 → 整理模型」里选服务商（DeepSeek、智谱、Kimi、通义千问、OpenRouter、OpenAI 或本机 Ollama）、填 API Key 和模型，点「测试连接」。Key 只保存在系统的钥匙串 / 凭据管理器里。不填 Key 也能听写，只是不改写。
+首次启动新版会迁移旧历史与保留录音。重置系统凭据可能使加密历史无法解密；迁移或保存失败会保留原数据并提示。终端保护仅覆盖已识别终端。
 
-文件校验值见 `SHA256SUMS.txt`。
+完整变化见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)，验证边界见 [1.16.0 验证记录](https://github.com/FlaxXTT/Typeleast/blob/main/docs/v1.16.0-验证记录.md)。文件校验记录随安装包提供。
