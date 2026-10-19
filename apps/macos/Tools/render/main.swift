@@ -7,7 +7,13 @@ import SwiftUI
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1]
     : (NSTemporaryDirectory() as NSString).appendingPathComponent("dsh-voice-render")
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+// This tool must never run as the installed application.
+precondition(Bundle.main.bundleIdentifier != "com.dsh.voice")
 KeychainStore.stub = [:]
+HistorySeal.reset()
+// Discard only this command-line tool's generated fixtures from earlier renders.
+UserDefaults.standard.removeObject(forKey: "voice.history.sealed.v1")
+UserDefaults.standard.removeObject(forKey: "voice.activity.v1")
 L10n.language = L10n.resolve(ProcessInfo.processInfo.environment["TYPELEAST_RENDER_LANGUAGE"] ?? "zh-Hans")
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
@@ -42,10 +48,12 @@ Settings.shared.words = [
     LocalWord(id: "3", word: "SenseVoice", heardAs: nil, source: .auto, addedAt: now),
     LocalWord(id: "4", word: "GitHub", heardAs: nil, source: .auto, addedAt: now),
 ]
-KeychainStore.stub = ["deepseek": "sk-0000000000000000000000000000"]
+KeychainStore.stub?["deepseek"] = "sk-0000000000000000000000000000"
 Settings.shared.llmPresetID = "deepseek"
 Settings.shared.llmModel = "deepseek-chat"
 HistoryStore.shared.load()
+precondition(HistoryStore.shared.entries.count == entries.count, "Sample history did not load")
+ActivityLog.shared.seedIfNeeded(from: entries.map { ($0.ts, DictationStats.countWords($0.displayText).cjk + DictationStats.countWords($0.displayText).latin) })
 let model = AppModel.shared
 model.reloadHistory()
 model.reloadWords()
