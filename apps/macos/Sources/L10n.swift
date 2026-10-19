@@ -41,6 +41,21 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "关于 TypeLeast": "About TypeLeast",
+        "隐藏 TypeLeast": "Hide TypeLeast",
+        "隐藏其他": "Hide Others",
+        "全部显示": "Show All",
+        "撤销": "Undo",
+        "重做": "Redo",
+        "剪切": "Cut",
+        "拷贝": "Copy",
+        "粘贴": "Paste",
+        "全选": "Select All",
+        "窗口": "Window",
+        "最小化": "Minimize",
+        "缩放": "Zoom",
+        "关闭": "Close",
+        "前置全部窗口": "Bring All to Front",
         "提示词 Beta": "Prompt Beta",
         "写最好的提示词：先问你几个关键问题，口头回答后起草，再另开上下文审查并修补。目标、成功标准、约束写清楚；拿不准或矛盾的要求不会两个都塞进去。比提示词模式慢，用量约 3–4 倍。": "Writes the best prompt it can: asks a few key questions first, drafts after your spoken answers, then reviews and patches it in a fresh context. Goals, success criteria and constraints are made explicit; unclear or conflicting requirements are never both put in. Slower than Prompt mode and uses about 3–4 times as many tokens.",
         "先回答几个问题": "Answer a few questions first",
