@@ -18,7 +18,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const STRENGTHS = ["off", "conservative", "prompt", "maximal", "promptify"];
+export const STRENGTHS = ["off", "conservative", "prompt", "maximal", "promptify", "promptbeta"];
 export const LANGUAGES = ["auto", "zh", "en", "yue", "ja", "ko"];
 export const CONFIG_FILE = "config.json";
 
@@ -26,7 +26,7 @@ export const CONFIG_FILE = "config.json";
 const FIELDS = {
   maxOutputTokens: { kind: "integer", default: 800, help: "Upper bound for the polished text." },
   timeoutMs: { kind: "integer", default: 12000, help: "Polishing budget; on expiry the raw transcript is used. Real dictations need 4-6s, so 12s leaves headroom." },
-  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "off skips the model. conservative | prompt | maximal use the Erduo cleanup prompt and only change how strict output validation is. promptify (提示词模式) rewrites every dictation into a structured prompt." },
+  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "off skips the model. conservative | prompt | maximal use the Erduo cleanup prompt and only change how strict output validation is. promptify (提示词模式) rewrites every dictation into a structured prompt. promptbeta (提示词 Beta) asks the key questions first, then drafts, reviews and patches the best prompt." },
   temperature: { kind: "number", default: 0.8, help: "Sampling temperature. The vendored prompt is tuned for 0.8; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },

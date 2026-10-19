@@ -16,7 +16,7 @@
  * @module typeleast-service/service
  */
 import { LANGUAGES } from "./config.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { redactFieldContext, redactSecrets } from "./context.js";
@@ -28,6 +28,10 @@ import { validateOutput } from "./validate.js";
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import { PROMPTIFY_LIMITS, PROMPTIFY_PROMPT, promptifySystemPrompt } from "./prompts/promptify.js";
+import {
+  BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
+  cleanPromptReply, draftMessage, hasContent, normaliseQuestions, parseJsonReply, reviewMessage,
+} from "./prompts/prompt-beta.js";
 
 /** Hard ceiling on concurrent recognition+polish work. */
 const MAX_PENDING = 2;
@@ -73,6 +77,8 @@ export class VoicePolishService {
     this.stats = { dictations: 0, polished: 0, fallback: 0, lastError: null, lastMs: null, modelCalls: 0, modelFallbacks: 0, jsonFallback: 0, jsonRecovered: 0 };
     /** Newest first; only attempts that reached the model and fell back. */
     this.recentFailures = [];
+    /** Prompt Beta question sessions: id -> { request, spec, questions, created }. */
+    this.betaSessions = new Map();
   }
 
   get strength() {
@@ -271,7 +277,9 @@ export class VoicePolishService {
       provider: null,
       ms: { transcribe: 0, polish: Date.now() - started, total: Date.now() - started },
     };
-    if (rawText.length === 0) return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
+    // Skipping Prompt Beta's questions sends no answer at all, which is not an empty dictation.
+    const betaSkip = strength === "promptbeta" && request.betaSkip === true && Boolean(request.betaSession);
+    if (rawText.length === 0 && !betaSkip) return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
     if (strength === "off") {
       // "off" means no model, not "leave the disfluency in". The deterministic
       // pass is free, so an unpolished dictation is still a tidy one.
@@ -290,6 +298,8 @@ export class VoicePolishService {
     base.provider = routeLabel(custom);
     base.model = custom.model;
     this.lastRoute = { provider: base.provider, model: base.model };
+
+    if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
     const context = await this.buildContext(request);
     if (strength === "promptify") await this.refreshPromptify();
@@ -402,6 +412,125 @@ export class VoicePolishService {
   }
 
   /**
+   * Prompt Beta (提示词 Beta): interview -> (questions) -> draft -> fresh review -> minimal patch.
+   *
+   * A new request runs the interview only. When it has questions they are returned with a
+   * session id and nothing is inserted; the next dictation carries that id and is taken as
+   * the spoken answers. A request that needs no questions goes straight to the draft.
+   * @returns {Promise<object>} a result whose `beta.questions` is set when answers are needed.
+   */
+  async polishBeta({ request, base, route, started, rawText, skip }) {
+    const redact = (text) => (this.config.redactSecrets === false ? text : redactSecrets(text));
+    const call = async (system, user, { maxTokens, temperature }) => {
+      this.stats.modelCalls += 1;
+      const result = await completeOpenAI({
+        route, system, user, maxTokens, temperature,
+        // Three calls of a whole prompt each: generous room and time, quality over speed.
+        timeoutMs: Math.max(this.config.timeoutMs, 60000),
+        signal: request.signal,
+        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
+      });
+      return result.text;
+    };
+    this.pruneBetaSessions();
+    let session = null;
+    if (request.betaSession) {
+      session = this.betaSessions.get(request.betaSession) ?? null;
+      if (!session) throw Object.assign(new Error("the questions have expired; dictate the request again"), { code: "beta-expired" });
+      this.betaSessions.delete(request.betaSession);
+    }
+    // A silent or filler-only request has nothing to write a prompt about.
+    if (!session && !hasContent(rawText)) {
+      return await this.recordAndReturn(request, { ...base, text: "", fallback: true, reason: "empty-transcript" });
+    }
+    const original = session ? session.request : rawText;
+    // An answer that says nothing counts as skipping the questions.
+    const skipped = Boolean(session) && (skip || !hasContent(rawText));
+    const answers = session && !skipped ? rawText : "";
+    const source = answers ? `${original}\n${answers}` : original;
+    try {
+      let spec = session?.spec ?? null;
+      let questions = session?.questions ?? [];
+      if (!session) {
+        const reply = parseJsonReply(await call(BETA_INTERVIEW_PROMPT, redact(rawText), { maxTokens: 1600, temperature: 0.3 }));
+        if (reply) {
+          spec = {
+            goal: reply.goal ?? "", audience: reply.audience ?? "", success: reply.success ?? [],
+            constraints: reply.constraints ?? [], output: reply.output ?? "", assumptions: reply.assumptions ?? [],
+          };
+        }
+        questions = normaliseQuestions(reply?.questions);
+        if (questions.length > 0) {
+          const sessionId = randomUUID();
+          this.betaSessions.set(sessionId, { request: rawText, spec, questions, created: Date.now() });
+          // Not recorded: nothing was written for the user yet.
+          return { ...base, text: "", beta: { sessionId, questions }, ms: timing(started, 0) };
+        }
+      }
+      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT,
+        draftMessage({ request: redact(original), spec, questions, answers: redact(answers), skipped }),
+        { maxTokens: 3200, temperature: 0.5 }));
+      if (!draft) throw Object.assign(new Error("empty draft"), { code: "output-format" });
+      // Review in a fresh call that only diagnoses, then a separate minimal patch.
+      const review = parseJsonReply(await call(BETA_REVIEW_PROMPT,
+        reviewMessage({ request: redact(original), answers: redact(answers), draft }),
+        { maxTokens: 1600, temperature: 0.2 }));
+      const issues = (Array.isArray(review?.issues) ? review.issues : [])
+        .filter((issue) => issue && typeof issue === "object" && issue.type).slice(0, 8);
+      let final = draft;
+      if (issues.length > 0) {
+        const patched = cleanPromptReply(await call(BETA_PATCH_PROMPT,
+          reviewMessage({ request: redact(original), answers: redact(answers), draft, issues }),
+          { maxTokens: 3200, temperature: 0.2 }));
+        if (patched) final = patched;
+      }
+      let verdict = validateOutput({ rawText: source, output: final, strength: "promptify" });
+      if (!verdict.ok && final !== draft) {
+        // The patch may have introduced the problem; the reviewed draft is still usable.
+        const before = validateOutput({ rawText: source, output: draft, strength: "promptify" });
+        if (before.ok) { final = draft; verdict = before; }
+      }
+      if (!verdict.ok) {
+        const tidyOnly = tidy(source);
+        return await this.recordFallback(request, {
+          ...base, raw: source, text: tidyOnly.text, fallback: true, reason: verdict.reason,
+          detail: describeVerdict(verdict.metrics), ms: timing(started, 0), metrics: verdict.metrics,
+        });
+      }
+      return await this.recordAndReturn(request, {
+        ...base, raw: source, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
+        beta: { reviewed: true, issues: issues.length, patched: final !== draft },
+      });
+    } catch (error) {
+      const reason = request.signal?.aborted
+        ? "cancelled"
+        : error instanceof ModelCallError ? failureReason(error) : (error.code === "output-format" ? "output-format" : "internal-error");
+      const detail = this.redactDetail(failureDetail(error)).split(route.apiKey || "\u0000").join("[redacted-key]");
+      this.stats.lastError = `${reason}: ${detail}`;
+      this.logger.warn?.("typeleast: prompt beta failed (%s: %s); using the raw transcript", reason, detail);
+      const tidyOnly = tidy(source);
+      return await this.recordFallback(request, {
+        ...base, raw: source, text: tidyOnly.text, fallback: true, reason, detail, ms: timing(started, 0),
+      });
+    }
+  }
+
+  /** Drop expired Prompt Beta sessions and keep the map bounded. */
+  pruneBetaSessions(now = Date.now()) {
+    for (const [id, session] of this.betaSessions) {
+      if (now - session.created > BETA_LIMITS.sessionMs) this.betaSessions.delete(id);
+    }
+    while (this.betaSessions.size > BETA_LIMITS.sessions) {
+      this.betaSessions.delete(this.betaSessions.keys().next().value);
+    }
+  }
+
+  /** Forget a Prompt Beta session the user cancelled. */
+  cancelBeta(sessionId) {
+    return this.betaSessions.delete(String(sessionId ?? ""));
+  }
+
+  /**
    * Remember a fallback from an attempt that reached the model, then record and
    * return it like any other result.
    * @param {object} request - the original request.
@@ -492,6 +621,7 @@ export class VoicePolishService {
         fieldContext: request.fieldContext ?? null,
         llm: request.llm ?? null,
         signal: request.signal,
+        betaSession: request.betaSession ?? null,
       });
       const result = {
         requestId: request.requestId,
@@ -508,6 +638,7 @@ export class VoicePolishService {
           total: Date.now() - started,
         },
         metrics: polished.metrics,
+        ...(polished.beta ? { beta: polished.beta } : {}),
       };
       this.stats.dictations += 1;
       if (result.fallback) this.stats.fallback += 1;

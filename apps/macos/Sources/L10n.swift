@@ -41,6 +41,14 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "提示词 Beta": "Prompt Beta",
+        "写最好的提示词：先问你几个关键问题，口头回答后起草，再另开上下文审查并修补。目标、成功标准、约束写清楚；拿不准或矛盾的要求不会两个都塞进去。比提示词模式慢，用量约 3–4 倍。": "Writes the best prompt it can: asks a few key questions first, drafts after your spoken answers, then reviews and patches it in a fresh context. Goals, success criteria and constraints are made explicit; unclear or conflicting requirements are never both put in. Slower than Prompt mode and uses about 3–4 times as many tokens.",
+        "先回答几个问题": "Answer a few questions first",
+        "按 {0} 口头回答，一次说完所有问题即可；没回答的会列进「待确认」。": "Press {0} and answer out loud, all questions at once; anything left unanswered is listed under “To confirm”.",
+        "跳过，直接生成": "Skip and write now",
+        "提示词 Beta：先回答面板里的问题": "Prompt Beta: answer the questions in the panel first",
+        "问题已过期，请重新说一遍需求": "The questions have expired. Dictate your request again",
+        "已取消": "Cancelled",
         "可选择当前模型支持的语言；不支持的语言设置使用自动识别。": "Choose a language supported by this model. Unsupported settings use automatic detection.",
         "文件校验失败，请重新下载。": "File verification failed. Download it again.",
         "下载失败，请检查网络或镜像后重试。": "Download failed. Check the network or mirror, then retry.",

@@ -5,7 +5,7 @@ import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSI
 
 test("erduo is the only prompt source", () => {
   assert.deepEqual(PROMPT_SOURCES, ["erduo"]);
-  assert.match(PROMPT_VERSION, /-erduo\+subject\+promptify$/);
+  assert.match(PROMPT_VERSION, /-erduo\+subject\+promptify\+beta$/);
 });
 
 test("the user message is the recognised text and nothing else", () => {

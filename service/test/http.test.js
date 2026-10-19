@@ -168,3 +168,30 @@ test("speech model endpoints preserve auth and pass only catalog IDs to lifecycl
   const denied=await call(handler,ROUTE_PREFIX+'/models',{authorization:'Bearer invalid'});
   assert.equal(denied.status,401);
 });
+
+test("Prompt Beta endpoints: skip and cancel take a session id; an expired one is 410", async () => {
+  const { Readable } = await import("node:stream");
+  const service = failingService();
+  const seen = [];
+  service.polish = async (request) => {
+    seen.push(request);
+    if (request.betaSession === "gone") throw Object.assign(new Error("expired"), { code: "beta-expired" });
+    return { text: "## 目标\nx", raw: "r", fallback: false, ms: {} };
+  };
+  service.cancelBeta = (id) => id === "live";
+  const handler = createHandler({ service, currentToken: async () => TOKEN });
+  async function post(path, body) {
+    const req = Readable.from([Buffer.from(JSON.stringify(body))]);
+    Object.assign(req, { url: ROUTE_PREFIX + path, method: "POST", headers: { host: "127.0.0.1", authorization: `Bearer ${TOKEN}` } });
+    const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(b) { this.body = b; } };
+    await handler(req, res);
+    return res;
+  }
+  const done = await post("/prompts/beta/finish", { sessionId: "live" });
+  assert.equal(done.status, 200);
+  assert.equal(JSON.parse(done.body).text, "## 目标\nx");
+  assert.equal(seen[0].betaSkip, true);
+  assert.equal(seen[0].strength, "promptbeta");
+  assert.equal((await post("/prompts/beta/finish", { sessionId: "gone" })).status, 410);
+  assert.equal(JSON.parse((await post("/prompts/beta/cancel", { sessionId: "live" })).body).cancelled, true);
+});

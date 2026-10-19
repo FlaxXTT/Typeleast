@@ -93,6 +93,9 @@ extension AppDelegate {
         let language = settings.language
         let strength = settings.strength
         let keep = settings.keepAudio24h
+        // A recording made while Prompt Beta's questions are open is the answer to them.
+        if strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
+        let betaSession = strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
         do {
             let r = try recorder.finish()
             playSound(start: false)
@@ -102,7 +105,7 @@ extension AppDelegate {
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,
-                         insert: true, deleteWhenDone: !keep)
+                         insert: true, deleteWhenDone: !keep, betaSession: betaSession)
         } catch {
             playSound(start: false)
             phase = .idle
@@ -141,7 +144,7 @@ extension AppDelegate {
 
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
-                      insert: Bool, deleteWhenDone: Bool = false) {
+                      insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil) {
         phase = .thinking
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
@@ -159,7 +162,8 @@ extension AppDelegate {
                 }
                 outcome = .success(try self.client.dictateSync(wav: data, language: language,
                                                               appBundleId: appBundleId, strength: strength,
-                                                              fieldContext: context, llm: llm))
+                                                              fieldContext: context, llm: llm,
+                                                              betaSession: betaSession))
             } catch {
                 outcome = .failure(error)
             }
@@ -183,6 +187,23 @@ extension AppDelegate {
         case .success(let resp):
             serviceUp = true
             model.serviceProblem = ""
+            if let sessionId = resp.beta?.sessionId, !resp.betaQuestions.isEmpty {
+                betaPending = BetaPending(sessionId: sessionId, questions: resp.betaQuestions,
+                                          appBundleId: appBundleId, field: field)
+                recordingBar.hide()
+                showBetaQuestions()
+                setHint(L10n.text("提示词 Beta：先回答面板里的问题"))
+                applyState()
+                return
+            }
+            // The answer to Prompt Beta's questions: the prompt goes where the request was made.
+            var appBundleId = appBundleId, field = field
+            if let pending = betaPending, strength == VoiceStrength.promptbeta.rawValue {
+                appBundleId = pending.appBundleId
+                field = pending.field ?? field
+                betaPending = nil
+                betaPanel.hide()
+            }
             let text = resp.insertableText
             var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                           language: language, strength: strength,
@@ -209,6 +230,13 @@ extension AppDelegate {
             }
         case .failure(let error):
             let d = error as? ServiceError
+            if case .http(410, _, _)? = d, betaPending != nil {
+                dropBeta(notify: false)
+                recordingBar.showResult(L10n.text("问题已过期，请重新说一遍需求"), warning: true)
+                setHint(L10n.text("问题已过期，请重新说一遍需求"), warning: true)
+                applyState()
+                return
+            }
             DiagnosticsLog.write("dictate.fail", ["error": d?.description ?? error.localizedDescription,
                                                   "ownKey": settings.activeLLMRoute == nil ? "no" : "yes"])
             if d?.serviceUnavailable == true {
@@ -314,4 +342,50 @@ extension AppDelegate {
             NSSound(named: NSSound.Name("Pop"))?.play()
         }
     }
+
+    // MARK: Prompt Beta
+
+    func showBetaQuestions() {
+        guard let pending = betaPending else { return }
+        betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
+        betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
+        betaPanel.show(questions: pending.questions, hotkey: model.hotkeyLabel)
+    }
+
+    /// "跳过，直接生成": write the prompt now; unanswered points go to 「待确认」.
+    func finishBetaWithoutAnswers() {
+        guard phase == .idle, let pending = betaPending else { return }
+        betaPanel.hide()
+        phase = .thinking
+        recordingBar.showThinking(detail: "")
+        applyState()
+        let llm = settings.activeLLMRoute
+        let language = settings.language
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let outcome = Result { try self.client.betaSync(sessionId: pending.sessionId, skip: true,
+                                                            appBundleId: pending.appBundleId, llm: llm) }
+            DispatchQueue.main.async {
+                self.finishRequest(outcome, appBundleId: pending.appBundleId, language: language,
+                                   strength: VoiceStrength.promptbeta.rawValue, audioPath: nil, seconds: nil,
+                                   field: pending.field, insert: true)
+            }
+        }
+    }
+
+    /// Close the questions; the service forgets the session too.
+    func dropBeta(notify: Bool) {
+        guard let pending = betaPending else { return }
+        betaPending = nil
+        betaPanel.hide()
+        let llm = settings.activeLLMRoute
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            _ = try? self?.client.betaSync(sessionId: pending.sessionId, skip: false, appBundleId: pending.appBundleId, llm: llm)
+        }
+        if notify {
+            setHint(L10n.text("已取消"))
+            applyState()
+        }
+    }
 }
+

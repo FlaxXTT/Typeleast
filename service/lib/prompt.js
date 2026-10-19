@@ -20,7 +20,7 @@ import { erduoSystemPrompt } from "./prompts/erduo-budget-typeless.js";
 import { promptifySystemPrompt } from "./prompts/promptify.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-18.4-erduo+subject+promptify";
+export const PROMPT_VERSION = "2026-10-19.5-erduo+subject+promptify+beta";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["erduo"];

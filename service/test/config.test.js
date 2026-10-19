@@ -62,7 +62,7 @@ test("bad values are reported and keep their defaults, never fatal", () => {
 test("the JSON Schema view is derived from the same declarations", () => {
   const schema = configJsonSchema();
   assert.equal(schema.type, "object");
-  assert.deepEqual(schema.properties.strength.enum, ["off", "conservative", "prompt", "maximal", "promptify"]);
+  assert.deepEqual(schema.properties.strength.enum, ["off", "conservative", "prompt", "maximal", "promptify", "promptbeta"]);
   assert.equal(schema.properties.timeoutMs.type, "integer");
   // Measured: real dictations take 4-6s, so a 6s budget cut them off and fell
   // back to the raw transcript. The default must leave headroom.

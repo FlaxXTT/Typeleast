@@ -37,6 +37,13 @@ public static class L10n
     }
     public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
+        ["提示词 Beta"] = "Prompt Beta",
+        ["先回答几个问题"] = "Answer a few questions first",
+        ["按 {0} 口头回答，一次说完所有问题即可；没回答的会列进「待确认」。"] = "Press {0} and answer out loud, all questions at once; anything left unanswered is listed under “To confirm”.",
+        ["跳过，直接生成"] = "Skip and write now",
+        ["提示词 Beta：先回答面板里的问题"] = "Prompt Beta: answer the questions in the panel first",
+        ["问题已过期，请重新说一遍需求"] = "The questions have expired. Dictate your request again",
+        ["自然整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。提示词 Beta：先问几个关键问题，口头回答后起草，再独立审查并修补，写出目标明确、没有矛盾的提示词，较慢。原话转写：只去口水词。"] = "Natural cleanup: removes fillers and smooths wording. Prompt mode: rewrites speech as a structured prompt (Role, Context, Task, Requirements, Tone and Audience, Output Format); role and format are completed, facts are never invented. Prompt Beta: asks a few key questions, drafts after your spoken answers, then reviews and patches it independently for a clear, conflict-free prompt; slower. Original: removes fillers only.",
         ["当前识别模型"] = "Current speech model",
         ["识别：本机模型（sherpa-onnx）· 整理：你自己的模型"] = "Recognition: local model (sherpa-onnx) \u00b7 Cleanup: your own model",
 
@@ -74,7 +81,6 @@ public static class L10n
         [" 秒"] = " seconds",
         ["DeepSeek 官方 API"] = "DeepSeek API",
         ["自然整理"] = "Natural cleanup",
-        ["自然整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。原话转写：只去口水词。"] = "Natural cleanup: remove fillers and improve wording. Prompt mode: create a structured prompt without inventing facts. Original: remove fillers only.",
         ["Key 在这里创建："] = "Create a key here: ",
         ["Key 无效或没有权限（"] = "Invalid key or insufficient permissions (",
         ["Kimi（月之暗面）"] = "Kimi (Moonshot)",

@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var pendingAppBundleId = ""
     /// The text field captured when the current recording started.
     var pendingField: FocusedField?
+    /// Prompt Beta questions waiting for a spoken answer, and where the prompt goes.
+    var betaPending: BetaPending?
+    let betaPanel = BetaPanel()
     var tickTimer: Timer?
     /// Last whole second pushed into the menu, so the 20 Hz waveform timer does
     /// not rebuild the menu on every frame.
@@ -170,6 +173,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                           + " ms=" + String(Int(Date().timeIntervalSince(started) * 1000)))
                     print("LLMCHECK dictate raw=" + r.raw)
                     print("LLMCHECK dictate text=" + r.text.replacingOccurrences(of: "\n", with: " / "))
+                    // Prompt Beta: answer the questions with a second WAV, or skip them.
+                    if let session = r.beta?.sessionId, !r.betaQuestions.isEmpty {
+                        print("LLMCHECK beta questions=" + r.betaQuestions.joined(separator: " | "))
+                        let next: DictateResponse
+                        if let answerPath = env["TYPELEAST_LLMCHECK_ANSWER_WAV"],
+                           let answer = FileManager.default.contents(atPath: answerPath) {
+                            next = try client.dictateSync(wav: answer, language: "auto", appBundleId: "com.apple.Notes",
+                                                          strength: "promptbeta", llm: route, betaSession: session)
+                            print("LLMCHECK beta answer raw=" + next.raw)
+                        } else {
+                            next = try client.betaSync(sessionId: session, skip: true, appBundleId: "com.apple.Notes", llm: route)
+                            print("LLMCHECK beta skipped")
+                        }
+                        print("LLMCHECK beta fallback=" + String(next.fallback) + (next.fallbackReason.map { " reason=" + $0 } ?? "")
+                              + " issues=" + String(next.beta?.issues ?? -1) + " patched=" + String(next.beta?.patched ?? false)
+                              + " ms=" + String(Int(Date().timeIntervalSince(started) * 1000)))
+                        print("LLMCHECK beta text=" + next.text.replacingOccurrences(of: "\n", with: " / "))
+                    }
                 } catch {
                     print("LLMCHECK dictate=error " + ((error as? ServiceError)?.description ?? String(describing: error)))
                 }
