@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixedWindows, joinSegments, LocalRecognizer, SEGMENT_THRESHOLD_SECONDS } from "../lib/asr.js";
-import { MODEL_FILES } from "../lib/models.js";
+import { MODEL_FILES, modelFor, recognizerConfig } from "../lib/models.js";
 import { pcm16ToFloat32 } from "../lib/wav.js";
 
 function wav(seconds, value = 0) {
@@ -31,6 +31,7 @@ function fakeSherpa({ texts = ["你好"], vadSegments = null } = {}) {
         configs.push(config);
         return {
           config,
+          setConfig: next => configs.push(next),
           createStream: () => {
             const stream = { samples: null, acceptWaveform: ({ samples, sampleRate }) => { stream.samples = samples; stream.rate = sampleRate; } };
             return stream;
@@ -187,4 +188,29 @@ test("per-request languages are applied serially and a rejection does not poison
     await recognizer.transcribe(wav(1), "auto");
     assert.equal(sherpa.configs.length, 4);
   });
+});
+
+test("optional models use only supported language hints and keep Qwen hints on their own stream", async () => {
+  for (const id of ['fireredasr2-ctc', 'fun-asr-nano', 'qwen3-asr-0.6b']) {
+    const hints = [], configs = [];
+    const make = async config => {
+      configs.push(config);
+      return {
+        createStream() { return { setOption: (key,value) => hints.push([key,value]), acceptWaveform() {} }; },
+        async decodeAsync() { return { text: 'public sample' }; },
+      };
+    };
+    const r = new LocalRecognizer({ modelsDir: '/unused', modelId: id });
+    r.sherpa = { OfflineRecognizer: { createAsync: make } };
+    r.recognizer = await make(recognizerConfig('/unused',id)); r.phase = 'ready';
+    const languages = ['zh','en','yue','ja','ko','auto'];
+    const results = await Promise.all(languages.map(language => r.transcribe(wav(1),language)));
+    assert.deepEqual(results.map(v=>v.language), languages.map(v=>modelFor(id).languages.includes(v) ? v : 'auto'));
+    if (id === 'qwen3-asr-0.6b') {
+      assert.equal(configs.length,1,'a per-stream hint must not reload Qwen');
+      assert.deepEqual(hints,[['language','Chinese'],['language','English'],['language','Cantonese'],['language','Japanese'],['language','Korean']]);
+    } else if (id === 'fun-asr-nano') {
+      assert.deepEqual(configs.map(c=>c.modelConfig.funasrNano.language),['','中文','英文','','日文','']);
+    } else assert.equal(configs.length,1,'auto-only CTC must not reload for a language preference');
+  }
 });

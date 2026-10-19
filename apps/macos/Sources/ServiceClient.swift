@@ -50,8 +50,49 @@ func lenient<T: Decodable, K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ t: T.
     (try? c.decodeIfPresent(t, forKey: k)) ?? nil
 }
 
+struct SpeechModelOperation: Codable, Equatable {
+    var modelId: String
+    var phase: String
+    var received: Double
+    var total: Double
+    var error: String?
+    var running: Bool { ["downloading", "waiting", "loading"].contains(phase) }
+    var problem: String {
+        switch error {
+        case "checksum-mismatch": return L10n.text("文件校验失败，请重新下载。")
+        case "download-failed": return L10n.text("下载失败，请检查网络或镜像后重试。")
+        case "model-not-installed": return L10n.text("模型文件不完整，请重新下载。")
+        case "model-load-failed": return L10n.text("模型加载失败，请重试或使用其他模型。")
+        case "ENOSPC": return L10n.text("磁盘空间不足，请释放空间后重试。")
+        case "EACCES", "EPERM": return L10n.text("无法保存模型设置，请检查文件访问权限。")
+        default: return L10n.text("模型操作失败，请重试。当前模型保留。")
+        }
+    }
+}
+struct SpeechModelOption: Codable, Identifiable {
+    var id: String
+    var name: String
+    var modelBytes: Double
+    var sourceUrl: String
+    var licenseUrl: String
+    var canSetLanguage: Bool
+    var installed: Bool
+}
+struct SpeechModelCatalog: Codable {
+    var activeModelId: String
+    var models: [SpeechModelOption]
+    var operation: SpeechModelOperation?
+    var notice: String?
+}
+
 struct SpeechStatus: Codable, Equatable {
     var providerId: String?
+    var modelId: String?
+    var modelName: String?
+    var canSetLanguage: Bool?
+    var languages: [String]?
+    var operation: SpeechModelOperation?
+    var notice: String?
     var ready: Bool?
     /// loading | ready | missing-model | downloading | error
     var phase: String?
@@ -62,7 +103,7 @@ struct SpeechStatus: Codable, Equatable {
     /// Size of the whole model set, for "下载语音模型（241 MB）".
     var modelBytes: Double?
 
-    enum CodingKeys: String, CodingKey { case providerId, ready, phase, error, download, modelBytes }
+    enum CodingKeys: String, CodingKey { case providerId, ready, phase, error, download, modelBytes, modelId, modelName, canSetLanguage, operation, notice, languages }
     enum DownloadKeys: String, CodingKey { case received, total }
     init() {}
     init(providerId: String?, ready: Bool?, phase: String?) {
@@ -73,6 +114,12 @@ struct SpeechStatus: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         providerId = lenient(c, String.self, .providerId)
+        modelId = lenient(c, String.self, .modelId)
+        modelName = lenient(c, String.self, .modelName)
+        canSetLanguage = lenient(c, Bool.self, .canSetLanguage)
+        languages = lenient(c, [String].self, .languages)
+        operation = lenient(c, SpeechModelOperation.self, .operation)
+        notice = lenient(c, String.self, .notice)
         ready = lenient(c, Bool.self, .ready)
         phase = lenient(c, String.self, .phase)
         error = lenient(c, String.self, .error)
@@ -85,6 +132,12 @@ struct SpeechStatus: Codable, Equatable {
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encodeIfPresent(providerId, forKey: .providerId)
+        try c.encodeIfPresent(modelId, forKey: .modelId)
+        try c.encodeIfPresent(modelName, forKey: .modelName)
+        try c.encodeIfPresent(canSetLanguage, forKey: .canSetLanguage)
+        try c.encodeIfPresent(languages, forKey: .languages)
+        try c.encodeIfPresent(operation, forKey: .operation)
+        try c.encodeIfPresent(notice, forKey: .notice)
         try c.encodeIfPresent(ready, forKey: .ready)
         try c.encodeIfPresent(phase, forKey: .phase)
         try c.encodeIfPresent(error, forKey: .error)
@@ -609,6 +662,27 @@ final class ServiceClient {
                 guard resp.statusCode == 202 || resp.statusCode == 200 else { throw httpError(resp, data) }
             }
         }
+    }
+
+    func speechModelsSync() throws -> SpeechModelCatalog {
+        try withPortRetry { try withTokenRetry { token in
+            let req = try makeRequest(path: "/api/voice-polish/models", method: "GET", token: token, timeout: healthTimeout)
+            let (data, response) = try performSync(req, timeout: healthTimeout)
+            guard response.statusCode == 200 else { throw httpError(response, data) }
+            return try JSONDecoder().decode(SpeechModelCatalog.self, from: data)
+        } }
+    }
+
+    func speechModelActionSync(id: String, download: Bool = false, cancel: Bool = false, endpoint: String = "") throws {
+        try withPortRetry { try withTokenRetry { token in
+            let path = cancel ? "/models/download/cancel" : download ? "/models/download" : "/models/active"
+            let object: [String: Any] = ["modelId": id, "activate": true, "endpoint": endpoint]
+            let body = try JSONSerialization.data(withJSONObject: object)
+            let req = try makeRequest(path: "/api/voice-polish" + path, method: download || cancel ? "POST" : "PUT", token: token,
+                headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)
+            let (data, response) = try performSync(req, timeout: healthTimeout)
+            guard response.statusCode == 202 else { throw httpError(response, data) }
+        } }
     }
 
     /// Prompt mode (提示词模式): the fixed default, the user's additions and replacement.

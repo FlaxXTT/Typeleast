@@ -352,16 +352,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             guard let self = self else { return }
             do {
                 let h = try self.client.healthSync()
+                let catalog = try? self.client.speechModelsSync()
                 DispatchQueue.main.async {
                     self.serviceUp = h.ok
                     self.model.health = h
+                    self.model.speechCatalog = catalog
                     self.model.serviceProblem = AppDelegate.speechProblem(h.speech)
                     if h.ok, let hint = self.hint, hint.contains(L10n.text("语音模型")) { self.setHint(nil) }
                     if self.dictionaryNeedsSync { self.syncDictionary() }
                     self.applyState()
                     // While the model loads or downloads, follow its progress.
                     let phase = h.speech?.phase ?? ""
-                    if (phase == "loading" || phase == "downloading") && !self.progressPollScheduled {
+                    if (phase == "loading" || phase == "downloading" || h.speech?.operation?.running == true) && !self.progressPollScheduled {
                         self.progressPollScheduled = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                             self.progressPollScheduled = false

@@ -30,12 +30,16 @@ internal sealed class SettingsPage : IPage
     private readonly ComboBox modelList = Theme.Choice(160);
     private readonly TextBlock missing = Theme.Text("", 12, Theme.Warning);
     private bool busy;
+    private bool refreshingLanguage;
+    private readonly SpeechModelsPanel speechModels;
+    private readonly ComboBox dictationLanguage = Theme.Choice(160);
 
     public UIElement View => root;
 
     public SettingsPage(AppHost host)
     {
         this.host = host;
+        speechModels = new SpeechModelsPanel(host);
         var s = host.Settings;
         root.Children.Add(Theme.Text(L10n.T("设置"), 22, bold: true));
 
@@ -46,17 +50,17 @@ internal sealed class SettingsPage : IPage
         uiLanguage.SelectionChanged += (_, _) => {
             if (uiLanguage.SelectedItem is ComboBoxItem { Tag: string code }) { s.InterfaceLanguage = code; host.SaveSettings(); }
         };
-        var dictationLanguage = Theme.Choice(160);
+
         var codes = new[] { "auto", "zh", "en", "yue", "ja", "ko" };
         var labels = new[] { L10n.T("自动识别"), L10n.T("中文"), "English", L10n.T("粤语"), "日本語", "한국어" };
         for (var i = 0; i < codes.Length; i++) dictationLanguage.Items.Add(new ComboBoxItem { Content = labels[i], Tag = codes[i] });
         dictationLanguage.SelectedIndex = Array.IndexOf(codes, s.Language);
         dictationLanguage.SelectionChanged += (_, _) => {
-            if (dictationLanguage.SelectedItem is ComboBoxItem { Tag: string code }) { s.Language = code; host.SaveSettings(); }
+            if (!refreshingLanguage && host.Speech?.CanSetLanguage != false && dictationLanguage.SelectedItem is ComboBoxItem { Tag: string code }) { s.Language = code; host.SaveSettings(); }
         };
         root.Children.Add(Section(L10n.T("语言"),
             Theme.SettingRow(L10n.T("界面语言"), Theme.Text(L10n.T("重启应用后生效；不会改变听写或输出语言。"), 12, Theme.Grey), uiLanguage),
-            Theme.SettingRow(L10n.T("听写语言"), Theme.Text(L10n.T("自动识别支持中文、英文、粤语、日语、韩语混说"), 12, Theme.Grey), dictationLanguage)));
+            Theme.SettingRow(L10n.T("听写语言"), Theme.Text(L10n.T("可选择当前模型支持的语言；不支持的语言设置使用自动识别。"), 12, Theme.Grey), dictationLanguage)));
 
         // ---- dictation
         var hotkey = Theme.Choice(160);
@@ -65,7 +69,7 @@ internal sealed class SettingsPage : IPage
         hotkey.SelectionChanged += (_, _) => { if (hotkey.SelectedItem is ComboBoxItem { Tag: DictationKey k }) { s.Hotkey = k; host.SaveSettings(); } };
 
         var strength = Theme.Choice(160);
-        strength.Items.Add(new ComboBoxItem { Content = L10n.T("Article 整理"), Tag = "prompt" });
+        strength.Items.Add(new ComboBoxItem { Content = L10n.T("自然整理"), Tag = "prompt" });
         strength.Items.Add(new ComboBoxItem { Content = L10n.T("提示词模式"), Tag = "promptify" });
         strength.Items.Add(new ComboBoxItem { Content = L10n.T("原话转写"), Tag = "off" });
         strength.SelectedIndex = s.Strength switch { "promptify" => 1, "off" => 2, _ => 0 };
@@ -86,7 +90,7 @@ internal sealed class SettingsPage : IPage
 
         root.Children.Add(Section(L10n.T("听写"),
             Theme.SettingRow(L10n.T("快捷键"), Theme.Text(L10n.T("单独按一下开始，再按一下结束；录音时按 Esc 取消。右 Alt 在部分欧洲键盘上是 AltGr，这时换一个键。"), 12, Theme.Grey), hotkey),
-            Theme.SettingRow(L10n.T("整理方式"), Theme.Text(L10n.T("Article 整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。原话转写：只去口水词。"), 12, Theme.Grey), strength),
+            Theme.SettingRow(L10n.T("整理方式"), Theme.Text(L10n.T("自然整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。原话转写：只去口水词。"), 12, Theme.Grey), strength),
             Theme.SettingRow(L10n.T("麦克风"), null, mic),
             Theme.SettingRow(L10n.T("粘贴后恢复剪贴板"), Theme.Text(L10n.T("粘贴完把你原来复制的文字放回剪贴板。"), 12, Theme.Grey), restore),
             Theme.SettingRow(L10n.T("开机自动启动"), null, login)));
@@ -133,13 +137,15 @@ internal sealed class SettingsPage : IPage
         var chooseNode = Theme.Secondary(L10n.T("选择 Node.js…"), ChooseNode);
         root.Children.Add(Section(L10n.T("本地服务"),
             Theme.SettingRow(L10n.T("本地服务"), serviceStatus, Theme.Row(8, chooseNode, Theme.Secondary(L10n.T("重新启动"), host.RestartService))),
-            Theme.SettingRow(L10n.T("语音模型（SenseVoice）"), speechStatus, Theme.Row(8, progress, downloadButton)),
+            Theme.SettingRow(L10n.T("当前识别模型"), speechStatus, Theme.Row(8, progress, downloadButton)),
             Theme.SettingRow(L10n.T("模型下载镜像（可选）"), Theme.Text(L10n.T("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。"), 12, Theme.Grey), mirror)));
 
         // ---- about
         var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
+        root.Children.Add(speechModels.View);
+
         root.Children.Add(Section(L10n.T("关于"),
-            Theme.SettingRow("TypeLeast " + version, Theme.Text(L10n.T("识别：SenseVoice（sherpa-onnx，本机）· 整理：你自己的模型"), 12, Theme.Grey),
+            Theme.SettingRow("TypeLeast " + version, Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
                 Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
 
         LoadPreset();
@@ -276,12 +282,20 @@ internal sealed class SettingsPage : IPage
 
     public void Refresh()
     {
+        speechModels.Refresh();
+        refreshingLanguage = true;
+        dictationLanguage.IsEnabled = host.Speech?.CanSetLanguage != false;
+        foreach (ComboBoxItem item in dictationLanguage.Items) item.IsEnabled = host.Speech?.Languages?.Contains((string)item.Tag) != false;
+        dictationLanguage.SelectedIndex = dictationLanguage.IsEnabled && host.Speech?.Languages?.Contains(host.Settings.Language) != false
+            ? Array.IndexOf(new[] { "auto", "zh", "en", "yue", "ja", "ko" }, host.Settings.Language) : 0;
+        refreshingLanguage = false;
+        dictationLanguage.ToolTip = dictationLanguage.IsEnabled ? null : L10n.T("当前模型自动检测语言，不能强制指定。");
         var svc = host.Service;
         serviceStatus.Text = host.ServiceSummary + (svc.NodeVersion is { } v && svc.NodePath is { } p ? " · Node.js " + v + "（" + p + "）" : "");
         serviceStatus.Foreground = svc.State == ServiceManager.Phase.Running ? Theme.Grey : Theme.Warning;
         var speech = host.Speech;
         var problem = Messages.SpeechProblem(speech);
-        speechStatus.Text = problem.Length == 0 ? L10n.T("已就绪，识别完全在本机进行，音频不出这台电脑") : problem;
+        speechStatus.Text = (speech?.ModelName ?? "SenseVoice Small") + " · " + (problem.Length == 0 ? L10n.T("已就绪，识别完全在本机进行，音频不出这台电脑") : problem);
         if (speech?.DownloadFraction is { } f)
         {
             progress.Visibility = Visibility.Visible;

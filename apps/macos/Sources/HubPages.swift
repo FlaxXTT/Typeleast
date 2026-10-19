@@ -151,7 +151,7 @@ private struct SetupCard: View {
                         model.actions?.restartService()
                     }
                 }
-                SetupRow(done: model.speech?.ready == true, title: L10n.text("语音模型（SenseVoice，约 241 MB）"),
+                SetupRow(done: model.speech?.ready == true, title: model.speech?.modelName ?? "SenseVoice Small",
                          detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("已就绪，识别完全在本机进行") : AppDelegate.speechProblem(model.speech),
                          action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("下载") : "") {
                     model.actions?.downloadModels()

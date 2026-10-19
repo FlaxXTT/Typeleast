@@ -139,3 +139,32 @@ test("malformed JSON is a client error and does not echo secrets", async () => {
   assert.equal(JSON.parse(res.body).code, "invalid-json");
   assert.ok(!res.body.includes("fake-private-credential"));
 });
+
+test("speech model endpoints preserve auth and pass only catalog IDs to lifecycle operations", async () => {
+  const { Readable } = await import('node:stream');
+  const { modelFor } = await import('../lib/models.js');
+  const seen=[];
+  const service=failingService();
+  service.recognizer.catalog=async()=>({activeModelId:'sensevoice-small',models:[]});
+  service.recognizer.start=(id,options)=>{modelFor(id);seen.push({id,...options});};
+  service.recognizer.cancel=id=>{modelFor(id);seen.push({cancel:id});};
+  const handler=createHandler({service,currentToken:async()=>TOKEN});
+  async function request(path,method,body={}) {
+    const req=Readable.from([Buffer.from(JSON.stringify(body))]);
+    Object.assign(req,{url:ROUTE_PREFIX+path,method,headers:{host:'127.0.0.1',authorization:`Bearer ${TOKEN}`}});
+    const res={headersSent:false,writeHead(status){this.status=status;this.headersSent=true;},end(body){this.body=body;}};
+    await handler(req,res);return res;
+  }
+  assert.equal((await request('/models','GET')).status,200);
+  assert.equal((await request('/models/download','POST')).status,202);
+  assert.equal(seen[0].id,'sensevoice-small');
+  assert.equal((await request('/models/active','PUT',{modelId:'fun-asr-nano'})).status,202);
+  assert.equal(seen[1].download,false);
+  assert.equal((await request('/models/download/cancel','POST',{modelId:'fun-asr-nano'})).status,202);
+  assert.equal((await request('/models/active','PUT',{modelId:'../../private'})).status,400);
+  assert.equal((await request('/models/active','PUT',null)).status,400);
+  assert.equal((await request('/models/download','POST',[])).status,400);
+  assert.equal((await request('/models/download','POST',{modelId:null})).status,400);
+  const denied=await call(handler,ROUTE_PREFIX+'/models',{authorization:'Bearer invalid'});
+  assert.equal(denied.status,401);
+});

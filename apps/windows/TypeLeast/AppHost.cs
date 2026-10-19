@@ -54,6 +54,7 @@ internal sealed class AppHost
     }
 
     public bool ServiceUp => Health?.Ok == true;
+    public SpeechModelCatalog? SpeechCatalog { get; private set; }
     public SpeechStatus? Speech => Health?.Speech;
     public string HotkeyLabel => TapDetector.Label(Settings.Hotkey);
     public LlmRoute? ActiveRoute => Settings.ActiveRoute(CredentialStore.Read);
@@ -145,6 +146,7 @@ internal sealed class AppHost
         try
         {
             Health = await Client.HealthAsync();
+            try { SpeechCatalog = await Client.GetSpeechModelsAsync(); } catch (ServiceException) { SpeechCatalog = null; }
             if (dictionaryNeedsSync && Health.Service == "typeleast") _ = SyncDictionary();
         }
         catch (ServiceException)
@@ -174,6 +176,13 @@ internal sealed class AppHost
         {
             SetHint(L10n.T("无法开始下载：") + e.Message);
         }
+    }
+
+    public async Task ManageSpeechModel(string id, bool download = false, bool cancel = false)
+    {
+        if (!cancel && Phase != DictationPhase.Idle) return;
+        try { await Client.SpeechModelActionAsync(id, download, cancel, Settings.ModelMirror); await RefreshHealth(); }
+        catch (ServiceException) { SetHint(L10n.T("模型操作失败，请重试。当前模型保留。")); }
     }
 
     public async Task SyncDictionary()

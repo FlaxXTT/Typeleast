@@ -13,7 +13,7 @@ import { createServer } from "node:http";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { format } from "node:util";
-import { LocalRecognizer } from "./asr.js";
+import { SpeechModels } from "./speech-models.js";
 import { loadConfig } from "./config.js";
 import { History } from "./history.js";
 import { createHandler } from "./http.js";
@@ -48,7 +48,7 @@ export async function startService(options = {}) {
 
   const history = new History({ filePath: join(stateDir, "history.jsonl"), retentionDays: config.historyDays });
   await history.load();
-  const recognizer = options.recognizer ?? new LocalRecognizer({ modelsDir, numThreads: config.numThreads, language: config.language, logger });
+  const recognizer = options.recognizer ?? new SpeechModels({ modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads, language: config.language, logger });
   const service = new VoicePolishService({
     recognizer,
     config,
@@ -58,6 +58,9 @@ export async function startService(options = {}) {
     logger,
     version: VERSION,
   });
+  if (recognizer instanceof SpeechModels) recognizer.beforeActivate = async signal => {
+    while (service.pending > 0 || service.queue > 0) { signal?.throwIfAborted(); await new Promise(resolve => setTimeout(resolve, 50)); }
+  };
   await service.loadDictionary();
   await service.loadPromptify();
   const token = await ensureToken(join(stateDir, "api-token"));

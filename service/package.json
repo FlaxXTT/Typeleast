@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "TypeLeast local service: on-device SenseVoice speech recognition (sherpa-onnx) plus cleanup with your own OpenAI-compatible model, over a loopback HTTP API used by the macOS and Windows apps.",
+  "description": "TypeLeast local service: on-device speech recognition (sherpa-onnx) plus cleanup with your own OpenAI-compatible model, over a loopback HTTP API used by the macOS and Windows apps.",
   "main": "lib/server.js",
   "exports": {
     ".": {
@@ -18,7 +18,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node bin/typeleast-service.mjs",
+    "start": "node --expose-gc bin/typeleast-service.mjs",
     "setup-models": "node scripts/setup-models.mjs",
     "test": "node --test \"test/*.test.js\""
   },

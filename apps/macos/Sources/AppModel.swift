@@ -42,6 +42,7 @@ protocol AppActions: AnyObject {
     func openKeyboardSettings()
     func openMicrophoneSettings()
     func restartService()
+    func manageSpeechModel(id: String, download: Bool, cancel: Bool)
     func downloadModels()
     func chooseNode()
     func recheckHealth()
@@ -67,6 +68,7 @@ final class AppModel: ObservableObject {
     @Published var serviceUp = false
     @Published var serviceState: ServiceManager.State = .stopped
     @Published var nodeDescription = ""
+    @Published var speechCatalog: SpeechModelCatalog?
     @Published var health: HealthResponse?
     @Published var serviceProblem = ""
     @Published var accessibilityTrusted = false
@@ -144,17 +146,8 @@ final class AppModel: ObservableObject {
     var modelsDownloading: Bool { speech?.downloading ?? false }
 
     var speechSummary: String {
-        guard let speech = health?.speech else { return L10n.text("SenseVoice（本地）") }
-        switch speech.phase ?? "" {
-        case "ready": return L10n.text("SenseVoice（本地）· 就绪")
-        case "missing-model": return L10n.text("SenseVoice（本地）· 模型未下载")
-        case "downloading":
-            let percent = speech.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? ""
-            return L10n.text("SenseVoice（本地）· 下载中 ") + percent
-        case "loading": return L10n.text("SenseVoice（本地）· 加载中")
-        case "error": return L10n.text("SenseVoice（本地）· 出错")
-        default: return L10n.text("SenseVoice（本地）· ") + (speech.phase ?? L10n.text("准备中"))
-        }
+        let name = speech?.modelName ?? "SenseVoice Small"
+        return name + " · " + (speech?.ready == true ? L10n.text("已就绪") : L10n.text("准备中"))
     }
 
     /// One line about the local service, for the window and settings.

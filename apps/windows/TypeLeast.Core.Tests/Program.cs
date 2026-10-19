@@ -206,6 +206,30 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Check("model download starts", await client.DownloadModelsAsync("https://mirror.example.com"));
     Check("the mirror is sent", Encoding.UTF8.GetString(stub.LastBody).Contains("mirror.example.com"));
 
+    stub.Reply = (200, """{"activeModelId":"sensevoice-small","models":[{"id":"fun-asr-nano","name":"Fun-ASR-Nano","modelBytes":1009605061,"sourceUrl":"https://huggingface.co/example/model","licenseUrl":"https://huggingface.co/example/source","canSetLanguage":true,"installed":true}],"operation":{"modelId":"fun-asr-nano","phase":"waiting","received":100,"total":100,"error":null}}""");
+    var catalog = await client.GetSpeechModelsAsync();
+    Eq("catalog request path", stub.LastPath, "/api/voice-polish/models");
+    Eq("catalog selected default", catalog.ActiveModelId, "sensevoice-small");
+    Check("catalog installed state", catalog.Models[0].Installed);
+    Check("catalog waiting blocks repeated actions", catalog.Operation?.Running == true);
+    stub.Reply = (202, "{\"ok\":true,\"phase\":\"accepted\"}");
+    await client.SpeechModelActionAsync("fun-asr-nano", download: true, endpoint: "https://mirror.example.com");
+    Eq("candidate download method", stub.LastMethod, "POST");
+    var modelBody = JsonSerializer.Deserialize<JsonElement>(stub.LastBody);
+    Eq("candidate download identifies model", modelBody.GetProperty("modelId").GetString(), "fun-asr-nano");
+    Check("candidate download requests activation", modelBody.GetProperty("activate").GetBoolean());
+    Eq("candidate download retains mirror", modelBody.GetProperty("endpoint").GetString(), "https://mirror.example.com");
+    await client.SpeechModelActionAsync("qwen3-asr-0.6b");
+    Eq("installed model activation method", stub.LastMethod, "PUT");
+    Eq("installed model activation path", stub.LastPath, "/api/voice-polish/models/active");
+    await client.SpeechModelActionAsync("fun-asr-nano", cancel: true);
+    Eq("candidate cancel method", stub.LastMethod, "POST");
+    Eq("candidate cancel path", stub.LastPath, "/api/voice-polish/models/download/cancel");
+    var modelStatus = JsonSerializer.Deserialize<SpeechStatus>("""{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}""", Json.Options)!;
+    Eq("health identifies actual recognizer", modelStatus.ModelName, "Fun-ASR-Nano");
+    Eq("health language capabilities", string.Join(",", modelStatus.Languages!), "auto,zh,en,ja");
+    Eq("natural cleanup English label", L10n.Render("自然整理", "en"), "Natural cleanup");
+
     stub.Stop();
     var dead = new ServiceClient(dir);
     dead.UsePort(1);
@@ -281,6 +305,7 @@ sealed class StubServer
     public int Port { get; }
     public (int Status, string Body) Reply { get; set; } = (200, "{}");
     public string LastPath { get; private set; } = "";
+    public string LastMethod { get; private set; } = "";
     public Dictionary<string, string> LastHeaders { get; private set; } = new();
     public byte[] LastBody { get; private set; } = Array.Empty<byte>();
 
@@ -333,6 +358,7 @@ sealed class StubServer
             body.AddRange(chunk.AsSpan(0, n).ToArray());
         }
         LastPath = head[0].Split(' ')[1];
+        LastMethod = head[0].Split(' ')[0];
         LastHeaders = headers;
         LastBody = body.ToArray();
         var payload = Encoding.UTF8.GetBytes(Reply.Body);

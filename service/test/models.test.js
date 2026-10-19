@@ -50,8 +50,8 @@ test("the real file list is the SenseVoice int8 model, its tokens and Silero VAD
 });
 
 test("downloads come from huggingface.co unless HF_ENDPOINT names a mirror", () => {
-  assert.equal(downloadUrl(MODEL_FILES[0], ""), "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx");
-  assert.equal(downloadUrl(MODEL_FILES[2], "https://mirror.example.com/"), "https://mirror.example.com/csukuangfj/vad/resolve/main/silero_vad.onnx");
+  assert.equal(downloadUrl(MODEL_FILES[0], ""), "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/model.int8.onnx");
+  assert.equal(downloadUrl(MODEL_FILES[2], "https://mirror.example.com/"), "https://mirror.example.com/csukuangfj/vad/resolve/fba88cd2e921609e7675c3aaf51e0b9b295da4bc/silero_vad.onnx");
 });
 
 test("missing files are downloaded, verified, and reported with progress", async () => {
@@ -106,3 +106,24 @@ test("files can be imported from another folder layout, checked by hash", async 
     assert.deepEqual(await readFile(join(target, "sensevoice", "model.int8.onnx")), A);
   });
 });
+
+test("same-size corrupted files are downloaded again and nested tokenizers are supported", async () => withDir(async dir => {
+  await mkdir(join(dir,'sensevoice'),{recursive:true});
+  await writeFile(join(dir,...FILES[0].path),Buffer.alloc(A.length));
+  const nested={...FILES[1],path:['nested','tokenizer','tokens.txt']};
+  const seen=[];
+  await downloadModels({modelsDir:dir,files:[FILES[0],nested],fetchImpl:serve({'model.int8.onnx':A,'tokens.txt':B},seen)});
+  assert.equal(seen.length,2);
+  assert.deepEqual(await readFile(join(dir,...nested.path)),B);
+}));
+
+test("cancelling a download removes its partial file and keeps verified files reusable", async () => withDir(async dir => {
+  const controller=new AbortController();
+  await assert.rejects(downloadModels({modelsDir:dir,files:FILES,signal:controller.signal,
+    fetchImpl:serve({'model.int8.onnx':A,'tokens.txt':B}),onProgress:()=>controller.abort()}));
+  await assert.rejects(stat(join(dir,...FILES[0].path)+'.part'));
+  await downloadModels({modelsDir:dir,files:FILES,fetchImpl:serve({'model.int8.onnx':A,'tokens.txt':B})});
+  const seen=[];
+  await downloadModels({modelsDir:dir,files:FILES,fetchImpl:serve({},seen)});
+  assert.equal(seen.length,0);
+}));

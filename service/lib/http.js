@@ -71,12 +71,15 @@ function classify(error) {
   switch (code) {
     case "payload-too-large":
       return { status: 413, code };
+    case "invalid-model":
     case "invalid-language":
     case "invalid-prompt":
       return { status: 400, code };
     case "invalid-audio":
     case "audio-too-large":
       return { status: 400, code };
+    case "model-busy":
+      return { status: 409, code };
     case "busy":
       return { status: 429, code };
     case "speech-not-ready":
@@ -183,13 +186,23 @@ export function createHandler(options) {
         return;
       }
 
-      if (route === "/models/download" && req.method === "POST") {
-        // Starts the one-time model download (about 241 MB) in the background;
-        // progress shows in /health as speech.download.
+      if (route === "/models" && req.method === "GET") {
+        reply(res, 200, await service.recognizer.catalog());
+        return;
+      }
+      if (["/models/download", "/models/active", "/models/download/cancel"].includes(route)
+          && req.method === (route === "/models/active" ? "PUT" : "POST")) {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
-        const endpoint = typeof body.endpoint === "string" && /^https:\/\/[^/\s]+/i.test(body.endpoint) ? body.endpoint : undefined;
-        void service.recognizer.downloadAndPrepare({ endpoint });
-        reply(res, 202, { ok: true, phase: "downloading" });
+        if (!body || Array.isArray(body) || typeof body !== "object") {
+          reply(res, 400, { error: "model request must be an object", code: "invalid-model" }); return;
+        }
+        const modelId = body.modelId === undefined ? "sensevoice-small" : body.modelId;
+        if (route === "/models/download/cancel") service.recognizer.cancel(modelId);
+        else if (typeof service.recognizer.start === "function") {
+          const endpoint = typeof body.endpoint === "string" && /^https:\/\/[^/\s]+/i.test(body.endpoint) ? body.endpoint : undefined;
+          service.recognizer.start(modelId, { endpoint, activate: route === "/models/active" || body.activate !== false, download: route !== "/models/active" });
+        } else await service.recognizer.downloadAndPrepare({ endpoint: body.endpoint });
+        reply(res, 202, { ok: true, phase: "accepted" });
         return;
       }
 

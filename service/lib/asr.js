@@ -16,7 +16,7 @@
  */
 import { LANGUAGES } from "./config.js";
 import { createRequire } from "node:module";
-import { downloadModels, MODELS_TOTAL_BYTES, modelPaths, modelStatus } from "./models.js";
+import { downloadModels, modelPaths, modelStatus, DEFAULT_MODEL_ID, filesForModel, modelFor, recognizerConfig } from "./models.js";
 import { pcm16ToFloat32, SAMPLE_RATE, withLeadIn } from "./wav.js";
 
 /** Above this many seconds a recording is split at pauses before recognition. */
@@ -30,6 +30,17 @@ function loadSherpa() {
   return createRequire(import.meta.url)("sherpa-onnx-node");
 }
 
+/** Native model buffers are not counted in V8's small JS heap. The app launches
+ * Node with --expose-gc so a replaced model does not wait for JS heap pressure.
+ * Yield first so obsolete native handles leave the current stack.
+ */
+async function collectNativeMemory() {
+  if (typeof globalThis.gc !== 'function') return;
+  await new Promise(resolve => setImmediate(resolve));
+  globalThis.gc();
+  await new Promise(resolve => setImmediate(resolve));
+}
+
 /** Recogniser state for /health and the apps. */
 export class LocalRecognizer {
   /**
@@ -37,8 +48,9 @@ export class LocalRecognizer {
    */
   constructor(options) {
     this.modelsDir = options.modelsDir;
+    this.modelId = options.modelId ?? DEFAULT_MODEL_ID;
     this.numThreads = options.numThreads ?? 2;
-    this.language = options.language ?? "auto";
+    this.language = modelFor(this.modelId).languages.includes(options.language) ? options.language : "auto";
     this.logger = options.logger ?? { info: () => {}, warn: () => {} };
     this.loadSherpa = options.loadSherpa ?? loadSherpa;
     /** missing-model | loading | ready | downloading | error */
@@ -62,26 +74,17 @@ export class LocalRecognizer {
     if (this.preparing) return this.preparing;
     this.preparing = (async () => {
       try {
-        const status = await modelStatus(this.modelsDir);
+        const status = await modelStatus(this.modelsDir, filesForModel(this.modelId));
         if (!status.ready) {
           this.phase = "missing-model";
           this.error = null;
           return this.phase;
         }
         this.phase = "loading";
-        const paths = modelPaths(this.modelsDir);
         this.sherpa = this.loadSherpa();
         const started = Date.now();
-        this.recognizer = await this.sherpa.OfflineRecognizer.createAsync({
-          featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
-          modelConfig: {
-            senseVoice: { model: paths.model, language: this.language, useInverseTextNormalization: 1 },
-            tokens: paths.tokens,
-            numThreads: this.numThreads,
-            provider: "cpu",
-            debug: 0,
-          },
-        });
+        this.recognizer = await this.sherpa.OfflineRecognizer.createAsync(recognizerConfig(this.modelsDir, this.modelId,
+          { language: this.language, numThreads: this.numThreads }));
         this.phase = "ready";
         this.error = null;
         this.logger.info?.("typeleast: speech model loaded in %d ms", Date.now() - started);
@@ -106,10 +109,11 @@ export class LocalRecognizer {
     if (this.phase === "downloading" || this.phase === "ready") return this.phase;
     this.phase = "downloading";
     this.error = null;
-    this.download = { received: 0, total: MODELS_TOTAL_BYTES };
+    this.download = { received: 0, total: filesForModel(this.modelId).reduce((sum, file) => sum + file.size, 0) };
     try {
       await downloadModels({
         modelsDir: this.modelsDir,
+        files: filesForModel(this.modelId),
         endpoint: options.endpoint,
         fetchImpl: options.fetchImpl,
         onProgress: ({ received, total }) => {
@@ -134,10 +138,10 @@ export class LocalRecognizer {
       engine: "sherpa-onnx",
       phase: this.phase,
       ready: this.phase === "ready",
-      languages: ["auto", "zh", "en", "yue", "ja", "ko"],
+      languages: modelFor(this.modelId).languages,
       ...(this.error ? { error: this.error } : {}),
       ...(this.download ? { download: { ...this.download } } : {}),
-      modelBytes: MODELS_TOTAL_BYTES,
+      modelBytes: filesForModel(this.modelId).reduce((sum, file) => sum + file.size, 0),
     };
   }
 
@@ -165,13 +169,17 @@ export class LocalRecognizer {
       error.code = "speech-not-ready";
       throw error;
     }
-    if (language !== this.activeLanguage) {
-      // Recreate with an explicit model language: native setConfig does not
-      // guarantee that a model-specific language is updated on every backend.
-      const config = structuredClone(this.recognizer.config);
-      config.modelConfig.senseVoice.language = language;
-      const next = await this.sherpa.OfflineRecognizer.createAsync(config);
-      this.recognizer = next;
+    if (!modelFor(this.modelId).languages.includes(language)) language = "auto";
+    if (language !== this.activeLanguage && this.modelId !== "qwen3-asr-0.6b") {
+      const config = recognizerConfig(this.modelsDir, this.modelId, { language, numThreads: this.numThreads });
+      // SenseVoice reads the inherited config on every decode in 1.13.8.
+      // FunASR keeps a separate config, so its language hint requires a reload.
+      if (this.modelId === DEFAULT_MODEL_ID) this.recognizer.setConfig(config);
+      else {
+        const next = await this.sherpa.OfflineRecognizer.createAsync(config);
+        this.recognizer = next;
+        await collectNativeMemory();
+      }
       this.activeLanguage = language;
     }
     // A short silent lead-in keeps the recogniser from clipping the first syllable.
@@ -180,12 +188,21 @@ export class LocalRecognizer {
     const texts = [];
     for (const segment of segments) {
       const stream = this.recognizer.createStream();
+      if (this.modelId === "qwen3-asr-0.6b" && language !== "auto") {
+        stream.setOption("language", ({ zh: "Chinese", en: "English", yue: "Cantonese", ja: "Japanese", ko: "Korean" })[language]);
+      }
       stream.acceptWaveform({ sampleRate: SAMPLE_RATE, samples: segment });
       const result = await this.recognizer.decodeAsync(stream);
       const text = String(result?.text ?? "").trim();
       if (text.length > 0) texts.push(text);
     }
-    return { text: joinSegments(texts) };
+    return { text: joinSegments(texts), language };
+  }
+
+  async release() {
+    this.recognizer = null;
+    this.phase = 'missing-model';
+    await collectNativeMemory();
   }
 
   /**

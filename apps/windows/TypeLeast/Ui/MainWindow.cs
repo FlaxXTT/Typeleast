@@ -172,7 +172,7 @@ internal sealed class HomePage : IPage
         Action startDownload = () => { _ = host.DownloadModels(); };
         (string, Action)? download = null;
         if (speech is { ModelsMissing: true } or { Phase: "error" }) download = (L10n.T("下载（约 241 MB）"), startDownload);
-        checklist.Children.Add(Item(speech?.Ready == true, L10n.T("语音模型（SenseVoice）"), problem.Length == 0 ? L10n.T("已就绪，识别完全在本机进行") : problem, download));
+        checklist.Children.Add(Item(speech?.Ready == true, host.Speech?.ModelName ?? "SenseVoice Small", problem.Length == 0 ? L10n.T("已就绪，识别完全在本机进行") : problem, download));
         Action openSettings = () => host.ShowWindow(MainWindow.Page.Settings);
         Action openPrivacy = () => Shell.Open("ms-settings:privacy-microphone");
         checklist.Children.Add(Item(host.LlmConfigured, L10n.T("整理模型（自己的 API Key）"),

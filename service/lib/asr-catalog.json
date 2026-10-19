@@ -1,0 +1,206 @@
+[
+  {
+    "id": "fireredasr2-ctc",
+    "name": "FireRedASR2 CTC",
+    "source": "https://huggingface.co/FireRedTeam/FireRedASR2-AED",
+    "sourceUrl": "https://huggingface.co/csukuangfj2/sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "id": "fireredasr2-ctc-model.int8.onnx",
+        "path": [
+          "fireredasr2-ctc",
+          "model.int8.onnx"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25",
+        "revision": "423be1acfdc5d8aaa5a485fb6263fe4ea8570b06",
+        "file": "model.int8.onnx",
+        "size": 775861420,
+        "sha256": "ca3dbabd82170110cc0b343c2890866d449984bc9cd92b9a18371ff80a81bb99"
+      },
+      {
+        "id": "fireredasr2-ctc-tokens.txt",
+        "path": [
+          "fireredasr2-ctc",
+          "tokens.txt"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25",
+        "revision": "423be1acfdc5d8aaa5a485fb6263fe4ea8570b06",
+        "file": "tokens.txt",
+        "size": 79172,
+        "sha256": "1bc613de2112d257e61a349c3e72d1b1a9cf19c33d3ca954197ad2171e5ea07b"
+      }
+    ],
+    "characteristics": "Chinese and dialects, with English support; automatic language detection."
+  },
+  {
+    "id": "fun-asr-nano",
+    "name": "Fun-ASR-Nano",
+    "source": "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512",
+    "sourceUrl": "https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "id": "fun-asr-nano-Qwen3-0.6B-merges.txt",
+        "path": [
+          "fun-asr-nano",
+          "Qwen3-0.6B",
+          "merges.txt"
+        ],
+        "repo": "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+        "revision": "6f16bd378457e13f36ccf3910df9017f96c346fb",
+        "file": "Qwen3-0.6B/merges.txt",
+        "size": 1671853,
+        "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+      },
+      {
+        "id": "fun-asr-nano-Qwen3-0.6B-tokenizer.json",
+        "path": [
+          "fun-asr-nano",
+          "Qwen3-0.6B",
+          "tokenizer.json"
+        ],
+        "repo": "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+        "revision": "6f16bd378457e13f36ccf3910df9017f96c346fb",
+        "file": "Qwen3-0.6B/tokenizer.json",
+        "size": 11422654,
+        "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+      },
+      {
+        "id": "fun-asr-nano-Qwen3-0.6B-vocab.json",
+        "path": [
+          "fun-asr-nano",
+          "Qwen3-0.6B",
+          "vocab.json"
+        ],
+        "repo": "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+        "revision": "6f16bd378457e13f36ccf3910df9017f96c346fb",
+        "file": "Qwen3-0.6B/vocab.json",
+        "size": 2776833,
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      {
+        "id": "fun-asr-nano-embedding.int8.onnx",
+        "path": [
+          "fun-asr-nano",
+          "embedding.int8.onnx"
+        ],
+        "repo": "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+        "revision": "6f16bd378457e13f36ccf3910df9017f96c346fb",
+        "file": "embedding.int8.onnx",
+        "size": 155584380,
+        "sha256": "95e61cd0c9c3b9543339a4cf973c95c116815e745ccc1e0285cbd81f76d18644"
+      },
+      {
+        "id": "fun-asr-nano-encoder_adaptor.int8.onnx",
+        "path": [
+          "fun-asr-nano",
+          "encoder_adaptor.int8.onnx"
+        ],
+        "repo": "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+        "revision": "6f16bd378457e13f36ccf3910df9017f96c346fb",
+        "file": "encoder_adaptor.int8.onnx",
+        "size": 237792748,
+        "sha256": "f36dea2e30fbc33b5db1d7a7265cc976c5e5586c77b042d5adb1ad27c72db422"
+      },
+      {
+        "id": "fun-asr-nano-llm.int8.onnx",
+        "path": [
+          "fun-asr-nano",
+          "llm.int8.onnx"
+        ],
+        "repo": "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+        "revision": "6f16bd378457e13f36ccf3910df9017f96c346fb",
+        "file": "llm.int8.onnx",
+        "size": 600356593,
+        "sha256": "dfbf9aa3be41bccc257587f151e15c63fbe1b549f2b517f5ccd5bdce3bf4322a"
+      }
+    ],
+    "characteristics": "Mixed Chinese and English, with Japanese support."
+  },
+  {
+    "id": "qwen3-asr-0.6b",
+    "name": "Qwen3-ASR-0.6B",
+    "source": "https://huggingface.co/Qwen/Qwen3-ASR-0.6B",
+    "sourceUrl": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "id": "qwen3-asr-0.6b-conv_frontend.onnx",
+        "path": [
+          "qwen3-asr-0.6b",
+          "conv_frontend.onnx"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        "revision": "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        "file": "conv_frontend.onnx",
+        "size": 44148281,
+        "sha256": "d22dc4423e0940e49884e903d2ea2f7e5567c14fc1aed97e4e26d6b8f208ef9e"
+      },
+      {
+        "id": "qwen3-asr-0.6b-decoder.int8.onnx",
+        "path": [
+          "qwen3-asr-0.6b",
+          "decoder.int8.onnx"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        "revision": "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        "file": "decoder.int8.onnx",
+        "size": 755914231,
+        "sha256": "4f6885be5959ae26af3089d38ee7972c5fafbeeb1cf8d5e76eab6d8b61ca5771"
+      },
+      {
+        "id": "qwen3-asr-0.6b-encoder.int8.onnx",
+        "path": [
+          "qwen3-asr-0.6b",
+          "encoder.int8.onnx"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        "revision": "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        "file": "encoder.int8.onnx",
+        "size": 182491662,
+        "sha256": "60748d3e6744a57c9c91e1b17424a6c2990567e8adceb0783940c03ed98fa9d9"
+      },
+      {
+        "id": "qwen3-asr-0.6b-tokenizer-merges.txt",
+        "path": [
+          "qwen3-asr-0.6b",
+          "tokenizer",
+          "merges.txt"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        "revision": "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        "file": "tokenizer/merges.txt",
+        "size": 1671853,
+        "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+      },
+      {
+        "id": "qwen3-asr-0.6b-tokenizer-tokenizer_config.json",
+        "path": [
+          "qwen3-asr-0.6b",
+          "tokenizer",
+          "tokenizer_config.json"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        "revision": "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        "file": "tokenizer/tokenizer_config.json",
+        "size": 12487,
+        "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c"
+      },
+      {
+        "id": "qwen3-asr-0.6b-tokenizer-vocab.json",
+        "path": [
+          "qwen3-asr-0.6b",
+          "tokenizer",
+          "vocab.json"
+        ],
+        "repo": "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        "revision": "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        "file": "tokenizer/vocab.json",
+        "size": 2776833,
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      }
+    ],
+    "characteristics": "Multilingual recognition; larger than SenseVoice Small."
+  }
+]

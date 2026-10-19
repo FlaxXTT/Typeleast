@@ -121,6 +121,7 @@ internal sealed class ServiceManager
             RedirectStandardError = true,
             WorkingDirectory = serviceDir,
         };
+        start.ArgumentList.Add("--expose-gc");
         start.ArgumentList.Add(Path.Combine(serviceDir, "bin", "typeleast-service.mjs"));
         start.ArgumentList.Add("--parent-pid");
         start.ArgumentList.Add(Environment.ProcessId.ToString());
