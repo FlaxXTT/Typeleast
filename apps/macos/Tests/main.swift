@@ -70,6 +70,8 @@ let historyJSON = """
 {"items":[{"id":"h1","ts":1700000000000,"app":"com.apple.TextEdit","language":"zh","raw":"ni hao","text":"你好","fallback":false,"reason":null,"model":"gpt-4o-mini","ms":210,"strength":"prompt"}]}
 """
 
+let modelCatalogJSON = #"{"activeModelId":"sensevoice-small","models":[{"id":"fun-asr-nano","name":"Fun-ASR-Nano","modelBytes":1009605061,"sourceUrl":"https://huggingface.co/example/model","licenseUrl":"https://huggingface.co/example/source","canSetLanguage":true,"installed":true}],"operation":{"modelId":"fun-asr-nano","phase":"waiting","received":100,"total":100,"error":null},"notice":null}"#
+
 let state = StubState()
 let tokenPath = NSTemporaryDirectory() + "dsh-voice-test-token.txt"
 state.tokenFilePath = tokenPath
@@ -88,6 +90,8 @@ let server = try StubServer { req in
         }
     }
     if req.path.hasPrefix("/api/voice-polish/health") { return .json(healthJSON) }
+    if req.path == "/api/voice-polish/models" { return .json(modelCatalogJSON) }
+    if req.path.hasPrefix("/api/voice-polish/models/") { return .json("{\"ok\":true,\"phase\":\"accepted\"}", status: 202) }
     if req.path.hasPrefix("/api/voice-polish/dictate") {
         if state.mode == "dictateError" {
             return .json("{\"error\":\"speech not ready\",\"code\":\"speech_not_ready\"}", status: 503)
@@ -844,6 +848,30 @@ do {
     checkEq("diagnostics omit raw error text", DiagnosticsLog.safeField("error", "fake-private-content"), "[omitted]")
     checkEq("diagnostics keep status", DiagnosticsLog.safeField("status", "-25293"), "-25293")
 }
+
+do {
+    let catalog = try client.speechModelsSync()
+    checkEq("catalog request path", state.lastRequest?.path, "/api/voice-polish/models")
+    checkEq("catalog preserves selected default", catalog.activeModelId, "sensevoice-small")
+    checkEq("catalog decodes installed model", catalog.models.first?.installed, true)
+    checkEq("catalog waiting blocks repeat actions", catalog.operation?.running, true)
+    try client.speechModelActionSync(id: "fun-asr-nano", download: true, endpoint: "https://mirror.example.com")
+    checkEq("candidate download method", state.lastRequest?.method, "POST")
+    let body = try JSONSerialization.jsonObject(with: state.lastRequest!.body) as! [String: Any]
+    checkEq("candidate download identifies model", body["modelId"] as? String, "fun-asr-nano")
+    checkEq("candidate download requests activation", body["activate"] as? Bool, true)
+    checkEq("candidate download retains mirror", body["endpoint"] as? String, "https://mirror.example.com")
+    try client.speechModelActionSync(id: "qwen3-asr-0.6b")
+    checkEq("installed model activation method", state.lastRequest?.method, "PUT")
+    checkEq("installed model activation path", state.lastRequest?.path, "/api/voice-polish/models/active")
+    try client.speechModelActionSync(id: "fun-asr-nano", cancel: true)
+    checkEq("candidate cancel method", state.lastRequest?.method, "POST")
+    checkEq("candidate cancel path", state.lastRequest?.path, "/api/voice-polish/models/download/cancel")
+    let status = try JSONDecoder().decode(SpeechStatus.self, from: Data(#"{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}"#.utf8))
+    checkEq("health identifies actual recognizer", status.modelName, "Fun-ASR-Nano")
+    checkEq("health exposes language capabilities", status.languages, ["auto", "zh", "en", "ja"])
+    checkEq("natural cleanup English label", L10n.render("自然整理", arguments: [], language: "en"), "Natural cleanup")
+} catch { check("speech model client contract", false, String(describing: error)) }
 
 server.stop()
 print("")

@@ -12,9 +12,51 @@ public sealed class DownloadProgress
     [JsonPropertyName("total")] public double Total { get; set; }
 }
 
+public sealed class SpeechModelOperation
+{
+    public string ModelId { get; set; } = "";
+    public string Phase { get; set; } = "";
+    public double Received { get; set; }
+    public double Total { get; set; }
+    public string? Error { get; set; }
+    [JsonIgnore] public string Problem => Error switch {
+        "checksum-mismatch" => L10n.T("文件校验失败，请重新下载。"),
+        "download-failed" => L10n.T("下载失败，请检查网络或镜像后重试。"),
+        "model-not-installed" => L10n.T("模型文件不完整，请重新下载。"),
+        "model-load-failed" => L10n.T("模型加载失败，请重试或使用其他模型。"),
+        "ENOSPC" => L10n.T("磁盘空间不足，请释放空间后重试。"),
+        "EACCES" or "EPERM" => L10n.T("无法保存模型设置，请检查文件访问权限。"),
+        _ => L10n.T("模型操作失败，请重试。当前模型保留。"),
+    };
+    [JsonIgnore] public bool Running => Phase is "downloading" or "waiting" or "loading";
+}
+public sealed class SpeechModelOption
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public double ModelBytes { get; set; }
+    public string SourceUrl { get; set; } = "";
+    public string LicenseUrl { get; set; } = "";
+    public bool CanSetLanguage { get; set; }
+    public bool Installed { get; set; }
+}
+public sealed class SpeechModelCatalog
+{
+    public string ActiveModelId { get; set; } = "sensevoice-small";
+    public List<SpeechModelOption> Models { get; set; } = new();
+    public SpeechModelOperation? Operation { get; set; }
+    public string? Notice { get; set; }
+}
+
 public sealed class SpeechStatus
 {
     [JsonPropertyName("providerId")] public string? ProviderId { get; set; }
+    public string? ModelId { get; set; }
+    public string? ModelName { get; set; }
+    public bool? CanSetLanguage { get; set; }
+    public List<string>? Languages { get; set; }
+    public SpeechModelOperation? Operation { get; set; }
+    public string? Notice { get; set; }
     [JsonPropertyName("ready")] public bool Ready { get; set; }
     /// <summary>loading | ready | missing-model | downloading | error</summary>
     [JsonPropertyName("phase")] public string? Phase { get; set; }

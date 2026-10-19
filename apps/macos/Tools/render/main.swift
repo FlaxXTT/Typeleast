@@ -53,6 +53,16 @@ model.serviceUp = true
 model.serviceState = .running(port: 1)
 model.nodeDescription = "v24.21.0 · App 内置"
 model.health = try? JSONDecoder().decode(HealthResponse.self, from: Data(#"{"ok":true,"service":"typeleast","version":"0.2.0","provider":"custom:api.deepseek.com","model":"deepseek-chat","speech":{"providerId":"sensevoice-local","phase":"ready","ready":true}}"#.utf8))
+model.speechCatalog = SpeechModelCatalog(activeModelId: "sensevoice-small", models: [
+    SpeechModelOption(id: "sensevoice-small", name: "SenseVoice Small", modelBytes: 239549735,
+        sourceUrl: "https://huggingface.co/FunAudioLLM/SenseVoice", licenseUrl: "https://github.com/FunAudioLLM/SenseVoice", canSetLanguage: true, installed: true),
+    SpeechModelOption(id: "fireredasr2-ctc", name: "FireRedASR2 CTC", modelBytes: 775940592,
+        sourceUrl: "https://huggingface.co/FireRedTeam/FireRedASR2-AED", licenseUrl: "https://huggingface.co/FireRedTeam/FireRedASR2-AED", canSetLanguage: false, installed: false),
+    SpeechModelOption(id: "fun-asr-nano", name: "Fun-ASR-Nano", modelBytes: 1009605061,
+        sourceUrl: "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512", licenseUrl: "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512", canSetLanguage: true, installed: false),
+    SpeechModelOption(id: "qwen3-asr-0.6b", name: "Qwen3-ASR-0.6B", modelBytes: 987015347,
+        sourceUrl: "https://huggingface.co/Qwen/Qwen3-ASR-0.6B", licenseUrl: "https://huggingface.co/Qwen/Qwen3-ASR-0.6B", canSetLanguage: true, installed: false),
+], operation: nil, notice: nil)
 model.accessibilityTrusted = true
 model.micStatus = .authorized
 
@@ -69,6 +79,27 @@ func snapshot(_ view: NSView, size: NSSize, name: String, dark: Bool) {
     let path = outDir + "/" + name + (dark ? "-dark" : "") + ".png"
     try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
     print("wrote " + path)
+}
+
+if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODELS_ONLY"] == "1" {
+    func modelPanel(dark: Bool = false) -> NSView {
+        NSHostingView(rootView: SpeechModelOptions().environmentObject(model)
+            .frame(width: 502, alignment: .topLeading).padding(24)
+            .frame(width: 550, height: 960, alignment: .topLeading)
+            .background(Color(NSColor.windowBackgroundColor))
+            .environment(\.colorScheme, dark ? .dark : .light))
+    }
+    for dark in [false, true] {
+        snapshot(modelPanel(dark: dark),
+                 size: NSSize(width: 550, height: 960), name: "speech-models", dark: dark)
+    }
+    model.speechCatalog?.operation = SpeechModelOperation(modelId: "fireredasr2-ctc", phase: "downloading", received: 320_000_000, total: 775_940_592, error: nil)
+    snapshot(modelPanel(),
+             size: NSSize(width: 550, height: 960), name: "speech-model-progress", dark: false)
+    model.speechCatalog?.operation = SpeechModelOperation(modelId: "fireredasr2-ctc", phase: "error", received: 320_000_000, total: 775_940_592, error: "download-failed")
+    snapshot(modelPanel(),
+             size: NSSize(width: 550, height: 960), name: "speech-model-error", dark: false)
+    exit(0)
 }
 
 for dark in [false, true] {

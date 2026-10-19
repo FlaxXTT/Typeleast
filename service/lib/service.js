@@ -486,7 +486,7 @@ export class VoicePolishService {
       const spoken = await this.transcribe(audio, language);
       const polished = await this.polish({
         rawText: spoken.text,
-        language,
+        language: spoken.language ?? language,
         appHint: request.appHint,
         strength: request.strength,
         fieldContext: request.fieldContext ?? null,
@@ -526,7 +526,7 @@ export class VoicePolishService {
   async transcribe(audio, language) {
     const started = Date.now();
     const spoken = await this.recognizer.transcribe(audio, language);
-    return { text: String(spoken.text ?? "").trim(), ms: Date.now() - started };
+    return { text: String(spoken.text ?? "").trim(), language: spoken.language ?? language, ms: Date.now() - started };
   }
 
   /** Assemble bounded, redacted context for one call. */

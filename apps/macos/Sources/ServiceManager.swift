@@ -190,7 +190,7 @@ final class ServiceManager {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: node.path)
-        p.arguments = [dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid())]
+        p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid())]
         p.currentDirectoryURL = URL(fileURLWithPath: dir)
         var env = ProcessInfo.processInfo.environment
         if let mirror = modelMirror, !mirror.isEmpty { env["HF_ENDPOINT"] = mirror }

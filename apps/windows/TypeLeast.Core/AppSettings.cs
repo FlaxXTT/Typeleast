@@ -19,7 +19,7 @@ public enum DictationKey
 public sealed class AppSettings
 {
     public DictationKey Hotkey { get; set; } = DictationKey.RightAlt;
-    /// <summary>"prompt" (Erduo cleanup), "promptify" (提示词模式) or "off" (raw transcription).</summary>
+    /// <summary>"prompt" (Natural cleanup), "promptify" (提示词模式) or "off" (raw transcription).</summary>
     public string Strength { get; set; } = "prompt";
     public string InterfaceLanguage { get; set; } = "system";
     public string Language { get; set; } = "auto";

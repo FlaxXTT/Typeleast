@@ -12,14 +12,21 @@ TypeLeast uses or downloads the following work. Each keeps its own licence.
 | .NET runtime (self-contained Windows build) | Windows app | MIT |
 | Microsoft Visual C++ runtime (`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`) | Windows: next to the sherpa-onnx DLLs | Microsoft Visual C++ Redistributable licence |
 
-## Downloaded by the app on first use (not part of this repository or the packages)
+## Downloaded by the app on request (not part of this repository or the packages)
 
 | Model | Source | Notes |
 |---|---|---|
 | SenseVoice Small, int8 ONNX export | [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice), converted by the sherpa-onnx project ([Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17)) | Use is subject to the model publisher's licence. |
 | Silero VAD | [snakers4/silero-vad](https://github.com/snakers4/silero-vad) ([Hugging Face mirror](https://huggingface.co/csukuangfj/vad)) | MIT |
+| FireRedASR2 CTC, int8 ONNX export | [FireRedTeam/FireRedASR2-AED](https://huggingface.co/FireRedTeam/FireRedASR2-AED), [sherpa-onnx export](https://huggingface.co/csukuangfj2/sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25) | Optional; Apache-2.0 according to the upstream model card. Only the CTC branch is used. |
+| Fun-ASR-Nano, int8 ONNX export | [FunAudioLLM/Fun-ASR-Nano-2512](https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512), [sherpa-onnx export](https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30) | Optional; Apache-2.0 according to the upstream model card. |
+| Qwen3-ASR-0.6B, int8 ONNX export | [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B), [sherpa-onnx export](https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25) | Optional; Apache-2.0 according to the upstream model card. |
 
-The files are verified by size and SHA-256 before use (`service/lib/models.js`).
+Downloads and model activation verify file sizes and SHA-256. Fixed revisions,
+checksums, upstream licence links and export links are listed in
+`service/lib/models.js` and `service/lib/asr-catalog.json`. The smoke test uses a
+short public `test_wavs/1.wav` example from the pinned FireRed export; test audio
+is downloaded only for validation and is not shipped in the apps.
 
 ## Budget Typeless DIY prompt
 

@@ -16,6 +16,7 @@
  *
  * @module typeleast-service/models
  */
+import candidates from "./asr-catalog.json" with { type: "json" };
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { copyFile, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
@@ -31,6 +32,7 @@ export const MODEL_FILES = [
     id: "sensevoice-model",
     path: ["sensevoice", "model.int8.onnx"],
     repo: SENSEVOICE_REPO,
+    revision: "2365baeacb507f821a0c8120fcee3d484dba7a07",
     file: "model.int8.onnx",
     size: 239233841,
     sha256: "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
@@ -39,6 +41,7 @@ export const MODEL_FILES = [
     id: "sensevoice-tokens",
     path: ["sensevoice", "tokens.txt"],
     repo: SENSEVOICE_REPO,
+    revision: "2365baeacb507f821a0c8120fcee3d484dba7a07",
     file: "tokens.txt",
     size: 315894,
     sha256: "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
@@ -47,6 +50,7 @@ export const MODEL_FILES = [
     id: "silero-vad",
     path: ["vad", "silero_vad.onnx"],
     repo: "csukuangfj/vad",
+    revision: "fba88cd2e921609e7675c3aaf51e0b9b295da4bc",
     file: "silero_vad.onnx",
     size: 1807522,
     sha256: "a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28",
@@ -70,7 +74,7 @@ export function modelPaths(modelsDir) {
  */
 export function downloadUrl(file, endpoint = process.env.HF_ENDPOINT) {
   const base = (endpoint?.trim() || "https://huggingface.co").replace(/\/+$/, "");
-  return `${base}/${file.repo}/resolve/main/${file.file}`;
+  return `${base}/${file.repo}/resolve/${file.revision ?? "main"}/${file.file}`;
 }
 
 /**
@@ -108,13 +112,17 @@ export async function sha256File(path) {
 export async function downloadModels(options) {
   const { modelsDir, endpoint, onProgress, signal, fetchImpl = globalThis.fetch, files = MODEL_FILES } = options;
   const { missing } = await modelStatus(modelsDir, files);
-  const todo = files.filter((file) => missing.includes(file.id));
+  const todo = [];
+  for (const file of files) {
+    if (missing.includes(file.id) || await sha256File(join(modelsDir, ...file.path)) !== file.sha256) todo.push(file);
+  }
   const total = todo.reduce((sum, file) => sum + file.size, 0);
   let received = 0;
   for (const file of todo) {
+    signal?.throwIfAborted();
     const target = join(modelsDir, ...file.path);
     const partial = `${target}.part`;
-    await mkdir(join(modelsDir, file.path[0]), { recursive: true });
+    await mkdir(join(modelsDir, ...file.path.slice(0, -1)), { recursive: true });
     const url = downloadUrl(file, endpoint);
     let response;
     try {
@@ -130,6 +138,8 @@ export async function downloadModels(options) {
     let size = 0;
     try {
       for await (const chunk of response.body) {
+        signal?.throwIfAborted();
+        if (size + chunk.length > file.size) throw new Error("file exceeds declared size");
         hash.update(chunk);
         size += chunk.length;
         received += chunk.length;
@@ -148,6 +158,7 @@ export async function downloadModels(options) {
       await rm(partial, { force: true });
       throw Object.assign(new Error(`${file.file} failed verification (got ${size} bytes, sha256 ${digest.slice(0, 12)}…)`), { code: "checksum-mismatch" });
     }
+    if (signal?.aborted) { await rm(partial, { force: true }); signal.throwIfAborted(); }
     await rename(partial, target);
   }
   return { downloaded: todo.map((file) => file.id) };
@@ -171,7 +182,7 @@ export async function importModels(options) {
     for (const path of candidates.filter((candidate) => candidate.name === file.file)) {
       const info = await stat(path.full);
       if (info.size !== file.size || (await sha256File(path.full)) !== file.sha256) continue;
-      await mkdir(join(modelsDir, file.path[0]), { recursive: true });
+      await mkdir(join(modelsDir, ...file.path.slice(0, -1)), { recursive: true });
       await copyFile(path.full, `${target}.part`);
       await rename(`${target}.part`, target);
       copied.push(file.id);
@@ -198,4 +209,48 @@ async function listFiles(dir, depth) {
     else if (entry.isDirectory() && depth > 1) out.push(...(await listFiles(full, depth - 1)));
   }
   return out;
+}
+
+
+export const DEFAULT_MODEL_ID = "sensevoice-small";
+export const MODEL_CATALOG = [
+  { id: DEFAULT_MODEL_ID, name: "SenseVoice Small", sourceUrl: `https://huggingface.co/${SENSEVOICE_REPO}`,
+    source: "https://github.com/FunAudioLLM/SenseVoice", license: "See publisher terms", files: MODEL_FILES.slice(0, 2) },
+  ...candidates,
+].map(model => ({ ...model, modelBytes: model.files.reduce((sum, file) => sum + file.size, 0),
+  // The v1.13.8 binding supports a FunASR config hint and a Qwen per-stream hint.
+  languages: model.id === "fireredasr2-ctc" ? ["auto"] : model.id === "fun-asr-nano" ? ["auto", "zh", "en", "ja"] : ["auto", "zh", "en", "yue", "ja", "ko"],
+  canSetLanguage: model.id !== "fireredasr2-ctc" }));
+
+export function modelFor(id = DEFAULT_MODEL_ID) {
+  const model = MODEL_CATALOG.find(model => model.id === id);
+  if (!model) throw Object.assign(new Error("unknown speech model"), { code: "invalid-model" });
+  return model;
+}
+export function filesForModel(id = DEFAULT_MODEL_ID) {
+  return [...modelFor(id).files, MODEL_FILES.find(file => file.id === "silero-vad")];
+}
+export function recognizerConfig(modelsDir, id, { language = "auto", numThreads = 2 } = {}) {
+  const model = modelFor(id);
+  const at = file => join(modelsDir, ...model.files.find(entry => entry.file === file).path);
+  const config = { featConfig: { sampleRate: 16000, featureDim: 80 },
+    modelConfig: { numThreads, provider: "cpu", debug: 0, tokens: "" } };
+  switch (id) {
+    case "sensevoice-small":
+      config.modelConfig.senseVoice = { model: at("model.int8.onnx"), language, useInverseTextNormalization: 1 };
+      config.modelConfig.tokens = at("tokens.txt"); break;
+    case "fireredasr2-ctc":
+      config.modelConfig.fireRedAsrCtc = { model: at("model.int8.onnx") };
+      config.modelConfig.tokens = at("tokens.txt"); break;
+    case "fun-asr-nano":
+      config.modelConfig.funasrNano = { encoderAdaptor: at("encoder_adaptor.int8.onnx"),
+        llm: at("llm.int8.onnx"), embedding: at("embedding.int8.onnx"),
+        tokenizer: join(modelsDir, id, "Qwen3-0.6B"),
+        language: ({ zh: "中文", en: "英文", ja: "日文" })[language] ?? "", itn: 1 }; break;
+    case "qwen3-asr-0.6b":
+      config.modelConfig.qwen3Asr = { convFrontend: at("conv_frontend.onnx"),
+        encoder: at("encoder.int8.onnx"), decoder: at("decoder.int8.onnx"),
+        tokenizer: join(modelsDir, id, "tokenizer"), hotwords: "" }; break;
+  }
+  return config;
 }

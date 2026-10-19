@@ -107,7 +107,7 @@ struct OnboardingView: View {
                             Button(L10n.text("已安装，重试")) { model.actions?.restartService() }.buttonStyle(SecondaryButtonStyle())
                         }
                     }
-                    OnboardingCheck(done: model.speech?.ready == true, title: L10n.text("语音模型"),
+                    OnboardingCheck(done: model.speech?.ready == true, title: model.speech?.modelName ?? "SenseVoice Small",
                                     detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("已就绪") : AppDelegate.speechProblem(model.speech)) {
                         if model.modelsMissing || model.speech?.phase == "error" {
                             Button(L10n.text("下载")) { model.actions?.downloadModels() }.buttonStyle(PrimaryButtonStyle())

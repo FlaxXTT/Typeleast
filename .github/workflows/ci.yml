@@ -42,6 +42,30 @@ jobs:
       - run: apps/macos/test.sh
       - run: apps/macos/build.sh --no-install
 
+  speech-models:
+    name: Real ASR models (${{ matrix.os }})
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/typeleast-asr-models
+          key: asr-v1-${{ runner.os }}-${{ hashFiles('service/lib/asr-catalog.json', 'service/lib/models.js') }}
+      - name: Download, verify, load and recognize with each model in order
+        run: node scripts/check-asr-models.mjs --download --models-dir "${{ runner.temp }}/typeleast-asr-models" --state-dir "${{ runner.temp }}/typeleast-asr-state"
+
   windows:
     name: Windows app (tests and build)
     runs-on: windows-latest

@@ -36,7 +36,7 @@ enum VoiceStrength: String, CaseIterable {
     case prompt, promptify, off
     var label: String {
         switch self {
-        case .prompt: return L10n.text("Erduo 整理")
+        case .prompt: return L10n.text("自然整理")
         case .promptify: return L10n.text("提示词模式")
         case .off: return L10n.text("原话转写")
         }
@@ -44,7 +44,7 @@ enum VoiceStrength: String, CaseIterable {
 
     var detail: String {
         switch self {
-        case .prompt: return L10n.text("用 Erduo 的提示词：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。")
+        case .prompt: return L10n.text("自然整理：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。")
         case .promptify: return L10n.text("把你说的话改写成一份结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），可以直接发给 AI。角色、语气、格式会自动补全；数字、日期、人名等事实你没说就不写。")
         case .off: return L10n.text("不调用大模型，只在本机去掉口头禅。速度最快。")
         }

@@ -85,6 +85,12 @@ struct SettingsPage: View {
         }
     }
 
+    private var dictationLanguage: Binding<String> {
+        Binding(get: {
+            let saved = Settings.shared.language
+            return model.speech?.languages?.contains(saved) == false || model.speech?.canSetLanguage == false ? "auto" : saved
+        }, set: { model.setting(\.language).wrappedValue = $0 })
+    }
     private var language: some View {
         SettingsSection(title: L10n.text("语言")) {
             SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启应用后生效；不会改变听写或输出语言。")) {
@@ -94,10 +100,11 @@ struct SettingsPage: View {
                     Text("English").tag("en")
                 }.labelsHidden().frame(width: 150)
             }
-            SettingRow(title: L10n.text("听写语言"), detail: L10n.text("自动识别支持中文、英文、粤语、日语、韩语混说")) {
-                Picker("", selection: model.setting(\.language)) {
-                    ForEach(VoiceLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+            SettingRow(title: L10n.text("听写语言"), detail: model.speech?.canSetLanguage == false ? L10n.text("当前模型自动检测语言，不能强制指定。") : L10n.text("可选择当前模型支持的语言；不支持的语言设置使用自动识别。")) {
+                Picker("", selection: dictationLanguage) {
+                    ForEach(VoiceLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue).disabled(model.speech?.languages?.contains($0.rawValue) == false) }
                 }
+                .disabled(model.speech?.canSetLanguage == false)
                 .labelsHidden()
                 .frame(width: 150)
             }
@@ -207,15 +214,7 @@ struct SettingsPage: View {
                     Button(L10n.text("重新启动")) { model.actions?.restartService() }.buttonStyle(SecondaryButtonStyle())
                 }
             }
-            SettingRow(title: L10n.text("语音模型（SenseVoice）"), detail: speechDetail) {
-                if model.modelsMissing || model.speech?.phase == "error" {
-                    Button(L10n.text("下载（约 241 MB）")) { model.actions?.downloadModels() }.buttonStyle(PrimaryButtonStyle())
-                } else if let fraction = model.speech?.downloadFraction {
-                    ProgressView(value: fraction).frame(width: 160)
-                } else {
-                    Button(L10n.text("重新检查")) { model.actions?.recheckHealth() }.buttonStyle(SecondaryButtonStyle())
-                }
-            }
+            SpeechModelOptions()
             SettingRow(title: L10n.text("模型下载镜像（可选）"),
                        detail: L10n.text("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。")) {
                 TextField("https://huggingface.co", text: model.setting(\.modelMirror))

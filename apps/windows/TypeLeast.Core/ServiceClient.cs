@@ -245,6 +245,20 @@ public sealed class ServiceClient
             return true;
         });
 
+    public Task<SpeechModelCatalog> GetSpeechModelsAsync(CancellationToken ct = default) => WithPortRetry(async () => {
+        var (status, body) = await SendAsync(HttpMethod.Get, "/models", null, null, ShortTimeout, ct).ConfigureAwait(false);
+        if (status != HttpStatusCode.OK) throw HttpError(status, body);
+        return Decode<SpeechModelCatalog>(body);
+    });
+    public Task<bool> SpeechModelActionAsync(string id, bool download = false, bool cancel = false, string endpoint = "", CancellationToken ct = default) => WithPortRetry(async () => {
+        var path = cancel ? "/models/download/cancel" : download ? "/models/download" : "/models/active";
+        var json = JsonSerializer.Serialize(new { modelId = id, activate = true, endpoint });
+        var (status, body) = await SendAsync(download || cancel ? HttpMethod.Post : HttpMethod.Put, path,
+            new StringContent(json, Encoding.UTF8, "application/json"), null, ShortTimeout, ct).ConfigureAwait(false);
+        if (status != HttpStatusCode.Accepted) throw HttpError(status, body);
+        return true;
+    });
+
     public Task<PromptifySettings> GetPromptifyAsync(CancellationToken ct = default) =>
         WithPortRetry(async () =>
         {
