@@ -8,7 +8,7 @@ extension AppDelegate {
     /// `interactive`: the user asked, so say "already up to date" and show errors.
     /// The quiet launch check only changes the menu item when there is a newer version.
     func checkForUpdates(interactive: Bool) {
-        if interactive { setHint("正在检查更新…") }
+        if interactive { setHint(L10n.text("正在检查更新…")) }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try Updater.latestVersion() }
             DispatchQueue.main.async {
@@ -20,9 +20,9 @@ extension AppDelegate {
                     if interactive { self.offerUpdate(to: latest) }
                 case .success:
                     self.menuController.setUpdateAvailable(nil)
-                    if interactive { self.updateAlert("已经是最新版本", "当前版本 " + Updater.currentVersion + "。") }
+                    if interactive { self.updateAlert(L10n.text("已经是最新版本"), L10n.text("当前版本 ") + Updater.currentVersion + "。") }
                 case .failure(let error):
-                    if interactive { self.updateAlert("检查更新失败", error.localizedDescription) }
+                    if interactive { self.updateAlert(L10n.text("检查更新失败"), error.localizedDescription) }
                 }
             }
         }
@@ -31,20 +31,20 @@ extension AppDelegate {
     func offerUpdate(to version: String) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "有新版本 " + version
-        alert.informativeText = "当前版本 " + Updater.currentVersion + "。更新会下载新版本、核对校验值、用本机证书签名，然后自动重启 TypeLeast。权限不需要重新授予。"
-        alert.addButton(withTitle: "立即更新")
-        alert.addButton(withTitle: "以后")
+        alert.messageText = L10n.text("有新版本 ") + version
+        alert.informativeText = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新会下载新版本、核对校验值、用本机证书签名，然后自动重启 TypeLeast。权限不需要重新授予。")
+        alert.addButton(withTitle: L10n.text("立即更新"))
+        alert.addButton(withTitle: L10n.text("以后"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         installUpdate(version)
     }
 
     func installUpdate(_ version: String) {
         guard phase == .idle else {
-            updateAlert("正在听写", "听写结束后再更新。")
+            updateAlert(L10n.text("正在听写"), L10n.text("听写结束后再更新。"))
             return
         }
-        setHint("正在下载更新 " + version + "…")
+        setHint(L10n.text("正在下载更新 ") + version + "…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try Updater.prepare(version: version) }
             DispatchQueue.main.async {
@@ -54,16 +54,16 @@ extension AppDelegate {
                     do {
                         try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
                                                      newApp: ready.app, installed: Bundle.main.bundleURL, work: ready.work)
-                        self.setHint("正在安装更新，TypeLeast 会自动重新打开…")
+                        self.setHint(L10n.text("正在安装更新，TypeLeast 会自动重新打开…"))
                         self.recorder.cancel()
                         NSApp.terminate(nil)
                     } catch {
                         self.setHint(nil)
-                        self.updateAlert("更新失败", error.localizedDescription)
+                        self.updateAlert(L10n.text("更新失败"), error.localizedDescription)
                     }
                 case .failure(let error):
                     self.setHint(nil)
-                    self.updateAlert("更新失败", error.localizedDescription)
+                    self.updateAlert(L10n.text("更新失败"), error.localizedDescription)
                 }
             }
         }

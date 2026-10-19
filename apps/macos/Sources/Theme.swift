@@ -157,7 +157,7 @@ struct Badge: View {
 /// Search box with a magnifier, as on the History and Dictionary pages.
 struct SearchField: View {
     @Binding var text: String
-    var placeholder = "搜索"
+    var placeholder = L10n.text("搜索")
 
     var body: some View {
         HStack(spacing: 6) {

@@ -67,32 +67,32 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(statusLine)
         menu.addItem(.separator())
 
-        toggleItem = item("开始听写", #selector(onToggle))
+        toggleItem = item(L10n.text("开始听写"), #selector(onToggle))
         menu.addItem(toggleItem)
-        cancelItem = item("取消听写", #selector(onCancel))
+        cancelItem = item(L10n.text("取消听写"), #selector(onCancel))
         menu.addItem(cancelItem)
-        pasteItem = item("粘贴上一条转写", #selector(onPasteLast))
+        pasteItem = item(L10n.text("粘贴上一条转写"), #selector(onPasteLast))
         menu.addItem(pasteItem)
 
         hintItem = item("", nil)
         hintItem.isEnabled = false
         menu.addItem(hintItem)
-        axItem = item("需要辅助功能权限才能自动粘贴 · 点此授权", #selector(onAccessibility))
+        axItem = item(L10n.text("需要辅助功能权限才能自动粘贴 · 点此授权"), #selector(onAccessibility))
         menu.addItem(axItem)
-        launchItem = item("重新启动本地服务", #selector(onLaunch))
+        launchItem = item(L10n.text("重新启动本地服务"), #selector(onLaunch))
         menu.addItem(launchItem)
 
         menu.addItem(.separator())
-        menu.addItem(item("打开 TypeLeast", #selector(onOpenHome)))
-        menu.addItem(item("历史…", #selector(onOpenHistory)))
-        menu.addItem(item("词典…", #selector(onOpenDictionary)))
-        let settings = item("设置…", #selector(onOpenSettings))
+        menu.addItem(item(L10n.text("打开 TypeLeast"), #selector(onOpenHome)))
+        menu.addItem(item(L10n.text("历史…"), #selector(onOpenHistory)))
+        menu.addItem(item(L10n.text("词典…"), #selector(onOpenDictionary)))
+        let settings = item(L10n.text("设置…"), #selector(onOpenSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)
-        updateItem = item("检查更新…", #selector(onCheckForUpdates))
+        updateItem = item(L10n.text("检查更新…"), #selector(onCheckForUpdates))
         menu.addItem(updateItem)
         menu.addItem(.separator())
-        let quit = item("退出 TypeLeast", #selector(onQuit))
+        let quit = item(L10n.text("退出 TypeLeast"), #selector(onQuit))
         quit.keyEquivalent = "q"
         menu.addItem(quit)
     }
@@ -100,22 +100,22 @@ final class MenuController: NSObject, NSMenuDelegate {
     func apply(_ s: MenuState) {
         switch s.phase {
         case .idle:
-            statusLine.title = s.serviceUp ? "就绪 · 按 " + s.hotkeySummary + " 听写" : "本地服务未就绪"
-            toggleItem.title = "开始听写"
+            statusLine.title = s.serviceUp ? L10n.text("就绪 · 按 ") + s.hotkeySummary + L10n.text(" 听写") : L10n.text("本地服务未就绪")
+            toggleItem.title = L10n.text("开始听写")
             setIcon("waveform")
         case .recording:
-            statusLine.title = "正在听 " + format(s.elapsed)
-            toggleItem.title = "结束听写"
+            statusLine.title = L10n.text("正在听 ") + format(s.elapsed)
+            toggleItem.title = L10n.text("结束听写")
             setIcon("waveform.circle.fill")
         case .thinking:
-            statusLine.title = "整理中…"
-            toggleItem.title = "整理中…"
+            statusLine.title = L10n.text("整理中…")
+            toggleItem.title = L10n.text("整理中…")
             setIcon("ellipsis.circle")
         }
         toggleItem.keyEquivalent = ""
         toggleItem.isEnabled = s.phase != .thinking
         cancelItem.isHidden = s.phase != .recording
-        pasteItem.title = "粘贴上一条转写" + (s.pasteLastSummary.isEmpty ? "" : "  " + s.pasteLastSummary)
+        pasteItem.title = L10n.text("粘贴上一条转写") + (s.pasteLastSummary.isEmpty ? "" : "  " + s.pasteLastSummary)
         pasteItem.isEnabled = s.hasLast && s.phase == .idle
         if let hint = s.hint, !hint.isEmpty {
             hintItem.title = (s.hintWarning ? "⚠︎ " : "") + shorten(hint, 52)
@@ -130,7 +130,7 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     /// A newer version was found: say so on the menu item (nil: back to "检查更新…").
     func setUpdateAvailable(_ version: String?) {
-        updateItem.title = version.map { "有新版本 " + $0 + " · 点此更新" } ?? "检查更新…"
+        updateItem.title = version.map { L10n.text("有新版本 ") + $0 + L10n.text(" · 点此更新") } ?? L10n.text("检查更新…")
     }
 
     private func setIcon(_ symbol: String) {

@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows;
+using TypeLeast.Core;
 
 namespace TypeLeast;
 
@@ -27,6 +28,7 @@ internal static class Paster
         try { if (Clipboard.ContainsText()) previous = Clipboard.GetText(); } catch (Exception) { }
         if (!SetText(text)) return Outcome.CopiedOnly;
         await Task.Delay(30);
+        if (!PasteTarget.Matches(expectedWindow, Native.GetForegroundWindow())) return Outcome.CopiedOnly;
         Native.SendKeys((Native.VK_CONTROL, false), (Native.VK_V, false), (Native.VK_V, true), (Native.VK_CONTROL, true));
         if (restoreClipboard && previous is not null)
         {

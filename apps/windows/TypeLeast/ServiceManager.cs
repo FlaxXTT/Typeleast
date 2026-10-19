@@ -102,13 +102,13 @@ internal sealed class ServiceManager
         var serviceDir = ServiceLocator.ServiceDirectory(appDir, env, File.Exists);
         if (serviceDir is null)
         {
-            Set(Phase.NoService, "TypeLeast 安装目录里缺少本地服务文件，请重新安装");
+            Set(Phase.NoService, L10n.T("TypeLeast 安装目录里缺少本地服务文件，请重新安装"));
             return;
         }
         if (NodePath is null) FindNode(appDir, env);
         if (NodePath is null || !ServiceLocator.IsSupported(NodeVersion))
         {
-            Set(Phase.NoNode, NodeVersion is null ? "没有找到 Node.js（需要 22 或更新）" : "Node.js 版本过低：" + NodeVersion + "，需要 22 或更新");
+            Set(Phase.NoNode, NodeVersion is null ? L10n.T("没有找到 Node.js（需要 22 或更新）") : L10n.T("Node.js 版本过低：") + NodeVersion + L10n.T("，需要 22 或更新"));
             NodePath = null;
             return;
         }
@@ -158,7 +158,7 @@ internal sealed class ServiceManager
         }
         catch (Exception e)
         {
-            Set(Phase.Failed, "无法启动 Node.js：" + e.Message);
+            Set(Phase.Failed, L10n.T("无法启动 Node.js：") + e.Message);
         }
     }
 
@@ -177,8 +177,8 @@ internal sealed class ServiceManager
         if (ServiceLocator.RestartDelay(restartAttempts) is not { } delay)
         {
             string last;
-            lock (RecentLog) last = RecentLog.LastOrDefault() ?? "退出码 " + code;
-            Set(Phase.Failed, "本地服务反复退出：" + last);
+            lock (RecentLog) last = RecentLog.LastOrDefault() ?? L10n.T("退出码 ") + code;
+            Set(Phase.Failed, L10n.T("本地服务反复退出：") + last);
             return;
         }
         Set(Phase.Starting);

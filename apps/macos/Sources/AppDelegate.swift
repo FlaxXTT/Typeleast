@@ -253,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             if FnTapGate.shouldStart(sourceAtPress: sourceAtPress, sourceAfter: InputSourceProbe.currentID()) {
                 self.hotkeyPressed()
             } else {
-                self.setHint("按 🌐 切换了输入法，没有开始听写（可在系统设置里把「按下 🌐 键时」改为「无操作」）")
+                self.setHint(L10n.text("按 🌐 切换了输入法，没有开始听写（可在系统设置里把「按下 🌐 键时」改为「无操作」）"))
                 self.applyState()
             }
         }
@@ -290,7 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func updateIdleBar() {
-        idleBar.hint = "按 " + model.hotkeyLabel + " 开始听写"
+        idleBar.hint = L10n.text("按 ") + model.hotkeyLabel + L10n.text(" 开始听写")
         if settings.showIdleBar && phase == .idle && !recordingBar.isVisible {
             idleBar.show()
         } else {
@@ -316,7 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let trusted = AXIsProcessTrusted()
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
-            if trusted, let h = hint, h.contains("辅助功能") { setHint("辅助功能已授权，可以自动粘贴了") }
+            if trusted, let h = hint, h.contains(L10n.text("辅助功能")) { setHint(L10n.text("辅助功能已授权，可以自动粘贴了")) }
             applyState()
         }
     }
@@ -356,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                     self.serviceUp = h.ok
                     self.model.health = h
                     self.model.serviceProblem = AppDelegate.speechProblem(h.speech)
-                    if h.ok, let hint = self.hint, hint.contains("语音模型") { self.setHint(nil) }
+                    if h.ok, let hint = self.hint, hint.contains(L10n.text("语音模型")) { self.setHint(nil) }
                     if self.dictionaryNeedsSync { self.syncDictionary() }
                     self.applyState()
                     // While the model loads or downloads, follow its progress.
@@ -387,12 +387,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     static func speechProblem(_ speech: SpeechStatus?) -> String {
         switch speech?.phase ?? "" {
         case "ready": return ""
-        case "missing-model": return "语音模型还没下载（约 241 MB，只需一次）"
+        case "missing-model": return L10n.text("语音模型还没下载（约 241 MB，只需一次）")
         case "downloading":
-            return "正在下载语音模型" + (speech?.downloadFraction.map { "：" + String(Int($0 * 100)) + "%" } ?? "…")
-        case "loading": return "语音模型加载中…"
-        case "error": return "语音模型出错：" + (speech?.error ?? "未知原因")
-        default: return "语音识别还在准备"
+            return L10n.text("正在下载语音模型") + (speech?.downloadFraction.map { "：" + String(Int($0 * 100)) + "%" } ?? "…")
+        case "loading": return L10n.text("语音模型加载中…")
+        case "error": return L10n.text("语音模型出错：") + (speech?.error ?? L10n.text("未知原因"))
+        default: return L10n.text("语音识别还在准备")
         }
     }
 
@@ -417,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         manager.nodePathOverride = settings.nodePath
         manager.modelMirror = settings.modelMirror
         serviceUp = false
-        setHint("正在重新启动本地服务…")
+        setHint(L10n.text("正在重新启动本地服务…"))
         manager.restart()
         applyState()
     }
@@ -432,7 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             } catch {
                 let desc = (error as? ServiceError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    self.setHint("无法开始下载：" + desc, warning: true)
+                    self.setHint(L10n.text("无法开始下载：") + desc, warning: true)
                     self.applyState()
                 }
             }
@@ -442,7 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// Let the user point at a Node.js binary (for unusual installs).
     func chooseNode() {
         let panel = NSOpenPanel()
-        panel.title = "选择 Node.js（node 可执行文件）"
+        panel.title = L10n.text("选择 Node.js（node 可执行文件）")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -489,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func learned(_ word: String) {
         guard settings.autoLearn, settings.addWord(word, source: .auto) else { return }
-        setHint("已把「" + word + "」加入词典")
+        setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
         syncDictionary()
         applyState()
     }
@@ -505,7 +505,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func retryEntry(id: String) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }),
               let path = e.audioPath, FileManager.default.fileExists(atPath: path) else {
-            setHint("原始录音已不存在（24 小时后自动清理）", warning: true)
+            setHint(L10n.text("原始录音已不存在（24 小时后自动清理）"), warning: true)
             applyState()
             return
         }
@@ -529,11 +529,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let trusted = Inserter.requestAccessibilityPrompt()
         model.accessibilityTrusted = trusted
         if trusted {
-            setHint("辅助功能已授权，可以自动粘贴了")
+            setHint(L10n.text("辅助功能已授权，可以自动粘贴了"))
             FnKeyMonitor.shared.stop()
             registerHotKeys()
         } else {
-            setHint(reset ? "请在「辅助功能」里打开 TypeLeast 的开关" : "请手动在「辅助功能」里打开 TypeLeast", warning: true)
+            setHint(reset ? L10n.text("请在「辅助功能」里打开 TypeLeast 的开关") : L10n.text("请手动在「辅助功能」里打开 TypeLeast"), warning: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { Inserter.openAccessibilitySettings() }
         }
         applyState()

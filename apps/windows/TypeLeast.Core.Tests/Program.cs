@@ -9,6 +9,7 @@ using TypeLeast.Core;
 
 var passed = 0;
 var failed = 0;
+L10n.Configure("zh-Hans");
 
 void Check(string name, bool ok, string detail = "")
 {
@@ -248,6 +249,28 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
 }
 
 Console.WriteLine();
+{
+    Eq("invalid UI preference follows system", L10n.Normalize("bad"), "system");
+    Eq("Chinese system uses Simplified Chinese", L10n.Resolve("system", "zh-TW"), "zh-Hans");
+    Eq("other systems use English", L10n.Resolve(null, "ja-JP"), "en");
+    Eq("manual English overrides system", L10n.Resolve("en", "zh-CN"), "en");
+    Eq("manual Chinese overrides system", L10n.Resolve("zh-Hans", "en-US"), "zh-Hans");
+    Eq("translated label", L10n.Render("设置", "en"), "Settings");
+    Eq("content slots remain verbatim", L10n.Render("已听写 {0} 次 · 共 {1} 字 · 说了 {2} 分钟", "en", "用户 {1}", 2, 3), "用户 {1} dictations · 2 characters · 3 minutes of speech");
+    Check("URL credentials rejected", !LlmPreset.IsAllowedBaseUrl("https://someone:fake@api.example.com/v1"));
+    Check("URL query credentials rejected", !LlmPreset.IsAllowedBaseUrl("https://api.example.com/v1?key=fake"));
+    Check("no paste after focus change", !PasteTarget.Matches(new IntPtr(1), new IntPtr(2)));
+    Check("same window may receive paste", PasteTarget.Matches(new IntPtr(1), new IntPtr(1)));
+    var path = Path.Combine(Path.GetTempPath(), "typeleast-ui-" + Guid.NewGuid() + ".json");
+    try {
+        new AppSettings { InterfaceLanguage = "en", Language = "ja" }.Save(path);
+        var saved = AppSettings.Load(path);
+        Eq("UI language persists", saved.InterfaceLanguage, "en");
+        Eq("dictation language is independent", saved.Language, "ja");
+        Eq("saving does not switch running UI", L10n.Language, "zh-Hans");
+    } finally { if (File.Exists(path)) File.Delete(path); }
+}
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

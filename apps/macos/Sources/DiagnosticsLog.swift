@@ -20,17 +20,24 @@ enum DiagnosticsLog {
     }()
 
     /// Append one line: `<time> <event> key=value …`. Values are trimmed to one line.
+    static func safeField(_ key: String, _ value: String) -> String {
+        // Exception text and provider metadata can include private URLs, paths or content.
+        guard ["status", "code", "ms", "attempt", "bytes"].contains(key) else { return "[omitted]" }
+        return String(value.filter { $0.isASCII && ($0.isNumber || $0.isLetter || "-_.".contains($0)) }.prefix(64))
+    }
+
     static func write(_ event: String, _ fields: KeyValuePairs<String, String> = [:]) {
         let time = formatter.string(from: Date())
         var line = time + " " + event
         for (key, value) in fields {
-            let flat = value.replacingOccurrences(of: "\n", with: " ").prefix(300)
+            let flat = safeField(key, value)
             line += " " + key + "=" + String(flat)
         }
         line += "\n"
         queue.async {
             let fm = FileManager.default
             try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
             if let size = (try? fm.attributesOfItem(atPath: file.path)[.size]) as? Int, size > maxBytes {
                 let old = directory.appendingPathComponent("typeleast.log.1")
                 try? fm.removeItem(at: old)
@@ -43,6 +50,7 @@ enum DiagnosticsLog {
             } else {
                 try? Data(line.utf8).write(to: file)
             }
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         }
     }
 }

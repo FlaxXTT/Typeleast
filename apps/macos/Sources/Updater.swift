@@ -19,13 +19,13 @@ enum UpdateError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noGitHubCLI: return "没有找到 GitHub 命令行工具 gh。用 Homebrew 安装（brew install gh）并运行 gh auth login 登录后再试。"
-        case .gh(let detail): return "从 GitHub 获取更新失败：" + detail + "\n如果还没登录，在终端运行 gh auth login。"
-        case .checksum: return "下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。"
-        case .badBundle(let detail): return "下载的安装包不对：" + detail
-        case .noSigningCertificate: return "这台 Mac 上没有「" + Updater.signingIdentity + "」签名证书。在源码目录运行 apps/macos/make-signing-cert.sh 生成后再试。"
-        case .sign(let detail): return "用本机证书签名失败：" + detail
-        case .requirementChanged: return "新版本签好名后和当前版本的签名要求不一致，装上会丢失权限，已放弃更新。"
+        case .noGitHubCLI: return L10n.text("没有找到 GitHub 命令行工具 gh。用 Homebrew 安装（brew install gh）并运行 gh auth login 登录后再试。")
+        case .gh(let detail): return L10n.text("从 GitHub 获取更新失败：") + detail + L10n.text("\n如果还没登录，在终端运行 gh auth login。")
+        case .checksum: return L10n.text("下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。")
+        case .badBundle(let detail): return L10n.text("下载的安装包不对：") + detail
+        case .noSigningCertificate: return L10n.text("这台 Mac 上没有「") + Updater.signingIdentity + L10n.text("」签名证书。在源码目录运行 apps/macos/make-signing-cert.sh 生成后再试。")
+        case .sign(let detail): return L10n.text("用本机证书签名失败：") + detail
+        case .requirementChanged: return L10n.text("新版本签好名后和当前版本的签名要求不一致，装上会丢失权限，已放弃更新。")
         }
     }
 }
@@ -152,12 +152,12 @@ enum Updater {
 
             let unpacked = work.appendingPathComponent("unpacked")
             guard run("/usr/bin/ditto", ["-x", "-k", zip.path, unpacked.path]).status == 0 else {
-                throw UpdateError.badBundle("无法解压")
+                throw UpdateError.badBundle(L10n.text("无法解压"))
             }
             let app = unpacked.appendingPathComponent("TypeLeast.app")
             let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
-            guard info?["CFBundleIdentifier"] as? String == bundleID else { throw UpdateError.badBundle("不是 TypeLeast") }
-            guard info?["CFBundleShortVersionString"] as? String == version else { throw UpdateError.badBundle("版本号不是 " + version) }
+            guard info?["CFBundleIdentifier"] as? String == bundleID else { throw UpdateError.badBundle(L10n.text("不是 TypeLeast")) }
+            guard info?["CFBundleShortVersionString"] as? String == version else { throw UpdateError.badBundle(L10n.text("版本号不是 ") + version) }
 
             // Not --deep: the bundled Node.js keeps the signature nodejs.org gave it (as in build.sh / package.sh).
             let sign = run("/usr/bin/codesign", ["--force", "--sign", signingIdentity, "--timestamp=none", app.path])

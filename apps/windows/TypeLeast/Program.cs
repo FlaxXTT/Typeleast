@@ -34,7 +34,7 @@ internal static class Program
         var host = new AppHost(app);
         app.DispatcherUnhandledException += (_, e) =>
         {
-            Log.Write("ui.error", e.Exception.GetType().Name + ": " + e.Exception.Message);
+            Log.Write("ui.error", e.Exception.GetType().Name);
             e.Handled = true;
         };
         app.Startup += (_, _) =>

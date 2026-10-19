@@ -146,6 +146,8 @@ internal static class Theme
     public static Grid SettingRow(string title, TextBlock? detail, UIElement? trailing)
     {
         var grid = new Grid { Margin = new Thickness(0, 6, 0, 6) };
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var left = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
@@ -160,6 +162,16 @@ internal static class Theme
         {
             Grid.SetColumn(trailing, 1);
             grid.Children.Add(trailing);
+            grid.SizeChanged += (_, _) => {
+                var stack = grid.ActualWidth < trailing.DesiredSize.Width + 200;
+                Grid.SetColumn(trailing, stack ? 0 : 1);
+                Grid.SetRow(trailing, stack ? 1 : 0);
+                grid.ColumnDefinitions[1].Width = stack ? new GridLength(0) : GridLength.Auto;
+                if (trailing is FrameworkElement element) {
+                    element.HorizontalAlignment = stack ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+                    element.Margin = stack ? new Thickness(0, 6, 0, 0) : new Thickness(0);
+                }
+            };
         }
         return grid;
     }

@@ -46,6 +46,7 @@ internal sealed class AppHost
         this.app = app;
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
+        L10n.Configure(Settings.InterfaceLanguage);
         History = new LocalHistory(AppPaths.AppHistoryFile());
         Service = new ServiceManager(Client) { NodePathOverride = Settings.NodePath, ModelMirror = Settings.ModelMirror };
         hook = new KeyboardHook(Settings.Hotkey);
@@ -62,17 +63,17 @@ internal sealed class AppHost
     {
         get
         {
-            if (!LlmConfigured) return "整理模型未设置（只去口水词，不改写）";
+            if (!LlmConfigured) return L10n.T("整理模型未设置（只去口水词，不改写）");
             var preset = Settings.Preset;
-            return preset.Name + " · " + Settings.LlmModel + (preset.Id == "ollama" ? "（本机）" : "（自己的 Key）");
+            return preset.Name + " · " + Settings.LlmModel + (preset.Id == "ollama" ? L10n.T("（本机）") : L10n.T("（自己的 Key）"));
         }
     }
 
     public string ServiceSummary => Service.State switch
     {
-        ServiceManager.Phase.Running => ServiceUp ? "本地服务已就绪" : (Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : "本地服务运行中"),
-        ServiceManager.Phase.Starting => "本地服务启动中…",
-        ServiceManager.Phase.Stopped => "本地服务未启动",
+        ServiceManager.Phase.Running => ServiceUp ? L10n.T("本地服务已就绪") : (Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务运行中")),
+        ServiceManager.Phase.Starting => L10n.T("本地服务启动中…"),
+        ServiceManager.Phase.Stopped => L10n.T("本地服务未启动"),
         _ => Service.Detail,
     };
 
@@ -90,7 +91,7 @@ internal sealed class AppHost
 
         hook.Tapped += () => app.Dispatcher.InvokeAsync(Toggle);
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
-        if (!hook.Install()) Hint = "无法注册快捷键，可以用托盘菜单开始听写";
+        if (!hook.Install()) Hint = L10n.T("无法注册快捷键，可以用托盘菜单开始听写");
         recorder.LimitReached += () => app.Dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
 
         tray = new Tray(this);
@@ -124,7 +125,7 @@ internal sealed class AppHost
     public void SaveSettings()
     {
         try { Settings.Save(settingsPath); }
-        catch (Exception e) { Log.Write("settings.save.fail", e.Message); }
+        catch (Exception e) { Log.Write("settings.save.fail", e.GetType().Name); }
         hook.SetKey(Settings.Hotkey);
         Service.NodePathOverride = Settings.NodePath;
         Service.ModelMirror = Settings.ModelMirror;
@@ -159,7 +160,7 @@ internal sealed class AppHost
         Service.NodePathOverride = Settings.NodePath;
         Service.ModelMirror = Settings.ModelMirror;
         Service.Restart();
-        SetHint("正在重新启动本地服务…");
+        SetHint(L10n.T("正在重新启动本地服务…"));
     }
 
     public async Task DownloadModels()
@@ -171,7 +172,7 @@ internal sealed class AppHost
         }
         catch (ServiceException e)
         {
-            SetHint("无法开始下载：" + e.Message);
+            SetHint(L10n.T("无法开始下载：") + e.Message);
         }
     }
 
@@ -223,7 +224,7 @@ internal sealed class AppHost
     {
         if (!ServiceUp)
         {
-            bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : "本地服务还没就绪", warning: true);
+            bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务还没就绪"), warning: true);
             return;
         }
         targetWindow = Native.GetForegroundWindow();
@@ -234,8 +235,8 @@ internal sealed class AppHost
         }
         catch (InvalidOperationException e)
         {
-            Log.Write("mic.fail", e.Message);
-            bar.ShowResult("无法打开麦克风：请在 设置 → 隐私和安全性 → 麦克风 中允许桌面应用访问麦克风", warning: true);
+            Log.Write("mic.fail", e.GetType().Name);
+            bar.ShowResult(L10n.T("无法打开麦克风：请在 设置 → 隐私和安全性 → 麦克风 中允许桌面应用访问麦克风"), warning: true);
             return;
         }
         Phase = DictationPhase.Recording;
@@ -250,7 +251,7 @@ internal sealed class AppHost
         recorder.Cancel();
         hook.SwallowEscape = false;
         Phase = DictationPhase.Idle;
-        bar.ShowResult("已取消", warning: false);
+        bar.ShowResult(L10n.T("已取消"), warning: false);
         Raise();
     }
 
@@ -261,7 +262,7 @@ internal sealed class AppHost
         if (seconds < 0.3)
         {
             Phase = DictationPhase.Idle;
-            bar.ShowResult("录音太短", warning: true);
+            bar.ShowResult(L10n.T("录音太短"), warning: true);
             Raise();
             return;
         }
@@ -274,7 +275,7 @@ internal sealed class AppHost
             var text = result.InsertableText.Trim();
             if (text.Length == 0)
             {
-                bar.ShowResult("没有听到内容", warning: true);
+                bar.ShowResult(L10n.T("没有听到内容"), warning: true);
             }
             else
             {
@@ -290,14 +291,14 @@ internal sealed class AppHost
                     Inserted = outcome == Paster.Outcome.Pasted,
                 });
                 var note = Messages.FallbackNote(result.FallbackReason);
-                var done = outcome == Paster.Outcome.Pasted ? "已粘贴" : "窗口已切换，已复制到剪贴板";
+                var done = outcome == Paster.Outcome.Pasted ? L10n.T("已粘贴") : L10n.T("窗口已切换，已复制到剪贴板");
                 bar.ShowResult(note is null ? done : done + " · " + note, warning: note is not null);
             }
         }
         catch (ServiceException e)
         {
             Log.Write("dictate.fail", (e.Code ?? e.Kind.ToString()) + " " + e.Status);
-            bar.ShowResult(e.Code == "speech-not-ready" ? Messages.SpeechProblem(Speech) : "听写失败：" + (e.ServiceUnavailable ? "本地服务未就绪" : e.Message), warning: true);
+            bar.ShowResult(e.Code == "speech-not-ready" ? Messages.SpeechProblem(Speech) : L10n.T("听写失败：") + (e.ServiceUnavailable ? L10n.T("本地服务未就绪") : e.Message), warning: true);
         }
         Phase = DictationPhase.Idle;
         Raise();

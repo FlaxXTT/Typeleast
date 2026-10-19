@@ -1,3 +1,4 @@
+using TypeLeast.Core;
 using System;
 using System.Windows;
 using System.Windows.Controls;
@@ -41,8 +42,8 @@ internal sealed class RecordingBar : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         Focusable = false;
 
-        cancel = RoundButton("✕", "取消（Esc）", () => host.Cancel());
-        stop = RoundButton("■", "结束并整理", () => host.Toggle());
+        cancel = RoundButton("✕", L10n.T("取消（Esc）"), () => host.Cancel());
+        stop = RoundButton("■", L10n.T("结束并整理"), () => host.Toggle());
         wave = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
         for (var i = 0; i < bars.Length; i++)
         {
@@ -132,7 +133,7 @@ internal sealed class RecordingBar : Window
         cancel.Visibility = Visibility.Collapsed;
         stop.Visibility = Visibility.Collapsed;
         wave.Visibility = Visibility.Visible;
-        label.Text = "整理中…";
+        label.Text = L10n.T("整理中…");
         ShowBar();
     }
 
@@ -159,7 +160,7 @@ internal sealed class RecordingBar : Window
             history[^1] = r.Level;
             var elapsed = DateTime.UtcNow - startedAt;
             var left = AudioRecorder.MaxSeconds - elapsed.TotalSeconds;
-            label.Text = left <= 15 ? "还剩 " + Math.Max(0, (int)left) + " 秒" : $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}";
+            label.Text = left <= 15 ? L10n.T("还剩 ") + Math.Max(0, (int)left) + L10n.T(" 秒") : $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}";
         }
         else
         {

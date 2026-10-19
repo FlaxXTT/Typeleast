@@ -80,6 +80,9 @@ cp -R "$SERVICE_SRC/bin" "$SERVICE_SRC/lib" "$SERVICE_SRC/package.json" "$SERVIC
   "$APP/Contents/Resources/service/"
 echo "service: bundled $(du -sh "$APP/Contents/Resources/service" | cut -f1)"
 
+for localization in "$ROOT/Resources/"*.lproj; do
+  if [ -d "$localization" ]; then cp -R "$localization" "$APP/Contents/Resources/"; fi
+done
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"; fi

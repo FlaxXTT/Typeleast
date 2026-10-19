@@ -29,6 +29,7 @@ jobs:
       - run: npm test
       - run: node scripts/check-redaction.mjs
       - run: node scripts/check-facts.mjs
+      - run: node scripts/check-localization.mjs
 
   macos:
     name: macOS app (tests and build)

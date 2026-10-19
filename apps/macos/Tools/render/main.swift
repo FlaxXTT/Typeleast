@@ -7,6 +7,8 @@ import SwiftUI
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1]
     : (NSTemporaryDirectory() as NSString).appendingPathComponent("dsh-voice-render")
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+KeychainStore.stub = [:]
+L10n.language = L10n.resolve(ProcessInfo.processInfo.environment["TYPELEAST_RENDER_LANGUAGE"] ?? "zh-Hans")
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 
@@ -73,7 +75,7 @@ for dark in [false, true] {
     for page in HubPage.allCases {
         model.page = page
         let height: CGFloat = page == .settings ? 1900 : 680
-        snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)), size: NSSize(width: 960, height: height),
+        snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)), size: NSSize(width: ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MINIMUM"] == "1" ? 820 : 960, height: height),
                  name: "hub-" + page.rawValue, dark: dark)
     }
 }

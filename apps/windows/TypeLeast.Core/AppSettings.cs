@@ -21,6 +21,7 @@ public sealed class AppSettings
     public DictationKey Hotkey { get; set; } = DictationKey.RightAlt;
     /// <summary>"prompt" (Erduo cleanup), "promptify" (提示词模式) or "off" (raw transcription).</summary>
     public string Strength { get; set; } = "prompt";
+    public string InterfaceLanguage { get; set; } = "system";
     public string Language { get; set; } = "auto";
     public string LlmPresetId { get; set; } = "deepseek";
     /// <summary>Base URL and model are remembered per preset, so switching back keeps them.</summary>
@@ -71,6 +72,8 @@ public sealed class AppSettings
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();
+                loaded.InterfaceLanguage = L10n.Normalize(loaded.InterfaceLanguage);
+                if (!new[] { "auto", "zh", "en", "yue", "ja", "ko" }.Contains(loaded.Language)) loaded.Language = "auto";
                 return loaded;
             }
         }

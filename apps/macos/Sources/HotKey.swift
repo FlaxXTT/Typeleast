@@ -51,7 +51,7 @@ final class HotKeyCentre {
         installIfNeeded()
         unregister(slot: slot)
         guard binding.enabled else {
-            status[slot] = "已停用"
+            status[slot] = L10n.text("已停用")
             return false
         }
         var ref: EventHotKeyRef?
@@ -61,13 +61,13 @@ final class HotKeyCentre {
         let err = RegisterEventHotKey(binding.keyCode, binding.modifiers, hkID,
                                       GetApplicationEventTarget(), 0, &ref)
         guard err == noErr, let r = ref else {
-            status[slot] = "注册失败 (OSStatus " + String(err) + ")"
+            status[slot] = L10n.text("注册失败 (OSStatus ") + String(err) + ")"
             return false
         }
         refs[slot] = r
         actions[slot] = action
         idToKey[id] = slot
-        status[slot] = "已注册 " + HotKeyCentre.describe(keyCode: binding.keyCode, modifiers: binding.modifiers)
+        status[slot] = L10n.text("已注册 ") + HotKeyCentre.describe(keyCode: binding.keyCode, modifiers: binding.modifiers)
         return true
     }
 

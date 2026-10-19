@@ -9,7 +9,7 @@ import AppKit
 
 private final class IdleBarView: NSView {
     var onClick: (() -> Void)?
-    var hint = "按 fn 开始听写"
+    var hint = L10n.text("按 fn 开始听写")
     private(set) var hovering = false {
         didSet { needsDisplay = true }
     }
@@ -85,7 +85,7 @@ final class IdleBar {
     private var view: IdleBarView?
     private var screenObserver: NSObjectProtocol?
 
-    var hint: String = "按 fn 开始听写" {
+    var hint: String = L10n.text("按 fn 开始听写") {
         didSet { view?.hint = hint; view?.needsDisplay = true }
     }
 

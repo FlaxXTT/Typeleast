@@ -1,3 +1,4 @@
+using TypeLeast.Core;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -17,19 +18,19 @@ internal sealed class Tray : IDisposable
     {
         this.host = host;
         status = new ToolStripMenuItem("TypeLeast") { Enabled = false };
-        toggle = new ToolStripMenuItem("开始听写", null, (_, _) => host.Toggle());
+        toggle = new ToolStripMenuItem(L10n.T("开始听写"), null, (_, _) => host.Toggle());
         var menu = new ContextMenuStrip();
         menu.Items.Add(status);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(toggle);
-        menu.Items.Add(new ToolStripMenuItem("复制上一条", null, (_, _) => host.CopyLast()));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("复制上一条"), null, (_, _) => host.CopyLast()));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("打开 TypeLeast", null, (_, _) => host.ShowWindow(MainWindow.Page.Home)));
-        menu.Items.Add(new ToolStripMenuItem("历史", null, (_, _) => host.ShowWindow(MainWindow.Page.History)));
-        menu.Items.Add(new ToolStripMenuItem("设置", null, (_, _) => host.ShowWindow(MainWindow.Page.Settings)));
-        menu.Items.Add(new ToolStripMenuItem("重新启动本地服务", null, (_, _) => host.RestartService()));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("打开 TypeLeast"), null, (_, _) => host.ShowWindow(MainWindow.Page.Home)));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("历史"), null, (_, _) => host.ShowWindow(MainWindow.Page.History)));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("设置"), null, (_, _) => host.ShowWindow(MainWindow.Page.Settings)));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("重新启动本地服务"), null, (_, _) => host.RestartService()));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("退出 TypeLeast", null, (_, _) => host.Quit()));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("退出 TypeLeast"), null, (_, _) => host.Quit()));
         menu.Opening += (_, _) => Update();
 
         icon = new NotifyIcon
@@ -56,10 +57,10 @@ internal sealed class Tray : IDisposable
 
     private void Update()
     {
-        status.Text = host.ServiceUp ? "就绪 · 按 " + host.HotkeyLabel + " 听写" : host.ServiceSummary;
-        toggle.Text = host.Phase == AppHost.DictationPhase.Recording ? "结束听写" : "开始听写";
+        status.Text = host.ServiceUp ? L10n.T("就绪 · 按 ") + host.HotkeyLabel + L10n.T(" 听写") : host.ServiceSummary;
+        toggle.Text = host.Phase == AppHost.DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("开始听写");
         toggle.Enabled = host.Phase != AppHost.DictationPhase.Thinking;
-        var tip = "TypeLeast · " + (host.ServiceUp ? "就绪" : "未就绪");
+        var tip = "TypeLeast · " + (host.ServiceUp ? L10n.T("就绪") : L10n.T("未就绪"));
         icon.Text = tip.Length > 63 ? tip[..63] : tip;
     }
 

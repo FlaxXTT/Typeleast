@@ -3,6 +3,8 @@ import Darwin
 import AVFoundation
 import AppKit
 
+KeychainStore.stub = [:]
+L10n.language = "zh-Hans"
 setbuf(stdout, nil)
 
 // main.swift (Tests) - unit/acceptance proofs for ServiceClient against the local service's contract.
@@ -821,6 +823,26 @@ do {
     checkEq("gh in the user's ~/.local/bin is found", Updater.findGH(home: "/Users/someone", exists: { $0 == "/Users/someone/.local/bin/gh" }, shellLookup: { nil }), "/Users/someone/.local/bin/gh")
     checkEq("otherwise the login shell is asked", Updater.findGH(home: "/Users/someone", exists: { $0 == "/opt/tools/gh" }, shellLookup: { "/opt/tools/gh" }), "/opt/tools/gh")
     checkEq("no gh, no update source", Updater.findGH(home: "/Users/someone", exists: { _ in false }, shellLookup: { nil }), nil)
+}
+
+// UI language and privacy regressions.
+do {
+    checkEq("invalid UI preference follows system", L10n.normalized("bad"), "system")
+    checkEq("Chinese system uses Simplified Chinese", L10n.resolve("system", preferred: ["zh-Hant-TW"]), "zh-Hans")
+    checkEq("other systems use English", L10n.resolve(nil, preferred: ["ja-JP"]), "en")
+    checkEq("manual English overrides system", L10n.resolve("en", preferred: ["zh-CN"]), "en")
+    checkEq("manual Chinese overrides system", L10n.resolve("zh-Hans", preferred: ["en-US"]), "zh-Hans")
+    checkEq("translated label", L10n.render("设置", arguments: [], language: "en"), "Settings")
+    checkEq("content slots are not translated or expanded", L10n.render("常被识别成「{0}」", arguments: ["用户 {1}"], language: "en"), "Often recognized as “用户 {1}”")
+    let previous = Settings.shared.interfaceLanguage
+    Settings.shared.interfaceLanguage = "en"
+    checkEq("language preference persists", UserDefaults.standard.string(forKey: L10n.preferenceKey), "en")
+    checkEq("saving does not switch the running UI", L10n.language, "zh-Hans")
+    Settings.shared.interfaceLanguage = previous
+    check("URL credentials rejected", !LLMPreset.isAllowedBaseURL("https://someone:fake@api.example.com/v1"))
+    check("URL query credentials rejected", !LLMPreset.isAllowedBaseURL("https://api.example.com/v1?key=fake"))
+    checkEq("diagnostics omit raw error text", DiagnosticsLog.safeField("error", "fake-private-content"), "[omitted]")
+    checkEq("diagnostics keep status", DiagnosticsLog.safeField("status", "-25293"), "-25293")
 }
 
 server.stop()
