@@ -48,6 +48,8 @@ export async function startService(options = {}) {
 
   const history = new History({ filePath: join(stateDir, "history.jsonl"), retentionDays: config.historyDays });
   await history.load();
+  // Older versions kept the words here in plain text; digests are enough.
+  if (config.logRaw !== true) await history.scrubText();
   const recognizer = options.recognizer ?? new SpeechModels({ modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads, language: config.language, logger });
   const service = new VoicePolishService({
     recognizer,

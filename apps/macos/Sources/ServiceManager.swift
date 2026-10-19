@@ -71,13 +71,27 @@ enum ServiceLocator {
         return exists(path) ? path : nil
     }
 
-    /// The bundled service, or (for development) TYPELEAST_SERVICE_DIR.
+    /// The bundled service. TYPELEAST_SERVICE_DIR (development) is used only when the
+    /// app carries no service of its own, so an environment variable can never swap
+    /// the code an installed app runs.
     static func serviceDirectory(resources: String?, environment: [String: String],
                                  exists: (String) -> Bool) -> String? {
         var candidates: [String] = []
-        if let dev = environment["TYPELEAST_SERVICE_DIR"], !dev.isEmpty { candidates.append(dev) }
         if let res = resources { candidates.append(res + "/service") }
+        if let dev = environment["TYPELEAST_SERVICE_DIR"], !dev.isEmpty { candidates.append(dev) }
         return candidates.first { exists($0 + "/bin/typeleast-service.mjs") }
+    }
+
+    /// The environment the service starts with: this app's, minus the variables that
+    /// would load other code into Node.js or weaken its TLS checks (NODE_OPTIONS,
+    /// NODE_PATH, NODE_TLS_REJECT_UNAUTHORIZED, DYLD_*, ...). NODE_EXTRA_CA_CERTS stays
+    /// for networks that need their own certificate authority.
+    static func serviceEnvironment(_ environment: [String: String]) -> [String: String] {
+        environment.filter { key, _ in
+            let upper = key.uppercased()
+            if upper == "NODE_EXTRA_CA_CERTS" { return true }
+            return !["NODE_", "NPM_", "DYLD_", "LD_", "ELECTRON_"].contains { upper.hasPrefix($0) }
+        }
     }
 
     /// Seconds to wait before restart number `attempt` (1-based); nil = give up.
@@ -130,6 +144,8 @@ final class ServiceManager {
     private var stopping = false
     private var restartAttempts = 0
     private var stdoutBuffer = ""
+    private var integrityChecked = false
+    private var integrityProblem: String?
 
     // MARK: lifecycle
 
@@ -165,6 +181,17 @@ final class ServiceManager {
         stopping = false
         if case .running = state, process != nil { return }
 
+        // Once per launch: a bundle whose sealed files changed does not get to run code.
+        if !integrityChecked {
+            integrityChecked = true
+            integrityProblem = SelfIntegrity.problem()
+            if integrityProblem != nil { DiagnosticsLog.write("integrity.fail", ["code": "signature"]) }
+        }
+        if integrityProblem != nil {
+            state = .failed(L10n.text("TypeLeast 的文件被改动过（签名校验没通过），为安全起见没有启动本地服务。请重新安装 TypeLeast。"))
+            return
+        }
+
         // A service that already answers (started by hand with `npm start`, or a
         // second copy of this app) is used as it is.
         let client = ServiceClient.shared
@@ -192,7 +219,7 @@ final class ServiceManager {
         p.executableURL = URL(fileURLWithPath: node.path)
         p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid())]
         p.currentDirectoryURL = URL(fileURLWithPath: dir)
-        var env = ProcessInfo.processInfo.environment
+        var env = ServiceLocator.serviceEnvironment(ProcessInfo.processInfo.environment)
         if let mirror = modelMirror, !mirror.isEmpty { env["HF_ENDPOINT"] = mirror }
         p.environment = env
         let out = Pipe(), err = Pipe()
@@ -315,6 +342,7 @@ final class ServiceManager {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
+        p.environment = ServiceLocator.serviceEnvironment(ProcessInfo.processInfo.environment)
         let out = Pipe()
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice

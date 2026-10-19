@@ -61,7 +61,7 @@ fi
 cp "$ROOT/../../THIRD-PARTY-NOTICES.md" "$RES/THIRD-PARTY-NOTICES.md"
 
 # Re-seal the bundle. Not --deep: Node.js keeps the signature nodejs.org gave it.
-codesign --force --sign - --timestamp=none "$APP"
+codesign --force --sign - --timestamp=none --options runtime --entitlements "$ROOT/TypeLeast.entitlements" "$APP"
 codesign --verify --strict "$APP"
 
 NAME="TypeLeast-$VERSION-macOS-$LABEL"

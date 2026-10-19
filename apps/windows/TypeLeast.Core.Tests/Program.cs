@@ -70,27 +70,33 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("restarts back off", ServiceLocator.RestartDelay(4), (double?)30);
     Eq("then give up", ServiceLocator.RestartDelay(5), (double?)null);
 
-    var appDir = @"C:\Apps\TypeLeast";
+    var appDir = Path.Combine("fixtures", "Apps", "TypeLeast");
+    var nvmDir = Path.Combine("fixtures", "Users", "someone", "nvm");
     var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
     {
-        ["ProgramFiles"] = @"C:\Program Files",
-        ["LOCALAPPDATA"] = @"C:\Users\someone\AppData\Local",
-        ["NVM_HOME"] = @"C:\Users\someone\AppData\Roaming\nvm",
-        ["PATH"] = @"C:\Windows\system32;""C:\Tools\node"";",
+        ["ProgramFiles"] = Path.Combine("fixtures", "ProgramFiles"),
+        ["LOCALAPPDATA"] = Path.Combine("fixtures", "Local"),
+        ["NVM_HOME"] = nvmDir,
+        ["PATH"] = "\"" + Path.Combine("fixtures", "Tools", "node") + "\"" + ";",
     };
-    var nvm = new Dictionary<string, string[]> { [@"C:\Users\someone\AppData\Roaming\nvm"] = new[] { "v20.1.0", "v24.2.0", "v22.9.0", "settings.txt" } };
+    var nvm = new Dictionary<string, string[]> { [nvmDir] = new[] { "v20.1.0", "v24.2.0", "v22.9.0", "settings.txt" } };
     var list = ServiceLocator.NodeCandidates(appDir, env, dir => nvm.TryGetValue(dir, out var v) ? v : Array.Empty<string>());
     Eq("the Node.js shipped with the app comes first", list[0], Path.Combine(appDir, "node", "node.exe"));
-    Check("the official installer location is tried", list.Contains(Path.Combine(@"C:\Program Files", "nodejs", "node.exe")));
-    var nvmFirst = list.FindIndex(p => p.Contains(@"\nvm\"));
-    Eq("nvm versions are tried newest first", list[nvmFirst], Path.Combine(@"C:\Users\someone\AppData\Roaming\nvm", "v24.2.0", "node.exe"));
-    Check("quoted PATH entries are unquoted", list.Contains(Path.Combine(@"C:\Tools\node", "node.exe")));
+    Check("the official installer location is tried", list.Contains(Path.Combine(env["ProgramFiles"]!, "nodejs", "node.exe")));
+    var nvmFirst = list.FindIndex(p => p.StartsWith(nvmDir + Path.DirectorySeparatorChar));
+    Eq("nvm versions are tried newest first", list[nvmFirst], Path.Combine(nvmDir, "v24.2.0", "node.exe"));
+    Check("quoted PATH entries are unquoted", list.Contains(Path.Combine("fixtures", "Tools", "node", "node.exe")));
     Eq("no duplicates", list.Count, list.Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
     bool Exists(string p) => p == Path.Combine(appDir, "service", "bin", "typeleast-service.mjs") || p == Path.Combine(@"D:\dev\service", "bin", "typeleast-service.mjs");
     Eq("the service beside the app is used", ServiceLocator.ServiceDirectory(appDir, new Dictionary<string, string?>(), Exists), Path.Combine(appDir, "service"));
-    Eq("TYPELEAST_SERVICE_DIR wins for development",
-        ServiceLocator.ServiceDirectory(appDir, new Dictionary<string, string?> { ["TYPELEAST_SERVICE_DIR"] = @"D:\dev\service" }, Exists), @"D:\dev\service");
+    Eq("an environment variable cannot replace the bundled service",
+        ServiceLocator.ServiceDirectory(appDir, new Dictionary<string, string?> { ["TYPELEAST_SERVICE_DIR"] = @"D:\dev\service" }, Exists), Path.Combine(appDir, "service"));
+    Eq("TYPELEAST_SERVICE_DIR is used when nothing is bundled (development)",
+        ServiceLocator.ServiceDirectory(@"C:\Elsewhere", new Dictionary<string, string?> { ["TYPELEAST_SERVICE_DIR"] = @"D:\dev\service" }, Exists), @"D:\dev\service");
+    Eq("the service environment drops code-loading variables",
+        string.Join(",", ServiceLocator.UnsafeServiceVariables(new[] { "PATH", "NODE_OPTIONS", "node_path", "NODE_TLS_REJECT_UNAUTHORIZED", "NODE_EXTRA_CA_CERTS", "HTTPS_PROXY" })),
+        "NODE_OPTIONS,node_path,NODE_TLS_REJECT_UNAUTHORIZED");
     Eq("no service folder is null", ServiceLocator.ServiceDirectory(@"C:\Elsewhere", new Dictionary<string, string?>(), Exists), null);
 }
 
@@ -134,10 +140,10 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     File.WriteAllText(file, "{\"Strength\":\"promptify\"}");
     Eq("prompt mode is remembered", AppSettings.Load(file).Strength, "promptify");
 
-    var history = new LocalHistory(Path.Combine(dir, "app-history.json"));
+    var history = new LocalHistory(Path.Combine(dir, "app-history.json"), TestHistoryProtection.Shared);
     history.Add(new HistoryEntry { Text = "第一条", Seconds = 2 });
     history.Add(new HistoryEntry { Text = "第二条", Seconds = 3 });
-    Eq("history is newest first", new LocalHistory(Path.Combine(dir, "app-history.json")).Last?.Text, "第二条");
+    Eq("history is newest first", new LocalHistory(Path.Combine(dir, "app-history.json"), TestHistoryProtection.Shared).Last?.Text, "第二条");
     Eq("stats count characters", history.Stats().Characters, 6);
     Directory.Delete(dir, true);
 }
@@ -375,6 +381,52 @@ Console.WriteLine();
     finally { if (File.Exists(path)) File.Delete(path); }
 }
 
+// Protected history: disk migration and failures must preserve existing data.
+{
+    var dir = Path.Combine(Path.GetTempPath(), "typeleast-protected-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    var path = Path.Combine(dir, "history.json");
+    try {
+        File.WriteAllText(path, "[{\"text\":\"fictional private words\",\"raw\":\"fictional raw\"}]");
+        var protection = new TestHistoryProtection();
+        var history = new LocalHistory(path, protection);
+        Eq("legacy history migrates", history.Last?.Text, "fictional private words");
+        Check("stored history contains no plaintext", !System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(path)).Contains("fictional"));
+        Eq("protected history reloads", new LocalHistory(path, protection).Last?.Raw, "fictional raw");
+        var saved = File.ReadAllBytes(path);
+        protection.Fail = true;
+        history.Add(new HistoryEntry { Text = "unsaved fixture" });
+        Check("encryption failure preserves disk history", saved.SequenceEqual(File.ReadAllBytes(path)));
+        Check("encryption failure is reported", history.LastError is not null);
+        Check("no plaintext temp file on encryption failure", !File.Exists(path + ".tmp"));
+        var locked = new LocalHistory(path, protection);
+        locked.Add(new HistoryEntry { Text = "cannot overwrite unreadable history" });
+        Check("unreadable ciphertext is preserved", saved.SequenceEqual(File.ReadAllBytes(path)));
+        locked.Clear();
+        Check("explicit Clear removes locked history", !File.Exists(path));
+        File.WriteAllText(path, "[{\"text\":\"migration fixture\"}]");
+        var legacy = File.ReadAllBytes(path);
+        var failedMigration = new LocalHistory(path, protection);
+        Check("failed migration preserves original", legacy.SequenceEqual(File.ReadAllBytes(path)));
+        Check("failed migration is reported", failedMigration.LastError is not null);
+        if (OperatingSystem.IsWindows()) {
+            File.Delete(path);
+            var native = new LocalHistory(path);
+            native.Add(new HistoryEntry { Text = "DPAPI fixture" });
+            Eq("real current-user DPAPI reloads", new LocalHistory(path).Last?.Text, "DPAPI fixture");
+            Check("real DPAPI hides text", !System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(path)).Contains("DPAPI fixture"));
+            var encrypted = File.ReadAllBytes(path); encrypted[^1] ^= 1; File.WriteAllBytes(path, encrypted);
+            var damaged = new LocalHistory(path);
+            Check("damaged DPAPI is rejected", damaged.LastError is not null);
+            damaged.Add(new HistoryEntry { Text = "preserve damaged file" });
+            Check("damaged DPAPI is retained", encrypted.SequenceEqual(File.ReadAllBytes(path)));
+        } else Console.WriteLine("SKIP native DPAPI: requires Windows");
+    } finally { Directory.Delete(dir, true); }
+}
+Eq("terminal paste strips newlines", TerminalGuard.SafeText("echo hi\r\nwhoami\n", "WindowsTerminal.exe"), "echo hi whoami");
+Eq("normal editors keep newlines", TerminalGuard.SafeText("a\nb", "notepad"), "a\nb");
+Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u2028d", "pwsh"), "abc d");
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 
@@ -456,5 +508,28 @@ sealed class StubServer
             if (match) return i;
         }
         return -1;
+    }
+}
+
+// Isolated test cipher; production always uses current-user DPAPI.
+sealed class TestHistoryProtection : IHistoryProtection
+{
+    public static readonly TestHistoryProtection Shared = new();
+    private readonly byte[] key = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+    public bool Fail { get; set; }
+    public byte[] Protect(byte[] data) {
+        if (Fail) throw new System.Security.Cryptography.CryptographicException();
+        var result = new byte[data.Length + 28];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(result.AsSpan(0,12));
+        using var aes = new System.Security.Cryptography.AesGcm(key,16);
+        aes.Encrypt(result.AsSpan(0,12),data,result.AsSpan(28),result.AsSpan(12,16));
+        return result;
+    }
+    public byte[] Unprotect(byte[] data) {
+        if (Fail) throw new System.Security.Cryptography.CryptographicException();
+        var result = new byte[data.Length-28];
+        using var aes = new System.Security.Cryptography.AesGcm(key,16);
+        aes.Decrypt(data.AsSpan(0,12),data.AsSpan(28),data.AsSpan(12,16),result);
+        return result;
     }
 }

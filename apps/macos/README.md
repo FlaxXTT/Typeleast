@@ -39,7 +39,9 @@ history and the dictionary carry over).
   first stdout line carries the port; `~/Library/Application Support/TypeLeast/runtime.json`
   has it too. It is restarted with a back-off if it stops.
 - `TYPELEAST_SERVICE_DIR=<repo>/service` makes a development build use the
-  service from the repository.
+  service from the repository, but only when the app carries no service of its
+  own: an installed app never runs code an environment variable points to.
+  `build.sh` bundles the service, so rebuild to pick up service changes.
 
 ## Files
 
@@ -47,9 +49,9 @@ history and the dictionary carry over).
 |---|---|
 | `~/Library/Application Support/TypeLeast/` | the service's token, runtime file, history, dictionary, `config.json` |
 | `~/Library/Application Support/TypeLeast/models/` | speech models (about 241 MB) |
-| `~/Library/Preferences/com.dsh.voice.plist` | the app's settings and recent history |
+| `~/Library/Preferences/com.dsh.voice.plist` | the app's settings and AES-GCM encrypted history |
 | `~/Library/Logs/TypeLeast/typeleast.log` | events, error codes and timings only (never keys or dictated text) |
-| Keychain, service `TypeLeast.llm-api-key` | the API key, one item per provider preset |
+| Keychain, service `TypeLeast.llm-api-key` | the API key per preset and a separate history encryption key |
 
 ## Diagnostics
 
@@ -75,3 +77,21 @@ the microphone, start one dictation by itself into the app in front, and show no
 window of its own. `Tools/demo/record-demo.sh` uses it with macOS's synthetic
 voice, so the README demo involves nobody's real voice.
 
+## Storage and process safeguards
+
+Builds enable Hardened Runtime with only the microphone entitlement. Before the
+local service starts, the app checks its signature and sealed resources. Local
+update signing preserves the runtime flags and entitlements. This does not add an
+independent update signature or Apple notarization.
+
+A process-owned file lock prevents simultaneous normal instances. An isolated
+`TYPELEAST_HOME` test run does not register global hotkeys. Node startup and
+version probes filter code-loading and TLS-disable environment variables.
+
+History and retained recordings use AES-GCM with a separate Keychain key. Old
+history and retained app temporary WAVs migrate on load. Migration failure keeps
+the original data and reports an error; new writes never fall back to plaintext.
+A missing key does not cause encrypted history to be overwritten. Resetting the
+Keychain can make that history unreadable. Recordings are still plaintext while
+recording and during the active request. Known terminal apps receive a single
+line without control characters; embedded terminals may not be detected.

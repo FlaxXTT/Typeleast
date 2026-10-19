@@ -43,7 +43,7 @@ test("bad values are reported and keep their defaults, never fatal", () => {
   const cases = [
     [{ nope: 1 }, /unknown configuration key/, null],
     [{ strength: "aggressive" }, /must be one of off, conservative, prompt/, ["strength", "prompt"]],
-    [{ logRaw: "yes" }, /must be a boolean/, ["logRaw", true]],
+    [{ logRaw: "yes" }, /must be a boolean/, ["logRaw", false]],
     [{ dictionary: [1, 2] }, /array of strings/, ["dictionary", []]],
     [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 12000]],
     [{ timeoutMs: 100 }, /at least 1000/, ["timeoutMs", 12000]],

@@ -31,7 +31,7 @@ npm start
 
 环境变量 `TYPELEAST_HOME` 覆盖状态目录（模型放在它下面的 `models`），`TYPELEAST_MODELS` 单独覆盖模型目录。
 
-状态目录里有：`api-token`（访问令牌）、`runtime.json`（当前端口）、`history.jsonl`（历史，默认保留 14 天）、`dictionary.json`（词典），以及可选的 `config.json`。
+状态目录里有：`api-token`（访问令牌）、`runtime.json`（当前端口）、`history.jsonl`（历史，默认保留 14 天）、`dictionary.json`（词典），以及可选的 `config.json`。默认启动前会把旧历史的原话和结果替换为摘要；迁移失败则停止启动。显式开启 `logRaw` 时不做此迁移。
 
 ## config.json（可选）
 
@@ -52,7 +52,7 @@ npm start
 | `historyDays` | 14 | 历史保留天数 |
 | `dictionary` | `[]` | 一定要这样写的词，或 `听成=正确写法` |
 | `redactSecrets` | `true` | 发给模型前抹掉看起来像密钥、密码的内容 |
-| `logRaw` | `true` | `false` 时历史只存哈希 |
+| `logRaw` | `false` | 默认只保存文字摘要；`true` 会保存明文，需自行评估风险 |
 
 模型、接口地址和 API Key **不在**这里配置：App 每次请求时带过来，服务不保存。
 
