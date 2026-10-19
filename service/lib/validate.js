@@ -406,6 +406,38 @@ export const THRESHOLDS = {
 };
 
 /**
+ * Numbers a translation wrote in digits that the speaker never said, by value.
+ * A translation changes how a number is written ("三点" -> "3:00 PM", "十九日" ->
+ * "October 19"), so the rewrite guard's token comparison does not fit: here every
+ * digit group must be a value the speaker said (in digits or Chinese numerals),
+ * zero, or the 24-hour form of a spoken hour. Words such as "p.m." are not facts.
+ * @param {string} raw - the transcript.
+ * @param {string} output - the translation.
+ * @returns {string[]} the unexplained numbers.
+ */
+export function translationInventedNumbers(raw, output) {
+  const said = new Set([0]);
+  const source = stripListMarkers(String(raw ?? ""));
+  for (const token of source.match(/\d+(?:[.:/-]\d+)*/g) ?? []) {
+    said.add(Number(token));
+    for (const part of token.split(/[.:/-]/)) said.add(Number(part));
+  }
+  for (const token of source.match(/[零一二三四五六七八九十百千万亿两]+/g) ?? []) {
+    const value = chineseNumeral(token);
+    if (value !== null) said.add(value);
+  }
+  if (/半/.test(source)) { said.add(30); said.add(0.5); }
+  for (const value of [...said]) if (Number.isInteger(value) && value >= 1 && value <= 12) said.add(value + 12);
+  const written = stripListMarkers(String(output ?? "")).replace(/(\d),(?=\d{3}\b)/g, "$1");
+  const extra = [];
+  for (const token of written.match(/\d+(?:[.:/-]\d+)*/g) ?? []) {
+    if (said.has(Number(token))) continue;
+    for (const part of token.split(/[.:/-]/)) if (!said.has(Number(part))) extra.push(token);
+  }
+  return [...new Set(extra)];
+}
+
+/**
  * Validate a polished candidate against its raw transcript.
  * @param {object} input - raw text, candidate, and the applied strength.
  * @returns {{ok: boolean, reason?: string, text: string, metrics: object}}
@@ -431,6 +463,12 @@ export function validateOutput(input) {
   // length ratio, and the reason reported must name the real fault.
   // Prompt mode may legitimately be asked (in the user's own additions) to write
   // the prompt in another language, so only its fact check applies.
+  // 翻译模式 changes the language and every word on purpose: only invented numbers count.
+  if (strength === "translate") {
+    metrics.inventedFacts = translationInventedNumbers(raw, text);
+    return metrics.inventedFacts.length > 0 ? { ok: false, reason: "invented-fact", text, metrics } : { ok: true, text, metrics };
+  }
+
   if (strength !== "promptify" && languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
 
   const ratio = metrics.outputLength / Math.max(1, rawContent);

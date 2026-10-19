@@ -189,6 +189,12 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     var decoded = JsonSerializer.Deserialize<JsonElement>(Convert.FromBase64String(sent));
     Eq("the route travels as base64 JSON", decoded.GetProperty("baseURL").GetString(), "https://api.example.com/v1");
     Check("the body is the WAV itself", Wav.IsCanonical(stub.LastBody));
+    await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route,
+        translateTo: "en", variants: "zh=tw,en=gb");
+    Eq("the target language is sent", stub.LastHeaders.GetValueOrDefault("x-voice-translate"), "en");
+    Eq("the variants are sent", stub.LastHeaders.GetValueOrDefault("x-voice-variants"), "zh=tw,en=gb");
+    await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
+    Eq("ordinary dictation sends no target", stub.LastHeaders.GetValueOrDefault("x-voice-translate"), null);
 
     stub.Reply = (503, "{\"error\":\"speech model is not ready\",\"code\":\"speech-not-ready\"}");
     try
@@ -311,6 +317,62 @@ Console.WriteLine();
         new AppSettings { Strength = "promptbeta" }.Save(path);
         Eq("Prompt Beta strength survives a reload", AppSettings.Load(path).Strength, "promptbeta");
     } finally { if (File.Exists(path)) File.Delete(path); }
+}
+
+// 翻译 and 语言变体: decoding and settings.
+{
+    var translated = System.Text.Json.JsonSerializer.Deserialize<DictateResponse>(
+        "{\"text\":\"Hello\",\"raw\":\"你好\",\"fallback\":false,\"translated\":\"en\"}")!;
+    Eq("the translated language is read", translated.Translated, "en");
+    Eq("default variants send nothing", new AppSettings().VariantsHeader, null);
+    Eq("chosen variants make the header", new AppSettings { ZhVariant = "tw", EnVariant = "gb" }.VariantsHeader, "zh=tw,en=gb");
+    var path = Path.Combine(Path.GetTempPath(), "typeleast-translate-" + Guid.NewGuid() + ".json");
+    try
+    {
+        new AppSettings { TranslateHotkey = DictationKey.F8, TranslateTarget = "ja", ZhVariant = "hk", EnVariant = "gb" }.Save(path);
+        var loaded = AppSettings.Load(path);
+        Eq("the translate key survives a reload", loaded.TranslateHotkey, (DictationKey?)DictationKey.F8);
+        Eq("the target survives a reload", loaded.TranslateTarget, "ja");
+        Eq("the Chinese variant survives a reload", loaded.ZhVariant, "hk");
+        new AppSettings { Hotkey = DictationKey.F8, TranslateHotkey = DictationKey.F8, TranslateTarget = "xx", ZhVariant = "nope" }.Save(path);
+        loaded = AppSettings.Load(path);
+        Eq("the translate key cannot be the dictation key", loaded.TranslateHotkey, (DictationKey?)null);
+        Eq("an unknown target reads as English", loaded.TranslateTarget, "en");
+        Eq("an unknown variant reads as Simplified", loaded.ZhVariant, "hans");
+        Eq("the translate key is off by default", new AppSettings().TranslateHotkey, (DictationKey?)null);
+    }
+    finally { if (File.Exists(path)) File.Delete(path); }
+}
+
+// Activity heatmap: counts per day, streaks, levels; never any text.
+{
+    var path = Path.Combine(Path.GetTempPath(), "typeleast-activity-" + Guid.NewGuid() + ".json");
+    try
+    {
+        var log = new ActivityLog(path);
+        Eq("a new log is empty", log.ActiveDays, 0);
+        log.SeedIfNeeded(new[] { (new DateTime(2026, 10, 10, 9, 0, 0), 30), (new DateTime(2026, 10, 10, 18, 0, 0), 5), (new DateTime(2026, 10, 11), 8) });
+        Eq("seeding counts per day", log.Day(new DateTime(2026, 10, 10)).Dictations, 2);
+        Eq("seeding adds the words", log.Day(new DateTime(2026, 10, 10)).Words, 35);
+        log.SeedIfNeeded(new[] { (new DateTime(2026, 10, 1), 1) });
+        Eq("seeding happens only once", log.Day(new DateTime(2026, 10, 1)).Dictations, 0);
+        log.Record(12, new DateTime(2026, 10, 12));
+        log.Record(3, new DateTime(2026, 10, 14));
+        log.Record(4, new DateTime(2026, 10, 15));
+        Eq("active days", log.ActiveDays, 5);
+        Eq("current streak ends today", log.Streaks(new DateTime(2026, 10, 15)).Current, 2);
+        Eq("longest streak", log.Streaks(new DateTime(2026, 10, 15)).Longest, 3);
+        Eq("a streak survives until the day is over", log.Streaks(new DateTime(2026, 10, 16)).Current, 2);
+        Eq("and breaks after a missed day", log.Streaks(new DateTime(2026, 10, 17)).Current, 0);
+        Eq("levels", string.Join(",", new[] { 0, 1, 4, 10, 25 }.Select(ActivityLog.Level)), "0,1,2,3,4");
+        Eq("counts persist", new ActivityLog(path).Day(new DateTime(2026, 10, 12)).Words, 12);
+        var stored = File.ReadAllText(path);
+        Check("only dates and counts are stored", stored.Contains("2026-10-12") && !stored.Contains("text"));
+        Eq("words: CJK characters plus latin words", ActivityLog.CountWords("你好 DeepSeek v3"), 4);
+        log.Clear();
+        Eq("clearing empties it", new ActivityLog(path).ActiveDays, 0);
+    }
+    finally { if (File.Exists(path)) File.Delete(path); }
 }
 
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");

@@ -103,6 +103,8 @@ struct RecordingBarModel {
     private(set) var phase: Phase = .hidden
     private(set) var destination = ""
     private(set) var detail = ""
+    /// A short tag beside the waveform while listening, e.g. "→EN" for 翻译模式.
+    private(set) var badge = ""
     private(set) var resultText = ""
     private(set) var warning = false
     private(set) var elapsed: Double = 0
@@ -115,8 +117,9 @@ struct RecordingBarModel {
 
     var isVisible: Bool { phase != .hidden }
 
-    mutating func showRecording(destination: String) {
+    mutating func showRecording(destination: String, badge: String = "") {
         self.destination = destination
+        self.badge = badge
         detail = ""
         resultText = ""
         warning = false
@@ -151,6 +154,7 @@ struct RecordingBarModel {
         phase = .hidden
         destination = ""
         detail = ""
+        badge = ""
         resultText = ""
         warning = false
         elapsed = 0
@@ -218,6 +222,7 @@ final class PillView: NSView {
     static let height: CGFloat = 32
     /// Diameter of the cancel (left) and stop (right) buttons.
     static let buttonSize: CGFloat = 20
+    static let badgeWidth: CGFloat = 34
     /// Font of the result line.
     static let resultFont = NSFont.systemFont(ofSize: 12, weight: .medium)
 
@@ -225,7 +230,8 @@ final class PillView: NSView {
     static func width(for model: RecordingBarModel, limit: Double) -> CGFloat {
         switch model.phase {
         case .hidden: return 100
-        case .recording: return limit - model.elapsed <= countdownSeconds ? 206 : 168
+        case .recording:
+            return (limit - model.elapsed <= countdownSeconds ? 206 : 168) + (model.badge.isEmpty ? 0 : badgeWidth + 6)
         case .thinking: return 72
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -369,6 +375,16 @@ final class PillView: NSView {
                      font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
                      color: NSColor.systemOrange)
             waveRight = stopRect.minX - 46
+        }
+        if !model.badge.isEmpty {
+            let rect = NSRect(x: waveRight - PillView.badgeWidth, y: bounds.midY - 8, width: PillView.badgeWidth, height: 16)
+            NSColor.systemBlue.withAlphaComponent(0.85).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+            let font = NSFont.systemFont(ofSize: 10, weight: .bold)
+            let textWidth = ceil((model.badge as NSString).size(withAttributes: [.font: font]).width)
+            drawText(model.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
+                     font: font, color: .white)
+            waveRight = rect.minX - 6
         }
         let waveLeft = dotCentre.x + dotRadius + 7
         let waveHeight = bounds.height - 8
@@ -602,10 +618,10 @@ final class RecordingBar {
     // MARK: API
 
     /// Starts the listening look. The destination is the bundle id the text will land in.
-    func showRecording(destination: String) {
+    func showRecording(destination: String, badge: String = "") {
         onMain {
             self.cancelPendingFade()
-            self.model.showRecording(destination: destination)
+            self.model.showRecording(destination: destination, badge: badge)
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
             self.present()

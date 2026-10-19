@@ -58,15 +58,62 @@ internal sealed class SettingsPage : IPage
         dictationLanguage.SelectionChanged += (_, _) => {
             if (!refreshingLanguage && host.Speech?.CanSetLanguage != false && dictationLanguage.SelectedItem is ComboBoxItem { Tag: string code }) { s.Language = code; host.SaveSettings(); }
         };
+        var translateTarget = Theme.Choice(160);
+        var targetLabels = new[] { "English", L10n.T("中文"), "日本語", "한국어", "Français", "Deutsch", "Español", "Português", "Italiano", "Русский" };
+        for (var i = 0; i < AppSettings.TranslateTargets.Length; i++)
+            translateTarget.Items.Add(new ComboBoxItem { Content = targetLabels[i], Tag = AppSettings.TranslateTargets[i] });
+        translateTarget.SelectedIndex = Array.IndexOf(AppSettings.TranslateTargets, s.TranslateTarget);
+        translateTarget.SelectionChanged += (_, _) => { if (translateTarget.SelectedItem is ComboBoxItem { Tag: string v }) { s.TranslateTarget = v; host.SaveSettings(); } };
+
+        var zhVariant = Theme.Choice(160);
+        foreach (var (code, label) in new[] { ("hans", L10n.T("简体")), ("tw", L10n.T("繁体（台湾）")), ("hk", L10n.T("繁体（香港）")) })
+            zhVariant.Items.Add(new ComboBoxItem { Content = label, Tag = code });
+        zhVariant.SelectedIndex = Array.IndexOf(AppSettings.ZhVariants, s.ZhVariant);
+        zhVariant.SelectionChanged += (_, _) => { if (zhVariant.SelectedItem is ComboBoxItem { Tag: string v }) { s.ZhVariant = v; host.SaveSettings(); } };
+
+        var enVariant = Theme.Choice(160);
+        foreach (var (code, label) in new[] { ("us", L10n.T("美式")), ("gb", L10n.T("英式")) })
+            enVariant.Items.Add(new ComboBoxItem { Content = label, Tag = code });
+        enVariant.SelectedIndex = Array.IndexOf(AppSettings.EnVariants, s.EnVariant);
+        enVariant.SelectionChanged += (_, _) => { if (enVariant.SelectedItem is ComboBoxItem { Tag: string v }) { s.EnVariant = v; host.SaveSettings(); } };
+
         root.Children.Add(Section(L10n.T("语言"),
             Theme.SettingRow(L10n.T("界面语言"), Theme.Text(L10n.T("重启应用后生效；不会改变听写或输出语言。"), 12, Theme.Grey), uiLanguage),
-            Theme.SettingRow(L10n.T("听写语言"), Theme.Text(L10n.T("可选择当前模型支持的语言；不支持的语言设置使用自动识别。"), 12, Theme.Grey), dictationLanguage)));
+            Theme.SettingRow(L10n.T("听写语言"), Theme.Text(L10n.T("可选择当前模型支持的语言；不支持的语言设置使用自动识别。"), 12, Theme.Grey), dictationLanguage),
+            Theme.SettingRow(L10n.T("翻译成"), Theme.Text(L10n.T("按翻译快捷键说的话，会整理后翻译成这种语言再插入。需要填好整理模型。"), 12, Theme.Grey), translateTarget),
+            Theme.SettingRow(L10n.T("中文写法"), Theme.Text(L10n.T("输出的中文用简体还是繁体；繁体在本机转换，并换成当地用语（软件 → 軟體）。"), 12, Theme.Grey), zhVariant),
+            Theme.SettingRow(L10n.T("英文拼写"), Theme.Text(L10n.T("输出的英文用美式还是英式拼写（color / colour）。"), 12, Theme.Grey), enVariant)));
 
         // ---- dictation
         var hotkey = Theme.Choice(160);
         foreach (DictationKey k in Enum.GetValues(typeof(DictationKey))) hotkey.Items.Add(new ComboBoxItem { Content = TapDetector.Label(k), Tag = k });
         hotkey.SelectedIndex = (int)s.Hotkey;
-        hotkey.SelectionChanged += (_, _) => { if (hotkey.SelectedItem is ComboBoxItem { Tag: DictationKey k }) { s.Hotkey = k; host.SaveSettings(); } };
+        // 翻译 has its own key, never the dictation key.
+        var translateKey = Theme.Choice(160);
+        translateKey.Items.Add(new ComboBoxItem { Content = L10n.T("关闭"), Tag = null });
+        foreach (DictationKey k in Enum.GetValues(typeof(DictationKey))) translateKey.Items.Add(new ComboBoxItem { Content = TapDetector.Label(k), Tag = k });
+        void SyncTranslateKey()
+        {
+            foreach (ComboBoxItem item in translateKey.Items) item.IsEnabled = item.Tag is not DictationKey k || k != s.Hotkey;
+            translateKey.SelectedIndex = s.TranslateHotkey is { } t ? (int)t + 1 : 0;
+        }
+        SyncTranslateKey();
+        translateKey.SelectionChanged += (_, _) =>
+        {
+            if (translateKey.SelectedItem is not ComboBoxItem item) return;
+            var chosen = item.Tag as DictationKey?;
+            if (chosen == s.TranslateHotkey) return;
+            s.TranslateHotkey = chosen;
+            host.SaveSettings();
+        };
+        hotkey.SelectionChanged += (_, _) =>
+        {
+            if (hotkey.SelectedItem is not ComboBoxItem { Tag: DictationKey k }) return;
+            s.Hotkey = k;
+            if (s.TranslateHotkey == k) s.TranslateHotkey = null;
+            host.SaveSettings();
+            SyncTranslateKey();
+        };
 
         var strength = Theme.Choice(160);
         strength.Items.Add(new ComboBoxItem { Content = L10n.T("自然整理"), Tag = "prompt" });
@@ -91,6 +138,7 @@ internal sealed class SettingsPage : IPage
 
         root.Children.Add(Section(L10n.T("听写"),
             Theme.SettingRow(L10n.T("快捷键"), Theme.Text(L10n.T("单独按一下开始，再按一下结束；录音时按 Esc 取消。右 Alt 在部分欧洲键盘上是 AltGr，这时换一个键。"), 12, Theme.Grey), hotkey),
+            Theme.SettingRow(L10n.T("翻译快捷键"), Theme.Text(L10n.T("单独按一下开始，再按一下结束，插入翻译后的文字；要和听写快捷键不同。"), 12, Theme.Grey), translateKey),
             Theme.SettingRow(L10n.T("整理方式"), Theme.Text(L10n.T("自然整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。提示词 Beta：先问几个关键问题，口头回答后起草，再独立审查并修补，写出目标明确、没有矛盾的提示词，较慢。原话转写：只去口水词。"), 12, Theme.Grey), strength),
             Theme.SettingRow(L10n.T("麦克风"), null, mic),
             Theme.SettingRow(L10n.T("粘贴后恢复剪贴板"), Theme.Text(L10n.T("粘贴完把你原来复制的文字放回剪贴板。"), 12, Theme.Grey), restore),

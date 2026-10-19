@@ -137,6 +137,7 @@ internal sealed class HomePage : IPage
     private readonly StackPanel checklist = new();
     private readonly Border setupCard;
     private readonly TextBlock stats = Theme.Text("", 13, Theme.Grey);
+    private readonly System.Windows.Controls.Border activityCard = Theme.Card(new StackPanel());
 
     public UIElement View => root;
 
@@ -152,6 +153,7 @@ internal sealed class HomePage : IPage
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
         root.Children.Add(Theme.Card(stats));
+        root.Children.Add(activityCard);
     }
 
     public void Refresh()
@@ -184,6 +186,7 @@ internal sealed class HomePage : IPage
 
         var (count, chars, seconds) = host.History.Stats();
         stats.Text = L10n.T("已听写 {0} 次 · 共 {1} 字 · 说了 {2} 分钟", count, chars, Math.Round(seconds / 60, 1));
+        activityCard.Child = ActivityView.Build(host.Activity, DateTime.Now);
     }
 
     private static Grid Item(bool done, string title, string detail, (string Label, Action Run)? action, bool showActionWhenDone = false)
@@ -227,7 +230,7 @@ internal sealed class HistoryPage : IPage
         {
             if (MessageBox.Show(L10n.T("清空全部历史？"), "TypeLeast", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
             {
-                host.History.Clear();
+                host.ClearHistory();
                 Refresh();
             }
         });

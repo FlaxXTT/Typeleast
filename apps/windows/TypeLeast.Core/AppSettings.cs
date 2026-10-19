@@ -19,6 +19,13 @@ public enum DictationKey
 public sealed class AppSettings
 {
     public DictationKey Hotkey { get; set; } = DictationKey.RightAlt;
+    /// <summary>翻译模式's own key (one tap starts, one tap finishes); null = off.</summary>
+    public DictationKey? TranslateHotkey { get; set; }
+    /// <summary>Target language code the service knows (en, zh, ja, ko, fr, de, es, pt, it, ru).</summary>
+    public string TranslateTarget { get; set; } = "en";
+    /// <summary>语言变体: Chinese "hans" / "tw" / "hk", English "us" / "gb".</summary>
+    public string ZhVariant { get; set; } = "hans";
+    public string EnVariant { get; set; } = "us";
     /// <summary>"prompt" (Natural cleanup), "promptify" (提示词模式) or "off" (raw transcription).</summary>
     public string Strength { get; set; } = "prompt";
     public string InterfaceLanguage { get; set; } = "system";
@@ -37,6 +44,14 @@ public sealed class AppSettings
     public List<string> Words { get; set; } = new();
 
     [JsonIgnore] public LlmPreset Preset => LlmPreset.Find(LlmPresetId);
+
+    public static readonly string[] TranslateTargets = { "en", "zh", "ja", "ko", "fr", "de", "es", "pt", "it", "ru" };
+    public static readonly string[] ZhVariants = { "hans", "tw", "hk" };
+    public static readonly string[] EnVariants = { "us", "gb" };
+
+    /// <summary>Sent with every request ("zh=tw,en=gb"); null while both are the defaults.</summary>
+    [JsonIgnore]
+    public string? VariantsHeader => ZhVariant == "hans" && EnVariant == "us" ? null : $"zh={ZhVariant},en={EnVariant}";
 
     [JsonIgnore]
     public string LlmBaseUrl
@@ -74,6 +89,11 @@ public sealed class AppSettings
                 loaded.Words ??= new();
                 loaded.InterfaceLanguage = L10n.Normalize(loaded.InterfaceLanguage);
                 if (!new[] { "auto", "zh", "en", "yue", "ja", "ko" }.Contains(loaded.Language)) loaded.Language = "auto";
+                if (!TranslateTargets.Contains(loaded.TranslateTarget)) loaded.TranslateTarget = "en";
+                if (!ZhVariants.Contains(loaded.ZhVariant)) loaded.ZhVariant = "hans";
+                if (!EnVariants.Contains(loaded.EnVariant)) loaded.EnVariant = "us";
+                // The two keys must differ; the dictation key wins.
+                if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
                 return loaded;
             }
         }

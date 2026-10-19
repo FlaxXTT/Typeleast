@@ -920,6 +920,68 @@ do {
     checkEq("⌘, opens settings", opened, 1)
 }
 
+// MARK: 25. 翻译 and 语言变体: headers, decoding, settings
+do {
+    state.mode = "health"
+    _ = try? client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt",
+                                translateTo: "en", variants: "zh=tw,en=gb")
+    checkEq("the target language is sent", state.lastRequest?.header("x-voice-translate"), "en")
+    checkEq("the variants are sent", state.lastRequest?.header("x-voice-variants"), "zh=tw,en=gb")
+    _ = try? client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt")
+    checkEq("ordinary dictation sends no target", state.lastRequest?.header("x-voice-translate"), "")
+    let r = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"Hello","raw":"你好","fallback":false,"translated":"en"}"#.utf8))
+    checkEq("the translated language is read", r.translated, "en")
+    let old = try JSONDecoder().decode(LocalHistoryEntry.self, from: Data(#"{"id":"a","ts":0,"language":"zh","strength":"prompt","raw":"r","text":"t","fallback":false,"inserted":true}"#.utf8))
+    checkEq("older history entries still decode", old.translated, nil)
+    let s = Settings.shared
+    let saved = (s.zhVariant, s.enVariant, s.translateTarget)
+    s.zhVariant = "hans"; s.enVariant = "us"
+    checkEq("default variants send nothing", s.variantsHeader, nil)
+    s.zhVariant = "tw"; s.enVariant = "gb"
+    checkEq("chosen variants make the header", s.variantsHeader, "zh=tw,en=gb")
+    s.zhVariant = "nonsense"
+    checkEq("an unknown variant reads as Simplified", s.zhVariant, "hans")
+    s.translateTarget = "xx"
+    checkEq("an unknown target reads as English", s.translateTarget, "en")
+    checkEq("the translate shortcut defaults to ⇧⌥Space", HotKeyBinding.translateDefault.modifiers, 512 | 2048)
+    s.zhVariant = saved.0; s.enVariant = saved.1; s.translateTarget = saved.2
+} catch {
+    check("translate decoding", false, String(describing: error))
+}
+
+// MARK: 26. activity heatmap: counts per day, streaks, levels; never any text
+do {
+    let suite = "typeleast.tests.activity"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let log = ActivityLog(defaults: defaults, calendar: calendar)
+    func day(_ d: Int) -> Date { calendar.date(from: DateComponents(year: 2026, month: 10, day: d, hour: 12))! }
+    checkEq("a new log is empty", log.activeDays, 0)
+    log.seedIfNeeded(from: [(date: day(10), words: 30), (date: day(10), words: 5), (date: day(11), words: 8)])
+    checkEq("seeding counts per day", log.day(day(10)), ActivityDay(dictations: 2, words: 35))
+    log.seedIfNeeded(from: [(date: day(1), words: 1)])
+    checkEq("seeding happens only once", log.day(day(1)).dictations, 0)
+    log.record(words: 12, at: day(12))
+    log.record(words: 3, at: day(14))
+    log.record(words: 4, at: day(15))
+    checkEq("active days", log.activeDays, 5)
+    let today = log.streaks(today: day(15))
+    checkEq("current streak ends today", today.current, 2)
+    checkEq("longest streak", today.longest, 3)
+    checkEq("a streak survives until the day is over", log.streaks(today: day(16)).current, 2)
+    checkEq("and breaks after a missed day", log.streaks(today: day(17)).current, 0)
+    checkEq("levels", [0, 1, 4, 10, 25].map(ActivityLog.level), [0, 1, 2, 3, 4])
+    let reloaded = ActivityLog(defaults: defaults, calendar: calendar)
+    checkEq("counts persist", reloaded.day(day(12)), ActivityDay(dictations: 1, words: 12))
+    let stored = String(data: defaults.data(forKey: "voice.activity.v1") ?? Data(), encoding: .utf8) ?? ""
+    checkEq("only dates and counts are stored", stored.contains("2026-10-12") && !stored.contains("text"), true)
+    reloaded.clear()
+    checkEq("clearing empties it", reloaded.activeDays, 0)
+    defaults.removePersistentDomain(forName: suite)
+}
+
 server.stop()
 print("")
 print("TESTS: " + String(passed) + " passed, " + String(failed) + " failed")

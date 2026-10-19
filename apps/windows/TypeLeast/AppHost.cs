@@ -19,6 +19,7 @@ internal sealed class AppHost
 
     public AppSettings Settings { get; }
     public LocalHistory History { get; }
+    public ActivityLog Activity { get; }
     public ServiceClient Client { get; } = new();
     public ServiceManager Service { get; }
     public HealthResponse? Health { get; private set; }
@@ -44,6 +45,8 @@ internal sealed class AppHost
     private IntPtr betaWindow;
     private string betaApp = "";
     private BetaPanel? betaPanel;
+    // 翻译模式: the target language of the recording in progress (null: ordinary dictation).
+    private string? translating;
     private bool dictionaryNeedsSync = true;
 
     public AppHost(Application app)
@@ -53,8 +56,12 @@ internal sealed class AppHost
         Settings = AppSettings.Load(settingsPath);
         L10n.Configure(Settings.InterfaceLanguage);
         History = new LocalHistory(AppPaths.AppHistoryFile());
+        Activity = new ActivityLog(AppPaths.AppActivityFile());
+        // The heatmap starts from whatever history is still kept, once.
+        Activity.SeedIfNeeded(History.Entries.Where(e => e.Text.Length > 0)
+            .Select(e => (e.Time.LocalDateTime, ActivityLog.CountWords(e.Text))));
         Service = new ServiceManager(Client) { NodePathOverride = Settings.NodePath, ModelMirror = Settings.ModelMirror };
-        hook = new KeyboardHook(Settings.Hotkey);
+        hook = new KeyboardHook(Settings.Hotkey, Settings.TranslateHotkey);
         bar = new RecordingBar(this);
     }
 
@@ -95,7 +102,8 @@ internal sealed class AppHost
         });
         Service.Start();
 
-        hook.Tapped += () => app.Dispatcher.InvokeAsync(Toggle);
+        hook.Tapped += () => app.Dispatcher.InvokeAsync(() => Toggle());
+        hook.TranslateTapped += () => app.Dispatcher.InvokeAsync(() => ToggleTranslate());
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
         if (!hook.Install()) Hint = L10n.T("无法注册快捷键，可以用托盘菜单开始听写");
         recorder.LimitReached += () => app.Dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
@@ -133,6 +141,7 @@ internal sealed class AppHost
         try { Settings.Save(settingsPath); }
         catch (Exception e) { Log.Write("settings.save.fail", e.GetType().Name); }
         hook.SetKey(Settings.Hotkey);
+        hook.SetTranslateKey(Settings.TranslateHotkey);
         Service.NodePathOverride = Settings.NodePath;
         Service.ModelMirror = Settings.ModelMirror;
         Raise();
@@ -224,11 +233,19 @@ internal sealed class AppHost
 
     // ---- dictation
 
-    public void Toggle()
+    public void Toggle() => Toggle(null);
+
+    /// <summary>翻译模式's key: starts a recording inserted in the target language; while recording, either key finishes.</summary>
+    public void ToggleTranslate() => Toggle(Settings.TranslateTarget);
+
+    private void Toggle(string? translateTo)
     {
         switch (Phase)
         {
-            case DictationPhase.Idle: StartRecording(); break;
+            case DictationPhase.Idle:
+                translating = translateTo;
+                StartRecording();
+                break;
             case DictationPhase.Recording: _ = StopAndSend(); break;
             default: break; // still cleaning up the last one
         }
@@ -255,7 +272,7 @@ internal sealed class AppHost
         }
         Phase = DictationPhase.Recording;
         hook.SwallowEscape = true;
-        bar.ShowRecording(recorder);
+        bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
         Raise();
     }
 
@@ -264,6 +281,7 @@ internal sealed class AppHost
         if (Phase != DictationPhase.Recording) return;
         recorder.Cancel();
         hook.SwallowEscape = false;
+        translating = null;
         Phase = DictationPhase.Idle;
         bar.ShowResult(L10n.T("已取消"), warning: false);
         Raise();
@@ -273,6 +291,8 @@ internal sealed class AppHost
     {
         var (wav, seconds) = recorder.Stop();
         hook.SwallowEscape = false;
+        var translateTo = translating;
+        translating = null;
         if (seconds < 0.3)
         {
             Phase = DictationPhase.Idle;
@@ -280,15 +300,17 @@ internal sealed class AppHost
             Raise();
             return;
         }
-        // A recording made while Prompt Beta's questions are open is the answer to them.
-        if (Settings.Strength != "promptbeta" && betaSession is not null) DropBeta();
-        var answering = Settings.Strength == "promptbeta" ? betaSession : null;
+        // A recording made while Prompt Beta's questions are open is the answer to them;
+        // a translation is not, and leaves the questions waiting.
+        if (translateTo is null && Settings.Strength != "promptbeta" && betaSession is not null) DropBeta();
+        var answering = translateTo is null && Settings.Strength == "promptbeta" ? betaSession : null;
         Phase = DictationPhase.Thinking;
-        bar.ShowThinking();
+        bar.ShowThinking(translateTo is null ? null : L10n.T("翻译中…"));
         Raise();
         try
         {
-            var result = await Client.DictateAsync(wav, Settings.Language, targetApp, Settings.Strength, ActiveRoute, betaSession: answering);
+            var result = await Client.DictateAsync(wav, Settings.Language, targetApp, Settings.Strength, ActiveRoute,
+                betaSession: answering, translateTo: translateTo, variants: Settings.VariantsHeader);
             if (ShowBetaQuestions(result))
             {
                 Phase = DictationPhase.Idle;
@@ -303,7 +325,7 @@ internal sealed class AppHost
             }
             await Deliver(result, seconds);
         }
-        catch (ServiceException e) when (e.Status == 410 && betaSession is not null)
+        catch (ServiceException e) when (e.Status == 410 && answering is not null)
         {
             DropBeta();
             bar.ShowResult(L10n.T("问题已过期，请重新说一遍需求"), warning: true);
@@ -339,6 +361,7 @@ internal sealed class AppHost
                     Seconds = seconds,
                     Inserted = outcome == Paster.Outcome.Pasted,
                 });
+                Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);
                 var done = outcome == Paster.Outcome.Pasted ? L10n.T("已粘贴") : L10n.T("窗口已切换，已复制到剪贴板");
                 bar.ShowResult(note is null ? done : done + " · " + note, warning: note is not null);
@@ -371,7 +394,7 @@ internal sealed class AppHost
         Raise();
         try
         {
-            await Deliver(await Client.BetaAsync(id, skip: true, targetApp, ActiveRoute), 0);
+            await Deliver(await Client.BetaAsync(id, skip: true, targetApp, ActiveRoute, variants: Settings.VariantsHeader), 0);
         }
         catch (ServiceException e)
         {
@@ -396,6 +419,14 @@ internal sealed class AppHost
     {
         betaSession = null;
         betaPanel?.Hide();
+    }
+
+    /// <summary>"删除全部历史": the per-day activity goes with it.</summary>
+    public void ClearHistory()
+    {
+        History.Clear();
+        Activity.Clear();
+        Raise();
     }
 
     public void CopyLast()

@@ -19,6 +19,7 @@ public static class AppPaths
     /// <summary>Settings and history of the app itself (the service has its own files beside them).</summary>
     public static string AppSettingsFile(string? stateDir = null) => Path.Combine(stateDir ?? StateDirectory(), "app-settings.json");
     public static string AppHistoryFile(string? stateDir = null) => Path.Combine(stateDir ?? StateDirectory(), "app-history.json");
+    public static string AppActivityFile(string? stateDir = null) => Path.Combine(stateDir ?? StateDirectory(), "app-activity.json");
     public static string LogFile(string? stateDir = null) => Path.Combine(stateDir ?? StateDirectory(), "typeleast-app.log");
 
     private static string? Get(IDictionary<string, string?> env, string key) =>

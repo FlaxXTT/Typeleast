@@ -20,7 +20,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { redactFieldContext, redactSecrets } from "./context.js";
-import { buildUserMessage, promptVersionFor, systemPromptFor } from "./prompt.js";
+import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
@@ -32,6 +32,8 @@ import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
   cleanPromptReply, draftMessage, hasContent, normaliseQuestions, parseJsonReply, reviewMessage,
 } from "./prompts/prompt-beta.js";
+import { TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
+import { applyVariants, parseVariants, variantInstruction } from "./variants.js";
 
 /** Hard ceiling on concurrent recognition+polish work. */
 const MAX_PENDING = 2;
@@ -280,6 +282,19 @@ export class VoicePolishService {
     // Skipping Prompt Beta's questions sends no answer at all, which is not an empty dictation.
     const betaSkip = strength === "promptbeta" && request.betaSkip === true && Boolean(request.betaSession);
     if (rawText.length === 0 && !betaSkip) return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
+    // 翻译模式 has its own hotkey and always needs the model, whatever the strength.
+    const translateTo = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
+    if (translateTo) {
+      const route = request.llm ? normalizeRoute(request.llm) : null;
+      if (!route) {
+        const tidyOnly = tidy(rawText);
+        return await this.recordAndReturn(request, { ...base, text: tidyOnly.text, fallback: true, reason: "no-api-key", postprocess: tidyOnly.applied });
+      }
+      base.provider = routeLabel(route);
+      base.model = route.model;
+      this.lastRoute = { provider: base.provider, model: base.model };
+      return await this.polishTranslate({ request, base, route, started, rawText, target: translateTo });
+    }
     if (strength === "off") {
       // "off" means no model, not "leave the disfluency in". The deterministic
       // pass is free, so an unpolished dictation is still a tidy one.
@@ -310,7 +325,7 @@ export class VoicePolishService {
       fieldContext: context.fieldContext ?? null,
       strength,
       promptify: this.promptify,
-    });
+    }) + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
     // already redacted by buildContext. The text the user finally gets is what
@@ -407,6 +422,56 @@ export class VoicePolishService {
         ms: timing(started, 0),
         attempts: error instanceof ModelCallError ? error.attempts : undefined,
         postprocess: tidyOnly.applied,
+      });
+    }
+  }
+
+  /**
+   * 翻译模式: clean up the spoken transcript and write it in the target language, in
+   * one call. Only the decisive fact check applies; a failure inserts the tidied
+   * original rather than nothing.
+   */
+  async polishTranslate({ request, base, route, started, rawText, target }) {
+    const context = await this.buildContext(request);
+    const system = translatePrompt(target)
+      + harnessAddendum({ dictionary: context.dictionary, fieldContext: context.fieldContext ?? null })
+      + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
+    const outboundText = this.config.redactSecrets === false ? rawText : redactSecrets(rawText);
+    this.stats.modelCalls += 1;
+    try {
+      const result = await completeOpenAI({
+        route, system, user: outboundText,
+        maxTokens: Math.max(this.config.maxOutputTokens, 1200),
+        temperature: 0.3,
+        timeoutMs: Math.max(this.config.timeoutMs, 20000),
+        signal: request.signal,
+        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
+      });
+      const verdict = validateOutput({ rawText, output: String(result.text ?? "").trim(), strength: "translate" });
+      if (!verdict.ok) {
+        const tidyOnly = tidy(rawText);
+        return await this.recordFallback(request, {
+          ...base, text: tidyOnly.text, fallback: true, reason: verdict.reason,
+          detail: describeVerdict(verdict.metrics), ms: timing(started, 0), metrics: verdict.metrics,
+          attempts: result.attempts, postprocess: tidyOnly.applied, translated: target,
+        });
+      }
+      return await this.recordAndReturn(request, {
+        ...base, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
+        usage: result.usage, attempts: result.attempts, translated: target,
+      });
+    } catch (error) {
+      const reason = request.signal?.aborted
+        ? "cancelled"
+        : error instanceof ModelCallError ? failureReason(error) : "internal-error";
+      const detail = this.redactDetail(failureDetail(error)).split(route.apiKey || "\u0000").join("[redacted-key]");
+      this.stats.lastError = `${reason}: ${detail}`;
+      this.logger.warn?.("typeleast: translation failed (%s: %s); using the raw transcript", reason, detail);
+      const tidyOnly = tidy(rawText);
+      return await this.recordFallback(request, {
+        ...base, text: tidyOnly.text, fallback: true, reason, detail, ms: timing(started, 0),
+        attempts: error instanceof ModelCallError ? error.attempts : undefined,
+        postprocess: tidyOnly.applied, translated: target,
       });
     }
   }
@@ -568,6 +633,8 @@ export class VoicePolishService {
    * @returns {Promise<object>} the same result.
    */
   async recordAndReturn(request, result) {
+    // The written variant (繁體) is the last step, so history and the inserted text agree.
+    if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants));
     await this.record(request, {
       raw: result.raw,
       text: result.text,
@@ -622,6 +689,8 @@ export class VoicePolishService {
         llm: request.llm ?? null,
         signal: request.signal,
         betaSession: request.betaSession ?? null,
+        translateTo: request.translateTo ?? null,
+        variants: request.variants ?? null,
       });
       const result = {
         requestId: request.requestId,
@@ -639,6 +708,7 @@ export class VoicePolishService {
         },
         metrics: polished.metrics,
         ...(polished.beta ? { beta: polished.beta } : {}),
+        ...(polished.translated ? { translated: polished.translated } : {}),
       };
       this.stats.dictations += 1;
       if (result.fallback) this.stats.fallback += 1;

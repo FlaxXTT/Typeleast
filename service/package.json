@@ -23,6 +23,7 @@
     "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
+    "opencc-js": "1.4.2",
     "sherpa-onnx-node": "1.13.8"
   }
 }

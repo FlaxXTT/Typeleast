@@ -29,6 +29,47 @@ enum VoiceLanguage: String, CaseIterable {
     }
 }
 
+/// 翻译模式 target languages; the raw values are the codes the service knows.
+enum TranslateLanguage: String, CaseIterable {
+    case en, zh, ja, ko, fr, de, es, pt, it, ru
+    var label: String {
+        switch self {
+        case .en: return "English"
+        case .zh: return L10n.text("中文")
+        case .ja: return "日本語"
+        case .ko: return "한국어"
+        case .fr: return "Français"
+        case .de: return "Deutsch"
+        case .es: return "Español"
+        case .pt: return "Português"
+        case .it: return "Italiano"
+        case .ru: return "Русский"
+        }
+    }
+}
+
+/// How Chinese and English are written in the output (语言变体).
+enum ChineseVariant: String, CaseIterable {
+    case hans, tw, hk
+    var label: String {
+        switch self {
+        case .hans: return L10n.text("简体")
+        case .tw: return L10n.text("繁体（台湾）")
+        case .hk: return L10n.text("繁体（香港）")
+        }
+    }
+}
+
+enum EnglishVariant: String, CaseIterable {
+    case us, gb
+    var label: String {
+        switch self {
+        case .us: return L10n.text("美式")
+        case .gb: return L10n.text("英式")
+        }
+    }
+}
+
 /// Cleanup is the Article prompt or nothing. The host's other strength names
 /// (conservative, maximal) only change validation strictness, so the app no longer
 /// offers them; a value saved by an older build reads as `.prompt`.
@@ -102,6 +143,8 @@ struct HotKeyBinding: Codable, Equatable {
     static let optionSpaceDefault = HotKeyBinding(keyCode: 49, modifiers: 2048, enabled: true, name: "Option+Space")
     /// kVK_ANSI_V = 9, cmdKey (256) | controlKey (4096): "paste last transcript".
     static let pasteLastDefault = HotKeyBinding(keyCode: 9, modifiers: 256 | 4096, enabled: true, name: "Control+Command+V")
+    /// kVK_Space with shiftKey (512) | optionKey (2048): 翻译, next to ⌥Space for dictation.
+    static let translateDefault = HotKeyBinding(keyCode: 49, modifiers: 512 | 2048, enabled: true, name: "Shift+Option+Space")
 
     var isFn: Bool { keyCode == 63 && modifiers == 0 }
 }
@@ -154,6 +197,12 @@ final class Settings {
         set { encodeBinding("hk.alt.v2", newValue); changed() }
     }
 
+    /// 翻译模式: dictate, and the cleaned-up text is inserted in the target language.
+    var hotkeyTranslate: HotKeyBinding {
+        get { decodeBinding("hk.translate") ?? HotKeyBinding.translateDefault }
+        set { encodeBinding("hk.translate", newValue); changed() }
+    }
+
     /// Re-insert the most recent transcript (Reference "Paste last transcript").
     var hotkeyPasteLast: HotKeyBinding {
         get { decodeBinding("hk.pasteLast") ?? HotKeyBinding.pasteLastDefault }
@@ -179,6 +228,27 @@ final class Settings {
     var language: String {
         get { VoiceLanguage(rawValue: d.string(forKey: "voice.language") ?? "auto")?.rawValue ?? "auto" }
         set { d.set(newValue, forKey: "voice.language"); changed() }
+    }
+
+    var translateTarget: String {
+        get { (TranslateLanguage(rawValue: d.string(forKey: "voice.translateTarget") ?? "") ?? .en).rawValue }
+        set { d.set(newValue, forKey: "voice.translateTarget"); changed() }
+    }
+
+    var zhVariant: String {
+        get { (ChineseVariant(rawValue: d.string(forKey: "voice.zhVariant") ?? "") ?? .hans).rawValue }
+        set { d.set(newValue, forKey: "voice.zhVariant"); changed() }
+    }
+
+    var enVariant: String {
+        get { (EnglishVariant(rawValue: d.string(forKey: "voice.enVariant") ?? "") ?? .us).rawValue }
+        set { d.set(newValue, forKey: "voice.enVariant"); changed() }
+    }
+
+    /// Sent with every request ("zh=tw,en=gb"); nil while both are the defaults.
+    var variantsHeader: String? {
+        zhVariant == ChineseVariant.hans.rawValue && enVariant == EnglishVariant.us.rawValue
+            ? nil : "zh=" + zhVariant + ",en=" + enVariant
     }
 
     var strength: String {

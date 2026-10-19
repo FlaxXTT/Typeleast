@@ -33,6 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var pendingField: FocusedField?
     /// Prompt Beta questions waiting for a spoken answer, and where the prompt goes.
     var betaPending: BetaPending?
+    /// 翻译模式: the target language of the recording in progress (nil: ordinary dictation).
+    var pendingTranslate: String?
     let betaPanel = BetaPanel()
     var tickTimer: Timer?
     /// Last whole second pushed into the menu, so the 20 Hz waveform timer does
@@ -72,6 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         NSApp.mainMenu = bar.menu
         NSApp.windowsMenu = bar.windows
         NSApp.applicationIconImage = AppMark.image(size: 512)
+        // The heatmap starts from whatever history is still kept, once.
+        ActivityLog.shared.seedIfNeeded(from: HistoryStore.shared.entries.filter { !$0.displayText.isEmpty }.map {
+            let counts = DictationStats.countWords($0.displayText)
+            return (date: $0.ts, words: counts.cjk + counts.latin)
+        })
         applyGeneralSettings()
         registerHotKeys()
         scheduleLaunchUpdateCheck()
@@ -174,8 +181,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                 let started = Date()
                 do {
                     let r = try client.dictateSync(wav: wav, language: "auto", appBundleId: "com.apple.Notes",
-                                                   strength: env["TYPELEAST_LLMCHECK_STRENGTH"] ?? "prompt", llm: route)
+                                                   strength: env["TYPELEAST_LLMCHECK_STRENGTH"] ?? "prompt", llm: route,
+                                                   translateTo: env["TYPELEAST_LLMCHECK_TRANSLATE"],
+                                                   variants: env["TYPELEAST_LLMCHECK_VARIANTS"])
                     print("LLMCHECK dictate provider=" + (r.provider ?? "?") + " model=" + (r.model ?? "?")
+                          + " translated=" + (r.translated ?? "-")
                           + " fallback=" + String(r.fallback) + (r.fallbackReason.map { " reason=" + $0 } ?? "")
                           + " ms=" + String(Int(Date().timeIntervalSince(started) * 1000)))
                     print("LLMCHECK dictate raw=" + r.raw)
@@ -264,11 +274,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
         if fnWanted { FnKeyMonitor.shared.start() } else { FnKeyMonitor.shared.stop() }
         centre.register(slot: "pasteLast", binding: settings.hotkeyPasteLast) { [weak self] in self?.pasteLast() }
+        // Fn is reserved for dictation; a translate binding of Fn is ignored.
+        let translate = settings.hotkeyTranslate
+        if translate.isFn { centre.unregister(slot: "translate") } else {
+            centre.register(slot: "translate", binding: translate) { [weak self] in self?.translateHotkeyPressed() }
+        }
     }
 
     /// Fn or a shortcut: toggle, exactly like Reference (press to start, press to stop).
     func hotkeyPressed() {
         toggleDictation()
+    }
+
+    /// 翻译模式: starts a recording whose text is inserted in the target language;
+    /// while recording, either key finishes it.
+    func translateHotkeyPressed() {
+        toggleDictation(translateTo: settings.translateTarget)
     }
 
     /// A clean Fn tap. Stopping is immediate; starting waits a moment, and if the
@@ -542,7 +563,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         guard phase == .idle else { return }
         // A retry from the window copies the result rather than pasting into the window.
         sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
-                     strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false)
+                     strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false,
+                     translateTo: e.translated)
     }
 
     func deleteEntry(id: String) {
@@ -551,6 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func clearHistory() {
         HistoryStore.shared.clear()
+        ActivityLog.shared.clear()
     }
 
     /// Reset a sticky denial, ask macOS to prompt, and open the settings pane.

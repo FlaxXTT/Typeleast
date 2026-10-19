@@ -111,6 +111,8 @@ public sealed class DictateResponse
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
     [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
+    /// <summary>翻译模式: the language the text was written in.</summary>
+    [JsonPropertyName("translated")] public string? Translated { get; set; }
 
     /// <summary>Prompt Beta asked questions: nothing to paste yet.</summary>
     [JsonIgnore] public IReadOnlyList<string> BetaQuestions =>
