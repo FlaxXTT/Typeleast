@@ -20,6 +20,8 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var inserted: Bool
     /// Length of the recording, for the Home statistics. Absent on old entries.
     var seconds: Double?
+    /// 翻译模式: the target language, so a retry translates again. Absent otherwise.
+    var translated: String? = nil
 
     var title: String {
         let t = text.isEmpty ? raw : text

@@ -62,6 +62,8 @@ final class AppModel: ObservableObject {
     @Published var page: HubPage = .home
     @Published private(set) var history: [LocalHistoryEntry] = []
     @Published private(set) var stats = DictationStats()
+    /// Bumped when the per-day activity changes; the heatmap reads ActivityLog.shared.
+    @Published private(set) var activityRevision = 0
     @Published private(set) var words: [LocalWord] = []
 
     @Published var phase: AppPhase = .idle
@@ -91,6 +93,9 @@ final class AppModel: ObservableObject {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: HistoryStore.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.reloadHistory()
+        })
+        observers.append(center.addObserver(forName: ActivityLog.didChange, object: nil, queue: .main) { [weak self] _ in
+            self?.activityRevision += 1
         })
         observers.append(center.addObserver(forName: Settings.wordsDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.reloadWords()

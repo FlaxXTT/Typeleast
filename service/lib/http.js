@@ -239,6 +239,8 @@ export function createHandler(options) {
           strength: body.strength,
           fieldContext: normalizeFieldContext(body.fieldContext),
           llm: normalizeRoute(body.llm),
+          translateTo: typeof body.translateTo === "string" ? body.translateTo : null,
+          variants: body.variants ?? null,
           signal: undefined,
         });
         // service.polish() records the attempt itself.
@@ -251,6 +253,7 @@ export function createHandler(options) {
           model: result.model,
           provider: result.provider,
           ms: result.ms,
+          ...(result.translated ? { translated: result.translated } : {}),
         });
         return;
       }
@@ -266,6 +269,8 @@ export function createHandler(options) {
           fieldContext: parseFieldContext(req.headers["x-voice-context"]),
           llm: parseRouteHeader(req.headers["x-voice-llm"]),
           betaSession: req.headers["x-voice-beta-session"] || null,
+          translateTo: req.headers["x-voice-translate"] || null,
+          variants: req.headers["x-voice-variants"] || null,
         });
         reply(res, 200, result);
         return;
@@ -286,6 +291,7 @@ export function createHandler(options) {
           llm: parseRouteHeader(req.headers["x-voice-llm"]),
           betaSession: sessionId,
           betaSkip: true,
+          variants: req.headers["x-voice-variants"] || null,
           signal: undefined,
         });
         reply(res, 200, {

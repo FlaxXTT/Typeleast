@@ -195,3 +195,27 @@ test("Prompt Beta endpoints: skip and cancel take a session id; an expired one i
   assert.equal((await post("/prompts/beta/finish", { sessionId: "gone" })).status, 410);
   assert.equal(JSON.parse((await post("/prompts/beta/cancel", { sessionId: "live" })).body).cancelled, true);
 });
+
+test("翻译和语言变体：/dictate 读请求头，/polish 读请求体，结果带上目标语言", async () => {
+  const { Readable } = await import("node:stream");
+  const service = failingService();
+  const seen = [];
+  service.transcribeAndPolish = async (request) => { seen.push(request); return { text: "Hello", raw: "你好", fallback: false, translated: "en", ms: {} }; };
+  service.polish = async (request) => { seen.push(request); return { text: "Hello", raw: "你好", fallback: false, translated: "en", ms: {} }; };
+  const handler = createHandler({ service, currentToken: async () => TOKEN });
+  async function post(path, body, headers = {}) {
+    const req = Readable.from([body]);
+    Object.assign(req, { url: ROUTE_PREFIX + path, method: "POST", headers: { host: "127.0.0.1", authorization: `Bearer ${TOKEN}`, ...headers } });
+    const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(b) { this.body = b; } };
+    await handler(req, res);
+    return res;
+  }
+  const dictated = await post("/dictate", Buffer.alloc(64), { "x-voice-translate": "en", "x-voice-variants": "zh=tw,en=gb" });
+  assert.equal(dictated.status, 200);
+  assert.equal(seen[0].translateTo, "en");
+  assert.equal(seen[0].variants, "zh=tw,en=gb");
+  const polished = await post("/polish", Buffer.from(JSON.stringify({ text: "你好", translateTo: "en", variants: { zh: "hk" } })));
+  assert.equal(JSON.parse(polished.body).translated, "en");
+  assert.equal(seen[1].translateTo, "en");
+  assert.deepEqual(seen[1].variants, { zh: "hk" });
+});

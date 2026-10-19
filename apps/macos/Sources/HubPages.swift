@@ -90,6 +90,7 @@ struct HomePage: View {
                         SetupCard()
                     }
                     StatsRow(stats: model.stats)
+                    ActivityCard()
                     RecentCard()
                     EngineCard()
                 }

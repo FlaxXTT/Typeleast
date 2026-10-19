@@ -51,6 +51,9 @@ struct SettingsPage: View {
                     HotkeyField(slot: .alt)
                 }
             }
+            SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始说话，再按一下结束，插入翻译成 {0} 的文字", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
+                HotkeyField(slot: .translate)
+            }
             SettingRow(title: L10n.text("粘贴上一条转写"), detail: L10n.text("文字没粘进去时，用它再贴一次")) {
                 HotkeyField(slot: .pasteLast)
             }
@@ -107,6 +110,21 @@ struct SettingsPage: View {
                 .disabled(model.speech?.canSetLanguage == false)
                 .labelsHidden()
                 .frame(width: 150)
+            }
+            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("按翻译快捷键说的话，会整理后翻译成这种语言再插入。需要填好整理模型。")) {
+                Picker("", selection: model.setting(\.translateTarget)) {
+                    ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+                }.labelsHidden().frame(width: 150)
+            }
+            SettingRow(title: L10n.text("中文写法"), detail: L10n.text("输出的中文用简体还是繁体；繁体在本机转换，并换成当地用语（软件 → 軟體）。")) {
+                Picker("", selection: model.setting(\.zhVariant)) {
+                    ForEach(ChineseVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+                }.labelsHidden().frame(width: 150)
+            }
+            SettingRow(title: L10n.text("英文拼写"), detail: L10n.text("输出的英文用美式还是英式拼写（color / colour）。")) {
+                Picker("", selection: model.setting(\.enVariant)) {
+                    ForEach(EnglishVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+                }.labelsHidden().frame(width: 150)
             }
         }
     }
@@ -414,13 +432,14 @@ private struct StrengthOption: View {
 // MARK: - shortcut recorder
 
 enum HotkeySlot {
-    case main, alt, pasteLast
+    case main, alt, pasteLast, translate
 
     var keyPath: ReferenceWritableKeyPath<Settings, HotKeyBinding> {
         switch self {
         case .main: return \.hotkeyMain
         case .alt: return \.hotkeyAlt
         case .pasteLast: return \.hotkeyPasteLast
+        case .translate: return \.hotkeyTranslate
         }
     }
 }
@@ -474,7 +493,8 @@ struct HotkeyField: View {
         recording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             if event.type == .flagsChanged {
-                if event.keyCode == FnKeyMonitor.keyCode, !event.modifierFlags.contains(.function) {
+                // Fn alone is a dictation key only; 翻译 needs a real shortcut.
+                if event.keyCode == FnKeyMonitor.keyCode, !event.modifierFlags.contains(.function), slot != .translate {
                     save(HotKeyBinding.fnDefault)
                 }
                 return event

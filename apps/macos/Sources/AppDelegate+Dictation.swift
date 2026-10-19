@@ -5,9 +5,14 @@ import AVFoundation
 
 extension AppDelegate {
 
-    func toggleDictation() {
+    func toggleDictation() { toggleDictation(translateTo: nil) }
+
+    /// `translateTo` only matters when this starts a recording (翻译模式's own hotkey).
+    func toggleDictation(translateTo: String?) {
         switch phase {
-        case .idle: startRecording()
+        case .idle:
+            pendingTranslate = translateTo
+            startRecording()
         case .recording: stopRecording()
         case .thinking: NSSound.beep()
         }
@@ -62,7 +67,8 @@ extension AppDelegate {
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
-        recordingBar.showRecording(destination: pendingAppBundleId)
+        recordingBar.showRecording(destination: pendingAppBundleId,
+                                   badge: pendingTranslate.map { "→" + $0.uppercased() } ?? "")
         if settings.muteWhileDictating { OutputMuter.shared.muteIfNeeded() }
         setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
         playSound(start: true)
@@ -93,9 +99,12 @@ extension AppDelegate {
         let language = settings.language
         let strength = settings.strength
         let keep = settings.keepAudio24h
-        // A recording made while Prompt Beta's questions are open is the answer to them.
-        if strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
-        let betaSession = strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
+        let translateTo = pendingTranslate
+        pendingTranslate = nil
+        // A recording made while Prompt Beta's questions are open is the answer to them;
+        // a translation is not, and leaves the questions waiting.
+        if translateTo == nil, strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
+        let betaSession = translateTo == nil && strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
         do {
             let r = try recorder.finish()
             playSound(start: false)
@@ -105,7 +114,7 @@ extension AppDelegate {
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,
-                         insert: true, deleteWhenDone: !keep, betaSession: betaSession)
+                         insert: true, deleteWhenDone: !keep, betaSession: betaSession, translateTo: translateTo)
         } catch {
             playSound(start: false)
             phase = .idle
@@ -129,6 +138,7 @@ extension AppDelegate {
             recordingStartedAt = nil
             pendingField = nil
             recordingBar.hide()
+            pendingTranslate = nil
             setHint(L10n.text("已取消，录音已丢弃"))
             applyState()
             updateIdleBar()
@@ -144,7 +154,8 @@ extension AppDelegate {
 
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
-                      insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil) {
+                      insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
+                      translateTo: String? = nil) {
         phase = .thinking
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
@@ -152,6 +163,7 @@ extension AppDelegate {
         let context = field?.context.encoded()
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let llm = settings.activeLLMRoute
+        let variants = settings.variantsHeader
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
@@ -163,7 +175,8 @@ extension AppDelegate {
                 outcome = .success(try self.client.dictateSync(wav: data, language: language,
                                                               appBundleId: appBundleId, strength: strength,
                                                               fieldContext: context, llm: llm,
-                                                              betaSession: betaSession))
+                                                              betaSession: betaSession,
+                                                              translateTo: translateTo, variants: variants))
             } catch {
                 outcome = .failure(error)
             }
@@ -198,7 +211,7 @@ extension AppDelegate {
             }
             // The answer to Prompt Beta's questions: the prompt goes where the request was made.
             var appBundleId = appBundleId, field = field
-            if let pending = betaPending, strength == VoiceStrength.promptbeta.rawValue {
+            if let pending = betaPending, strength == VoiceStrength.promptbeta.rawValue, resp.translated == nil {
                 appBundleId = pending.appBundleId
                 field = pending.field ?? field
                 betaPending = nil
@@ -212,6 +225,7 @@ extension AppDelegate {
                                           msTotal: resp.ms?.total, audioPath: audioPath, inserted: false,
                                           seconds: seconds)
             entry.model = resp.model ?? resp.provider
+            entry.translated = resp.translated
             HistoryStore.shared.add(entry)
             if text.isEmpty {
                 recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
@@ -219,8 +233,11 @@ extension AppDelegate {
                 applyState()
                 return
             }
-            setHint(resp.fallback ? L10n.text("这次用了原文（整理没有成功）") : nil, warning: resp.fallback)
+            let failedHint = resp.translated != nil ? L10n.text("翻译没有成功，用了原文") : L10n.text("这次用了原文（整理没有成功）")
+            setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
+                let counts = DictationStats.countWords(text)
+                ActivityLog.shared.record(words: counts.cjk + counts.latin)
                 insertText(text, fallback: resp.fallback, entryId: entry.id, appBundleId: appBundleId, field: field)
             } else {
                 Inserter.shared.setString(text)
@@ -361,10 +378,12 @@ extension AppDelegate {
         applyState()
         let llm = settings.activeLLMRoute
         let language = settings.language
+        let variants = settings.variantsHeader
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.betaSync(sessionId: pending.sessionId, skip: true,
-                                                            appBundleId: pending.appBundleId, llm: llm) }
+                                                            appBundleId: pending.appBundleId, llm: llm,
+                                                            variants: variants) }
             DispatchQueue.main.async {
                 self.finishRequest(outcome, appBundleId: pending.appBundleId, language: language,
                                    strength: VoiceStrength.promptbeta.rawValue, audioPath: nil, seconds: nil,

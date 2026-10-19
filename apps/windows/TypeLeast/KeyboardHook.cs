@@ -16,17 +16,22 @@ internal sealed class KeyboardHook : IDisposable
     private readonly Native.LowLevelKeyboardProc proc;
     private IntPtr handle;
     private readonly TapDetector tap;
+    /// <summary>翻译模式's key; null when it is off.</summary>
+    private TapDetector? translateTap;
 
     /// <summary>A clean tap of the dictation key.</summary>
     public event Action? Tapped;
+    /// <summary>A clean tap of the translate key.</summary>
+    public event Action? TranslateTapped;
     /// <summary>Esc while <see cref="SwallowEscape"/> is set (recording).</summary>
     public event Action? Escape;
     /// <summary>When true, Esc is consumed instead of reaching the focused app.</summary>
     public bool SwallowEscape { get; set; }
 
-    public KeyboardHook(DictationKey key)
+    public KeyboardHook(DictationKey key, DictationKey? translateKey = null)
     {
         tap = new TapDetector(TapDetector.VirtualKey(key));
+        SetTranslateKey(translateKey);
         proc = Callback; // keep the delegate alive for as long as the hook is installed
     }
 
@@ -34,6 +39,11 @@ internal sealed class KeyboardHook : IDisposable
     {
         tap.TargetVk = TapDetector.VirtualKey(key);
         tap.Reset();
+    }
+
+    public void SetTranslateKey(DictationKey? key)
+    {
+        translateTap = key is { } k ? new TapDetector(TapDetector.VirtualKey(k)) : null;
     }
 
     public bool Install()
@@ -63,10 +73,12 @@ internal sealed class KeyboardHook : IDisposable
 
             // A lone Alt tap would open the focused window's menu bar and steal the
             // caret; an unassigned key in between makes Windows ignore it.
-            if (!injected && isDown && vk == tap.TargetVk && vk is 0xA4 or 0xA5)
+            if (!injected && isDown && (vk == tap.TargetVk || vk == translateTap?.TargetVk) && vk is 0xA4 or 0xA5)
                 Native.SendKeys((Native.VK_MENU_MASK, false), (Native.VK_MENU_MASK, true));
 
-            if (tap.OnKey(vk, isDown, injected, DateTime.UtcNow)) Tapped?.Invoke();
+            var now = DateTime.UtcNow;
+            if (tap.OnKey(vk, isDown, injected, now)) Tapped?.Invoke();
+            if (translateTap?.OnKey(vk, isDown, injected, now) == true) TranslateTapped?.Invoke();
         }
         return Native.CallNextHookEx(handle, nCode, wParam, lParam);
     }

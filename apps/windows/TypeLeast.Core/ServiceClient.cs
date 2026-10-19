@@ -204,7 +204,8 @@ public sealed class ServiceClient
     }
 
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
-        LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null) =>
+        LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
+        string? translateTo = null, string? variants = null) =>
         WithPortRetry(async () =>
         {
             var headers = new Dictionary<string, string>
@@ -216,6 +217,8 @@ public sealed class ServiceClient
             if (EncodeContextHeader(fieldContext) is { } context) headers["x-voice-context"] = context;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
+            if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
+            if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
             var content = new ByteArrayContent(wav);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             // Prompt Beta makes up to four model calls in one request.
@@ -226,10 +229,12 @@ public sealed class ServiceClient
         });
 
     /// <summary>Prompt Beta: write the prompt without answers (skip), or forget the questions (cancel).</summary>
-    public Task<DictateResponse> BetaAsync(string sessionId, bool skip, string appHint, LlmRoute? llm, CancellationToken ct = default) =>
+    public Task<DictateResponse> BetaAsync(string sessionId, bool skip, string appHint, LlmRoute? llm, CancellationToken ct = default,
+        string? variants = null) =>
         WithPortRetry(async () =>
         {
             var headers = new Dictionary<string, string> { ["x-voice-app"] = appHint };
+            if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
             var json = JsonSerializer.Serialize(new { sessionId });
             var (status, body) = await SendAsync(HttpMethod.Post, skip ? "/prompts/beta/finish" : "/prompts/beta/cancel",

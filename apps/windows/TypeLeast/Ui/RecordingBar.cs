@@ -114,26 +114,30 @@ internal sealed class RecordingBar : Window
         Place();
     }
 
-    public void ShowRecording(AudioRecorder rec)
+    private string prefix = "";
+
+    /// <param name="prefix">Shown before the timer, e.g. "→EN " for 翻译模式.</param>
+    public void ShowRecording(AudioRecorder rec, string prefix = "")
     {
+        this.prefix = prefix;
         recorder = rec;
         startedAt = DateTime.UtcNow;
         Array.Clear(history);
         cancel.Visibility = Visibility.Visible;
         stop.Visibility = Visibility.Visible;
         wave.Visibility = Visibility.Visible;
-        label.Text = "0:00";
+        label.Text = prefix + "0:00";
         tick.Start();
         ShowBar();
     }
 
-    public void ShowThinking()
+    public void ShowThinking(string? text = null)
     {
         recorder = null;
         cancel.Visibility = Visibility.Collapsed;
         stop.Visibility = Visibility.Collapsed;
         wave.Visibility = Visibility.Visible;
-        label.Text = L10n.T("整理中…");
+        label.Text = text ?? L10n.T("整理中…");
         ShowBar();
     }
 
@@ -160,7 +164,7 @@ internal sealed class RecordingBar : Window
             history[^1] = r.Level;
             var elapsed = DateTime.UtcNow - startedAt;
             var left = AudioRecorder.MaxSeconds - elapsed.TotalSeconds;
-            label.Text = left <= 15 ? L10n.T("还剩 ") + Math.Max(0, (int)left) + L10n.T(" 秒") : $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}";
+            label.Text = prefix + (left <= 15 ? L10n.T("还剩 ") + Math.Max(0, (int)left) + L10n.T(" 秒") : $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}");
         }
         else
         {
