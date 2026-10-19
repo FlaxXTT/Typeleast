@@ -1,63 +1,57 @@
 <p align="center">
-  <img src="docs/media/banner.png" alt="TypeLeast：说话就是打字。本机识别，你的模型整理，直接写进光标处。" width="860">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/hero-dark.svg">
+  <img src="docs/media/readme/hero-light.svg" alt="TypeLeast：说出来，就写好了。按一下说话，再按一下，整理好的文字直接出现在光标处。" width="880">
+</picture>
 </p>
 
 <p align="center">
-  <a href="https://github.com/FlaxXTT/typeleast/releases/latest"><img alt="下载最新版" src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E6%9C%80%E6%96%B0%E7%89%88-1a1a1a"></a>
-  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1a1a1a?logo=apple&logoColor=white">
-  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-1a1a1a?logo=windows&logoColor=white">
-  <img alt="识别在本机" src="https://img.shields.io/badge/%E8%AF%86%E5%88%AB-%E6%9C%AC%E6%9C%BA-2e9d5b">
-  <img alt="自带 API Key" src="https://img.shields.io/badge/%E6%95%B4%E7%90%86-%E8%87%AA%E5%B8%A6%20API%20Key-5b5bd6">
+  <a href="https://github.com/FlaxXTT/Typeleast/releases/latest"><picture>  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/button-download-dark.svg">  <img src="docs/media/readme/button-download-light.svg" alt="下载最新版" width="141"></picture></a>
+  &nbsp;
+  <a href="#看它工作"><picture>  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/button-more-dark.svg">  <img src="docs/media/readme/button-more-light.svg" alt="看它怎么用" width="161"></picture></a>
 </p>
+
+<p align="center"><sub>macOS 13 以上 &nbsp;·&nbsp; Windows 10 / 11 &nbsp;·&nbsp; 完全免费</sub></p>
+
+<br>
+
+<p align="center">TypeLeast 是一个免费的 Mac 和 Windows 听写工具。<br>按一下快捷键说话，语音在<b>你自己的电脑上</b>识别，再用<b>你自己的大模型</b>整理成通顺的文字，直接写进当前光标处。</p>
+
+<br>
 
 <p align="center">
-  <a href="docs/media/promo.mp4"><img src="docs/media/promo.gif" alt="10 秒宣传片：按一下 fn 随口说，口头禅去掉、改口照办，整理好的文字直接写进光标处" width="860"></a>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/features-dark.svg">
+  <img src="docs/media/readme/features-light.svg" alt="亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。" width="880">
+</picture>
 </p>
 
-<p align="center"><sub>10 秒宣传片（点击看高清 MP4）。</sub></p>
+<br>
 
-# TypeLeast
+## 看它工作
 
-按一下快捷键说话，再按一下结束：语音在**你自己的电脑上**识别，再用**你自己的大模型 API Key** 整理成通顺的文字，直接出现在当前光标处。对标 [Typeless](https://www.typeless.com)，但识别不上云，也不用订阅。
-
-## 为什么用 TypeLeast
-
-| | |
-|---|---|
-| 🎙️ **随口说，它来整理** | 「嗯」「那个」「然后呢」自动去掉；说错了改口（「明天，不对，后天」），它按你最后的意思写；句子理顺、标点补好，不编造你没说的内容。 |
-| 🔒 **识别在本机** | 默认 SenseVoice Small，也可下载 FireRedASR2 CTC、Fun-ASR-Nano、Qwen3-ASR；音频在本机识别。 |
-| 🔑 **用你自己的模型** | DeepSeek、智谱、Kimi、通义千问、OpenRouter、OpenAI，或本机 Ollama。按量付费，没有订阅；Key 只存在系统钥匙串 / 凭据管理器里。不填 Key 也能用，只去口水词。 |
-| ⚡ **哪里都能用** | 微信、邮件、浏览器、Word、VS Code……任何输入框。Mac 单按 fn，Windows 单按右 Alt。 |
-| 📦 **装上就能用** | 安装包自带运行环境，不需要账号，也不需要另装 Node.js 或其他宿主程序。 |
-
-## 识别模型（v1.5.0 开发中）
-
-设置页的「识别模型」提供以下选项。SenseVoice Small 仍是默认模型，升级不会自动下载候选模型。
-
-| 模型 | 特点 | 模型文件大小 |
-|---|---|---|
-| SenseVoice Small，INT8 | 体积小、响应快；支持中文、英文、粤语、日语和韩语 | 约 0.24 GB |
-| FireRedASR2 CTC，INT8 | 偏向中文与方言，也支持英文；自动检测语言 | 约 0.78 GB |
-| Fun-ASR-Nano，INT8 | 适合中英混合听写，也支持日语；可指定中文、英文或日语提示 | 约 1.01 GB |
-| Qwen3-ASR-0.6B，INT8 | 多语言识别候选；使用现有五种语言提示 | 约 0.99 GB |
-
-以上是模型特点，不是统一精度排名。来源及许可证见 [第三方说明](THIRD-PARTY-NOTICES.md)。
-
-点击「下载并启用」后，应用下载并校验文件，成功加载后才保存选择。下载期间仍可使用当前模型。失败时保留当前模型，并显示原因。可取消下载后重试，已经校验的文件会复用。已下载的模型可点「使用」切换；录音或整理期间不能切换。
-
-界面语言、听写语言和整理方式彼此独立。FireRed 仅自动检测语言；其他模型仅提供其支持的语言提示。不支持的旧语言设置按自动识别处理，切回原模型后仍保留原设置。整理档位「自然整理」（Natural cleanup）沿用原有 `prompt` 设置和行为，提示词正文及版本不变。
-
-候选模型必须完成实际加载、公开样例识别和三平台 CI 后才能正式发布；当前验收状态见 [v1.5.0 验证记录](docs/v1.5.0-验证记录.md)。
-
-## 实际效果
+<p align="center">
+  <a href="docs/media/promo.mp4"><img src="docs/media/promo.gif" alt="10 秒宣传片：按一下 fn 随口说，口头禅去掉、改口照办，整理好的文字直接写进光标处" width="880"></a>
+  <br><sub>10 秒宣传片 · 点击看高清 MP4</sub>
+</p>
 
 <p align="center">
   <img src="docs/media/demo.gif" alt="真实录屏：在输入框里按一下 fn，随口说一句带口头禅、中途改口的话，整理好的文字直接出现在光标处" width="760">
+  <br><sub>真实录屏：识别、整理、粘贴，一次完成</sub>
 </p>
 
-<p align="center"><sub></sub></p>
+<br>
 
-## 界面一览
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/free-dark.svg">
+  <img src="docs/media/readme/free-light.svg" alt="免费：整套框架免费使用，没有订阅，不用注册，不限次数。本机识别不花钱；整理用你自己的 Key 按用量计费；用本机 Ollama 一分钱都不花。" width="880">
+</picture>
+</p>
+
+<br>
+
+## 界面
 
 <table>
   <tr>
@@ -65,45 +59,48 @@
     <td width="50%"><img src="docs/media/history.png" alt="历史：每条听写的整理结果，可复制原话"></td>
   </tr>
   <tr>
-    <td align="center"><sub>首页：一键开始、统计、最近的听写</sub></td>
-    <td align="center"><sub>历史：整理结果和原话都能复制</sub></td>
+    <td align="center"><sub>首页 · 一键开始、统计、最近的听写</sub></td>
+    <td align="center"><sub>历史 · 整理结果和原话都能复制</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/media/settings.png" alt="设置：快捷键和整理模型（自己的 API Key）"></td>
     <td width="50%"><img src="docs/media/dictionary-dark.png" alt="词典（深色模式）：专有名词和纠错规则"></td>
   </tr>
   <tr>
-    <td align="center"><sub>设置：选服务商、填 Key、测试连接</sub></td>
-    <td align="center"><sub>词典：人名、术语、「听成=正确写法」，支持深色模式</sub></td>
+    <td align="center"><sub>设置 · 选服务商、填 Key、测试连接</sub></td>
+    <td align="center"><sub>词典 · 人名、术语和纠错规则，支持深色模式</sub></td>
   </tr>
 </table>
 
-<p align="center">
-  <img src="docs/media/pill-recording.png" alt="录音条：正在听" height="64">
-  &nbsp;&nbsp;
-  <img src="docs/media/pill-thinking.png" alt="录音条：整理中" height="64">
-  <br><sub>屏幕底部的录音条：说话时显示实时波形，说完显示整理进度，不抢当前窗口的焦点。</sub>
-</p>
+<p align="center"><sub>截图里的历史和词典都是示例数据。</sub></p>
 
-<sub>截图里的历史和词典都是示例数据。</sub>
+## 识别模型
 
----
+默认用 SenseVoice Small。在「设置 → 识别模型」里点「下载并启用」，就能换成更大的本机模型：下载时照常听写，每个文件都校验 SHA-256，加载成功才切换，失败保留当前模型。
 
-## 下载安装（普通用户看这里）
+| 模型 | 适合 | 大小 |
+|---|---|---|
+| **SenseVoice Small** · 默认 | 小而快；中文、英文、粤语、日语、韩语 | 0.24 GB |
+| **FireRedASR2 CTC** | 中文与方言，也支持英文；自动检测语言 | 0.78 GB |
+| **Fun-ASR-Nano** | 中英混合听写，也支持日语 | 1.01 GB |
+| **Qwen3-ASR-0.6B** | 多语言；对中文可能输出繁体字 | 0.99 GB |
 
-到本仓库的 **Releases** 页面下载最新版本：
+<sub>这是特点不是精度排名，建议用自己的说话方式试一试。更大的模型识别更慢、占用约 2–3 GB 内存。来源和许可证见 [第三方说明](THIRD-PARTY-NOTICES.md)，实测数据见 [v1.5.0 验证记录](docs/v1.5.0-验证记录.md)。</sub>
+
+## 下载
+
+到 [**Releases**](https://github.com/FlaxXTT/Typeleast/releases/latest) 下载最新版本：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
-| Mac，Apple 芯片（M1、M2、M3、M4…） | `TypeLeast-<版本>-macOS-AppleSilicon.dmg` |
-| Mac，Intel 芯片 | `TypeLeast-<版本>-macOS-Intel.dmg` |
-| Windows 11 / Windows 10，64 位 | `TypeLeast-<版本>-Windows-x64-Setup.exe`（安装版），或 `…-Portable.zip`（解压即用） |
+| Mac · Apple 芯片（M1、M2、M3、M4…） | `TypeLeast-<版本>-macOS-AppleSilicon.dmg` |
+| Mac · Intel 芯片 | `TypeLeast-<版本>-macOS-Intel.dmg` |
+| Windows 11 / 10（64 位） | `TypeLeast-<版本>-Windows-x64-Setup.exe`，或免安装的 `…-Portable.zip` |
 
-> 不确定 Mac 是哪种芯片：点左上角  →「关于本机」，「芯片」一栏写 Apple M… 就是 Apple 芯片，写 Intel 就是 Intel。
+<sub>不确定 Mac 是哪种芯片：点左上角  →「关于本机」，「芯片」写 Apple M… 就是 Apple 芯片。安装包已经带好运行环境，不需要另装任何东西；`SHA256SUMS.txt` 里有每个文件的校验值。</sub>
 
-安装包里**已经带好** Node.js 和本地识别引擎，不需要另外安装任何东西。`SHA256SUMS.txt` 里有每个文件的校验值。
-
-### 你需要准备的
+<details>
+<summary><b>你需要准备的</b></summary>
 
 | | macOS | Windows |
 |---|---|---|
@@ -113,7 +110,10 @@
 | 权限 | 麦克风；辅助功能（自动粘贴、Fn 键） | 麦克风（系统隐私设置里允许桌面应用访问）；不需要管理员权限 |
 | 整理模型 | 任一 OpenAI 兼容服务的 API Key（可选） | 同左 |
 
-### macOS 安装步骤
+</details>
+
+<details>
+<summary><b>macOS 安装步骤</b></summary>
 
 1. 打开 `.dmg`，把 **TypeLeast** 拖进「应用程序」。
 2. 第一次打开会被系统拦下，因为这个版本没有 Apple 开发者签名。打开「系统设置 → 隐私与安全性」，在页面底部点 **「仍要打开」**，再确认一次。
@@ -130,7 +130,10 @@
    - **🌐 / Fn 键**：建议在「系统设置 → 键盘」把「按下 🌐 键时」改为「无操作」，免得按 Fn 时同时切换输入法。
 4. 在「设置 → 整理模型」里填 API Key（见下文），点「测试连接」。
 
-### Windows 安装步骤
+</details>
+
+<details>
+<summary><b>Windows 安装步骤</b></summary>
 
 1. 双击 `TypeLeast-<版本>-Windows-x64-Setup.exe`。安装包没有代码签名，SmartScreen 可能提示「Windows 已保护你的电脑」：点 **「更多信息」→「仍要运行」**。
 2. 按向导安装（装在你自己的用户目录，不需要管理员权限），最后勾选「运行 TypeLeast」。
@@ -140,9 +143,12 @@
    - **麦克风**：如果录不到声音，打开「设置 → 隐私和安全性 → 麦克风」，打开「允许桌面应用访问麦克风」。
 4. 在「设置 → 整理模型」里填 API Key，点「测试连接」。
 
----
+</details>
 
-## 使用
+## 更多
+
+<details>
+<summary><b>使用方法：快捷键、整理方式、词典</b></summary>
 
 界面语言可在「设置 → 语言 → 界面语言」选择跟随系统、简体中文或 English，重启应用后生效。默认跟随系统：中文系统使用简体中文，其他系统使用英语。界面语言不改变听写语言或整理结果的语言。Mac 和 Windows 都支持。
 
@@ -165,7 +171,10 @@
 - **历史**：最近的听写都在主窗口「历史」里，可以复制整理结果或原话。
 - Windows 上，右 Alt 在部分欧洲键盘布局里是 AltGr（用来打特殊字符），这种情况请在设置里换一个键。
 
-## 整理模型和 API Key
+</details>
+
+<details>
+<summary><b>整理模型和 API Key</b></summary>
 
 「设置 → 整理模型」里选服务商，填 Key 和模型 ID（可以点「获取列表」选），再点「测试连接」：
 
@@ -185,7 +194,10 @@
 - 会先「思考」再回答的模型（推理模型），TypeLeast 会在已知服务商上关闭思考，整理更快、更省 token。
 - 调用费用由你的服务商账户承担。每次整理只发送识别出的文字、你的词典，以及（macOS 上）光标附近的少量文字。
 
-## 隐私
+</details>
+
+<details>
+<summary><b>隐私：数据去了哪里</b></summary>
 
 - **音频不出电脑。** 录音只在内存里，交给本机的识别服务后即丢弃（macOS 可选保留 24 小时用于重试）。
 - 发给整理模型服务商的只有：识别出的文字、词典，以及（macOS 上）光标附近的文字；发送前会抹掉看起来像密钥、密码的内容。
@@ -198,7 +210,10 @@
 | 语音模型 | `~/Library/Application Support/TypeLeast/models/` | `%LOCALAPPDATA%\TypeLeast\models\` |
 | API Key | 钥匙串，名称 `TypeLeast.llm-api-key` | 凭据管理器，名称以 `TypeLeast.llm-api-key/` 开头 |
 
-## 常见问题
+</details>
+
+<details>
+<summary><b>常见问题</b></summary>
 
 **显示「本地服务未就绪」**：在「设置 → 本地服务」点「重新启动」。从源码构建的版本需要电脑上装有 Node.js 22 或更新版本，或点「选择 Node.js…」指定位置。
 
@@ -222,9 +237,10 @@
 
 **杀毒软件提示 TypeLeast 有风险**：TypeLeast 用系统的键盘钩子识别单独按下的快捷键，又没有代码签名，个别杀毒软件会因此提示。它只判断快捷键和 Esc，不记录你输入的任何内容；源码就在本仓库，可以自行构建。
 
----
+</details>
 
-## 从源码构建（开发者）
+<details>
+<summary><b>从源码构建（开发者）</b></summary>
 
 ### 前置依赖
 
@@ -272,7 +288,9 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 - 开发时让 App 使用仓库里的服务：先设置 `$env:TYPELEAST_SERVICE_DIR="<仓库路径>\service"`，再运行 `dotnet run --project TypeLeast`。
 - `.\package.ps1` 生成自带 Node.js 的 `Setup.exe` 和便携版 `.zip`，输出在 `apps\windows\dist\`。
 
-### README 里的截图和演示
+### README 里的截图、动效和演示
+
+- 首屏动画、亮点卡片、免费卡片和按钮：`python3 docs/media/readme/make_readme_art.py` 生成浅色和深色两套 SVG（纯 SVG + CSS 动画，GitHub 直接播放）。
 
 - 截图：`apps/macos/Tools/render.sh` 用示例数据离屏渲染所有页面，再用 `apps/macos/Tools/demo/FrameShot.swift` 加圆角和阴影。
 - 宣传片：先用 `record-demo.sh` 录好 `demo.mov`，再用 `apps/macos/Tools/demo/MakePromo.swift` 把它和真实界面截图剪成 10 秒的 MP4 和 GIF（用法见文件开头）。
@@ -297,6 +315,11 @@ git push origin v1.5.0
 | [`docs/`](docs/) | 开发记录和对标 Typeless 的功能整理 |
 | [`.github/workflows/`](.github/workflows/) | CI 和发布流程 |
 
-## 许可与致谢
+</details>
+
+<details>
+<summary><b>许可与致谢</b></summary>
 
 见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)：sherpa-onnx（Apache-2.0）、SenseVoice 模型（FunAudioLLM）、Silero VAD（MIT）、Node.js（MIT）、NAudio（MIT），以及整理提示词所依据的 Erduo《Budget Typeless DIY》。
+
+</details>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="161" height="48" viewBox="0 0 161 48" role="img" aria-label="看它怎么用 ›">
+<title>看它怎么用 ›</title>
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
+.ink { fill: #1d1d1f; } .gray { fill: #6e6e73; } .faint { fill: #a1a1a6; }
+.blue { fill: #0071e3; } .green { fill: #248a3d; }
+.grow { transform-box: fill-box; transform-origin: center; }
+.left { transform-box: fill-box; transform-origin: left center; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+<rect x="1" y="1" width="159" height="46" rx="23" fill="none" stroke="#0071e3" stroke-width="1.5"/><text x="80.5" y="30" font-size="17" font-weight="600" text-anchor="middle" fill="#0071e3">看它怎么用 ›</text>
+</svg>

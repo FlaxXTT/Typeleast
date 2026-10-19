@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。">
+<title>亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。</title>
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
+.ink { fill: #1d1d1f; } .gray { fill: #6e6e73; } .faint { fill: #a1a1a6; }
+.blue { fill: #0071e3; } .green { fill: #248a3d; }
+.grow { transform-box: fill-box; transform-origin: center; }
+.left { transform-box: fill-box; transform-origin: left center; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+.lb0 { animation: lbPulse 1.2s ease-in-out -0.00s infinite; }
+.lb1 { animation: lbPulse 1.2s ease-in-out -0.48s infinite; }
+.lb2 { animation: lbPulse 1.2s ease-in-out -0.26s infinite; }
+.lb3 { animation: lbPulse 1.2s ease-in-out -0.74s infinite; }
+.lb4 { animation: lbPulse 1.2s ease-in-out -0.52s infinite; }
+.lb5 { animation: lbPulse 1.2s ease-in-out -1.00s infinite; }
+.lb6 { animation: lbPulse 1.2s ease-in-out -0.78s infinite; }
+@keyframes lbPulse { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.35); } }
+.fade { animation: fade 6s ease-in-out infinite; }
+.cut  { animation: cut 6s ease-in-out infinite; }
+@keyframes cut  { 0%,15% { transform: scaleX(0); } 35%,85% { transform: scaleX(1); } 95%,100% { transform: scaleX(0); } }
+@keyframes fade { 0%,35% { opacity: 1; } 50%,85% { opacity: .35; } 95%,100% { opacity: 1; } }
+.pulse { animation: pulse 2.4s ease-out infinite; }
+@keyframes pulse { 0% { transform: scale(.8); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+.result { animation: result 6s ease-in-out infinite; }
+@keyframes result { 0%,30% { opacity: .25; } 42%,88% { opacity: 1; } 96%,100% { opacity: .25; } }
+.pl { animation: pl 6s ease-out infinite; opacity: 0; }
+.p0 { animation-delay: 0s; } .p1 { animation-delay: .35s; } .p2 { animation-delay: .7s; } .p3 { animation-delay: 1.05s; } .p4 { animation-delay: 1.4s; }
+@keyframes pl { 0% { opacity: 0; transform: translateX(-6px); } 8%,80% { opacity: 1; transform: translateX(0); } 92%,100% { opacity: 0; } }
+.m0,.m1,.n0,.n1 { animation: pick 8s ease-in-out infinite; }
+.m1 { animation-delay: -6s; } .n0 { animation-delay: -4s; } .n1 { animation-delay: -2s; }
+@keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
+</style>
+<g transform="translate(0,0)"><rect width="880" height="310" rx="28" fill="#f5f5f7"/><text x="36" y="58" font-size="15" font-weight="600" text-anchor="start" class="blue" >自然整理</text>
+<text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >随口说，它来整理。</text>
+<text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >口头禅去掉，改口照办，标点补好。不编造你没说的内容。</text>
+<rect x="24" y="162" width="832" height="56" rx="16" fill="#ffffff"/>
+<g class="fade"><text x="48" y="196" font-size="18" font-weight="400" text-anchor="start" class="faint" >嗯那个，</text></g>
+<rect class="left cut" x="48" y="190" width="72" height="1.8" rx="0.9" fill="#ff3b30"/>
+<g class="fade"><text x="120" y="196" font-size="18" font-weight="400" text-anchor="start" class="faint" >明天，不对，</text></g>
+<rect class="left cut" x="120" y="190" width="108" height="1.8" rx="0.9" fill="#ff3b30"/>
+<g class=""><text x="228" y="196" font-size="18" font-weight="400" text-anchor="start" class="ink" >后天下午三点开会，</text></g>
+<g class="fade"><text x="390" y="196" font-size="18" font-weight="400" text-anchor="start" class="faint" >然后</text></g>
+<rect class="left cut" x="390" y="190" width="36" height="1.8" rx="0.9" fill="#ff3b30"/>
+<g class=""><text x="426" y="196" font-size="18" font-weight="400" text-anchor="start" class="ink" >会前把报告发给大家</text></g>
+<g class="result"><rect x="24" y="228" width="832" height="56" rx="16" fill="#0071e3" fill-opacity="0.10"/><text x="48" y="262" font-size="18" font-weight="600" text-anchor="start" class="ink" >后天下午三点开会，会前把报告发给大家。</text><text x="832" y="262" font-size="13" font-weight="600" text-anchor="end" class="blue" >写进去的</text></g></g>
+<g transform="translate(0,326)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="green" >本机识别</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >音频不出电脑。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >语音在你自己的电脑上识别，</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >录音不上传，模型下载一次后离线可用。</text>
+<circle class="grow pulse" cx="216.0" cy="218" r="50" fill="#248a3d" fill-opacity="0.16"/>
+<circle cx="216.0" cy="218" r="40" fill="#248a3d"/>
+<rect class="grow lb0" x="194.6" y="213.1" width="3.9" height="9.7" rx="2.0" fill="#ffffff"/>
+<rect class="grow lb1" x="201.0" y="209.6" width="3.9" height="16.9" rx="2.0" fill="#ffffff"/>
+<rect class="grow lb2" x="207.5" y="206.0" width="3.9" height="24.0" rx="2.0" fill="#ffffff"/>
+<rect class="grow lb3" x="214.0" y="203.1" width="3.9" height="29.9" rx="2.0" fill="#ffffff"/>
+<rect class="grow lb4" x="220.5" y="206.0" width="3.9" height="24.0" rx="2.0" fill="#ffffff"/>
+<rect class="grow lb5" x="227.0" y="209.6" width="3.9" height="16.9" rx="2.0" fill="#ffffff"/>
+<rect class="grow lb6" x="233.5" y="213.1" width="3.9" height="9.7" rx="2.0" fill="#ffffff"/></g>
+<g transform="translate(448.0,326)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >随处可用</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >任何输入框，直接写入。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >Mac 单按 fn，Windows 单按右 Alt。</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >说话时切换了窗口，就只放进剪贴板。</text>
+<g><rect x="32" y="176" width="56" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="60.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >微信</text></g>
+<g><rect x="98" y="176" width="56" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="126.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >邮件</text></g>
+<g><rect x="164" y="176" width="70" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="199.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >浏览器</text></g>
+<g><rect x="32" y="220" width="62" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="62.8" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >Word</text></g>
+<g><rect x="104" y="220" width="87" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="147.0" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >VS Code</text></g></g>
+<g transform="translate(0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >提示词模式</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >说需求，得到提示词。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >口述直接变成结构化提示词，</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >可以马上发给任何 AI。</text>
+<rect x="24" y="160" width="384.0" height="106" rx="16" fill="#ffffff"/>
+<g class="pl p0"><text x="44" y="190" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 角色</text></g>
+<g class="pl p1"><text x="44" y="220" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 背景</text></g>
+<g class="pl p2"><text x="44" y="250" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 任务</text></g>
+<g class="pl p3"><text x="224" y="190" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 要求</text></g>
+<g class="pl p4"><text x="224" y="220" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 输出格式</text></g></g>
+<g transform="translate(448.0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >识别模型</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >四个本机模型，随时切换。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >默认小而快；中文方言、中英混说、</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >多语言都有更大的模型可选。</text>
+<g class="m0"><rect x="32" y="176" width="106" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="85.0" y="198" font-size="13" font-weight="500" text-anchor="middle" class="ink" >SenseVoice</text></g>
+<g class="m1"><rect x="148" y="176" width="114" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="204.9" y="198" font-size="13" font-weight="500" text-anchor="middle" class="ink" >FireRedASR2</text></g>
+<g class="n0"><rect x="32" y="220" width="122" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="92.8" y="242" font-size="13" font-weight="500" text-anchor="middle" class="ink" >Fun-ASR-Nano</text></g>
+<g class="n1"><rect x="164" y="220" width="98" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="212.7" y="242" font-size="13" font-weight="500" text-anchor="middle" class="ink" >Qwen3-ASR</text></g></g>
+<g transform="translate(0,938)"><rect width="880" height="192" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >你的模型</text>
+<text x="32" y="92" font-size="22" font-weight="700" text-anchor="start" class="ink" >用你自己的 Key。Key 只存在钥匙串 / 凭据管理器里。</text>
+<g><rect x="32" y="128" width="95" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="79.6" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >DeepSeek</text></g>
+<g><rect x="137" y="128" width="90" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="182.0" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >智谱 GLM</text></g>
+<g><rect x="237" y="128" width="62" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="267.59999999999997" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >Kimi</text></g>
+<g><rect x="308" y="128" width="84" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="350.4" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >通义千问</text></g>
+<g><rect x="402" y="128" width="112" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="458.4" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >OpenRouter</text></g>
+<g><rect x="524" y="128" width="78" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="563.6" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >OpenAI</text></g>
+<g><rect x="613" y="128" width="115" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="670.1999999999999" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >本机 Ollama</text></g></g>
+</svg>
