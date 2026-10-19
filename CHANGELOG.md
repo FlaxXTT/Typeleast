@@ -4,6 +4,8 @@
 
 ## 未发布
 
+## 1.5.0（2026-10-19）
+
 - Mac 和 Windows 新增可选识别模型：FireRedASR2 CTC INT8、Fun-ASR-Nano INT8、Qwen3-ASR-0.6B INT8；SenseVoice Small 仍为默认。下载、大小及 SHA-256 校验、取消重试、加载后启用和服务端选择持久化已接入。
 - 下载候选模型期间继续使用当前模型；切换与识别共用串行队列，加载或保存失败保留当前模型。首页及引导显示实际使用的模型。
 - 按引擎能力应用听写语言提示：FireRed 自动检测；Fun-ASR-Nano 支持中文、英文和日语；Qwen3-ASR 使用逐请求语言提示。
