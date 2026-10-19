@@ -744,9 +744,17 @@ do {
     checkEq("the bundled service is used",
             ServiceLocator.serviceDirectory(resources: "/App/Contents/Resources", environment: [:], exists: exists),
             "/App/Contents/Resources/service")
-    checkEq("TYPELEAST_SERVICE_DIR wins for development",
+    checkEq("an environment variable cannot replace the bundled service",
             ServiceLocator.serviceDirectory(resources: "/App/Contents/Resources", environment: ["TYPELEAST_SERVICE_DIR": "/dev/service"], exists: exists),
+            "/App/Contents/Resources/service")
+    checkEq("TYPELEAST_SERVICE_DIR is used when nothing is bundled (development)",
+            ServiceLocator.serviceDirectory(resources: "/Other", environment: ["TYPELEAST_SERVICE_DIR": "/dev/service"], exists: exists),
             "/dev/service")
+    let childEnv = ServiceLocator.serviceEnvironment(["PATH": "/usr/bin", "NODE_OPTIONS": "--require /tmp/x.js", "node_path": "/tmp",
+                                                      "NODE_TLS_REJECT_UNAUTHORIZED": "0", "DYLD_INSERT_LIBRARIES": "/tmp/x.dylib",
+                                                      "NODE_EXTRA_CA_CERTS": "/etc/ca.pem", "TYPELEAST_HOME": "/tmp/h", "HTTPS_PROXY": "http://p"])
+    checkEq("the service environment drops code-loading variables",
+            childEnv.keys.sorted(), ["HTTPS_PROXY", "NODE_EXTRA_CA_CERTS", "PATH", "TYPELEAST_HOME"])
     checkEq("no service folder is reported as nil",
             ServiceLocator.serviceDirectory(resources: "/Other", environment: [:], exists: exists), nil)
 
@@ -980,6 +988,152 @@ do {
     reloaded.clear()
     checkEq("clearing empties it", reloaded.activeDays, 0)
     defaults.removePersistentDomain(forName: suite)
+}
+
+// MARK: 27. security: sealed history, terminal paste, own signature, the one service
+do {
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    let suite = "typeleast.tests.history"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    let old = [LocalHistoryEntry(id: "a", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "明天三点开会",
+                                 text: "明天三点开会。", fallback: false, fallbackReason: nil, model: nil, msTotal: nil,
+                                 audioPath: nil, inserted: true, seconds: 2)]
+    defaults.set(try! JSONEncoder().encode(old), forKey: "voice.history.v1")
+    let store = HistoryStore(defaults: defaults)
+    checkEq("plain history from older versions is read", store.entries.first?.text, "明天三点开会。")
+    checkEq("and then removed", defaults.data(forKey: "voice.history.v1"), nil)
+    let sealed = defaults.data(forKey: "voice.history.sealed.v1") ?? Data()
+    checkEq("the sealed copy shows no words", String(decoding: sealed, as: UTF8.self).contains("开会"), false)
+    checkEq("the key is in the Keychain, not the preferences", KeychainStore.stub?[HistorySeal.account] != nil, true)
+    HistorySeal.reset()
+    checkEq("a new start reads it back", HistoryStore(defaults: defaults).entries.count, 1)
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    checkEq("without the key nothing is readable", HistoryStore(defaults: defaults).entries.count, 0)
+    defaults.removePersistentDomain(forName: suite)
+
+    let wavPath = NSTemporaryDirectory() + "dsh-voice-test-" + UUID().uuidString + ".wav"
+    FileManager.default.createFile(atPath: wavPath, contents: Data([1, 2, 3, 4]))
+    let sealedPath = HistorySeal.sealFile(atPath: wavPath)
+    checkEq("a kept recording is sealed", sealedPath, wavPath + ".sealed")
+    checkEq("the plain recording is gone", FileManager.default.fileExists(atPath: wavPath), false)
+    checkEq("it reads back in memory", try? HistorySeal.readAudio(URL(fileURLWithPath: sealedPath ?? "")), Data([1, 2, 3, 4]))
+    checkEq("its file is owner-only", ((try? FileManager.default.attributesOfItem(atPath: sealedPath ?? ""))?[.posixPermissions] as? Int), 0o600)
+    try? FileManager.default.removeItem(atPath: sealedPath ?? "")
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+}
+checkEq("ordinary apps get the text unchanged", TerminalGuard.safeText("第一行\n第二行", bundleId: "com.apple.Notes"), "第一行\n第二行")
+checkEq("a terminal gets one line", TerminalGuard.safeText("ls\nrm -rf ~\n", bundleId: "com.apple.Terminal"), "ls rm -rf ~")
+checkEq("escape sequences are dropped", TerminalGuard.safeText("echo hi\u{1b}[201~\r\nwhoami", bundleId: "com.googlecode.iterm2"), "echo hi[201~ whoami")
+checkEq("Apple's own apps pass the signature check", SelfIntegrity.problem(bundleURL: URL(fileURLWithPath: "/System/Applications/TextEdit.app")), nil)
+let unsignedDir = URL(fileURLWithPath: NSTemporaryDirectory() + "typeleast-unsigned-" + UUID().uuidString + ".app")
+try? FileManager.default.createDirectory(at: unsignedDir, withIntermediateDirectories: true)
+checkEq("an unsigned folder does not", SelfIntegrity.problem(bundleURL: unsignedDir) != nil, true)
+try? FileManager.default.removeItem(at: unsignedDir)
+
+// Upgrade retained recordings using fixture data only.
+do {
+    KeychainStore.stub = [:]; HistorySeal.reset()
+    let suite = "typeleast.tests.audio-migration"
+    let d = UserDefaults(suiteName: suite)!
+    d.removePersistentDomain(forName: suite)
+    let path = NSTemporaryDirectory() + "dsh-voice-upgrade-" + UUID().uuidString + ".wav"
+    try! Data([7, 8, 9]).write(to: URL(fileURLWithPath: path))
+    let entry = LocalHistoryEntry(id: "migration", ts: Date(), app: nil, language: "auto", strength: "prompt",
+        raw: "fixture", text: "fixture", fallback: false, fallbackReason: nil, model: nil, msTotal: nil,
+        audioPath: path, inserted: false)
+    d.set(try! JSONEncoder().encode([entry]), forKey: "voice.history.v1")
+    let store = HistoryStore(defaults: d)
+    checkEq("legacy audio path migrates", store.last?.audioPath, path + ".sealed")
+    checkEq("legacy audio plaintext is removed after history save", FileManager.default.fileExists(atPath: path), false)
+    checkEq("migrated audio can be retried", try? HistorySeal.readAudio(URL(fileURLWithPath: path + ".sealed")), Data([7, 8, 9]))
+    checkEq("migrated audio path survives reload", HistoryStore(defaults: d).last?.audioPath, path + ".sealed")
+    try? FileManager.default.removeItem(atPath: path + ".sealed")
+    d.removePersistentDomain(forName: suite)
+    // An unavailable encryption key must not remove either legacy file.
+    try! Data([7, 8, 9]).write(to: URL(fileURLWithPath: path))
+    let original = try! JSONEncoder().encode([entry])
+    d.set(original, forKey: "voice.history.v1")
+    KeychainStore.stub = [HistorySeal.account: "invalid fixture key"]; HistorySeal.reset()
+    let failedMigration = HistoryStore(defaults: d)
+    check("failed audio migration reports a problem", failedMigration.persistenceProblem != nil)
+    checkEq("failed audio migration preserves the legacy history", d.data(forKey: "voice.history.v1"), original)
+    checkEq("failed audio migration preserves the original audio", try? Data(contentsOf: URL(fileURLWithPath: path)), Data([7, 8, 9]))
+    try? FileManager.default.removeItem(atPath: path)
+    d.removePersistentDomain(forName: suite)
+    KeychainStore.stub = [:]; HistorySeal.reset()
+    // A damaged legacy store must remain available for recovery.
+    let invalid = Data("not JSON".utf8)
+    d.set(invalid, forKey: "voice.history.v1")
+    let broken = HistoryStore(defaults: d)
+    broken.save()
+    checkEq("invalid legacy history is preserved", d.data(forKey: "voice.history.v1"), invalid)
+    check("invalid legacy history reports failure", broken.persistenceProblem != nil)
+    d.removePersistentDomain(forName: suite)
+    KeychainStore.stub = [:]; HistorySeal.reset()
+}
+
+// Verify a signed resource bundle, without starting an app or reading any user data.
+do {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory() + "typeleast-integrity-" + UUID().uuidString + ".app")
+    let contents = root.appendingPathComponent("Contents")
+    let executable = contents.appendingPathComponent("MacOS/Fixture")
+    let resource = contents.appendingPathComponent("Resources/fixture.txt")
+    try! FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try! FileManager.default.createDirectory(at: resource.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try! FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: executable)
+    let plist: [String: Any] = ["CFBundleIdentifier": "test.typeleast.integrity", "CFBundleExecutable": "Fixture", "CFBundlePackageType": "APPL"]
+    try! PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
+    try! Data("original fixture".utf8).write(to: resource)
+    let signer = Process()
+    signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+    signer.arguments = ["--force", "--sign", "-", "--timestamp=none", "--options", "runtime", root.path]
+    signer.standardError = FileHandle.nullDevice
+    try! signer.run(); signer.waitUntilExit()
+    checkEq("fixture signs with Hardened Runtime", signer.terminationStatus, 0)
+    checkEq("intact signed resources pass", SelfIntegrity.problem(bundleURL: root), nil)
+    try! Data("changed fixture".utf8).write(to: resource)
+    check("modified signed resources are rejected", SelfIntegrity.problem(bundleURL: root) != nil)
+    try? FileManager.default.removeItem(at: root)
+}
+
+// Failure paths must not overwrite a locked encrypted store or write new plaintext.
+do {
+    let suite = "typeleast.tests.history-failures"
+    let d = UserDefaults(suiteName: suite)!
+    d.removePersistentDomain(forName: suite)
+    KeychainStore.stub = [:]; HistorySeal.reset()
+    let store = HistoryStore(defaults: d)
+    store.save()
+    let saved = d.data(forKey: "voice.history.sealed.v1")
+    KeychainStore.stub = [:]; HistorySeal.reset()
+    let locked = HistoryStore(defaults: d)
+    locked.save()
+    checkEq("locked history preserves ciphertext", d.data(forKey: "voice.history.sealed.v1"), saved)
+    checkEq("locked history never writes plaintext", d.data(forKey: "voice.history.v1"), nil)
+    check("locked history exposes a storage problem", locked.persistenceProblem != nil)
+    KeychainStore.stub = [HistorySeal.account: "invalid fixture key"]; HistorySeal.reset()
+    checkEq("invalid stored key is never replaced", HistorySeal.key(create: true) == nil, true)
+    checkEq("existing key remains intact", KeychainStore.stub?[HistorySeal.account], "invalid fixture key")
+    locked.clear()
+    checkEq("explicit clear removes locked ciphertext", d.data(forKey: "voice.history.sealed.v1"), nil)
+    let empty = HistoryStore(defaults: d)
+    empty.save()
+    checkEq("failed encryption never writes plaintext", d.data(forKey: "voice.history.v1"), nil)
+    check("failed encryption is reported", empty.persistenceProblem != nil)
+    d.removePersistentDomain(forName: suite)
+    KeychainStore.stub = [:]; HistorySeal.reset()
+    let dir = NSTemporaryDirectory() + "typeleast-instance-" + UUID().uuidString
+    var first: InstanceLock? = InstanceLock(directory: dir)
+    let second = InstanceLock(directory: dir)
+    checkEq("first instance owns the lock", first?.acquire(), true)
+    checkEq("simultaneous second instance is rejected", second.acquire(), false)
+    first = nil
+    checkEq("lock releases when owner exits", second.acquire(), true)
+    try? FileManager.default.removeItem(atPath: dir)
 }
 
 server.stop()

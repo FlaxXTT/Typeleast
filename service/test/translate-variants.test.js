@@ -110,3 +110,24 @@ test("翻译的防编造按数值比对：换写法的时间日期能过，凭�
   assert.deepEqual(translationInventedNumbers(raw, "Pay 1,200 yuan in room 512."), ["512"]);
   assert.deepEqual(translationInventedNumbers("一共 3.5 万", "35,000 in total"), ["35000"]);
 });
+
+test("服务端历史默认只存摘要；旧文件里的明文在启动时一次性换成摘要", async (t) => {
+  const { mkdtemp, readFile, writeFile, stat, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { History, textDigest } = await import("../lib/history.js");
+  const { validateConfig } = await import("../lib/config.js");
+  assert.equal(validateConfig({}).value.logRaw, false);
+  const dir = await mkdtemp(join(tmpdir(), "typeleast-history-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, "history.jsonl");
+  await writeFile(file, JSON.stringify({ id: "a", ts: Date.now(), raw: "明天下午三点开会", text: "明天下午三点开会。" }) + "\n"
+    + JSON.stringify({ id: "b", ts: Date.now(), raw: textDigest("x"), text: "" }) + "\n");
+  const history = new History({ filePath: file, retentionDays: 30 });
+  assert.equal(await history.scrubText(), 2);
+  const stored = await readFile(file, "utf8");
+  assert.doesNotMatch(stored, /开会/);
+  assert.match(stored, /"raw":"sha256:[0-9a-f]{16}"/);
+  if (process.platform !== "win32") assert.equal((await stat(file)).mode & 0o777, 0o600);
+  assert.equal(await new History({ filePath: file, retentionDays: 30 }).scrubText(), 0);
+});

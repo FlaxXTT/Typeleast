@@ -160,7 +160,9 @@ enum Updater {
             guard info?["CFBundleShortVersionString"] as? String == version else { throw UpdateError.badBundle(L10n.text("版本号不是 ") + version) }
 
             // Not --deep: the bundled Node.js keeps the signature nodejs.org gave it (as in build.sh / package.sh).
-            let sign = run("/usr/bin/codesign", ["--force", "--sign", signingIdentity, "--timestamp=none", app.path])
+            // Keep the release's Hardened Runtime flag and entitlements; the requirement is this Mac's own.
+            let sign = run("/usr/bin/codesign", ["--force", "--sign", signingIdentity, "--timestamp=none",
+                                                 "--preserve-metadata=entitlements,flags,runtime", app.path])
             guard sign.status == 0 else { throw UpdateError.sign(sign.err) }
             let verify = run("/usr/bin/codesign", ["--verify", "--strict", app.path])
             guard verify.status == 0 else { throw UpdateError.sign(verify.err) }

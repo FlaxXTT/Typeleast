@@ -41,6 +41,8 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。": "History cannot be read or saved securely. The existing file is retained. Check system credentials and file permissions.",
+        "TypeLeast 的文件被改动过（签名校验没通过），为安全起见没有启动本地服务。请重新安装 TypeLeast。": "TypeLeast failed its signature check. The local service was not started. Reinstall TypeLeast.",
         "简体": "Simplified",
         "繁体（台湾）": "Traditional (Taiwan)",
         "繁体（香港）": "Traditional (Hong Kong)",

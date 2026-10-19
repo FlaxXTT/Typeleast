@@ -75,6 +75,23 @@ enum KeychainStore {
         return text
     }
 
+    /// Create only: a locked or unreadable existing key must never be replaced.
+    static func create(_ value: String, account: String) -> Bool {
+        if stub != nil {
+            guard stub?[account] == nil else { return false }
+            stub?[account] = value
+            return true
+        }
+        let item: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service, kSecAttrAccount as String: account,
+            kSecValueData as String: Data(value.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        lastStatus = SecItemAdd(item as CFDictionary, nil)
+        return lastStatus == errSecSuccess
+    }
+
     @discardableResult
     static func write(_ value: String, account: String) -> Bool {
         if stub != nil {

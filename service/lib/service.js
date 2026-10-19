@@ -26,6 +26,7 @@ import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { validateOutput } from "./validate.js";
 import { tidy } from "./tidy.js";
+import { textDigest } from "./history.js";
 import { validateWav } from "./wav.js";
 import { PROMPTIFY_LIMITS, PROMPTIFY_PROMPT, promptifySystemPrompt } from "./prompts/promptify.js";
 import {
@@ -800,9 +801,7 @@ function describeVerdict(metrics) {
 }
 
 /** Short stable digest for privacy-preserving history. */
-function hash(text) {
-  return `sha256:${createHash("sha256").update(String(text)).digest("hex").slice(0, 16)}`;
-}
+const hash = textDigest;
 
 /** Narrow an unknown throwable to a printable message. */
 function message(error) {

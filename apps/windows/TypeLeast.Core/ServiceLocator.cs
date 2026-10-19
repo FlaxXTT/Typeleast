@@ -48,13 +48,29 @@ public static class ServiceLocator
         return attempt >= 1 && attempt <= delays.Length ? delays[attempt - 1] : null;
     }
 
-    /// <summary>The service shipped beside the app, or TYPELEAST_SERVICE_DIR for development.</summary>
+    /// <summary>
+    /// The service shipped beside the app. TYPELEAST_SERVICE_DIR (development) is used
+    /// only when there is none, so an environment variable can never swap the code an
+    /// installed app runs.
+    /// </summary>
     public static string? ServiceDirectory(string appDir, IDictionary<string, string?> env, Func<string, bool> exists)
     {
-        var candidates = new List<string>();
+        var candidates = new List<string> { Path.Combine(appDir, "service") };
         if (env.TryGetValue("TYPELEAST_SERVICE_DIR", out var dev) && !string.IsNullOrWhiteSpace(dev)) candidates.Add(dev);
-        candidates.Add(Path.Combine(appDir, "service"));
         return candidates.FirstOrDefault(dir => exists(Path.Combine(dir, "bin", "typeleast-service.mjs")));
+    }
+
+    /// <summary>
+    /// Variables removed before the service starts: they would load other code into
+    /// Node.js or weaken its TLS checks (NODE_OPTIONS, NODE_PATH,
+    /// NODE_TLS_REJECT_UNAUTHORIZED, ...). NODE_EXTRA_CA_CERTS stays for networks that
+    /// need their own certificate authority.
+    /// </summary>
+    public static List<string> UnsafeServiceVariables(IEnumerable<string> keys)
+    {
+        var prefixes = new[] { "NODE_", "NPM_", "ELECTRON_" };
+        return keys.Where(k => !string.Equals(k, "NODE_EXTRA_CA_CERTS", StringComparison.OrdinalIgnoreCase)
+                               && prefixes.Any(p => k.StartsWith(p, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
     /// <summary>

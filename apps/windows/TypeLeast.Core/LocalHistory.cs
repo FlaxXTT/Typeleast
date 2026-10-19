@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace TypeLeast.Core;
 
@@ -15,25 +16,38 @@ public sealed class HistoryEntry
     public bool Inserted { get; set; }
 }
 
-/// <summary>The app's recent dictations, newest first, in app-history.json.</summary>
+/// <summary>Recent dictations, protected at rest with DPAPI; migrates legacy JSON.</summary>
 public sealed class LocalHistory
 {
     public const int MaxEntries = 500;
     private readonly string path;
     public List<HistoryEntry> Entries { get; private set; } = new();
 
-    public LocalHistory(string path)
+    private static readonly byte[] Marker = "TLH1\n"u8.ToArray();
+    private readonly IHistoryProtection protection;
+    private bool locked;
+    public string? LastError { get; private set; }
+
+    public LocalHistory(string path, IHistoryProtection? protection = null)
     {
         this.path = path;
-        try
-        {
-            Entries = JsonSerializer.Deserialize<List<HistoryEntry>>(File.ReadAllText(path), Json.Options) ?? new();
-        }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
-        {
-            Entries = new();
-        }
+        this.protection = protection ?? new DpapiHistoryProtection();
+        byte[]? plain = null;
+        try {
+            var stored = File.ReadAllBytes(path);
+            var encrypted = stored.AsSpan().StartsWith(Marker);
+            plain = encrypted ? this.protection.Unprotect(stored[Marker.Length..]) : stored;
+            Entries = JsonSerializer.Deserialize<List<HistoryEntry>>(plain, Json.Options) ?? new();
+            if (!encrypted) Save(); // Replace legacy plaintext only after protection succeeds.
+        } catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) {
+        } catch (Exception e) when (IsStorageError(e)) {
+            locked = true;
+            LastError = "history-unavailable";
+        } finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }
+
+    private static bool IsStorageError(Exception e) => e is IOException or JsonException
+        or UnauthorizedAccessException or CryptographicException or PlatformNotSupportedException;
 
     public HistoryEntry? Last => Entries.Count > 0 ? Entries[0] : null;
 
@@ -52,8 +66,10 @@ public sealed class LocalHistory
 
     public void Clear()
     {
-        Entries.Clear();
-        Save();
+        try {
+            File.Delete(path); // Only the explicit Delete All History action calls this.
+            Entries.Clear(); locked = false; LastError = null;
+        } catch (Exception e) when (IsStorageError(e)) { LastError = "history-unavailable"; }
     }
 
     /// <summary>Dictations and characters, for the home page.</summary>
@@ -62,15 +78,19 @@ public sealed class LocalHistory
 
     private void Save()
     {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var temp = path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(Entries, Json.Options));
+        if (locked) { LastError = "history-unavailable"; return; }
+        byte[]? plain = null;
+        var temp = path + ".tmp";
+        try {
+            plain = JsonSerializer.SerializeToUtf8Bytes(Entries, Json.Options);
+            var sealedData = protection.Protect(plain); // No plaintext fallback, including temporary files.
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None)) {
+                file.Write(Marker); file.Write(sealedData); file.Flush(true);
+            }
             File.Move(temp, path, overwrite: true);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-        }
+            LastError = null;
+        } catch (Exception e) when (IsStorageError(e)) { LastError = "history-unavailable"; }
+        finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }
 }

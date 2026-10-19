@@ -125,6 +125,8 @@ internal sealed class ServiceManager
         start.ArgumentList.Add(Path.Combine(serviceDir, "bin", "typeleast-service.mjs"));
         start.ArgumentList.Add("--parent-pid");
         start.ArgumentList.Add(Environment.ProcessId.ToString());
+        var unsafeKeys = ServiceLocator.UnsafeServiceVariables(new List<string>(start.Environment.Keys));
+        foreach (var key in unsafeKeys) start.Environment.Remove(key);
         if (ModelMirror.Length > 0) start.Environment["HF_ENDPOINT"] = ModelMirror;
 
         var p = new Process { StartInfo = start, EnableRaisingEvents = true };
@@ -224,13 +226,15 @@ internal sealed class ServiceManager
     {
         try
         {
-            using var p = Process.Start(new ProcessStartInfo(exe, args)
+            var start = new ProcessStartInfo(exe, args)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-            });
+            };
+            foreach (var key in ServiceLocator.UnsafeServiceVariables(new List<string>(start.Environment.Keys))) start.Environment.Remove(key);
+            using var p = Process.Start(start);
             if (p is null) return null;
             var output = p.StandardOutput.ReadToEndAsync();
             if (!p.WaitForExit(5000)) { try { p.Kill(); } catch (Exception) { } return null; }

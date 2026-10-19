@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // History.swift - local (UserDefaults) history of dictations, kept for the user's
@@ -74,25 +75,149 @@ struct DictationStats: Equatable {
     }
 }
 
+/// History at rest is sealed with AES-GCM. The key is made on first use and kept in
+/// this Mac's Keychain. Preferences do not contain plaintext dictation.
+/// Retained recordings are sealed the same way.
+enum HistorySeal {
+    static let account = "history-encryption-key"
+    private static var cached: SymmetricKey?
+
+    static func key(create: Bool) -> SymmetricKey? {
+        if let cached { return cached }
+        if let saved = KeychainStore.read(account: account) {
+            guard let data = Data(base64Encoded: saved), data.count == 32 else { return nil }
+            cached = SymmetricKey(data: data)
+            return cached
+        }
+        guard create else { return nil }
+        let fresh = SymmetricKey(size: .bits256)
+        guard KeychainStore.create(fresh.withUnsafeBytes { Data($0) }.base64EncodedString(), account: account) else { return nil }
+        cached = fresh
+        return fresh
+    }
+
+    /// Test seam: forget the cached key.
+    static func reset() { cached = nil }
+
+    static func seal(_ data: Data, key: SymmetricKey) -> Data? { try? AES.GCM.seal(data, using: key).combined }
+
+    static func open(_ data: Data, key: SymmetricKey) -> Data? {
+        guard let box = try? AES.GCM.SealedBox(combined: data) else { return nil }
+        return try? AES.GCM.open(box, using: key)
+    }
+
+    /// Seal a recording in place ("x.wav" -> "x.wav.sealed"); the plain file is removed.
+    /// Returns the new path, or nil when it could not be sealed (the plain file stays).
+    static func sealFile(atPath path: String, removePlain: Bool = true) -> String? {
+        if path.hasSuffix(".sealed") { return path }
+        guard let key = key(create: true), let plain = FileManager.default.contents(atPath: path),
+              let sealed = seal(plain, key: key) else { return nil }
+        let target = path + ".sealed"
+        do {
+            try sealed.write(to: URL(fileURLWithPath: target), options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target)
+            if removePlain { try FileManager.default.removeItem(atPath: path) }
+        } catch { return nil }
+        return target
+    }
+
+    /// The recording's bytes, opening a sealed file in memory.
+    static func readAudio(_ url: URL) throws -> Data {
+        let data = try Data(contentsOf: url)
+        guard url.path.hasSuffix(".sealed") else { return data }
+        guard let key = key(create: false), let plain = open(data, key: key) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return plain
+    }
+}
+
 final class HistoryStore {
     static let shared = HistoryStore()
     static let didChange = Notification.Name("DshVoiceHistoryDidChange")
     /// Hard cap so UserDefaults stays small whatever the retention says.
     static let limit = 2000
 
-    private let key = "voice.history.v1"
-    private let d = UserDefaults.standard
+    /// Plain JSON written by older versions; read once, then replaced by the sealed copy.
+    private let plainKey = "voice.history.v1"
+    private let sealedKey = "voice.history.sealed.v1"
+    private let d: UserDefaults
+    private var locked = false
+    private(set) var persistenceProblem: String?
     private(set) var entries: [LocalHistoryEntry] = []
 
-    init() { load() }
+    init(defaults: UserDefaults = .standard) {
+        d = defaults
+        load()
+    }
 
     func load() {
-        guard let data = d.data(forKey: key) else { entries = []; return }
-        entries = (try? JSONDecoder().decode([LocalHistoryEntry].self, from: data)) ?? []
+        if let sealed = d.data(forKey: sealedKey) {
+            // Without the key (a Keychain that was reset) the old history cannot be read.
+            guard let key = HistorySeal.key(create: false), let data = HistorySeal.open(sealed, key: key),
+                  let decoded = try? JSONDecoder().decode([LocalHistoryEntry].self, from: data) else {
+                entries = []; locked = true; persistenceProblem = "history-unavailable"; return
+            }
+            entries = decoded; locked = false; persistenceProblem = nil
+            if entries.contains(where: { $0.audioPath.map(Self.ownedPlainAudio) == true }) { persist() }
+            return
+        }
+        guard let data = d.data(forKey: plainKey) else { entries = []; return }
+        guard let decoded = try? JSONDecoder().decode([LocalHistoryEntry].self, from: data) else {
+            locked = true; persistenceProblem = "history-unavailable"; return
+        }
+        entries = decoded
+        persist()
+    }
+
+    /// Only migrate recordings created by this app in its temporary directory.
+    private static func ownedPlainAudio(_ path: String) -> Bool {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        return url.deletingLastPathComponent() == URL(fileURLWithPath: NSTemporaryDirectory()).standardizedFileURL
+            && url.lastPathComponent.hasPrefix("dsh-voice-") && url.pathExtension == "wav"
+    }
+
+    /// Stage encrypted audio, then save its paths before removing the original audio.
+    /// Failure preserves the old preferences and recordings; no plaintext fallback.
+    private func persist() {
+        guard !locked, let key = HistorySeal.key(create: true) else {
+            persistenceProblem = "history-unavailable"; return
+        }
+        var next = entries
+        var originals: [String] = []
+        for i in next.indices {
+            guard let path = next[i].audioPath, Self.ownedPlainAudio(path) else { continue }
+            if !FileManager.default.fileExists(atPath: path) {
+                // Recover after a crash between saving the new paths and removing originals.
+                let sealed = path + ".sealed"
+                if (try? HistorySeal.readAudio(URL(fileURLWithPath: sealed))) != nil { next[i].audioPath = sealed }
+                continue
+            }
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                  attrs[.type] as? FileAttributeType == .typeRegular,
+                  let target = HistorySeal.sealFile(atPath: path, removePlain: false) else {
+                persistenceProblem = "history-unavailable"; return
+            }
+            next[i].audioPath = target
+            originals.append(path)
+        }
+        guard let data = try? JSONEncoder().encode(next), let sealed = HistorySeal.seal(data, key: key) else {
+            persistenceProblem = "history-unavailable"; return
+        }
+        d.set(sealed, forKey: sealedKey)
+        // Flush the migrated paths before removing the only plaintext copy.
+        guard d.synchronize() else { persistenceProblem = "history-unavailable"; return }
+        d.removeObject(forKey: plainKey)
+        entries = next
+        persistenceProblem = nil
+        for path in originals {
+            do { try FileManager.default.removeItem(atPath: path) }
+            catch { persistenceProblem = "history-unavailable" }
+        }
     }
 
     func save() {
-        if let data = try? JSONEncoder().encode(entries) { d.set(data, forKey: key) }
+        persist()
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: HistoryStore.didChange, object: nil)
         }
@@ -129,7 +254,10 @@ final class HistoryStore {
     func clear() {
         for e in entries { removeAudio(e) }
         entries.removeAll()
-        save()
+        d.removeObject(forKey: plainKey)
+        d.removeObject(forKey: sealedKey)
+        locked = false; persistenceProblem = nil
+        DispatchQueue.main.async { NotificationCenter.default.post(name: HistoryStore.didChange, object: nil) }
     }
 
     /// Drop entries older than the retention window. "Never" keeps only the entry
@@ -167,7 +295,7 @@ final class HistoryStore {
         if changed { save() }
         let tmp = NSTemporaryDirectory()
         if let names = try? FileManager.default.contentsOfDirectory(atPath: tmp) {
-            for n in names where n.hasPrefix("dsh-voice-") && n.hasSuffix(".wav") {
+            for n in names where n.hasPrefix("dsh-voice-") && (n.hasSuffix(".wav") || n.hasSuffix(".wav.sealed")) {
                 let full = tmp + n
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: full),
                    let modified = attrs[.modificationDate] as? Date, modified < cutoff {

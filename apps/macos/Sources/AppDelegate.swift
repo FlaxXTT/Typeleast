@@ -35,6 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var betaPending: BetaPending?
     /// 翻译模式: the target language of the recording in progress (nil: ordinary dictation).
     var pendingTranslate: String?
+    /// A test run beside the real app leaves the global hotkeys and Fn to it.
+    var skipGlobalHotkeys = false
+    private let instanceLock = InstanceLock()
     let betaPanel = BetaPanel()
     var tickTimer: Timer?
     /// Last whole second pushed into the menu, so the 20 Hz waveform timer does
@@ -64,7 +67,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
     }
 
+    static let showHubNotification = Notification.Name("com.dsh.voice.showHub")
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One TypeLeast at a time: two would fight over the hotkeys, the microphone and
+        // the service. A second launch shows the first one's window and quits. A test run
+        // with its own TYPELEAST_HOME may run beside it, without the global hotkeys.
+        let isolatedTestRun = !(ProcessInfo.processInfo.environment["TYPELEAST_HOME"] ?? "").isEmpty
+        if !isolatedTestRun, !instanceLock.acquire() {
+            DistributedNotificationCenter.default().postNotificationName(AppDelegate.showHubNotification, object: nil,
+                                                                         userInfo: nil, deliverImmediately: true)
+            NSApp.terminate(nil)
+            return
+        }
+        skipGlobalHotkeys = isolatedTestRun
+        if !isolatedTestRun { DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showHubNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.hub.show()
+        } }
         model.actions = self
         menuController.target = self
         mainMenu.openSettings = { [weak self] in self?.menuOpenHub(.settings) }
@@ -262,6 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     // MARK: hotkeys
 
     func registerHotKeys() {
+        guard !skipGlobalHotkeys else { return }
         let centre = HotKeyCentre.shared
         var fnWanted = false
         for (slot, binding) in [("main", settings.hotkeyMain), ("alt", settings.hotkeyAlt)] {
@@ -389,6 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func setHint(_ text: String?, warning: Bool = false) {
+        let text = text ?? (HistoryStore.shared.persistenceProblem == nil ? nil : L10n.text("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"))
         hint = text
         hintWarning = warning
         model.hint = text ?? ""

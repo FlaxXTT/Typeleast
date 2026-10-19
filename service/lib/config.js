@@ -35,7 +35,7 @@ const FIELDS = {
   maxAudioBytes: { kind: "integer", default: 4194304, help: "Largest accepted WAV body." },
   maxDurationSeconds: { kind: "integer", default: 120, help: "Longest accepted recording." },
   redactSecrets: { kind: "boolean", default: true, help: "Strip key-shaped strings from model context." },
-  logRaw: { kind: "boolean", default: true, help: "Store raw transcripts in history; false keeps only hashes." },
+  logRaw: { kind: "boolean", default: false, help: "Store the words of each dictation in the service's history.jsonl; off by default (only digests), since the apps keep their own encrypted history." },
 };
 
 /** JSON Schema view of the fields, for documentation and tests. */

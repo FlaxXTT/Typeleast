@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { History } from "../lib/history.js";
+import { History, textDigest } from "../lib/history.js";
 
 async function withTempDir(run) {
   const dir = await mkdtemp(join(tmpdir(), "voice-polish-history-"));
@@ -76,5 +76,42 @@ test("a fallback's detail is stored, and is null for a clean result", async () =
     assert.equal(onDisk[0].detail, null);
     assert.equal(onDisk[1].reason, "model-max-tokens");
     assert.equal(onDisk[1].detail, "model output hit its token limit (4712 ms)");
+  });
+});
+
+
+test("legacy words are scrubbed atomically, including fake digest prefixes", async () => {
+  await withTempDir(async (dir) => {
+    const file = join(dir, "history.jsonl");
+    await writeFile(file, JSON.stringify({ raw: "sha256:private sample", text: "fixture words" }) + "\n");
+    const history = new History({ filePath: file, retentionDays: 14 });
+    assert.equal(await history.scrubText(), 2);
+    const saved = JSON.parse(await readFile(file, "utf8"));
+    assert.equal(saved.raw, textDigest("sha256:private sample"));
+    assert.equal(saved.text, textDigest("fixture words"));
+    assert.equal(await history.scrubText(), 0);
+  });
+});
+
+test("failed scrubbing preserves the original and can retry", async () => {
+  await withTempDir(async (dir) => {
+    const file = join(dir, "history.jsonl");
+    const original = JSON.stringify({ raw: "private fixture", text: "result fixture" }) + "\n";
+    await writeFile(file, original);
+    await mkdir(file + ".scrub.tmp");
+    const history = new History({ filePath: file, retentionDays: 14 });
+    await assert.rejects(history.scrubText());
+    assert.equal(await readFile(file, "utf8"), original);
+    assert.equal((await history.recent())[0].raw, "private fixture");
+    await rm(file + ".scrub.tmp", { recursive: true });
+    assert.equal(await history.scrubText(), 2);
+    assert.ok(!(await readFile(file, "utf8")).includes("private fixture"));
+  });
+});
+
+test("an unreadable history does not silently become empty", async () => {
+  await withTempDir(async (dir) => {
+    const history = new History({ filePath: dir, retentionDays: 14 });
+    await assert.rejects(history.scrubText());
   });
 });

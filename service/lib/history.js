@@ -1,18 +1,22 @@
 /**
  * Dictation history: an append-only JSONL file in the state directory.
  *
- * History is the safety net for this feature: every attempt is recorded before
- * the caller inserts anything, so a failed paste, an offline service or a
- * rejected rewrite is always recoverable.
+ * The service records outcomes for diagnosis. By default, transcript fields
+ * contain digests; the apps keep their own encrypted, recoverable history.
  *
  * @module typeleast-service/history
  */
-import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { appendFile, chmod, mkdir, readFile, stat, writeFile, rename } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 
 /** Soft size ceiling; older lines are dropped once the file exceeds it. */
 const MAX_BYTES = 5 * 1024 * 1024;
+
+/** Short stable digest that stands in for a dictation's words. */
+export function textDigest(text) {
+  return `sha256:${createHash("sha256").update(String(text)).digest("hex").slice(0, 16)}`;
+}
 
 export class History {
   /**
@@ -42,7 +46,8 @@ export class History {
         }
       }
       this.lines = lines;
-    } catch {
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
       this.lines = [];
     }
     return this.lines;
@@ -118,6 +123,33 @@ export class History {
   async recent({ limit = 20 } = {}) {
     const lines = await this.load();
     return lines.slice(-limit).reverse();
+  }
+
+  /**
+   * Replace words kept by older versions with digests, once: the apps keep their own
+   * (encrypted) history, so this file only needs to show that something happened.
+   * @returns {Promise<number>} how many entries were rewritten.
+   */
+  async scrubText() {
+    const lines = (await this.load()).map(line => ({ ...line }));
+    let changed = 0;
+    for (const line of lines) {
+      for (const key of ["raw", "text"]) {
+        const value = line[key];
+        if (typeof value === "string" && value.length > 0 && !/^sha256:[0-9a-f]{16}$/.test(value)) {
+          line[key] = textDigest(value);
+          changed += 1;
+        }
+      }
+    }
+    if (changed > 0) {
+      const temporary = this.filePath + ".scrub.tmp";
+      await writeFile(temporary, lines.map((line) => JSON.stringify(line)).join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
+      await rename(temporary, this.filePath);
+      this.lines = lines;
+      await chmod(this.filePath, 0o600).catch(() => {});
+    }
+    return changed;
   }
 
   /** Test seam: replace the in-memory view without touching disk. */

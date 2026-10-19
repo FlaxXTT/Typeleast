@@ -63,6 +63,7 @@ internal sealed class AppHost
         Service = new ServiceManager(Client) { NodePathOverride = Settings.NodePath, ModelMirror = Settings.ModelMirror };
         hook = new KeyboardHook(Settings.Hotkey, Settings.TranslateHotkey);
         bar = new RecordingBar(this);
+        if (History.LastError is not null) Hint = L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。");
     }
 
     public bool ServiceUp => Health?.Ok == true;
@@ -343,7 +344,8 @@ internal sealed class AppHost
     private async Task Deliver(DictateResponse result, double seconds)
     {
         {
-            var text = result.InsertableText.Trim();
+            // A terminal gets one line without control characters: this reduces accidental command execution.
+            var text = TerminalGuard.SafeText(result.InsertableText.Trim(), targetApp);
             if (text.Length == 0)
             {
                 bar.ShowResult(L10n.T("没有听到内容"), warning: true);
@@ -361,6 +363,7 @@ internal sealed class AppHost
                     Seconds = seconds,
                     Inserted = outcome == Paster.Outcome.Pasted,
                 });
+                if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);
                 var done = outcome == Paster.Outcome.Pasted ? L10n.T("已粘贴") : L10n.T("窗口已切换，已复制到剪贴板");
@@ -425,6 +428,7 @@ internal sealed class AppHost
     public void ClearHistory()
     {
         History.Clear();
+        if (History.LastError is not null) { SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。")); return; }
         Activity.Clear();
         Raise();
     }

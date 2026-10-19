@@ -168,7 +168,7 @@ extension AppDelegate {
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
             do {
-                let data = try Data(contentsOf: audioURL)
+                let data = try HistorySeal.readAudio(audioURL)
                 if data.count > Wav.maxBytes {
                     throw ServiceError.transport(L10n.text("录音超过 4 MiB 上限"))
                 }
@@ -190,6 +190,12 @@ extension AppDelegate {
 
     func finishRequest(_ outcome: Result<DictateResponse, Error>, appBundleId: String, language: String,
                        strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool) {
+        // A failed request or Beta question does not retain an untracked raw recording.
+        defer {
+            if let path = audioPath, !path.hasSuffix(".sealed") {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
         phase = .idle
         recordingStartedAt = nil
         pendingField = nil
@@ -218,6 +224,15 @@ extension AppDelegate {
                 betaPanel.hide()
             }
             let text = resp.insertableText
+            // A kept recording is sealed before its path goes into the history.
+            let audioPath = audioPath.flatMap { path -> String? in
+                guard HistoryStore.shared.persistenceProblem == nil, let sealed = HistorySeal.sealFile(atPath: path) else {
+                    // This is the recording created by this request; do not retain plaintext on failure.
+                    try? FileManager.default.removeItem(atPath: path)
+                    return nil
+                }
+                return sealed
+            }
             var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                           language: language, strength: strength,
                                           raw: resp.raw, text: text, fallback: resp.fallback,
@@ -269,6 +284,8 @@ extension AppDelegate {
     // MARK: insertion
 
     func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?) {
+        // A terminal gets one line without control characters: this reduces accidental command execution.
+        let text = TerminalGuard.safeText(text, bundleId: appBundleId)
         let mode = InsertionMode(rawValue: settings.insertionMode) ?? .autoPaste
         switch mode {
         case .autoPaste:

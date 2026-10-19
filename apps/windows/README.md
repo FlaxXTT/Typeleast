@@ -7,7 +7,7 @@ which the app starts, watches and stops by itself.
 
 | Project | What |
 |---|---|
-| `TypeLeast.Core` | Logic with no Windows dependency: the service client, settings, presets, the single-key tap detector, Node.js discovery. |
+| `TypeLeast.Core` | Logic without WPF (the default history protector uses Windows DPAPI): the service client, settings, presets, the single-key tap detector, Node.js discovery. |
 | `TypeLeast.Core.Tests` | A console test runner for Core (no test framework to download). |
 | `TypeLeast` | The WPF app: tray icon, main window (首页 / 历史 / 词典 / 设置), recording bar, keyboard hook, microphone (NAudio), paste, Credential Manager. |
 | `installer/TypeLeast.iss` | Inno Setup script: per-user install, no administrator rights. |
@@ -53,7 +53,20 @@ SHA-256 list, starts the bundled service once as a smoke test, and writes
 | Path | What |
 |---|---|
 | `%APPDATA%\TypeLeast\app-settings.json` | the app's settings (no key) |
-| `%APPDATA%\TypeLeast\app-history.json` | recent dictations (500 at most) |
+| `%APPDATA%\TypeLeast\app-history.json` | current-user DPAPI encrypted dictations (500 at most; legacy JSON is migrated) |
 | `%APPDATA%\TypeLeast\typeleast-app.log` | events and error codes only |
 | `%APPDATA%\TypeLeast\` | the service's token, runtime file, history, dictionary |
 | `%LOCALAPPDATA%\TypeLeast\models\` | speech models (about 241 MB) |
+
+## Storage and service safeguards
+
+History migration replaces the old JSON only after encryption succeeds. If the
+history cannot be decrypted or saved, the app preserves the original and reports
+a storage error. Back up the user profile before moving encrypted history to a
+new computer. Unit tests on other systems use a fake protector; native DPAPI tests
+run only on Windows.
+
+The bundled service takes priority over the development directory override.
+Node startup and version probes remove code-loading environment variables and
+variables that disable TLS verification. Paste to known terminal processes uses
+one line with control characters removed. Embedded terminals may not be detected.

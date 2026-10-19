@@ -37,6 +37,7 @@ public static class L10n
     }
     public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
+        ["历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"] = "History cannot be read or saved securely. The existing file is retained. Check system credentials and file permissions.",
         ["简体"] = "Simplified",
         ["繁体（台湾）"] = "Traditional (Taiwan)",
         ["繁体（香港）"] = "Traditional (Hong Kong)",
