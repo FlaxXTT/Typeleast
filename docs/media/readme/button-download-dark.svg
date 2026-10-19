@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="141" height="48" viewBox="0 0 141 48" role="img" aria-label="下载最新版">
+<title>下载最新版</title>
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
+.ink { fill: #f5f5f7; } .gray { fill: #a1a1a6; } .faint { fill: #6e6e73; }
+.blue { fill: #2997ff; } .green { fill: #30d158; }
+.grow { transform-box: fill-box; transform-origin: center; }
+.left { transform-box: fill-box; transform-origin: left center; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+<rect x="1" y="1" width="139" height="46" rx="23" fill="#f5f5f7" stroke="none" stroke-width="1.5"/><text x="70.5" y="30" font-size="17" font-weight="600" text-anchor="middle" fill="#1d1d1f">下载最新版</text>
+</svg>
