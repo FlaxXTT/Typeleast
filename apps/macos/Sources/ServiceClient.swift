@@ -7,6 +7,12 @@ import Foundation
 
 // MARK: - Errors
 
+final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+}
+
 enum ServiceError: Error, CustomStringConvertible, Equatable {
     case noToken(String)
     case transport(String)
@@ -351,7 +357,7 @@ final class ServiceClient {
         cfg.httpShouldUsePipelining = false
         cfg.httpMaximumConnectionsPerHost = 2
         cfg.waitsForConnectivity = false
-        return URLSession(configuration: cfg)
+        return URLSession(configuration: cfg, delegate: NoRedirectDelegate(), delegateQueue: nil)
     }()
 
     private final class Box {

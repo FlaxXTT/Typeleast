@@ -8,9 +8,9 @@ enum InsertionMode: String, CaseIterable {
     case preview
     var label: String {
         switch self {
-        case .autoPaste: return "自动粘贴到光标处"
-        case .clipboardOnly: return "仅复制到剪贴板"
-        case .preview: return "先预览（不粘贴）"
+        case .autoPaste: return L10n.text("自动粘贴到光标处")
+        case .clipboardOnly: return L10n.text("仅复制到剪贴板")
+        case .preview: return L10n.text("先预览（不粘贴）")
         }
     }
 }
@@ -19,10 +19,10 @@ enum VoiceLanguage: String, CaseIterable {
     case auto, zh, en, yue, ja, ko
     var label: String {
         switch self {
-        case .auto: return "自动识别"
-        case .zh: return "中文"
+        case .auto: return L10n.text("自动识别")
+        case .zh: return L10n.text("中文")
         case .en: return "English"
-        case .yue: return "粤语"
+        case .yue: return L10n.text("粤语")
         case .ja: return "日本語"
         case .ko: return "한국어"
         }
@@ -36,17 +36,17 @@ enum VoiceStrength: String, CaseIterable {
     case prompt, promptify, off
     var label: String {
         switch self {
-        case .prompt: return "Article 整理"
-        case .promptify: return "提示词模式"
-        case .off: return "原话转写"
+        case .prompt: return L10n.text("Article 整理")
+        case .promptify: return L10n.text("提示词模式")
+        case .off: return L10n.text("原话转写")
         }
     }
 
     var detail: String {
         switch self {
-        case .prompt: return "用 Article 的提示词：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。"
-        case .promptify: return "把你说的话改写成一份结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），可以直接发给 AI。角色、语气、格式会自动补全；数字、日期、人名等事实你没说就不写。"
-        case .off: return "不调用大模型，只在本机去掉口头禅。速度最快。"
+        case .prompt: return L10n.text("用 Article 的提示词：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。")
+        case .promptify: return L10n.text("把你说的话改写成一份结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），可以直接发给 AI。角色、语气、格式会自动补全；数字、日期、人名等事实你没说就不写。")
+        case .off: return L10n.text("不调用大模型，只在本机去掉口头禅。速度最快。")
         }
     }
 }
@@ -55,9 +55,9 @@ enum AppearancePreference: String, CaseIterable {
     case system, light, dark
     var label: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return L10n.text("跟随系统")
+        case .light: return L10n.text("浅色")
+        case .dark: return L10n.text("深色")
         }
     }
 }
@@ -67,12 +67,12 @@ enum HistoryRetention: String, CaseIterable {
     case forever, year, month, week, day, never
     var label: String {
         switch self {
-        case .forever: return "永久"
-        case .year: return "1 年"
-        case .month: return "1 个月"
-        case .week: return "1 周"
-        case .day: return "24 小时"
-        case .never: return "不保存"
+        case .forever: return L10n.text("永久")
+        case .year: return L10n.text("1 年")
+        case .month: return L10n.text("1 个月")
+        case .week: return L10n.text("1 周")
+        case .day: return L10n.text("24 小时")
+        case .never: return L10n.text("不保存")
         }
     }
 
@@ -169,8 +169,13 @@ final class Settings {
 
     // MARK: dictation
 
+    var interfaceLanguage: String {
+        get { L10n.normalized(d.string(forKey: L10n.preferenceKey)) }
+        set { d.set(L10n.normalized(newValue), forKey: L10n.preferenceKey); changed() }
+    }
+
     var language: String {
-        get { d.string(forKey: "voice.language") ?? VoiceLanguage.auto.rawValue }
+        get { VoiceLanguage(rawValue: d.string(forKey: "voice.language") ?? "auto")?.rawValue ?? "auto" }
         set { d.set(newValue, forKey: "voice.language"); changed() }
     }
 

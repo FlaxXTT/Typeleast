@@ -135,13 +135,13 @@ private struct ServiceBadge: View {
     @EnvironmentObject var model: AppModel
 
     private var badgeText: String {
-        if model.serviceUp { return "本地服务已就绪" }
+        if model.serviceUp { return L10n.text("本地服务已就绪") }
         if model.modelsDownloading {
-            return "下载模型 " + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
+            return L10n.text("下载模型 ") + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
         }
-        if model.modelsMissing { return "语音模型未下载" }
-        if case .running = model.serviceState { return "语音模型加载中" }
-        return "本地服务未就绪"
+        if model.modelsMissing { return L10n.text("语音模型未下载") }
+        if case .running = model.serviceState { return L10n.text("语音模型加载中") }
+        return L10n.text("本地服务未就绪")
     }
 
     var body: some View {
@@ -155,12 +155,12 @@ private struct ServiceBadge: View {
                 .lineLimit(1)
             Spacer()
             if model.modelsMissing {
-                Button("下载模型") { model.actions?.downloadModels() }
+                Button(L10n.text("下载模型")) { model.actions?.downloadModels() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundColor(Theme.ink)
             } else if !model.serviceUp && !model.modelsDownloading {
-                Button("重启") { model.actions?.restartService() }
+                Button(L10n.text("重启")) { model.actions?.restartService() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundColor(Theme.ink)

@@ -24,7 +24,7 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var title: String {
         let t = text.isEmpty ? raw : text
         let flat = t.replacingOccurrences(of: "\n", with: " ")
-        if flat.count <= 42 { return flat.isEmpty ? "(空)" : flat }
+        if flat.count <= 42 { return flat.isEmpty ? L10n.text("(空)") : flat }
         return String(flat.prefix(42)) + "…"
     }
 

@@ -80,7 +80,7 @@ internal static class Autostart
         }
         catch (Exception e)
         {
-            Log.Write("autostart.fail", e.Message);
+            Log.Write("autostart.fail", e.GetType().Name);
         }
     }
 }
@@ -115,7 +115,7 @@ internal static class Shell
     public static void Open(string target)
     {
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); }
-        catch (Exception e) { Log.Write("shell.open.fail", e.Message); }
+        catch (Exception e) { Log.Write("shell.open.fail", e.GetType().Name); }
     }
 
     /// <summary>The executable name of the window's process, e.g. "notepad.exe".</summary>

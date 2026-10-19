@@ -57,8 +57,8 @@ public sealed class TapDetector
 
     public static string Label(DictationKey key) => key switch
     {
-        DictationKey.RightAlt => "右 Alt",
-        DictationKey.RightCtrl => "右 Ctrl",
+        DictationKey.RightAlt => L10n.T("右 Alt"),
+        DictationKey.RightCtrl => L10n.T("右 Ctrl"),
         DictationKey.CapsLock => "Caps Lock",
         DictationKey.F8 => "F8",
         _ => key.ToString(),

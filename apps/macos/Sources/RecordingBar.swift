@@ -228,7 +228,7 @@ final class PillView: NSView {
         case .recording: return limit - model.elapsed <= countdownSeconds ? 206 : 168
         case .thinking: return 72
         case .result:
-            let text = (model.resultText.isEmpty ? "（无内容）" : model.resultText) as NSString
+            let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
             let width = text.size(withAttributes: [.font: resultFont]).width
             return min(320, max(100, ceil(width) + 50))
         }
@@ -238,8 +238,8 @@ final class PillView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         bars = Array(repeating: 0, count: LevelHistory.defaultCapacity)
-        configure(cancelButton, glyph: "✕", tip: "取消听写（Esc）", action: #selector(cancelPressed))
-        configure(stopButton, glyph: "", tip: "结束并整理", action: #selector(stopPressed))
+        configure(cancelButton, glyph: "✕", tip: L10n.text("取消听写（Esc）"), action: #selector(cancelPressed))
+        configure(stopButton, glyph: "", tip: L10n.text("结束并整理"), action: #selector(stopPressed))
         addSubview(cancelButton)
         addSubview(stopButton)
     }
@@ -417,7 +417,7 @@ final class PillView: NSView {
             check.lineJoinStyle = .round
             check.stroke()
         }
-        let text = model.resultText.isEmpty ? "（无内容）" : model.resultText
+        let text = model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText
         drawText(text, x: 34, centerY: rowY, width: bounds.width - 46,
                  font: PillView.resultFont,
                  color: NSColor.white)

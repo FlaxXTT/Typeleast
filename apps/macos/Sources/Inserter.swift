@@ -25,10 +25,10 @@ enum PasteResult {
 
     var message: String {
         switch self {
-        case .pasted: return "已粘贴"
-        case .unverified: return "已粘贴（未验证）· 若文字没出现请按 ⌘V，或在菜单里申请辅助功能权限"
-        case .secureInput: return "当前输入被安全键盘保护，已复制到剪贴板"
-        case .eventFailed: return "无法构造粘贴事件，已复制到剪贴板"
+        case .pasted: return L10n.text("已粘贴")
+        case .unverified: return L10n.text("已粘贴（未验证）· 若文字没出现请按 ⌘V，或在菜单里申请辅助功能权限")
+        case .secureInput: return L10n.text("当前输入被安全键盘保护，已复制到剪贴板")
+        case .eventFailed: return L10n.text("无法构造粘贴事件，已复制到剪贴板")
         }
     }
 }

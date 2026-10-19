@@ -219,7 +219,7 @@ final class ServiceManager {
             state = .starting
             DiagnosticsLog.write("service.start", ["node": node.version, "pid": String(p.processIdentifier)])
         } catch {
-            state = .failed("无法启动 Node.js：" + error.localizedDescription)
+            state = .failed(L10n.text("无法启动 Node.js：") + error.localizedDescription)
         }
     }
 
@@ -251,8 +251,8 @@ final class ServiceManager {
         if stopping { return }
         restartAttempts += 1
         guard let delay = ServiceLocator.restartDelay(attempt: restartAttempts) else {
-            let last = recentLog.last ?? "退出码 " + String(proc.terminationStatus)
-            state = .failed("本地服务反复退出：" + last)
+            let last = recentLog.last ?? L10n.text("退出码 ") + String(proc.terminationStatus)
+            state = .failed(L10n.text("本地服务反复退出：") + last)
             return
         }
         state = .starting

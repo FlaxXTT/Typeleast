@@ -40,12 +40,14 @@ public sealed class ServiceClient
     private static readonly HttpClient Loopback = new(new SocketsHttpHandler
     {
         UseProxy = false,
+        AllowAutoRedirect = false,
         ConnectTimeout = TimeSpan.FromSeconds(3),
     })
     { Timeout = Timeout.InfiniteTimeSpan };
 
     private static readonly HttpClient Internet = new(new SocketsHttpHandler
     {
+        AllowAutoRedirect = false,
         ConnectTimeout = TimeSpan.FromSeconds(10),
     })
     { Timeout = TimeSpan.FromSeconds(15) };

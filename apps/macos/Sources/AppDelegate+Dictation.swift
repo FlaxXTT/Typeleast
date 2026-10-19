@@ -27,12 +27,12 @@ extension AppDelegate {
                 if granted {
                     self.beginCapture()
                 } else {
-                    self.setHint("需要麦克风权限才能录音", warning: true)
+                    self.setHint(L10n.text("需要麦克风权限才能录音"), warning: true)
                     self.applyState()
                 }
             }
         case .denied, .restricted:
-            setHint("麦克风权限被拒绝 · 在设置里打开", warning: true)
+            setHint(L10n.text("麦克风权限被拒绝 · 在设置里打开"), warning: true)
             applyState()
             hub.show(page: .settings)
         default:
@@ -64,7 +64,7 @@ extension AppDelegate {
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
         recordingBar.showRecording(destination: pendingAppBundleId)
         if settings.muteWhileDictating { OutputMuter.shared.muteIfNeeded() }
-        setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? "本地服务未就绪" : model.serviceProblem), warning: !serviceUp)
+        setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
         playSound(start: true)
         registerEscape()
         startTick()
@@ -98,7 +98,7 @@ extension AppDelegate {
             playSound(start: false)
             phase = .thinking
             recordingBar.showThinking(detail: "")
-            setHint(auto ? "已到 \(recorder.maxSeconds) 秒上限，正在整理" : nil)
+            setHint(auto ? L10n.text("已到 {0} 秒上限，正在整理", recorder.maxSeconds) : nil)
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,
@@ -126,11 +126,11 @@ extension AppDelegate {
             recordingStartedAt = nil
             pendingField = nil
             recordingBar.hide()
-            setHint("已取消，录音已丢弃")
+            setHint(L10n.text("已取消，录音已丢弃"))
             applyState()
             updateIdleBar()
         case .thinking:
-            setHint("正在整理，无法取消")
+            setHint(L10n.text("正在整理，无法取消"))
             applyState()
         case .idle:
             break
@@ -155,7 +155,7 @@ extension AppDelegate {
             do {
                 let data = try Data(contentsOf: audioURL)
                 if data.count > Wav.maxBytes {
-                    throw ServiceError.transport("录音超过 4 MiB 上限")
+                    throw ServiceError.transport(L10n.text("录音超过 4 MiB 上限"))
                 }
                 outcome = .success(try self.client.dictateSync(wav: data, language: language,
                                                               appBundleId: appBundleId, strength: strength,
@@ -193,18 +193,18 @@ extension AppDelegate {
             entry.model = resp.model ?? resp.provider
             HistoryStore.shared.add(entry)
             if text.isEmpty {
-                recordingBar.showResult("没有识别到内容", warning: true)
-                setHint("没有识别到内容", warning: true)
+                recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
+                setHint(L10n.text("没有识别到内容"), warning: true)
                 applyState()
                 return
             }
-            setHint(resp.fallback ? "这次用了原文（整理没有成功）" : nil, warning: resp.fallback)
+            setHint(resp.fallback ? L10n.text("这次用了原文（整理没有成功）") : nil, warning: resp.fallback)
             if insert {
                 insertText(text, fallback: resp.fallback, entryId: entry.id, appBundleId: appBundleId, field: field)
             } else {
                 Inserter.shared.setString(text)
                 recordingBar.showResult(text, warning: resp.fallback)
-                setHint("重试完成，结果已复制到剪贴板")
+                setHint(L10n.text("重试完成，结果已复制到剪贴板"))
                 applyState()
             }
         case .failure(let error):
@@ -215,8 +215,8 @@ extension AppDelegate {
                 serviceUp = false
                 scheduleHealthRetry()
             }
-            recordingBar.showResult(serviceUp ? "听写失败" : "本地服务未就绪", warning: true)
-            setHint("听写失败：" + (d?.description ?? error.localizedDescription), warning: true)
+            recordingBar.showResult(serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), warning: true)
+            setHint(L10n.text("听写失败：") + (d?.description ?? error.localizedDescription), warning: true)
             applyState()
         }
     }
@@ -236,9 +236,9 @@ extension AppDelegate {
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
                 let paste = settings.hotkeyPasteLast
                 let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
-                recordingBar.showResult(key.isEmpty ? "已切换应用，没有粘贴 · 在历史里" : "已切换应用，没有粘贴 · 按 " + key + " 贴到这里",
+                recordingBar.showResult(key.isEmpty ? L10n.text("已切换应用，没有粘贴 · 在历史里") : L10n.text("已切换应用，没有粘贴 · 按 ") + key + L10n.text(" 贴到这里"),
                                         warning: true)
-                setHint("你在整理时切换了应用，这次没有粘贴。" + (key.isEmpty ? "文字在历史里。" : "按 " + key + " 可以贴到当前位置，历史里也有。"),
+                setHint(L10n.text("你在整理时切换了应用，这次没有粘贴。") + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 可以贴到当前位置，历史里也有。")),
                         warning: true)
                 applyState()
                 return
@@ -259,14 +259,14 @@ extension AppDelegate {
         case .clipboardOnly:
             Inserter.shared.setString(text)
             recordingBar.showResult(text, warning: fallback)
-            setHint("已复制到剪贴板")
+            setHint(L10n.text("已复制到剪贴板"))
             applyState()
         case .preview:
             Inserter.shared.setString(text)
             if previewPanel == nil { previewPanel = PreviewPanel() }
             previewPanel?.show(text: text)
             recordingBar.showResult(text, warning: fallback)
-            setHint("预览 · 已复制到剪贴板")
+            setHint(L10n.text("预览 · 已复制到剪贴板"))
             applyState()
         }
     }

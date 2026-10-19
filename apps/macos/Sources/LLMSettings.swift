@@ -22,22 +22,22 @@ struct LLMPreset: Identifiable, Equatable {
     let keyPage: String
 
     static let all: [LLMPreset] = [
-        LLMPreset(id: "deepseek", name: "DeepSeek 官方 API", baseURL: "https://api.deepseek.com/v1",
+        LLMPreset(id: "deepseek", name: L10n.text("DeepSeek 官方 API"), baseURL: "https://api.deepseek.com/v1",
                   modelHint: "deepseek-chat", needsKey: true, keyPage: "https://platform.deepseek.com/api_keys"),
-        LLMPreset(id: "zhipu", name: "智谱 GLM", baseURL: "https://open.bigmodel.cn/api/paas/v4",
+        LLMPreset(id: "zhipu", name: L10n.text("智谱 GLM"), baseURL: "https://open.bigmodel.cn/api/paas/v4",
                   modelHint: "glm-4-flash", needsKey: true, keyPage: "https://open.bigmodel.cn/usercenter/apikeys"),
-        LLMPreset(id: "moonshot", name: "Kimi（月之暗面）", baseURL: "https://api.moonshot.cn/v1",
+        LLMPreset(id: "moonshot", name: L10n.text("Kimi（月之暗面）"), baseURL: "https://api.moonshot.cn/v1",
                   modelHint: "moonshot-v1-8k", needsKey: true, keyPage: "https://platform.moonshot.cn/console/api-keys"),
-        LLMPreset(id: "qwen", name: "通义千问", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        LLMPreset(id: "qwen", name: L10n.text("通义千问"), baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
                   modelHint: "qwen-plus", needsKey: true, keyPage: "https://dashscope.console.aliyun.com/apiKey"),
         LLMPreset(id: "openrouter", name: "OpenRouter", baseURL: "https://openrouter.ai/api/v1",
                   modelHint: "deepseek/deepseek-chat", needsKey: true, keyPage: "https://openrouter.ai/keys"),
         LLMPreset(id: "openai", name: "OpenAI", baseURL: "https://api.openai.com/v1",
                   modelHint: "gpt-4o-mini", needsKey: true, keyPage: "https://platform.openai.com/api-keys"),
-        LLMPreset(id: "ollama", name: "本机 Ollama", baseURL: "http://127.0.0.1:11434/v1",
+        LLMPreset(id: "ollama", name: L10n.text("本机 Ollama"), baseURL: "http://127.0.0.1:11434/v1",
                   modelHint: "qwen2.5:7b", needsKey: false, keyPage: "https://ollama.com"),
-        LLMPreset(id: "custom", name: "自定义（OpenAI 兼容）", baseURL: "",
-                  modelHint: "模型 ID", needsKey: true, keyPage: ""),
+        LLMPreset(id: "custom", name: L10n.text("自定义（OpenAI 兼容）"), baseURL: "",
+                  modelHint: L10n.text("模型 ID"), needsKey: true, keyPage: ""),
     ]
 
     static func find(_ id: String) -> LLMPreset { all.first { $0.id == id } ?? all[0] }
@@ -45,7 +45,8 @@ struct LLMPreset: Identifiable, Equatable {
     /// Whether a base URL may carry a key: https, or http to this Mac only.
     static func isAllowedBaseURL(_ text: String) -> Bool {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespaces)),
-              let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return false }
+              let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return false }
         if scheme == "https" { return true }
         return scheme == "http" && ["127.0.0.1", "localhost", "::1"].contains(host)
     }

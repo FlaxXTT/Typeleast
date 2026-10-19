@@ -12,10 +12,10 @@ enum HubPage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: return "首页"
-        case .history: return "历史"
-        case .dictionary: return "词典"
-        case .settings: return "设置"
+        case .home: return L10n.text("首页")
+        case .history: return L10n.text("历史")
+        case .dictionary: return L10n.text("词典")
+        case .settings: return L10n.text("设置")
         }
     }
 
@@ -132,8 +132,8 @@ final class AppModel: ObservableObject {
 
     var modelSummary: String {
         let preset = LLMPreset.find(settings.llmPresetID)
-        guard settings.activeLLMRoute != nil else { return "整理模型未配置（只去口水词，不改写）" }
-        return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? "（本机）" : "（自己的 Key）")
+        guard settings.activeLLMRoute != nil else { return L10n.text("整理模型未配置（只去口水词，不改写）") }
+        return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（自己的 Key）"))
     }
 
     /// Whether cleanup is configured: a model and (except for local servers) a key.
@@ -144,28 +144,28 @@ final class AppModel: ObservableObject {
     var modelsDownloading: Bool { speech?.downloading ?? false }
 
     var speechSummary: String {
-        guard let speech = health?.speech else { return "SenseVoice（本地）" }
+        guard let speech = health?.speech else { return L10n.text("SenseVoice（本地）") }
         switch speech.phase ?? "" {
-        case "ready": return "SenseVoice（本地）· 就绪"
-        case "missing-model": return "SenseVoice（本地）· 模型未下载"
+        case "ready": return L10n.text("SenseVoice（本地）· 就绪")
+        case "missing-model": return L10n.text("SenseVoice（本地）· 模型未下载")
         case "downloading":
             let percent = speech.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? ""
-            return "SenseVoice（本地）· 下载中 " + percent
-        case "loading": return "SenseVoice（本地）· 加载中"
-        case "error": return "SenseVoice（本地）· 出错"
-        default: return "SenseVoice（本地）· " + (speech.phase ?? "准备中")
+            return L10n.text("SenseVoice（本地）· 下载中 ") + percent
+        case "loading": return L10n.text("SenseVoice（本地）· 加载中")
+        case "error": return L10n.text("SenseVoice（本地）· 出错")
+        default: return L10n.text("SenseVoice（本地）· ") + (speech.phase ?? L10n.text("准备中"))
         }
     }
 
     /// One line about the local service, for the window and settings.
     var serviceSummary: String {
         switch serviceState {
-        case .running: return "本地服务运行中"
-        case .starting: return "本地服务启动中…"
-        case .stopped: return "本地服务未启动"
+        case .running: return L10n.text("本地服务运行中")
+        case .starting: return L10n.text("本地服务启动中…")
+        case .stopped: return L10n.text("本地服务未启动")
         case .noNode(let found):
-            return found.map { "Node.js 版本过低：" + $0 + "，需要 22 或更新" } ?? "没有找到 Node.js（需要 22 或更新）"
-        case .noService: return "App 里缺少本地服务文件，请重新构建 App"
+            return found.map { L10n.text("Node.js 版本过低：") + $0 + L10n.text("，需要 22 或更新") } ?? L10n.text("没有找到 Node.js（需要 22 或更新）")
+        case .noService: return L10n.text("App 里缺少本地服务文件，请重新构建 App")
         case .failed(let why): return why
         }
     }
