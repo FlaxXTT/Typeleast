@@ -150,6 +150,8 @@ export async function downloadModels(options) {
       await finished(out);
     } catch (error) {
       out.destroy();
+      // The file opens asynchronously: removing it before the stream closes can leave the .part behind.
+      if (!out.closed) await new Promise((resolve) => out.once("close", resolve));
       await rm(partial, { force: true });
       throw Object.assign(new Error(`download of ${file.file} was interrupted: ${error instanceof Error ? error.message : String(error)}`), { code: "download-failed" });
     }

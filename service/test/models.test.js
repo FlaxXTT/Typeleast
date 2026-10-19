@@ -31,6 +31,22 @@ function serve(contents, seen = []) {
   };
 }
 
+/** fetch that sends the first chunk of a file, then hangs until the request is aborted. */
+function serveUntilAborted(contents) {
+  return async (url, { signal }) => {
+    const bytes = contents[url.split("/").pop()];
+    return {
+      ok: true,
+      status: 200,
+      body: (async function* chunks() {
+        yield bytes.subarray(0, 64);
+        if (!signal.aborted) await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+        yield bytes.subarray(64);
+      })(),
+    };
+  };
+}
+
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), "typeleast-models-"));
   try {
@@ -120,7 +136,7 @@ test("same-size corrupted files are downloaded again and nested tokenizers are s
 test("cancelling a download removes its partial file and keeps verified files reusable", async () => withDir(async dir => {
   const controller=new AbortController();
   await assert.rejects(downloadModels({modelsDir:dir,files:FILES,signal:controller.signal,
-    fetchImpl:serve({'model.int8.onnx':A,'tokens.txt':B}),onProgress:()=>controller.abort()}));
+    fetchImpl:serveUntilAborted({'model.int8.onnx':A,'tokens.txt':B}),onProgress:()=>setImmediate(()=>controller.abort())}));
   await assert.rejects(stat(join(dir,...FILES[0].path)+'.part'));
   await downloadModels({modelsDir:dir,files:FILES,fetchImpl:serve({'model.int8.onnx':A,'tokens.txt':B})});
   const seen=[];
