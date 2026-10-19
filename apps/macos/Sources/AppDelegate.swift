@@ -10,6 +10,7 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppActions {
     let menuController = MenuController()
+    let mainMenu = MainMenu()
     let recorder = Recorder()
     /// Floating capsule shown while listening and thinking.
     let recordingBar = RecordingBar()
@@ -64,6 +65,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.actions = self
         menuController.target = self
+        mainMenu.openSettings = { [weak self] in self?.menuOpenHub(.settings) }
+        mainMenu.checkForUpdates = { [weak self] in self?.menuCheckForUpdates() }
+        mainMenu.quit = { [weak self] in self?.menuQuit() }
+        let bar = mainMenu.build()
+        NSApp.mainMenu = bar.menu
+        NSApp.windowsMenu = bar.windows
         NSApp.applicationIconImage = AppMark.image(size: 512)
         applyGeneralSettings()
         registerHotKeys()

@@ -892,6 +892,34 @@ do {
     check("Prompt Beta decoding", false, String(describing: error))
 }
 
+// MARK: 24. the app's own menu bar: TypeLeast / Edit / Window, with the standard shortcuts
+do {
+    let menus = MainMenu()
+    var opened = 0
+    menus.openSettings = { opened += 1 }
+    let bar = menus.build()
+    checkEq("three menus in the menu bar", bar.menu.items.count, 3)
+    checkEq("the window menu is handed back", bar.menu.items[2].submenu === bar.windows, true)
+    func find(_ key: String, _ mask: NSEvent.ModifierFlags = .command) -> NSMenuItem? {
+        bar.menu.items.compactMap(\.submenu).flatMap(\.items)
+            .first { $0.keyEquivalent == key && $0.keyEquivalentModifierMask == mask }
+    }
+    checkEq("⌘C copies via the first responder", find("c")?.action, #selector(NSText.copy(_:)))
+    checkEq("⌘V pastes", find("v")?.action, #selector(NSText.paste(_:)))
+    checkEq("⌘X cuts", find("x")?.action, #selector(NSText.cut(_:)))
+    checkEq("⌘A selects all", find("a")?.action, #selector(NSText.selectAll(_:)))
+    checkEq("⌘Z undoes", find("z")?.action, Selector(("undo:")))
+    checkEq("⇧⌘Z redoes", find("z", [.command, .shift])?.action, Selector(("redo:")))
+    checkEq("edit actions have no fixed target", find("v")?.target == nil, true)
+    checkEq("⌘W closes the window", find("w")?.action, #selector(NSWindow.performClose(_:)))
+    checkEq("⌘M minimises", find("m")?.action, #selector(NSWindow.performMiniaturize(_:)))
+    checkEq("⌘H hides the app", find("h")?.action, #selector(NSApplication.hide(_:)))
+    checkEq("⌥⌘H hides the others", find("h", [.command, .option])?.action, #selector(NSApplication.hideOtherApplications(_:)))
+    checkEq("⌘Q and ⌘, are there", find("q") != nil && find(",") != nil, true)
+    if let settings = find(","), let action = settings.action { _ = (settings.target as? NSObject)?.perform(action) }
+    checkEq("⌘, opens settings", opened, 1)
+}
+
 server.stop()
 print("")
 print("TESTS: " + String(passed) + " passed, " + String(failed) + " failed")
