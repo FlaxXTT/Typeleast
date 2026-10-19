@@ -105,6 +105,7 @@ export async function completeOpenAI(options) {
     try {
       const response = await fetchImpl(`${route.baseURL}/chat/completions`, {
         method: "POST",
+        redirect: "error",
         headers: {
           "content-type": "application/json",
           ...(route.apiKey ? { authorization: `Bearer ${route.apiKey}` } : {}),

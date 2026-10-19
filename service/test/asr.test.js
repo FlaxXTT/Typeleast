@@ -30,6 +30,7 @@ function fakeSherpa({ texts = ["你好"], vadSegments = null } = {}) {
       createAsync: async (config) => {
         configs.push(config);
         return {
+          config,
           createStream: () => {
             const stream = { samples: null, acceptWaveform: ({ samples, sampleRate }) => { stream.samples = samples; stream.rate = sampleRate; } };
             return stream;
@@ -165,4 +166,25 @@ test("real SenseVoice recognition (skipped without models)", async (t) => {
   assert.equal(await recognizer.prepare(), "ready");
   const silence = await recognizer.transcribe(wav(1.5));
   assert.equal(typeof silence.text, "string");
+  for (const language of ["en", "auto"]) {
+    assert.equal(typeof (await recognizer.transcribe(wav(0.3), language)).text, "string");
+    assert.equal(recognizer.activeLanguage, language);
+  }
+});
+
+
+test("per-request languages are applied serially and a rejection does not poison recognition", async () => {
+  await withDir(async (dir) => {
+    await fakeModels(dir);
+    const sherpa = fakeSherpa();
+    const recognizer = new LocalRecognizer({ modelsDir: dir, loadSherpa: () => sherpa });
+    await recognizer.prepare();
+    await Promise.all([recognizer.transcribe(wav(1), "en"), recognizer.transcribe(wav(1), "ja")]);
+    assert.deepEqual(sherpa.configs.map(c => c.modelConfig.senseVoice.language), ["auto", "en", "ja"]);
+    await assert.rejects(recognizer.transcribe(wav(1), "unsupported"), { code: "invalid-language" });
+    await recognizer.transcribe(wav(1), "auto");
+    assert.equal(sherpa.configs.at(-1).modelConfig.senseVoice.language, "auto");
+    await recognizer.transcribe(wav(1), "auto");
+    assert.equal(sherpa.configs.length, 4);
+  });
 });

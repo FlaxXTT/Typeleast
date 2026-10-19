@@ -10,6 +10,8 @@
 
 /** Patterns that must not reach a model provider. */
 const SECRET_PATTERNS = [
+  // Require an explicit connector and value; ordinary discussion stays unchanged.
+  { pattern: /((?:密码|口令|密钥|令牌)\s*(?:是|为|[:：=])\s*)(["“][^"”]+["”]|[^\s，。；！？,;!?]+)/g, replacement: "$1[redacted]" },
   { pattern: /\bsk-[A-Za-z0-9_-]{12,}\b/g, replacement: "[redacted-key]" },
   { pattern: /\b(?:ghp|gho|ghu|github_pat)_[A-Za-z0-9_]{12,}\b/g, replacement: "[redacted-token]" },
   { pattern: /\bxox[baprs]-[A-Za-z0-9-]{8,}\b/g, replacement: "[redacted-token]" },
