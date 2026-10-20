@@ -37,6 +37,10 @@ public static class L10n
     }
     public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
+        ["设置未能保存，请检查文件权限和可用空间。"] = "Settings could not be saved. Check file permissions and free space.",
+        ["本地服务启动失败，请检查 Node 和安装文件。"] = "Local service could not start. Check Node and the installation files.",
+        ["本地服务反复退出，请检查安装或手动重试。"] = "Local service exited repeatedly. Check the installation or retry manually.",
+        ["生成失败，请重试"] = "Generation failed. Please retry",
         ["模型输出达到长度上限，已插入原话"] = "Model output reached its limit; used the transcript",
         ["模型返回格式无法解析，已插入原话"] = "Model response could not be parsed; used the transcript",
         ["整理请求鉴权失败，已插入原话"] = "Cleanup authentication failed; used the transcript",
