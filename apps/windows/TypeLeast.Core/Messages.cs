@@ -36,6 +36,11 @@ public static class Messages
         "no-api-key" => L10n.T("整理模型未设置，已插入原话（去掉了口水词）"),
         "empty-transcript" => L10n.T("没有听到内容"),
         "model-timeout" => L10n.T("整理超时，已插入原话"),
+        "model-max-tokens" => L10n.T("模型输出达到长度上限，已插入原话"),
+        "output-format" => L10n.T("模型返回格式无法解析，已插入原话"),
+        "model-error:HTTP_401" or "model-error:HTTP_403" => L10n.T("整理请求鉴权失败，已插入原话"),
+        "model-error:NETWORK" => L10n.T("整理请求网络失败，已插入原话"),
+        "cancelled" => L10n.T("已取消"),
         _ when reason.StartsWith("model-error") => L10n.T("整理模型出错，已插入原话"),
         _ => L10n.T("整理结果没通过检查，已插入原话"),
     };

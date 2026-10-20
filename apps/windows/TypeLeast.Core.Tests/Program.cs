@@ -427,6 +427,15 @@ Eq("terminal paste strips newlines", TerminalGuard.SafeText("echo hi\r\nwhoami\n
 Eq("normal editors keep newlines", TerminalGuard.SafeText("a\nb", "notepad"), "a\nb");
 Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u2028d", "pwsh"), "abc d");
 
+{
+    var malicious = "sk-fake-private\r\nhttps://secret.example/private";
+    var line = new DiagnosticEvent(malicious, malicious, malicious, double.NaN, 999, -1).Format();
+    Check("diagnostic rejects arbitrary strings", !line.Contains("private") && !line.Contains('\n'));
+    Check("diagnostic rejects invalid numeric values", line.Contains("elapsedMs=unknown") && line.Contains("characters=unknown"));
+    Check("diagnostic preserves bounded reason", new DiagnosticEvent("dictation", "complete", "model-timeout", 12000).Format().Contains("reason=model-timeout"));
+    Check("diagnostic preserves auth category", DiagnosticEvent.SafeReason("model-error:HTTP_401") == "model-error:HTTP_401");
+    Eq("diagnostic rejects provider text", DiagnosticEvent.SafeReason("model-error:secret"), "other");
+}
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 
