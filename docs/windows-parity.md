@@ -81,6 +81,30 @@ restart exhaustion/stability, ACL inheritance and current-user-only grants, plus
 WPF Release compiles, 0 errors, existing WFAC010 warning. Actual mic, overlay focus, crash-loop
 subprocesses, cross-user ACL/DPAPI and sleep/wake interactions remain unverified at this stage.
 
+## Stage 3 verification (2026-10-20 UTC)
+
+Added structured dictionary entries with legacy source migration, bounded CSV preview,
+retention policies, optional retry metadata and DPAPI-protected 24-hour retry audio.
+History retries preserve language/mode/translation/variants and copy the result, matching
+Mac retry behavior. Prompt Beta cannot be reconstructed from one recording and is disabled
+for this action. Never-save keeps paste-last in process memory only. Corrupt settings cannot
+be overwritten silently. Dictionary entries respect the shared service's 120-character limit.
+
+Insertion supports automatic paste, copy and interactive preview, with field identity checks
+and clipboard sequence-based restoration. Unknown target identity safely falls back to copy.
+Numbered-list HTML preserves a plain-text fallback; terminals remain plain text.
+Optional context uses bounded TextPattern selections, excludes password/known credential apps,
+and is redacted by the existing shared service. Optional learning observes only a matching field
+containing exactly the insertion, for at most 30 seconds, stops on focus change, and sends one
+bounded correction through /learn. It does not capture keyboard input. These checks are
+conservative, not a claim to identify all sensitive applications or secrets.
+
+Native Core: 508 passed, 0 failed. New scenarios include retention, never-save, retry metadata,
+legacy dictionary migration, CSV duplicates/quotes/invalid rows, corrupt settings preservation,
+sealed audio round-trip/expiry/path traversal, HTML escaping and bounded edit extraction.
+WPF compiles. Native field providers, clipboard/preview interactions and retained audio with
+real microphone input still require UI/runtime QA; cross-user proof remains pending.
+
 ## Required final acceptance (pending)
 
 Test all pages, overlays, preview, onboarding, menu/tray in Chinese/English and light/dark,

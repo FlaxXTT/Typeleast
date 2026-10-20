@@ -468,6 +468,52 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         finally { Directory.Delete(dir, true); }
     }
 }
+{
+    var dir = Path.Combine(Path.GetTempPath(), "typeleast-data-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+    try
+    {
+        var history = new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared);
+        history.Add(new HistoryEntry { Text = "old fixture", Time = DateTimeOffset.UtcNow.AddDays(-40) });
+        history.Add(new HistoryEntry { Text = "new fixture", Request = new("zh", "prompt", "en", "zh=tw,en=gb") });
+        history.ApplyRetention("month"); Eq("retention removes old entries", history.Entries.Count, 1);
+        var reloaded = new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared);
+        Eq("retry preserves translation target", reloaded.Last?.Request?.TranslateTo, "en");
+        Eq("retry preserves variants", reloaded.Last?.Request?.Variants, "zh=tw,en=gb");
+        history.ApplyRetention("never"); history.Add(new HistoryEntry { Text = "memory-only result" });
+        Eq("never keeps paste-last in memory", history.Last?.Text, "memory-only result");
+        Eq("never writes no result", new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared).Entries.Count, 0);
+        history.Clear(); Check("clear forgets memory result", history.Last is null);
+        var settingsPath = Path.Combine(dir, "settings.json");
+        File.WriteAllText(settingsPath, "{\"words\":[\"heard=TypeLeast\",\"SenseVoice\"]}");
+        var settings = AppSettings.Load(settingsPath);
+        Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 2);
+        Eq("legacy heardAs preserved", settings.DictionaryEntries[0].HeardAs, "heard");
+        Eq("legacy source is manual", settings.DictionaryEntries[0].Source, "manual");
+        var preview = WordImport.Preview("word,heardAs\nTypeLeast,heard\n\"Product, Name\",wrong\nnew,old\n\"unterminated", settings.DictionaryEntries);
+        Eq("CSV duplicates reported", preview.Duplicates, 1); Eq("CSV valid preview", preview.Valid.Count, 2);
+        Eq("CSV invalid line reported", preview.InvalidLines.Single(), 5);
+        Eq("CSV quoted commas preserved", preview.Valid[0].Word, "Product, Name");
+        Check("dictionary rejects controls", WordEntry.Parse("bad\nword") is null);
+        Check("dictionary enforces service limit", WordEntry.Parse(new string('a', 121)) is null);
+        File.WriteAllText(settingsPath, "{broken"); var broken = AppSettings.Load(settingsPath);
+        Check("corrupt settings block writes", broken.PersistenceBlocked);
+        try { broken.Save(settingsPath); Check("cannot replace corrupt settings", false); } catch (IOException) { Check("cannot replace corrupt settings", File.ReadAllText(settingsPath) == "{broken"); }
+        var audio = new RetainedAudio(Path.Combine(dir, "recordings"), TestHistoryProtection.Shared);
+        var id = Guid.NewGuid().ToString("N"); var wav = Wav.FromPcm16(new byte[16000]);
+        audio.Save(id, wav); Check("retained audio round-trip", audio.Load(id).SequenceEqual(wav));
+        Check("retained audio is sealed", !File.ReadAllBytes(Path.Combine(dir,"recordings",id+".audio")).AsSpan().SequenceEqual(wav));
+        File.SetLastWriteTimeUtc(Path.Combine(dir,"recordings",id+".audio"), DateTime.UtcNow.AddHours(-25));
+        Check("retained audio expires", !audio.Available(id)); audio.Prune(new[] { id });
+        Check("expired audio removed", !File.Exists(Path.Combine(dir,"recordings",id+".audio")));
+        try { audio.Save("../escape", wav); Check("audio rejects path traversal", false); } catch (InvalidDataException) { Check("audio rejects path traversal", true); }
+        Check("format lists produces HTML", FormattedText.HtmlClipboard("1. 第一项\n2. <safe>")?.Contains("&lt;safe&gt;") == true);
+        Check("ordinary text stays plain", FormattedText.HtmlClipboard("ordinary paragraph") is null);
+        Check("edit correction extracts bounded term", EditCorrection.Find("Hello DeepSeak.","Hello DeepSeek.") is not null);
+        Check("edit learning rejects credential-like tokens", EditCorrection.Find("key abc123", "key xyz789") is null);
+        Check("edit learning rejects long private content", EditCorrection.Find(new string('a',2001),"b") is null);
+    }
+    finally { Directory.Delete(dir, true); }
+}
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

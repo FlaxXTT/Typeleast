@@ -260,6 +260,13 @@ public sealed class ServiceClient
                 : new List<string>();
         });
 
+    public async Task LearnCorrectionAsync(string from, string to, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(new { from, to });
+        var (status, body) = await SendAsync(HttpMethod.Post, "/learn", new StringContent(json, Encoding.UTF8, "application/json"), null, ShortTimeout, ct);
+        if (status != HttpStatusCode.OK) throw HttpError(status, body);
+    }
+
     /// <summary>Start the one-time model download (about 241 MB); progress shows in /health.</summary>
     public Task<bool> DownloadModelsAsync(string? endpoint, CancellationToken ct = default) =>
         WithPortRetry(async () =>
