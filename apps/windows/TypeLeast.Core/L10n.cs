@@ -37,6 +37,10 @@ public static class L10n
     }
     public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
+        ["模型输出达到长度上限，已插入原话"] = "Model output reached its limit; used the transcript",
+        ["模型返回格式无法解析，已插入原话"] = "Model response could not be parsed; used the transcript",
+        ["整理请求鉴权失败，已插入原话"] = "Cleanup authentication failed; used the transcript",
+        ["整理请求网络失败，已插入原话"] = "Cleanup network request failed; used the transcript",
         ["历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"] = "History cannot be read or saved securely. The existing file is retained. Check system credentials and file permissions.",
         ["简体"] = "Simplified",
         ["繁体（台湾）"] = "Traditional (Taiwan)",

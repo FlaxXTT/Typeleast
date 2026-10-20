@@ -287,6 +287,7 @@ internal sealed class SettingsPage : IPage
         try
         {
             var result = await host.Client.TestLlmAsync(route);
+            Log.Write("operation.complete", new DiagnosticEvent("connection-test", "complete", result.Code, result.Ms).Format());
             if (result.Ok)
             {
                 var saved = key.Password.Length == 0 || SaveKey(quiet: true);

@@ -343,6 +343,8 @@ internal sealed class AppHost
     /// <summary>Paste a finished result into the target window and record it.</summary>
     private async Task Deliver(DictateResponse result, double seconds)
     {
+        Log.Write("operation.complete", new DiagnosticEvent(result.Translated is null ? "dictation" : "translation", "complete",
+            result.FallbackReason, result.Ms?.Total, Characters: result.Text.Length).Format());
         {
             // A terminal gets one line without control characters: this reduces accidental command execution.
             var text = TerminalGuard.SafeText(result.InsertableText.Trim(), targetApp);
