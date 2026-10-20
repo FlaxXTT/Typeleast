@@ -115,7 +115,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     s.LlmModel = "deepseek-chat";
     Eq("no key means no route", s.ActiveRoute(_ => null), null);
     var route = s.ActiveRoute(_ => "sk-test");
-    Eq("a complete route uses the preset's URL", route?.BaseUrl, "https://api.deepseek.com/v1");
+    Eq("a complete route uses the preset's URL", route?.BaseUrl, "https://api.deepseek.com");
     s.LlmPresetId = "ollama";
     s.LlmModel = "qwen2.5:7b";
     Eq("a local server needs no key", s.ActiveRoute(_ => null)?.Model, "qwen2.5:7b");
