@@ -55,6 +55,11 @@ internal sealed class AppHost
     private bool refreshing;
     private bool syncing;
     private DictationOptions? betaOptions;
+    public RetainedAudio RetainedAudio { get; }
+    private FieldTarget? targetField;
+    private byte[]? recordingContext;
+    private readonly EditLearner learner = new();
+    private FieldTarget? betaField;
 
     public AppHost(Application app)
     {
@@ -64,6 +69,9 @@ internal sealed class AppHost
         Settings = AppSettings.Load(settingsPath);
         L10n.Configure(Settings.InterfaceLanguage);
         History = new LocalHistory(AppPaths.AppHistoryFile());
+        History.ApplyRetention(Settings.HistoryRetention);
+        RetainedAudio = new RetainedAudio(System.IO.Path.Combine(AppPaths.StateDirectory(), "recordings"));
+        PruneAudio();
         Activity = new ActivityLog(AppPaths.AppActivityFile());
         // The heatmap starts from whatever history is still kept, once.
         Activity.SeedIfNeeded(History.Entries.Where(e => e.Text.Length > 0)
@@ -149,15 +157,19 @@ internal sealed class AppHost
 
     private void Raise() => Changed?.Invoke();
 
-    public void SaveSettings()
+    public bool SaveSettings()
     {
+        if (!Settings.LearnCorrections) learner.Stop();
+        Settings.Words = Settings.DictionaryEntries.Select(e => e.ServiceValue).ToList();
         try { Settings.Save(settingsPath); }
-        catch (Exception e) { Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未能保存，请检查文件权限和可用空间。")); return; }
+        catch (Exception e) { Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未能保存，请检查文件权限和可用空间。")); return false; }
         hook.SetKey(Settings.Hotkey);
         hook.SetTranslateKey(Settings.TranslateHotkey);
         Service.NodePathOverride = Settings.NodePath;
         Service.ModelMirror = Settings.ModelMirror;
-        Raise();
+        if (Settings.Strength != "promptbeta" && betaSession is not null) DropBeta();
+        History.ApplyRetention(Settings.HistoryRetention); PruneAudio();
+        Raise(); return true;
     }
 
     public void SetHint(string text)
@@ -239,18 +251,66 @@ internal sealed class AppHost
 
     public void AddWord(string entry)
     {
-        var word = entry.Trim();
-        if (word.Length == 0 || Settings.Words.Contains(word)) return;
-        Settings.Words.Add(word);
-        SaveSettings();
-        _ = SyncDictionary();
+        if (WordEntry.FromLegacy(entry) is { } word) SaveWord(word);
     }
-
+    public bool SaveWord(WordEntry entry, bool synchronize = true)
+    {
+        if (WordEntry.Parse(entry.Word, entry.HeardAs, entry.Source) is null) return false;
+        if (Settings.DictionaryEntries.Any(e => e.Id != entry.Id && string.Equals(e.ServiceValue, entry.ServiceValue, StringComparison.OrdinalIgnoreCase)))
+        { SetHint(L10n.T("词条已存在或输入无效")); return false; }
+        var previous = Settings.DictionaryEntries.ToList();
+        var index = Settings.DictionaryEntries.FindIndex(e => e.Id == entry.Id);
+        if (index < 0) Settings.DictionaryEntries.Add(entry); else Settings.DictionaryEntries[index] = entry;
+        if (!SaveSettings()) { Settings.DictionaryEntries = previous; return false; }
+        dictionaryNeedsSync = true; if (synchronize) _ = SyncDictionary(); return true;
+    }
+    private async Task LearnWord(WordEntry entry)
+    {
+        if (!Settings.LearnCorrections || quitting || !SaveWord(entry, false)) return;
+        try { await Client.LearnCorrectionAsync(entry.HeardAs, entry.Word); dictionaryNeedsSync = false; DictionarySynced = true; }
+        catch (ServiceException) { dictionaryNeedsSync = true; DictionarySynced = false; }
+        Raise();
+    }
     public void RemoveWord(string entry)
     {
-        Settings.Words.Remove(entry);
-        SaveSettings();
-        _ = SyncDictionary();
+        var previous = Settings.DictionaryEntries.ToList();
+        Settings.DictionaryEntries.RemoveAll(e => e.Id == entry || e.ServiceValue == entry);
+        if (!SaveSettings()) { Settings.DictionaryEntries = previous; return; }
+        dictionaryNeedsSync = true; _ = SyncDictionary();
+    }
+    private void PruneAudio()
+    {
+        try { RetainedAudio.Prune(Settings.KeepAudio24h && Settings.HistoryRetention != "never" ? History.Entries.Select(e => e.AudioId).OfType<string>() : Array.Empty<string>()); }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { SetHint(L10n.T("保留录音无法清理，请检查文件权限。")); }
+    }
+    public void DeleteHistory(string id) { History.Remove(id); PruneAudio(); Raise(); }
+    public bool CanRetry(HistoryEntry entry)
+    {
+        try { return Settings.KeepAudio24h && entry.Request is { Strength: not "promptbeta" } && RetainedAudio.Available(entry.AudioId); }
+        catch (Exception) { return false; }
+    }
+    public async Task RetryHistory(HistoryEntry entry)
+    {
+        if (Phase != DictationPhase.Idle || !CanRetry(entry) || entry.Request is not { } request) return;
+        var operation = operations.TryBegin(); if (operation is null) return;
+        Phase = DictationPhase.Thinking; hook.SwallowEscape = true; bar.ShowThinking(); Raise();
+        byte[]? wav = null;
+        try
+        {
+            wav = RetainedAudio.Load(entry.AudioId!);
+            var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
+                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants);
+            if (!operations.IsCurrent(operation)) return;
+            Paster.SetText(result.InsertableText);
+            History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
+                Fallback = result.Fallback, Reason = result.FallbackReason, Seconds = entry.Seconds,
+                Request = request, AudioId = entry.AudioId });
+            bar.ShowResult(L10n.T("已复制"), result.Fallback);
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (Exception e) when (e is ServiceException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
+        { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("重试失败，原始记录已保留"), true); }
+        finally { if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav); if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; } operations.Complete(operation); Raise(); }
     }
 
     // ---- dictation
@@ -283,8 +343,11 @@ internal sealed class AppHost
         }
         var operation = operations.TryBegin();
         if (operation is null) return;
-        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard);
-        targetWindow = Native.GetForegroundWindow();
+        learner.Stop();
+        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
+        targetField = FieldTarget.Capture();
+        targetWindow = targetField.Window;
+        recordingContext = Settings.UseFieldContext ? FieldContextReader.Read(targetField) : null;
         targetApp = Shell.ProcessName(targetWindow);
         try
         {
@@ -305,6 +368,7 @@ internal sealed class AppHost
 
     public void Cancel()
     {
+        learner.Stop();
         var lease = operations.Active;
         operations.Cancel();
         recorder.Cancel();
@@ -344,7 +408,7 @@ internal sealed class AppHost
         {
             var requestOptions = answering is not null ? betaOptions ?? options : options;
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
-                ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants);
+                fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants);
             if (!operations.IsCurrent(operation)) return;
             if (ShowBetaQuestions(result))
             {
@@ -355,9 +419,10 @@ internal sealed class AppHost
             {
                 targetWindow = betaWindow;
                 targetApp = betaApp;
+                targetField = betaField;
                 ClearBeta();
             }
-            await Deliver(result, seconds, operation, options);
+            await Deliver(result, seconds, operation, requestOptions, answering is null ? wav : null);
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
         catch (ServiceException e) when (e.Status == 410 && answering is not null)
@@ -374,13 +439,14 @@ internal sealed class AppHost
         }
         finally
         {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav);
             if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; Raise(); }
             operations.Complete(operation);
         }
     }
 
     /// <summary>Paste a finished result into the target window and record it.</summary>
-    private async Task Deliver(DictateResponse result, double seconds, OperationTracker.Lease operation, DictationOptions options)
+    private async Task Deliver(DictateResponse result, double seconds, OperationTracker.Lease operation, DictationOptions options, byte[]? wav = null)
     {
         if (!operations.IsCurrent(operation) || quitting) return;
         Log.Write("operation.complete", new DiagnosticEvent(result.Translated is null ? "dictation" : "translation", "complete",
@@ -394,9 +460,19 @@ internal sealed class AppHost
             }
             else
             {
-                var outcome = await Paster.PasteAsync(text, targetWindow, options.RestoreClipboard, operation.Token);
+                if (options.InsertionMode == "preview")
+                {
+                    var preview = await PreviewPanel.Show(text, operation.Token);
+                    if (preview is null || !operations.IsCurrent(operation)) return;
+                    text = TerminalGuard.SafeText(preview, targetApp);
+                    Native.SetForegroundWindow(targetWindow);
+                    await Task.Delay(100, operation.Token);
+                }
+                var outcome = options.InsertionMode == "clipboardOnly" ? (Paster.SetText(text) ? Paster.Outcome.CopiedOnly : Paster.Outcome.Failed)
+                    : await Paster.PasteAsync(text, targetWindow, options.RestoreClipboard, operation.Token, targetField, options.FormattedLists && TerminalGuard.SafeText("a\nb", targetApp).Contains('\n'));
+                if (outcome == Paster.Outcome.Failed) { bar.ShowResult(L10n.T("无法写入剪贴板，请重试"), true); return; }
                 if (!operations.IsCurrent(operation)) return;
-                History.Add(new HistoryEntry
+                var entry = new HistoryEntry
                 {
                     Text = text,
                     Raw = result.Raw,
@@ -405,7 +481,16 @@ internal sealed class AppHost
                     Reason = result.FallbackReason,
                     Seconds = seconds,
                     Inserted = outcome == Paster.Outcome.Pasted,
-                });
+                    Request = new HistoryRequest(options.Language, options.Strength, options.TranslateTo, options.Variants),
+                };
+                if (wav is not null && Settings.KeepAudio24h && Settings.HistoryRetention != "never" && options.Strength != "promptbeta")
+                {
+                    try { RetainedAudio.Save(entry.Id, wav); entry.AudioId = entry.Id; }
+                    catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { SetHint(L10n.T("录音未能安全保留，文字结果仍可使用。")); }
+                }
+                History.Add(entry); PruneAudio();
+                if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && Settings.LearnCorrections && targetField is { } field)
+                    learner.Start(field, text, word => _ = LearnWord(word));
                 if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);
@@ -422,6 +507,7 @@ internal sealed class AppHost
         betaSession = id;
         betaWindow = targetWindow;
         betaApp = targetApp;
+        betaField = targetField;
         betaPanel ??= new BetaPanel(() => _ = FinishBetaWithoutAnswers(), DropBeta);
         betaPanel.ShowQuestions(result.BetaQuestions, HotkeyLabel);
         bar.ShowResult(L10n.T("提示词 Beta：先回答面板里的问题"), warning: false);
@@ -434,7 +520,7 @@ internal sealed class AppHost
         if (Phase != DictationPhase.Idle || betaSession is not { } id || betaOptions is not { } options) return;
         var operation = operations.TryBegin();
         if (operation is null) return;
-        targetWindow = betaWindow; targetApp = betaApp;
+        targetWindow = betaWindow; targetApp = betaApp; targetField = betaField;
         ClearBeta();
         Phase = DictationPhase.Thinking; hook.SwallowEscape = true;
         bar.ShowThinking(); Raise();
@@ -468,6 +554,7 @@ internal sealed class AppHost
     {
         betaSession = null;
         betaOptions = null;
+        betaField = null;
         betaPanel?.Hide();
     }
 
@@ -477,6 +564,7 @@ internal sealed class AppHost
         History.Clear();
         if (History.LastError is not null) { SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。")); return; }
         Activity.Clear();
+        PruneAudio();
         Raise();
     }
 

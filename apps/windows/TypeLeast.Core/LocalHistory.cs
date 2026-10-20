@@ -14,7 +14,11 @@ public sealed class HistoryEntry
     public string? Reason { get; set; }
     public double Seconds { get; set; }
     public bool Inserted { get; set; }
+    public HistoryRequest? Request { get; set; }
+    public string? AudioId { get; set; }
 }
+
+public sealed record HistoryRequest(string Language, string Strength, string? TranslateTo, string? Variants);
 
 /// <summary>Recent dictations, protected at rest with DPAPI; migrates legacy JSON.</summary>
 public sealed class LocalHistory
@@ -27,6 +31,9 @@ public sealed class LocalHistory
     private readonly IHistoryProtection protection;
     private bool locked;
     public string? LastError { get; private set; }
+    public long Revision { get; private set; }
+    public string Retention { get; private set; } = "forever";
+    private HistoryEntry? lastSession;
 
     public LocalHistory(string path, IHistoryProtection? protection = null)
     {
@@ -38,7 +45,7 @@ public sealed class LocalHistory
             var encrypted = stored.AsSpan().StartsWith(Marker);
             plain = encrypted ? this.protection.Unprotect(stored[Marker.Length..]) : stored;
             Entries = JsonSerializer.Deserialize<List<HistoryEntry>>(plain, Json.Options) ?? new();
-            if (!encrypted) Save(); // Replace legacy plaintext only after protection succeeds.
+            if (!encrypted) { Save(); if (LastError is not null) locked = true; }
         } catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) {
         } catch (Exception e) when (IsStorageError(e)) {
             locked = true;
@@ -49,13 +56,31 @@ public sealed class LocalHistory
     private static bool IsStorageError(Exception e) => e is IOException or JsonException
         or UnauthorizedAccessException or CryptographicException or PlatformNotSupportedException;
 
-    public HistoryEntry? Last => Entries.Count > 0 ? Entries[0] : null;
+    public HistoryEntry? Last => lastSession ?? Entries.FirstOrDefault();
 
     public void Add(HistoryEntry entry)
     {
+        lastSession = entry;
+        if (Retention == "never") return;
         Entries.Insert(0, entry);
         if (Entries.Count > MaxEntries) Entries.RemoveRange(MaxEntries, Entries.Count - MaxEntries);
         Save();
+    }
+
+    public void ApplyRetention(string retention, DateTimeOffset? now = null)
+    {
+        Retention = retention;
+        var days = retention switch { "year" => 365, "month" => 30, "week" => 7, "day" => 1, "never" => 0, _ => -1 };
+        if (days < 0) return;
+        var cutoff = (now ?? DateTimeOffset.Now).AddDays(-days);
+        if (Entries.RemoveAll(e => retention == "never" || e.Time < cutoff) > 0) Save();
+    }
+
+    public void Update(HistoryEntry entry)
+    {
+        var index = Entries.FindIndex(e => e.Id == entry.Id);
+        if (index < 0) return;
+        Entries[index] = entry; Save();
     }
 
     public void Remove(string id)
@@ -68,7 +93,7 @@ public sealed class LocalHistory
     {
         try {
             File.Delete(path); // Only the explicit Delete All History action calls this.
-            Entries.Clear(); locked = false; LastError = null;
+            Entries.Clear(); lastSession = null; locked = false; LastError = null; Revision++;
         } catch (Exception e) when (IsStorageError(e)) { LastError = "history-unavailable"; }
     }
 
@@ -89,7 +114,7 @@ public sealed class LocalHistory
                 file.Write(Marker); file.Write(sealedData); file.Flush(true);
             }
             File.Move(temp, path, overwrite: true);
-            LastError = null;
+            LastError = null; Revision++;
         } catch (Exception e) when (IsStorageError(e)) { LastError = "history-unavailable"; }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }

@@ -79,10 +79,17 @@ internal sealed class AudioRecorder
             w.Dispose();
         }
         byte[] pcm;
-        lock (gate) pcm = buffer.ToArray();
+        lock (gate)
+        {
+            pcm = buffer.ToArray();
+            if (buffer.TryGetBuffer(out var stored)) stored.AsSpan().Clear();
+            buffer.SetLength(0);
+        }
         Level = 0;
-        return (Wav.FromPcm16(pcm), Wav.Seconds(pcm.Length));
+        var wav = Wav.FromPcm16(pcm);
+        System.Security.Cryptography.CryptographicOperations.ZeroMemory(pcm);
+        return (wav, Wav.Seconds(pcm.Length));
     }
 
-    public void Cancel() => Stop();
+    public void Cancel() { var stopped = Stop(); System.Security.Cryptography.CryptographicOperations.ZeroMemory(stopped.Wav); }
 }
