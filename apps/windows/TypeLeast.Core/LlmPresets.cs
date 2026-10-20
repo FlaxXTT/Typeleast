@@ -6,7 +6,7 @@ public sealed record LlmPreset(string Id, string Name, string BaseUrl, string Mo
 {
     public static readonly IReadOnlyList<LlmPreset> All = new[]
     {
-        new LlmPreset("deepseek", L10n.T("DeepSeek 官方 API"), "https://api.deepseek.com/v1", "deepseek-chat", true, "https://platform.deepseek.com/api_keys"),
+        new LlmPreset("deepseek", L10n.T("DeepSeek 官方 API"), "https://api.deepseek.com", "deepseek-flash", true, "https://platform.deepseek.com/api_keys"),
         new LlmPreset("zhipu", L10n.T("智谱 GLM"), "https://open.bigmodel.cn/api/paas/v4", "glm-4-flash", true, "https://open.bigmodel.cn/usercenter/apikeys"),
         new LlmPreset("moonshot", L10n.T("Kimi（月之暗面）"), "https://api.moonshot.cn/v1", "moonshot-v1-8k", true, "https://platform.moonshot.cn/console/api-keys"),
         new LlmPreset("qwen", L10n.T("通义千问"), "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", true, "https://dashscope.console.aliyun.com/apiKey"),

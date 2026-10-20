@@ -184,7 +184,7 @@
 
 | 服务商 | 接口地址（已预填） | 在哪里创建 Key |
 |---|---|---|
-| DeepSeek 官方 | `https://api.deepseek.com/v1` | platform.deepseek.com |
+| DeepSeek 官方 | `https://api.deepseek.com` | platform.deepseek.com |
 | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | open.bigmodel.cn |
 | Kimi（月之暗面） | `https://api.moonshot.cn/v1` | platform.moonshot.cn |
 | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | dashscope.console.aliyun.com |
@@ -192,6 +192,8 @@
 | OpenAI | `https://api.openai.com/v1` | platform.openai.com |
 | 本机 Ollama | `http://127.0.0.1:11434/v1` | 不需要 Key |
 | 自定义 | 任何 OpenAI 兼容地址 | — |
+
+DeepSeek 官方当前使用模型 ID `deepseek-flash`。旧名称 `deepseek-chat`、`deepseek-reasoner` 已停用；已有用户需在设置中手动更新模型，或点「获取列表」选择。不要把 `/chat/completions` 填进接口地址，程序会自动追加这个路径。参见 [官方接入文档](https://api-docs.deepseek.com/zh-cn/) 和 [停用公告](https://api-docs.deepseek.com/zh-cn/updates/)。
 
 - Key 只保存在系统自带的安全存储里：macOS 是**钥匙串**，Windows 是**凭据管理器**。它只发给本机的 TypeLeast 服务，由服务直接调用你选的服务商，不会写进任何文件或日志。
 - 远程地址必须是 https；http 只允许本机地址（如 Ollama）。
