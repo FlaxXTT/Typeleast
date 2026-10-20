@@ -514,6 +514,28 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     }
     finally { Directory.Delete(dir, true); }
 }
+// ---- Windows release lookup: Mac keeps GitHub's "latest"; Windows reads its own assets
+
+{
+    var json = """
+    [
+      {"tag_name":"v1.17.0","html_url":"https://example.invalid/mac","draft":false,"prerelease":false,"assets":[{"name":"TypeLeast-1.17.0-macOS-AppleSilicon.zip"}]},
+      {"tag_name":"windows-v1.16.1","html_url":"https://example.invalid/win","draft":false,"prerelease":false,"assets":[{"name":"TypeLeast-1.16.1-Windows-x64-Setup.exe"},{"name":"TypeLeast-1.16.1-Windows-x64-Portable.zip"}]},
+      {"tag_name":"windows-v1.18.0","html_url":"https://example.invalid/draft","draft":true,"prerelease":false,"assets":[{"name":"TypeLeast-1.18.0-Windows-x64-Setup.exe"}]},
+      {"tag_name":"windows-v1.17.5","html_url":"https://example.invalid/pre","draft":false,"prerelease":true,"assets":[{"name":"TypeLeast-1.17.5-Windows-x64-Setup.exe"}]},
+      {"tag_name":"v1.5.0","html_url":"https://example.invalid/old","draft":false,"prerelease":false,"assets":[{"name":"TypeLeast-1.5.0-Windows-x64-Setup.exe"}]}
+    ]
+    """;
+    var newest = WindowsRelease.Newest(json);
+    Eq("windows release ignores mac-only releases", newest?.Version, "1.16.1");
+    Eq("windows release keeps its own tag", newest?.Tag, "windows-v1.16.1");
+    Check("windows release is newer than 1.16.0", WindowsRelease.IsNewer("1.16.1", "1.16.0"));
+    Check("same windows version is not newer", !WindowsRelease.IsNewer("1.16.1", "1.16.1"));
+    Check("1.10.0 is newer than 1.9.3", WindowsRelease.IsNewer("1.10.0", "1.9.3"));
+    Check("no windows asset gives no release", WindowsRelease.Newest("[{\"tag_name\":\"v1\",\"assets\":[{\"name\":\"x.dmg\"}]}]") is null);
+    Check("a non-list answer gives no release", WindowsRelease.Newest("{\"message\":\"Not Found\"}") is null);
+}
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 
