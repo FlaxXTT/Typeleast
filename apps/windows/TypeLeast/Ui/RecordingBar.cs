@@ -59,10 +59,10 @@ internal sealed class RecordingBar : Window
         Content = new Border
         {
             Background = Theme.Pill,
+            BorderBrush = Theme.Hex("#40FFFFFF"), BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(22),
             Padding = new Thickness(8, 6, 8, 6),
             Child = row,
-            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 3, Opacity = 0.25 },
             Margin = new Thickness(12),
         };
 
@@ -138,6 +138,7 @@ internal sealed class RecordingBar : Window
         stop.Visibility = Visibility.Collapsed;
         wave.Visibility = Visibility.Visible;
         label.Text = text ?? L10n.T("整理中…");
+        tick.Start();
         ShowBar();
     }
 

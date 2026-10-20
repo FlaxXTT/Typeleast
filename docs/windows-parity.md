@@ -107,6 +107,43 @@ real microphone input still require UI/runtime QA; cross-user proof remains pend
 
 ## Required final acceptance (pending)
 
+## Stage 4 implementation and preliminary verification (2026-10-20 UTC)
+
+The WPF UI now uses semantic light/dark/system palettes, bottom settings navigation,
+window-bound persistence, keycaps, four responsive statistics, recent history, engine status
+and a responsive month-labelled heatmap. History supports retention, search, filters, date
+groups and retry. Dictionary supports search, sources, edits and previewed CSV imports.
+Settings follow the requested group order and include insertion policies, controlled context/
+learning, audio testing, session muting, appearance, taskbar/background behavior, idle bar,
+privacy, Windows conditions and explicit release checking/download links. Added onboarding
+and nonactivating idle entry; active recording/Beta remain coordinated by AppHost.
+
+Microphone tests start only on explicit click, run for at most 15 seconds and do not upload,
+recognize or retain their audio. Audio capture is capped and late device callbacks ignored.
+Device errors cancel the operation. Existing playback sessions are restored on stop/cancel;
+new playback sessions are not claimed muted. Draft model routes no longer mutate effective
+settings before save; failed settings writes restore the last saved values and show an error.
+Credential access is injectable so verification uses a fake store, never real credential reads.
+
+Preliminary verification: native Core 508/0; WPF build passed with existing WFAC010.
+Offscreen UI: 50 checks passed and 136 renders generated (two languages, two palettes,
+820/940 DIP content, 100/125/150/200% render DPI plus settings bottom views). Selected
+images were visually inspected. Render DPI does not prove actual OS scaling or physical Tab.
+These checks found and fixed frozen palette brushes and low-contrast native combo templates.
+Native UI: 18 passed / 1 failed. Processing/Beta/idle overlays preserved the observed foreground,
+preview cancellation, native popup, keyboard traversal, service-gated onboarding and HTTP retry
+cancellation were exercised. Windows refused foreground ownership of the fixture; therefore
+target-field foreground integration is explicitly not accepted. No real clipboard payload was
+read or changed by those checks. Tests use fake credentials and synthetic state/audio only.
+
+Default SenseVoice files were downloaded into the task's isolated model directory and checked
+by the existing model verifier. Thirty SAPI-synthesized speech flows passed through real
+recognition and deterministic cleanup / fake provider / no-key fallback, alternating en/auto.
+This is short-sample execution, not accuracy or microphone-quality evidence. With these models,
+the service suite passed 205/0 with zero skips. Other real recognizers remain pending.
+
+## Final acceptance (pending)
+
 Test all pages, overlays, preview, onboarding, menu/tray in Chinese/English and light/dark,
 minimum window and 100/125/150/200% scaling. Check focus, Tab, scrolling, long text,
 disabled states and recovery. Use 100 cancellation/entry races, 30 public audio flows,

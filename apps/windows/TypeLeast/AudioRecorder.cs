@@ -23,6 +23,7 @@ internal sealed class AudioRecorder
     public bool IsRecording => wave is not null;
     /// <summary>Raised (on a background thread) when the 120 s ceiling is reached.</summary>
     public event Action? LimitReached;
+    public event Action? RecordingFailed;
 
     /// <summary>Input devices by index, as Windows names them.</summary>
     public static List<string> Devices()
@@ -37,6 +38,7 @@ internal sealed class AudioRecorder
     {
         lock (gate) buffer.SetLength(0);
         Level = 0;
+        var limitSignalled = false;
         var w = new WaveInEvent
         {
             DeviceNumber = device >= 0 && device < WaveInEvent.DeviceCount ? device : -1,
@@ -51,19 +53,24 @@ internal sealed class AudioRecorder
             bool full;
             lock (gate)
             {
-                buffer.Write(chunk);
-                full = buffer.Length >= (long)MaxSeconds * Wav.BytesPerSecond;
+                if (wave != w) return;
+                var remaining = (int)Math.Max(0, (long)MaxSeconds * Wav.BytesPerSecond - buffer.Length);
+                buffer.Write(chunk[..Math.Min(remaining, chunk.Length)]);
+                full = !limitSignalled && buffer.Length >= (long)MaxSeconds * Wav.BytesPerSecond;
+                if (full) limitSignalled = true;
             }
             if (full) LimitReached?.Invoke();
         };
+        w.RecordingStopped += (_, e) => { if (e.Exception is not null && wave == w) RecordingFailed?.Invoke(); };
         try
         {
-            w.StartRecording();
             wave = w;
+            w.StartRecording();
         }
         catch (Exception e)
         {
             w.Dispose();
+            wave = null;
             throw new InvalidOperationException(e.Message, e);
         }
     }

@@ -9,6 +9,12 @@ using TypeLeast.Core;
 
 namespace TypeLeast;
 
+internal sealed class WindowsCredentials : ICredentialStore
+{
+    public string? Read(string account) => CredentialStore.Read(account);
+    public bool Write(string account, string value) => CredentialStore.Write(account, value);
+}
+
 /// <summary>The API key in the Windows Credential Manager, one generic credential per preset.</summary>
 internal static class CredentialStore
 {
