@@ -245,12 +245,14 @@ internal sealed class SettingsPage : IPage
         try
         {
             using var client = new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(12) };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("TypeLeast/1.16.0");
-            using var response = await client.GetAsync("https://api.github.com/repos/FlaxXTT/Typeleast/releases/latest");
+            var current = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "0";
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("TypeLeast/" + current);
+            using var response = await client.GetAsync(WindowsRelease.ListUrl);
             if (!response.IsSuccessStatusCode) { updateStatus.Text = L10n.T("仓库可能需要登录；请在浏览器中查看发布版本。不会自动安装。"); return; }
-            using var document = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            var tag = document.RootElement.GetProperty("tag_name").GetString() ?? "";
-            updateStatus.Text = L10n.T("最新发布：{0}；请检查是否包含 Windows 安装包。", tag.Length <= 40 ? tag : "?");
+            var newest = WindowsRelease.Newest(await response.Content.ReadAsStringAsync());
+            updateStatus.Text = newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
+                : WindowsRelease.IsNewer(newest.Version, current) ? L10n.T("有新的 Windows 版本：{0}。请在发布页下载，不会自动安装。", newest.Version)
+                : L10n.T("已是最新的 Windows 版本（{0}）。", current);
         }
         catch (Exception) { updateStatus.Text = L10n.T("版本检查失败，请在浏览器中查看发布。不会自动安装。"); }
     }
