@@ -13,10 +13,20 @@ internal static class ActivityView
 {
     private const double Cell = 11;
     private const double Gap = 3;
-    private const int Weeks = 26;
     private static readonly double[] Opacity = { 0, 0.3, 0.5, 0.75, 1 };
 
     public static UIElement Build(ActivityLog log, DateTime today)
+    {
+        var content = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var weeks = 0;
+        content.SizeChanged += (_, _) =>
+        {
+            var count = Math.Clamp((int)(content.ActualWidth / (Cell + Gap)), 4, 52);
+            if (count == weeks) return; weeks = count; content.Content = Buildweeks(log, today, count);
+        };
+        content.Content = Buildweeks(log, today, 26); return content;
+    }
+    private static UIElement Buildweeks(ActivityLog log, DateTime today, int weeks)
     {
         var (current, longest) = log.Streaks(today);
         var header = Theme.Row(16,
@@ -25,12 +35,18 @@ internal static class ActivityView
             Theme.Text(L10n.T("当前连续") + " " + current + " " + L10n.T("天"), 12, Theme.Grey, wrap: false),
             Theme.Text(L10n.T("最长连续") + " " + longest + " " + L10n.T("天"), 12, Theme.Grey, wrap: false));
 
-        var canvas = new Canvas { Width = Weeks * (Cell + Gap), Height = 7 * (Cell + Gap), HorizontalAlignment = HorizontalAlignment.Left };
+        var canvas = new Canvas { Width = weeks * (Cell + Gap), Height = 18 + 7 * (Cell + Gap), HorizontalAlignment = HorizontalAlignment.Left };
         // Columns start on Monday; the last column is the current week.
         var monday = today.Date.AddDays(-(((int)today.DayOfWeek + 6) % 7));
-        var first = monday.AddDays(-7 * (Weeks - 1));
-        for (var column = 0; column < Weeks; column++)
+        var first = monday.AddDays(-7 * (weeks - 1));
+        for (var column = 0; column < weeks; column++)
         {
+            var monthDay = first.AddDays(column * 7);
+            if (column == 0 || monthDay.Month != monthDay.AddDays(-7).Month)
+            {
+                var month = Theme.Text(monthDay.ToString("MMM", L10n.Culture), 10, Theme.Grey, wrap: false);
+                Canvas.SetLeft(month, column * (Cell + Gap)); canvas.Children.Add(month);
+            }
             for (var row = 0; row < 7; row++)
             {
                 var date = first.AddDays(column * 7 + row);
@@ -41,7 +57,7 @@ internal static class ActivityView
                     ? L10n.T("没有活动")
                     : L10n.T("{0} 次 · {1} 字", day.Dictations, day.Words));
                 Canvas.SetLeft(square, column * (Cell + Gap));
-                Canvas.SetTop(square, row * (Cell + Gap));
+                Canvas.SetTop(square, 18 + row * (Cell + Gap));
                 canvas.Children.Add(square);
             }
         }

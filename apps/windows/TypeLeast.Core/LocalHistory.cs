@@ -45,9 +45,11 @@ public sealed class LocalHistory
             var encrypted = stored.AsSpan().StartsWith(Marker);
             plain = encrypted ? this.protection.Unprotect(stored[Marker.Length..]) : stored;
             Entries = JsonSerializer.Deserialize<List<HistoryEntry>>(plain, Json.Options) ?? new();
+            if (Entries.Any(e => e is null || e.Id is null || e.Text is null || e.Raw is null || e.App is null)) throw new JsonException("Invalid history entries");
             if (!encrypted) { Save(); if (LastError is not null) locked = true; }
         } catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) {
         } catch (Exception e) when (IsStorageError(e)) {
+            Entries = new();
             locked = true;
             LastError = "history-unavailable";
         } finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
@@ -85,6 +87,7 @@ public sealed class LocalHistory
 
     public void Remove(string id)
     {
+        if (lastSession?.Id == id) lastSession = null;
         Entries.RemoveAll(e => e.Id == id);
         Save();
     }
@@ -99,7 +102,7 @@ public sealed class LocalHistory
 
     /// <summary>Dictations and characters, for the home page.</summary>
     public (int Count, int Characters, double Seconds) Stats() =>
-        (Entries.Count, Entries.Sum(e => e.Text.Length), Entries.Sum(e => e.Seconds));
+        (Entries.Count, Entries.Sum(e => ActivityLog.CountWords(e.Text)), Entries.Sum(e => e.Seconds));
 
     private void Save()
     {

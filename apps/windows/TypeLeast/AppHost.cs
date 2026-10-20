@@ -27,12 +27,14 @@ internal sealed class AppHost
     public DictationPhase Phase { get; private set; } = DictationPhase.Idle;
     public string Hint { get; private set; } = "";
     public bool? DictionarySynced { get; private set; }
+    public string? SettingsSaveError { get; private set; }
 
     /// <summary>Something the windows show changed (raised on the UI thread).</summary>
     public event Action? Changed;
 
     private readonly Application app;
     private readonly string settingsPath;
+    private string savedSettingsJson = "{}";
     private readonly KeyboardHook hook;
     private readonly AudioRecorder recorder = new();
     private readonly RecordingBar bar;
@@ -60,14 +62,26 @@ internal sealed class AppHost
     private byte[]? recordingContext;
     private readonly EditLearner learner = new();
     private FieldTarget? betaField;
+    private readonly AudioDucking ducking = new();
+    private IdleBar? idleBar;
+    private Onboarding? onboarding;
+    private bool started;
+    public bool IsMicrophoneTesting { get; private set; }
+    public bool? MicrophoneReady { get; private set; }
+    public bool? HotkeyReady { get; private set; }
+    public double MicrophoneLevel => recorder.Level;
 
-    public AppHost(Application app)
+    public ICredentialStore Credentials { get; }
+    public AppHost(Application app, ICredentialStore? credentials = null)
     {
         this.app = app;
+        Credentials = credentials ?? new WindowsCredentials();
         PrivateStorage.EnsureDirectory(AppPaths.StateDirectory());
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
+        savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);
+        Theme.Apply(Settings.Appearance);
         History = new LocalHistory(AppPaths.AppHistoryFile());
         History.ApplyRetention(Settings.HistoryRetention);
         RetainedAudio = new RetainedAudio(System.IO.Path.Combine(AppPaths.StateDirectory(), "recordings"));
@@ -79,14 +93,17 @@ internal sealed class AppHost
         Service = new ServiceManager(Client) { NodePathOverride = Settings.NodePath, ModelMirror = Settings.ModelMirror };
         hook = new KeyboardHook(Settings.Hotkey, Settings.TranslateHotkey);
         bar = new RecordingBar(this);
+        bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
+        if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件无法读取，原文件已保留，已阻止覆盖保存。");
+        if (Activity.LastError is not null) Hint = L10n.T("活动计数文件损坏或无法读取，原文件已保留。");
         if (History.LastError is not null) Hint = L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。");
     }
 
-    public bool ServiceUp => Health?.Ok == true;
+    public bool ServiceUp => Health?.Ok == true && Health.Service == "typeleast";
     public SpeechModelCatalog? SpeechCatalog { get; private set; }
     public SpeechStatus? Speech => Health?.Speech;
     public string HotkeyLabel => TapDetector.Label(Settings.Hotkey);
-    public LlmRoute? ActiveRoute => Settings.ActiveRoute(CredentialStore.Read);
+    public LlmRoute? ActiveRoute => Settings.ActiveRoute(Credentials.Read);
     public bool LlmConfigured => ActiveRoute is not null;
 
     public string ModelSummary
@@ -111,6 +128,9 @@ internal sealed class AppHost
 
     public void Start(bool autostart)
     {
+        if (started) return;
+        started = true;
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
         {
@@ -120,10 +140,14 @@ internal sealed class AppHost
         Service.Start();
 
         hook.Tapped += () => app.Dispatcher.InvokeAsync(() => Toggle());
+        hook.PasteLast += () => app.Dispatcher.InvokeAsync(() => _ = PasteLast());
+        hook.CopyShortcut = Settings.PasteLastShortcut;
         hook.TranslateTapped += () => app.Dispatcher.InvokeAsync(() => ToggleTranslate());
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
-        if (!hook.Install()) Hint = L10n.T("无法注册快捷键，可以用托盘菜单开始听写");
+        HotkeyReady = hook.Install();
+        if (HotkeyReady != true) Hint = L10n.T("无法注册快捷键，可以用托盘菜单开始听写");
         recorder.LimitReached += () => app.Dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
+        recorder.RecordingFailed += () => app.Dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风已断开或录音异常，请重新选择设备后重试。")); });
 
         tray = new Tray(this);
         healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
@@ -131,11 +155,16 @@ internal sealed class AppHost
         healthTimer.Start();
 
         if (!Settings.OnboardingDone || !autostart) ShowWindow(MainWindow.Page.Home);
+        if (!Settings.OnboardingDone) ShowOnboarding();
+        UpdateIdleBar();
     }
 
     public void Quit()
     {
         quitting = true;
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged -= SystemAppearanceChanged;
+        idleBar?.Hide();
+        onboarding?.Close();
         Cancel();
         DropBeta();
         healthTimer?.Stop();
@@ -155,14 +184,54 @@ internal sealed class AppHost
         window.Activate();
     }
 
-    private void Raise() => Changed?.Invoke();
+    private void Raise() { UpdateIdleBar(); Changed?.Invoke(); }
+    private void SystemAppearanceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        => app.Dispatcher.InvokeAsync(() => { if (!quitting && Settings.Appearance == "system") Theme.Apply("system"); });
+    private void UpdateIdleBar()
+    {
+        if (!started || quitting) return;
+        if (Settings.ShowIdleBar && Phase == DictationPhase.Idle && !bar.IsVisible)
+        { idleBar ??= new IdleBar(this); if (!idleBar.IsVisible) idleBar.Show(); }
+        else idleBar?.Hide();
+    }
+    public void ShowOnboarding()
+    {
+        if (onboarding is null) { onboarding = new Onboarding(this); onboarding.Closed += (_, _) => onboarding = null; }
+        onboarding.Show(); onboarding.Activate();
+    }
+    public bool StartMicrophoneTest()
+    {
+        if (Phase != DictationPhase.Idle || operations.TryBegin() is not { } operation) return false;
+        learner.Stop();
+        try { recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
+        catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("无法打开麦克风，请检查设备和 Windows 麦克风权限。")); return false; }
+    }
+    public void EndMicrophoneTest() { if (IsMicrophoneTesting) Cancel(); }
+    public async Task PasteLast()
+    {
+        if (Phase != DictationPhase.Idle || History.Last is not { } last) return;
+        var field = FieldTarget.Capture();
+        for (var i = 0; i < 40 && (Native.GetAsyncKeyState(0x11) < 0 || Native.GetAsyncKeyState(0x10) < 0 || Native.GetAsyncKeyState(0x12) < 0); i++) await Task.Delay(25);
+        if (quitting || !field.Matches()) return;
+        var text = TerminalGuard.SafeText(last.Text, Shell.ProcessName(field.Window));
+        var result = await Paster.PasteAsync(text, field.Window, Settings.RestoreClipboard, field: field);
+        if (result != Paster.Outcome.Pasted) SetHint(L10n.T("窗口已切换，已复制到剪贴板"));
+    }
 
     public bool SaveSettings()
     {
         if (!Settings.LearnCorrections) learner.Stop();
         Settings.Words = Settings.DictionaryEntries.Select(e => e.ServiceValue).ToList();
-        try { Settings.Save(settingsPath); }
-        catch (Exception e) { Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未能保存，请检查文件权限和可用空间。")); return false; }
+        try { Settings.Save(settingsPath); savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options); }
+        catch (Exception e) {
+            var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(savedSettingsJson, Json.Options)!;
+            foreach (var property in typeof(AppSettings).GetProperties().Where(p => p.SetMethod?.IsPublic == true && !p.IsDefined(typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), true))) property.SetValue(Settings, property.GetValue(restored));
+            SettingsSaveError = L10n.T("设置未能保存，请检查文件权限和可用空间。");
+            Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未能保存，请检查文件权限和可用空间。")); return false; }
+        SettingsSaveError = null;
+        Theme.Apply(Settings.Appearance);
+        if (window is not null) window.ShowInTaskbar = Settings.ShowInTaskbar;
+        hook.CopyShortcut = Settings.PasteLastShortcut;
         hook.SetKey(Settings.Hotkey);
         hook.SetTranslateKey(Settings.TranslateHotkey);
         Service.NodePathOverride = Settings.NodePath;
@@ -183,6 +252,7 @@ internal sealed class AppHost
     public async Task RefreshHealth()
     {
         if (refreshing || quitting) return;
+        History.ApplyRetention(Settings.HistoryRetention); PruneAudio();
         refreshing = true;
         try
         {
@@ -322,6 +392,7 @@ internal sealed class AppHost
 
     private void Toggle(string? translateTo)
     {
+        if (IsMicrophoneTesting) return;
         switch (Phase)
         {
             case DictationPhase.Idle:
@@ -336,7 +407,7 @@ internal sealed class AppHost
     private void StartRecording()
     {
         if (quitting) return;
-        if (!ServiceUp)
+        if (!ServiceUp || Speech?.Ready != true)
         {
             bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务还没就绪"), warning: true);
             return;
@@ -351,11 +422,15 @@ internal sealed class AppHost
         targetApp = Shell.ProcessName(targetWindow);
         try
         {
+            if (Settings.PlaySounds) System.Media.SystemSounds.Asterisk.Play();
             recorder.Start(Settings.MicrophoneDevice);
+            MicrophoneReady = true;
+            if (Settings.MuteOtherAudio) ducking.Start();
         }
         catch (InvalidOperationException e)
         {
             operations.Complete(operation);
+            ducking.Dispose(); MicrophoneReady = false;
             Log.Write("mic.fail", e.GetType().Name);
             bar.ShowResult(L10n.T("无法打开麦克风：请在 设置 → 隐私和安全性 → 麦克风 中允许桌面应用访问麦克风"), warning: true);
             return;
@@ -369,6 +444,7 @@ internal sealed class AppHost
     public void Cancel()
     {
         learner.Stop();
+        ducking.Dispose(); IsMicrophoneTesting = false;
         var lease = operations.Active;
         operations.Cancel();
         recorder.Cancel();
@@ -385,6 +461,8 @@ internal sealed class AppHost
     {
         if (operations.Active is not { } operation || recordingOptions is not { } options) return;
         var (wav, seconds) = recorder.Stop();
+        ducking.Dispose();
+        if (Settings.PlaySounds) System.Media.SystemSounds.Asterisk.Play();
         hook.SwallowEscape = false;
         var translateTo = options.TranslateTo;
         translating = null;

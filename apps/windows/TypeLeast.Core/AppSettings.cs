@@ -54,6 +54,7 @@ public sealed class AppSettings
     public bool FormattedLists { get; set; }
     public bool PlaySounds { get; set; } = true;
     public bool MuteOtherAudio { get; set; }
+    public string PasteLastShortcut { get; set; } = "CtrlShiftV";
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double WindowWidth { get; set; } = 956;
@@ -105,6 +106,9 @@ public sealed class AppSettings
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();
                 loaded.DictionaryEntries ??= new();
+                if (loaded.DictionaryEntries.Any(e => e is null || e.Word is null || e.HeardAs is null || WordEntry.Parse(e.Word, e.HeardAs, e.Source) is null)) throw new JsonException("Invalid dictionary entries");
+                if (!Enum.IsDefined(loaded.Hotkey)) loaded.Hotkey = DictationKey.RightAlt;
+                if (loaded.TranslateHotkey is { } key && !Enum.IsDefined(key)) loaded.TranslateHotkey = null;
                 if (loaded.DictionaryEntries.Count == 0)
                     loaded.DictionaryEntries = loaded.Words.Select(WordEntry.FromLegacy).OfType<WordEntry>().ToList();
                 if (!new[] { "forever", "year", "month", "week", "day", "never" }.Contains(loaded.HistoryRetention)) loaded.HistoryRetention = "forever";
@@ -125,7 +129,7 @@ public sealed class AppSettings
         {
             return new AppSettings { PersistenceBlocked = true };
         }
-        return new AppSettings();
+        return new AppSettings { PersistenceBlocked = true };
     }
 
     /// <summary>Atomic write: a crash never leaves a half-written file.</summary>

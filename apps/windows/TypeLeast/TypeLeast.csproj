@@ -15,8 +15,10 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Assets\TypeLeast.ico" LogicalName="TypeLeast.Icon" />
     <ProjectReference Include="..\TypeLeast.Core\TypeLeast.Core.csproj" />
     <!-- NAudio (MIT): microphone capture through the Windows wave API. -->
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>
 </Project>

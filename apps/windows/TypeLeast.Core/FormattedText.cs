@@ -13,11 +13,11 @@ public static class FormattedText
         var fragment = new StringBuilder(); var list = false;
         foreach (var row in rows)
         {
-            var match = Regex.Match(row, @"^\s*\d+[.)、]\s*(.+)$");
+            var match = Regex.Match(row, @"^\s*(?<number>\d{1,9})[.)、]\s*(?<body>.+)$");
             if (match.Success)
             {
                 if (!list) { fragment.Append("<ol>"); list = true; }
-                fragment.Append("<li>").Append(WebUtility.HtmlEncode(match.Groups[1].Value)).Append("</li>");
+                fragment.Append("<li value=\"").Append(match.Groups["number"].Value).Append("\">").Append(WebUtility.HtmlEncode(match.Groups["body"].Value)).Append("</li>");
             }
             else { if (list) { fragment.Append("</ol>"); list = false; } fragment.Append("<p>").Append(WebUtility.HtmlEncode(row)).Append("</p>"); }
         }

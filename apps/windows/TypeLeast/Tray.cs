@@ -23,10 +23,14 @@ internal sealed class Tray : IDisposable
         menu.Items.Add(status);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(toggle);
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("开始翻译"), null, (_, _) => host.ToggleTranslate()));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("取消"), null, (_, _) => host.Cancel()));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("粘贴上一条"), null, (_, _) => _ = host.PasteLast()));
         menu.Items.Add(new ToolStripMenuItem(L10n.T("复制上一条"), null, (_, _) => host.CopyLast()));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem(L10n.T("打开 TypeLeast"), null, (_, _) => host.ShowWindow(MainWindow.Page.Home)));
         menu.Items.Add(new ToolStripMenuItem(L10n.T("历史"), null, (_, _) => host.ShowWindow(MainWindow.Page.History)));
+        menu.Items.Add(new ToolStripMenuItem(L10n.T("词典"), null, (_, _) => host.ShowWindow(MainWindow.Page.Dictionary)));
         menu.Items.Add(new ToolStripMenuItem(L10n.T("设置"), null, (_, _) => host.ShowWindow(MainWindow.Page.Settings)));
         menu.Items.Add(new ToolStripMenuItem(L10n.T("重新启动本地服务"), null, (_, _) => host.RestartService()));
         menu.Items.Add(new ToolStripSeparator());
