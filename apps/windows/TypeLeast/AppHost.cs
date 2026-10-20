@@ -212,10 +212,10 @@ internal sealed class AppHost
         if (Phase != DictationPhase.Idle || History.Last is not { } last) return;
         var field = FieldTarget.Capture();
         for (var i = 0; i < 40 && (Native.GetAsyncKeyState(0x11) < 0 || Native.GetAsyncKeyState(0x10) < 0 || Native.GetAsyncKeyState(0x12) < 0); i++) await Task.Delay(25);
-        if (quitting || !field.Matches()) return;
+        if (quitting || field.Window == IntPtr.Zero || !Paster.SameWindow(field.Window, Native.GetForegroundWindow())) return;
         var text = TerminalGuard.SafeText(last.Text, Shell.ProcessName(field.Window));
-        var result = await Paster.PasteAsync(text, field.Window, Settings.RestoreClipboard, field: field);
-        if (result != Paster.Outcome.Pasted) SetHint(L10n.T("窗口已切换，已复制到剪贴板"));
+        var result = await Paster.PasteAsync(text, field.Window, Settings.RestoreClipboard);
+        if (result != Paster.Outcome.Pasted) SetHint(Paster.Message(result));
     }
 
     public bool SaveSettings()
@@ -547,7 +547,7 @@ internal sealed class AppHost
                     await Task.Delay(100, operation.Token);
                 }
                 var outcome = options.InsertionMode == "clipboardOnly" ? (Paster.SetText(text) ? Paster.Outcome.CopiedOnly : Paster.Outcome.Failed)
-                    : await Paster.PasteAsync(text, targetWindow, options.RestoreClipboard, operation.Token, targetField, options.FormattedLists && TerminalGuard.SafeText("a\nb", targetApp).Contains('\n'));
+                    : await Paster.PasteAsync(text, targetWindow, options.RestoreClipboard, operation.Token, options.FormattedLists && TerminalGuard.SafeText("a\nb", targetApp).Contains('\n'));
                 if (outcome == Paster.Outcome.Failed) { bar.ShowResult(L10n.T("无法写入剪贴板，请重试"), true); return; }
                 if (!operations.IsCurrent(operation)) return;
                 var entry = new HistoryEntry
@@ -572,7 +572,7 @@ internal sealed class AppHost
                 if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);
-                var done = outcome == Paster.Outcome.Pasted ? L10n.T("已粘贴") : L10n.T("窗口已切换，已复制到剪贴板");
+                var done = Paster.Message(outcome);
                 bar.ShowResult(note is null ? done : done + " · " + note, warning: note is not null);
             }
         }

@@ -31,6 +31,9 @@ internal static class Theme
         Line = Token("#E7E7E5"), Ink = Token("#141313"), InkInverse = Token("#FFFFFF"), Grey = Token("#6E6D6B"),
         Tertiary = Token("#A3A29F"), Accent = Token("#3E9BE9"), Success = Token("#2E9E5B"), Warning = Token("#D9822B"),
         Selected = Token("#E9E9E7"), Pill = Token("#E61C1B1B");
+    /// <summary>True while the dark palette is applied (read by the WinForms tray menu).</summary>
+    public static bool IsDark { get; private set; }
+
     public static void Apply(string appearance)
     {
         var dark = appearance == "dark";
@@ -41,11 +44,14 @@ internal static class Theme
         var tokens = new[] { Background, Sidebar, CardFill, Line, Ink, InkInverse, Grey, Tertiary, Accent, Success, Warning, Selected };
         var values = dark ? new[] { "#1C1B1B", "#151414", "#262525", "#333232", "#F4F3F3", "#141313", "#9C9B99", "#6E6D6B", "#62BBF3", "#4CC27A", "#F0A04B", "#2F2E2E" }
             : new[] { "#FFFFFF", "#F6F6F5", "#F4F4F3", "#E7E7E5", "#141313", "#FFFFFF", "#6E6D6B", "#A3A29F", "#3E9BE9", "#2E9E5B", "#D9822B", "#E9E9E7" };
+        IsDark = dark;
         for (var i = 0; i < tokens.Length; i++) Colors[tokens[i]].Value = (Color)ColorConverter.ConvertFromString(values[i]);
         if (Application.Current is { } app)
         {
             app.Resources["TL.Ink"] = Ink; app.Resources["TL.Card"] = CardFill; app.Resources["TL.Line"] = Line;
-            app.Resources["TL.Success"] = Success; app.Resources["TL.Tertiary"] = Tertiary;
+            app.Resources["TL.Success"] = Success; app.Resources["TL.Tertiary"] = Tertiary; app.Resources["TL.Grey"] = Grey;
+            if (app.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] is null && ScrollBarStyle() is { } bar)
+                app.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = bar;
             foreach (var type in new[] { typeof(TextBox), typeof(PasswordBox), typeof(ComboBox), typeof(ComboBoxItem), typeof(CheckBox) })
             {
                 var style = new Style(type);
@@ -65,6 +71,69 @@ internal static class Theme
         var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
         brush.Freeze();
         return brush;
+    }
+
+    /// <summary>A thin rounded scrollbar in the palette: no arrow buttons, transparent track, darker while dragged.
+    /// Null (the system scrollbar stays) if the markup cannot be loaded.</summary>
+    internal static Style? ScrollBarStyle()
+    {
+        const string xaml = """
+<Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="ScrollBar">
+  <Style.Resources>
+    <Style x:Key="TL.Page" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="IsTabStop" Value="False"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <ControlTemplate x:Key="TL.Thumb" TargetType="Thumb">
+      <Border x:Name="Bar" CornerRadius="3" Margin="2" Background="{DynamicResource TL.Tertiary}" Opacity="0.75"/>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bar" Property="Opacity" Value="1"/></Trigger>
+        <Trigger Property="IsDragging" Value="True"><Setter TargetName="Bar" Property="Background" Value="{DynamicResource TL.Grey}"/><Setter TargetName="Bar" Property="Opacity" Value="1"/></Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+  </Style.Resources>
+  <Setter Property="Background" Value="Transparent"/>
+  <Setter Property="Width" Value="10"/>
+  <Setter Property="MinWidth" Value="10"/>
+  <Setter Property="Template">
+    <Setter.Value>
+      <ControlTemplate TargetType="ScrollBar">
+        <Grid Background="Transparent" SnapsToDevicePixels="True">
+          <Track x:Name="PART_Track" IsDirectionReversed="True">
+            <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource TL.Page}" Command="ScrollBar.PageUpCommand"/></Track.DecreaseRepeatButton>
+            <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource TL.Page}" Command="ScrollBar.PageDownCommand"/></Track.IncreaseRepeatButton>
+            <Track.Thumb><Thumb Template="{StaticResource TL.Thumb}"/></Track.Thumb>
+          </Track>
+        </Grid>
+      </ControlTemplate>
+    </Setter.Value>
+  </Setter>
+  <Style.Triggers>
+    <Trigger Property="Orientation" Value="Horizontal">
+      <Setter Property="Width" Value="Auto"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="Height" Value="10"/>
+      <Setter Property="MinHeight" Value="10"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Grid Background="Transparent" SnapsToDevicePixels="True">
+              <Track x:Name="PART_Track" IsDirectionReversed="False">
+                <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource TL.Page}" Command="ScrollBar.PageLeftCommand"/></Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource TL.Page}" Command="ScrollBar.PageRightCommand"/></Track.IncreaseRepeatButton>
+                <Track.Thumb><Thumb Template="{StaticResource TL.Thumb}"/></Track.Thumb>
+              </Track>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Trigger>
+  </Style.Triggers>
+</Style>
+""";
+        try { return (Style)System.Windows.Markup.XamlReader.Parse(xaml); }
+        catch (System.Exception) { Log.Write("theme.scrollbar.fail"); return null; }
     }
 
     private static ControlTemplate ComboTemplate()
