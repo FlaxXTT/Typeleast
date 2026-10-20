@@ -383,6 +383,7 @@ public static class L10n
         ["用你自己的 API Key 调用大模型，把识别出的话整理成通顺的书面语。Key 只存在这台电脑的 Windows 凭据管理器里，只发给本机的 TypeLeast 服务。"] = "Use your API key to clean up speech. The key stays in Windows Credential Manager and is passed to the local service for the provider request.",
         ["界面语言"] = "Interface language",
         ["窗口已切换，已复制到剪贴板"] = "Window changed. Copied to clipboard",
+        ["剪贴板被其他程序改动，已复制到剪贴板"] = "Another app changed the clipboard. Copied to clipboard",
         ["简体中文"] = "简体中文",
         ["粘贴 Key，再点保存或测试连接"] = "Paste a key, then save or test the connection",
         ["粘贴后恢复剪贴板"] = "Restore clipboard after pasting",
