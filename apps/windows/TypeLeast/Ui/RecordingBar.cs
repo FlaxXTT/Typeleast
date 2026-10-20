@@ -134,7 +134,7 @@ internal sealed class RecordingBar : Window
     public void ShowThinking(string? text = null)
     {
         recorder = null;
-        cancel.Visibility = Visibility.Collapsed;
+        cancel.Visibility = Visibility.Visible;
         stop.Visibility = Visibility.Collapsed;
         wave.Visibility = Visibility.Visible;
         label.Text = text ?? L10n.T("整理中…");

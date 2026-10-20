@@ -65,6 +65,24 @@ No global SDK installation or installed TypeLeast replacement.
 
 ## Required final acceptance
 
+## Stage 2 verification (2026-10-20 UTC)
+
+Implemented processing cancellation and immutable per-recording request options, cancellation
+propagation to HTTP, late-completion isolation, and no transport replay of dictation/Beta POSTs.
+The recording overlay keeps Cancel available during processing. Quit/restart cancels work.
+Service starts are serialized, pending restarts are cancelled on stop, stale ports invalidated,
+and restart attempts reset only after 60 seconds uptime. Arbitrary child stderr is not retained.
+Dedicated state directories reject links/unrelated files and receive current-user ACLs before
+service startup; existing immediate state files inherit that ACL. This is access control,
+not proof of service identity or protection against the logged-in user.
+
+Native Windows Core: 481 passed, 0 failed, including 100 entry/cancellation/late-result rounds,
+restart exhaustion/stability, ACL inheritance and current-user-only grants, plus native DPAPI.
+WPF Release compiles, 0 errors, existing WFAC010 warning. Actual mic, overlay focus, crash-loop
+subprocesses, cross-user ACL/DPAPI and sleep/wake interactions remain unverified at this stage.
+
+## Required final acceptance (pending)
+
 Test all pages, overlays, preview, onboarding, menu/tray in Chinese/English and light/dark,
 minimum window and 100/125/150/200% scaling. Check focus, Tab, scrolling, long text,
 disabled states and recovery. Use 100 cancellation/entry races, 30 public audio flows,

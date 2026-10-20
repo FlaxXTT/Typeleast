@@ -436,6 +436,38 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("diagnostic preserves auth category", DiagnosticEvent.SafeReason("model-error:HTTP_401") == "model-error:HTTP_401");
     Eq("diagnostic rejects provider text", DiagnosticEvent.SafeReason("model-error:secret"), "other");
 }
+{
+    var tracker = new OperationTracker();
+    for (var i = 0; i < 100; i++)
+    {
+        var old = tracker.TryBegin()!;
+        Check("parallel entry rejected " + i, tracker.TryBegin() is null);
+        tracker.Cancel();
+        var next = tracker.TryBegin()!;
+        Check("cancel invalidates late result " + i, old.Token.IsCancellationRequested && !tracker.IsCurrent(old));
+        tracker.Complete(old);
+        Check("old completion preserves new operation " + i, tracker.IsCurrent(next));
+        tracker.Complete(next);
+    }
+    var recovery = new RestartPolicy();
+    foreach (var expected in new double?[] { 1, 3, 10, 30, null })
+        Eq("short-lived ready does not reset backoff", recovery.Next(TimeSpan.FromSeconds(2)), expected);
+    Eq("stable uptime resets backoff", recovery.Next(TimeSpan.FromSeconds(60)), 1.0);
+    if (OperatingSystem.IsWindows())
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "typeleast-acl-" + Guid.NewGuid());
+        try
+        {
+            PrivateStorage.EnsureDirectory(dir);
+            var rules = System.IO.FileSystemAclExtensions.GetAccessControl(new DirectoryInfo(dir));
+            Check("state ACL inheritance is disabled", rules.AreAccessRulesProtected);
+            var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+            var grants = rules.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier));
+            Check("state ACL grants only current user", grants.Cast<System.Security.AccessControl.FileSystemAccessRule>().All(rule => rule.IdentityReference.Equals(sid)));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+}
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

@@ -299,7 +299,7 @@ internal sealed class SettingsPage : IPage
             else
             {
                 Status(Messages.ExplainLlmCode(result.Code, result.Error), false);
-                Log.Write("llm.test.fail", "code=" + (result.Code ?? "?"));
+                Log.Write("llm.test.fail", "code=" + DiagnosticEvent.SafeReason(result.Code));
             }
         }
         catch (ServiceException e)

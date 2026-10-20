@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
 using TypeLeast.Core;
 
@@ -16,8 +17,9 @@ internal static class Paster
     public enum Outcome { Pasted, CopiedOnly }
 
     /// <summary>Must run on the UI thread (the clipboard is an STA resource).</summary>
-    public static async Task<Outcome> PasteAsync(string text, IntPtr expectedWindow, bool restoreClipboard)
+    public static async Task<Outcome> PasteAsync(string text, IntPtr expectedWindow, bool restoreClipboard, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var foreground = Native.GetForegroundWindow();
         if (expectedWindow != IntPtr.Zero && foreground != expectedWindow)
         {
@@ -27,20 +29,22 @@ internal static class Paster
         string? previous = null;
         try { if (Clipboard.ContainsText()) previous = Clipboard.GetText(); } catch (Exception) { }
         if (!SetText(text)) return Outcome.CopiedOnly;
-        await Task.Delay(30);
+        await Task.Delay(30, ct);
+        ct.ThrowIfCancellationRequested();
         if (!PasteTarget.Matches(expectedWindow, Native.GetForegroundWindow())) return Outcome.CopiedOnly;
         Native.SendKeys((Native.VK_CONTROL, false), (Native.VK_V, false), (Native.VK_V, true), (Native.VK_CONTROL, true));
         if (restoreClipboard && previous is not null)
         {
-            await Task.Delay(600);
-            try
-            {
-                // Only if nobody else changed the clipboard in the meantime.
-                if (Clipboard.ContainsText() && Clipboard.GetText() == text) SetText(previous);
-            }
-            catch (Exception) { }
+            _ = RestoreLater(text, previous);
         }
         return Outcome.Pasted;
+    }
+
+    private static async Task RestoreLater(string inserted, string previous)
+    {
+        await Task.Delay(600);
+        try { if (Clipboard.ContainsText() && Clipboard.GetText() == inserted) SetText(previous); }
+        catch (Exception) { }
     }
 
     /// <summary>The clipboard is sometimes held by another app for a moment: retry briefly.</summary>
