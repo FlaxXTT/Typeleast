@@ -16,6 +16,10 @@ internal static class Theme
     /// outside the Chinese subset fall back to the system's Microsoft YaHei UI.</summary>
     public static readonly FontFamily Font = new(new Uri("pack://application:,,,/TypeLeast;component/"),
         "./Fonts/#Inter, ./Fonts/#Noto Sans SC, Microsoft YaHei UI, Segoe UI");
+    /// <summary>Titles from 20 px up: Inter Display, drawn tighter for large sizes (as iOS switches to its Display face).</summary>
+    public static readonly FontFamily DisplayFont = new(new Uri("pack://application:,,,/TypeLeast;component/"),
+        "./Fonts/#Inter Display, ./Fonts/#Noto Sans SC, Microsoft YaHei UI, Segoe UI");
+    private const double DisplaySize = 20;
 
     static Theme()
     {
@@ -182,16 +186,19 @@ internal static class Theme
 
     public static TextBlock Text(string text, double size = 13, Brush? color = null, bool bold = false, bool wrap = true)
     {
-        return new TextBlock
+        var block = new TextBlock
         {
             Text = text,
-            FontFamily = Font,
+            FontFamily = size >= DisplaySize ? DisplayFont : Font,
             FontSize = size,
             Foreground = color ?? Ink,
             FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
             TextTrimming = wrap ? TextTrimming.None : TextTrimming.CharacterEllipsis,
         };
+        // Large text is mostly titles and statistics: equal-width digits keep numbers from shifting.
+        if (size >= DisplaySize) System.Windows.Documents.Typography.SetNumeralAlignment(block, FontNumeralAlignment.Tabular);
+        return block;
     }
 
     public static System.Windows.Controls.Border Card(UIElement child, double padding = 18)
