@@ -284,8 +284,8 @@ def prompt_story(t):
     violet = "#8e5cf0" if t is THEMES["light"] else "#a77bff"
     body = [f'<rect width="{W}" height="{H}" rx="28" fill="{t["card"]}"/>',
             text(36, 56, "提示词 Beta", 15, "", 600, extra=f'fill="{violet}"'),
-            text(36, 98, "聊着天，就把项目讲清楚了。", 32, "ink", 700),
-            text(36, 132, "它只问缺的，你随时改口；出稿后再审一遍、改一遍。超长提示词，说出来就写好了。", 16, "gray")]
+            text(36, 98, "长提示词，聊着就写好了。", 32, "ink", 700),
+            text(36, 132, "它问，你答。出稿前你核对，出稿后它再审一遍。", 16, "gray")]
     # Left: the conversation.
     L, LW, top = 24, 404, 160
     body.append(f'<rect x="{L}" y="{top}" width="{LW}" height="{H - top - 24}" rx="20" fill="{t["card2"]}"/>')
