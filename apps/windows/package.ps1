@@ -60,7 +60,7 @@ New-Item -ItemType Directory -Force $nodeOut | Out-Null
 Copy-Item (Join-Path $work "node-v$NodeVersion-win-x64\node.exe") $nodeOut
 Copy-Item (Join-Path $work "node-v$NodeVersion-win-x64\LICENSE") $nodeOut
 Write-Host "node   : $zipName (sha256 verified)"
-Copy-Item (Join-Path $root "THIRD-PARTY-NOTICES.md") $stage
+Copy-Item (Join-Path $root "LICENSE"), (Join-Path $root "THIRD-PARTY-NOTICES.md") $stage
 
 # 4. Smoke test: the bundled Node.js starts the bundled service and it answers.
 $state = Join-Path $work "state"
