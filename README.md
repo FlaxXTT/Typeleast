@@ -58,6 +58,11 @@
 </p>
 
 <p align="center">
+  <a href="docs/media/film-long.mp4"><img src="docs/media/film-long-poster.jpg" alt="72 秒完整宣传片：听写、整理、提示词 Beta 多轮补充与翻译" width="880"></a>
+  <br><sub>完整宣传片 · 点击观看</sub>
+</p>
+
+<p align="center">
   <img src="docs/media/demo.gif" alt="真实录屏：在输入框里按一下 fn，随口说一句带口头禅、中途改口的话，整理好的文字直接出现在光标处" width="760">
   <br><sub>真实录屏：识别、整理、粘贴，一次完成</sub>
 </p>
