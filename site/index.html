@@ -290,7 +290,7 @@ footer a { color: var(--ink-2); }
 
 <footer>
   <div class="wrap">
-    <span>© <span data-year></span> TypeLeast · 免费软件</span>
+    <span>© <span data-year></span> TypeLeast · 免费软件，以 <a data-link="license" href="#">GPL-3.0</a> 许可开源</span>
     <span><a data-link="repo" href="#">GitHub</a> · <a data-link="notices" href="#">第三方说明</a> · <a data-link="releases" href="#">所有版本</a></span>
   </div>
 </footer>
@@ -304,15 +304,16 @@ const SITE = {
     repo: "https://github.com/FlaxXTT/Typeleast",
     releases: "https://github.com/FlaxXTT/Typeleast/releases",
     notices: "https://github.com/FlaxXTT/Typeleast/blob/main/THIRD-PARTY-NOTICES.md",
+    license: "https://github.com/FlaxXTT/Typeleast/blob/main/LICENSE",
   },
-  versions: { windows: "1.16.2", mac: "1.16.0" },
+  versions: { windows: "1.16.2", mac: "1.16.2" },
   // Release assets of a private repository need a GitHub login. Before going public, point these
   // at public files (a public repository's releases, or a Cloudflare R2 bucket).
   downloads: {
-    windowsSetup: "https://github.com/FlaxXTT/Typeleast/releases/download/windows-v1.16.2/TypeLeast-1.16.2-Windows-x64-Setup.exe",
-    windowsPortable: "https://github.com/FlaxXTT/Typeleast/releases/download/windows-v1.16.2/TypeLeast-1.16.2-Windows-x64-Portable.zip",
-    macAppleSilicon: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.16.0/TypeLeast-1.16.0-macOS-AppleSilicon.dmg",
-    macIntel: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.16.0/TypeLeast-1.16.0-macOS-Intel.dmg",
+    windowsSetup: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.16.2/TypeLeast-1.16.2-Windows-x64-Setup.exe",
+    windowsPortable: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.16.2/TypeLeast-1.16.2-Windows-x64-Portable.zip",
+    macAppleSilicon: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.16.2/TypeLeast-1.16.2-macOS-AppleSilicon.dmg",
+    macIntel: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.16.2/TypeLeast-1.16.2-macOS-Intel.dmg",
   },
 };
 

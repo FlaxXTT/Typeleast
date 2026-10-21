@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build.sh - assemble the one-page site into site/dist from site/ and docs/media/,
-# so the images are not stored twice. Cloudflare Pages: build command "bash site/build.sh",
-# output directory "site/dist".
+# so the images are not stored twice. Cloudflare (Workers, see wrangler.jsonc): build command
+# "bash site/build.sh", deploy command "npx wrangler deploy".
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/site/dist"

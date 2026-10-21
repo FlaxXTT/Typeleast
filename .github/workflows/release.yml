@@ -1,23 +1,14 @@
 name: Release
 
-# Push a tag like v1.2.0 (or run this by hand) to build and publish:
+# Run this by hand to build and publish:
 #   TypeLeast-<v>-macOS-AppleSilicon.dmg / .zip
 #   TypeLeast-<v>-macOS-Intel.dmg / .zip
 #   TypeLeast-<v>-Windows-x64-Setup.exe
 #   TypeLeast-<v>-Windows-x64-Portable.zip
 #   SHA256SUMS.txt
-# On a pull request that touches packaging, the packages are built and kept as
-# workflow artifacts, but nothing is published.
+# Manual only (no Actions quota; releases are published locally with
+# apps/windows/publish-release.ps1 or gh). Run it by hand when quota is available.
 on:
-  push:
-    tags: ["v*"]
-  pull_request:
-    paths:
-      - ".github/workflows/release.yml"
-      - "apps/macos/package.sh"
-      - "apps/macos/build.sh"
-      - "apps/windows/package.ps1"
-      - "apps/windows/installer/**"
   workflow_dispatch:
     inputs:
       tag:
