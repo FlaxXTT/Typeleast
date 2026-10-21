@@ -42,6 +42,24 @@ public sealed class AppSettings
     /// <summary>-1 = the system default microphone.</summary>
     public int MicrophoneDevice { get; set; } = -1;
     public List<string> Words { get; set; } = new();
+    public List<WordEntry> DictionaryEntries { get; set; } = new();
+    public string HistoryRetention { get; set; } = "forever";
+    public bool KeepAudio24h { get; set; }
+    public string InsertionMode { get; set; } = "autoPaste";
+    public string Appearance { get; set; } = "system";
+    public bool ShowInTaskbar { get; set; } = true;
+    public bool ShowIdleBar { get; set; }
+    public bool UseFieldContext { get; set; }
+    public bool LearnCorrections { get; set; }
+    public bool FormattedLists { get; set; }
+    public bool PlaySounds { get; set; } = true;
+    public bool MuteOtherAudio { get; set; }
+    public string PasteLastShortcut { get; set; } = "CtrlShiftV";
+    public double? WindowLeft { get; set; }
+    public double? WindowTop { get; set; }
+    public double WindowWidth { get; set; } = 956;
+    public double WindowHeight { get; set; } = 679;
+    [JsonIgnore] public bool PersistenceBlocked { get; private set; }
 
     [JsonIgnore] public LlmPreset Preset => LlmPreset.Find(LlmPresetId);
 
@@ -87,6 +105,15 @@ public sealed class AppSettings
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();
+                loaded.DictionaryEntries ??= new();
+                if (loaded.DictionaryEntries.Any(e => e is null || e.Word is null || e.HeardAs is null || WordEntry.Parse(e.Word, e.HeardAs, e.Source) is null)) throw new JsonException("Invalid dictionary entries");
+                if (!Enum.IsDefined(loaded.Hotkey)) loaded.Hotkey = DictationKey.RightAlt;
+                if (loaded.TranslateHotkey is { } key && !Enum.IsDefined(key)) loaded.TranslateHotkey = null;
+                if (loaded.DictionaryEntries.Count == 0)
+                    loaded.DictionaryEntries = loaded.Words.Select(WordEntry.FromLegacy).OfType<WordEntry>().ToList();
+                if (!new[] { "forever", "year", "month", "week", "day", "never" }.Contains(loaded.HistoryRetention)) loaded.HistoryRetention = "forever";
+                if (!new[] { "autoPaste", "clipboardOnly", "preview" }.Contains(loaded.InsertionMode)) loaded.InsertionMode = "autoPaste";
+                if (!new[] { "system", "light", "dark" }.Contains(loaded.Appearance)) loaded.Appearance = "system";
                 loaded.InterfaceLanguage = L10n.Normalize(loaded.InterfaceLanguage);
                 if (!new[] { "auto", "zh", "en", "yue", "ja", "ko" }.Contains(loaded.Language)) loaded.Language = "auto";
                 if (!TranslateTargets.Contains(loaded.TranslateTarget)) loaded.TranslateTarget = "en";
@@ -97,15 +124,18 @@ public sealed class AppSettings
                 return loaded;
             }
         }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { return new AppSettings(); }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {
+            return new AppSettings { PersistenceBlocked = true };
         }
-        return new AppSettings();
+        return new AppSettings { PersistenceBlocked = true };
     }
 
     /// <summary>Atomic write: a crash never leaves a half-written file.</summary>
     public void Save(string path)
     {
+        if (PersistenceBlocked) throw new IOException("Existing settings could not be read; retained without replacement");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(this, Json.Options));

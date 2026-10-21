@@ -22,8 +22,8 @@ struct LLMPreset: Identifiable, Equatable {
     let keyPage: String
 
     static let all: [LLMPreset] = [
-        LLMPreset(id: "deepseek", name: L10n.text("DeepSeek 官方 API"), baseURL: "https://api.deepseek.com/v1",
-                  modelHint: "deepseek-chat", needsKey: true, keyPage: "https://platform.deepseek.com/api_keys"),
+        LLMPreset(id: "deepseek", name: L10n.text("DeepSeek 官方 API"), baseURL: "https://api.deepseek.com",
+                  modelHint: "deepseek-flash", needsKey: true, keyPage: "https://platform.deepseek.com/api_keys"),
         LLMPreset(id: "zhipu", name: L10n.text("智谱 GLM"), baseURL: "https://open.bigmodel.cn/api/paas/v4",
                   modelHint: "glm-4-flash", needsKey: true, keyPage: "https://open.bigmodel.cn/usercenter/apikeys"),
         LLMPreset(id: "moonshot", name: L10n.text("Kimi（月之暗面）"), baseURL: "https://api.moonshot.cn/v1",

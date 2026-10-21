@@ -115,7 +115,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     s.LlmModel = "deepseek-chat";
     Eq("no key means no route", s.ActiveRoute(_ => null), null);
     var route = s.ActiveRoute(_ => "sk-test");
-    Eq("a complete route uses the preset's URL", route?.BaseUrl, "https://api.deepseek.com/v1");
+    Eq("a complete route uses the preset's URL", route?.BaseUrl, "https://api.deepseek.com");
     s.LlmPresetId = "ollama";
     s.LlmModel = "qwen2.5:7b";
     Eq("a local server needs no key", s.ActiveRoute(_ => null)?.Model, "qwen2.5:7b");
@@ -426,6 +426,134 @@ Console.WriteLine();
 Eq("terminal paste strips newlines", TerminalGuard.SafeText("echo hi\r\nwhoami\n", "WindowsTerminal.exe"), "echo hi whoami");
 Eq("normal editors keep newlines", TerminalGuard.SafeText("a\nb", "notepad"), "a\nb");
 Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u2028d", "pwsh"), "abc d");
+
+{
+    var malicious = "sk-fake-private\r\nhttps://secret.example/private";
+    var line = new DiagnosticEvent(malicious, malicious, malicious, double.NaN, 999, -1).Format();
+    Check("diagnostic rejects arbitrary strings", !line.Contains("private") && !line.Contains('\n'));
+    Check("diagnostic rejects invalid numeric values", line.Contains("elapsedMs=unknown") && line.Contains("characters=unknown"));
+    Check("diagnostic preserves bounded reason", new DiagnosticEvent("dictation", "complete", "model-timeout", 12000).Format().Contains("reason=model-timeout"));
+    Check("diagnostic preserves auth category", DiagnosticEvent.SafeReason("model-error:HTTP_401") == "model-error:HTTP_401");
+    Eq("diagnostic rejects provider text", DiagnosticEvent.SafeReason("model-error:secret"), "other");
+}
+{
+    var tracker = new OperationTracker();
+    for (var i = 0; i < 100; i++)
+    {
+        var old = tracker.TryBegin()!;
+        Check("parallel entry rejected " + i, tracker.TryBegin() is null);
+        tracker.Cancel();
+        var next = tracker.TryBegin()!;
+        Check("cancel invalidates late result " + i, old.Token.IsCancellationRequested && !tracker.IsCurrent(old));
+        tracker.Complete(old);
+        Check("old completion preserves new operation " + i, tracker.IsCurrent(next));
+        tracker.Complete(next);
+    }
+    var recovery = new RestartPolicy();
+    foreach (var expected in new double?[] { 1, 3, 10, 30, null })
+        Eq("short-lived ready does not reset backoff", recovery.Next(TimeSpan.FromSeconds(2)), expected);
+    Eq("stable uptime resets backoff", recovery.Next(TimeSpan.FromSeconds(60)), 1.0);
+    if (OperatingSystem.IsWindows())
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "typeleast-acl-" + Guid.NewGuid());
+        try
+        {
+            PrivateStorage.EnsureDirectory(dir);
+            var rules = System.IO.FileSystemAclExtensions.GetAccessControl(new DirectoryInfo(dir));
+            Check("state ACL inheritance is disabled", rules.AreAccessRulesProtected);
+            var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+            var grants = rules.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier));
+            Check("state ACL grants only current user", grants.Cast<System.Security.AccessControl.FileSystemAccessRule>().All(rule => rule.IdentityReference.Equals(sid)));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+}
+{
+    var dir = Path.Combine(Path.GetTempPath(), "typeleast-data-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+    try
+    {
+        var history = new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared);
+        history.Add(new HistoryEntry { Text = "old fixture", Time = DateTimeOffset.UtcNow.AddDays(-40) });
+        history.Add(new HistoryEntry { Text = "new fixture", Request = new("zh", "prompt", "en", "zh=tw,en=gb") });
+        history.ApplyRetention("month"); Eq("retention removes old entries", history.Entries.Count, 1);
+        var reloaded = new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared);
+        Eq("retry preserves translation target", reloaded.Last?.Request?.TranslateTo, "en");
+        Eq("retry preserves variants", reloaded.Last?.Request?.Variants, "zh=tw,en=gb");
+        history.ApplyRetention("never"); history.Add(new HistoryEntry { Text = "memory-only result" });
+        Eq("never keeps paste-last in memory", history.Last?.Text, "memory-only result");
+        Eq("never writes no result", new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared).Entries.Count, 0);
+        history.Clear(); Check("clear forgets memory result", history.Last is null);
+        var settingsPath = Path.Combine(dir, "settings.json");
+        File.WriteAllText(settingsPath, "{\"words\":[\"heard=TypeLeast\",\"SenseVoice\"]}");
+        var settings = AppSettings.Load(settingsPath);
+        Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 2);
+        Eq("legacy heardAs preserved", settings.DictionaryEntries[0].HeardAs, "heard");
+        Eq("legacy source is manual", settings.DictionaryEntries[0].Source, "manual");
+        var preview = WordImport.Preview("word,heardAs\nTypeLeast,heard\n\"Product, Name\",wrong\nnew,old\n\"unterminated", settings.DictionaryEntries);
+        Eq("CSV duplicates reported", preview.Duplicates, 1); Eq("CSV valid preview", preview.Valid.Count, 2);
+        Eq("CSV invalid line reported", preview.InvalidLines.Single(), 5);
+        Eq("CSV quoted commas preserved", preview.Valid[0].Word, "Product, Name");
+        Check("dictionary rejects controls", WordEntry.Parse("bad\nword") is null);
+        Check("dictionary enforces service limit", WordEntry.Parse(new string('a', 121)) is null);
+        File.WriteAllText(settingsPath, "{broken"); var broken = AppSettings.Load(settingsPath);
+        Check("corrupt settings block writes", broken.PersistenceBlocked);
+        try { broken.Save(settingsPath); Check("cannot replace corrupt settings", false); } catch (IOException) { Check("cannot replace corrupt settings", File.ReadAllText(settingsPath) == "{broken"); }
+        var audio = new RetainedAudio(Path.Combine(dir, "recordings"), TestHistoryProtection.Shared);
+        var id = Guid.NewGuid().ToString("N"); var wav = Wav.FromPcm16(new byte[16000]);
+        audio.Save(id, wav); Check("retained audio round-trip", audio.Load(id).SequenceEqual(wav));
+        Check("retained audio is sealed", !File.ReadAllBytes(Path.Combine(dir,"recordings",id+".audio")).AsSpan().SequenceEqual(wav));
+        File.SetLastWriteTimeUtc(Path.Combine(dir,"recordings",id+".audio"), DateTime.UtcNow.AddHours(-25));
+        Check("retained audio expires", !audio.Available(id)); audio.Prune(new[] { id });
+        Check("expired audio removed", !File.Exists(Path.Combine(dir,"recordings",id+".audio")));
+        try { audio.Save("../escape", wav); Check("audio rejects path traversal", false); } catch (InvalidDataException) { Check("audio rejects path traversal", true); }
+        Check("format lists produces HTML", FormattedText.HtmlClipboard("1. 第一项\n2. <safe>")?.Contains("&lt;safe&gt;") == true);
+        Check("ordinary text stays plain", FormattedText.HtmlClipboard("ordinary paragraph") is null);
+        Check("edit correction extracts bounded term", EditCorrection.Find("Hello DeepSeak.","Hello DeepSeek.") is not null);
+        Check("edit learning rejects credential-like tokens", EditCorrection.Find("key abc123", "key xyz789") is null);
+        Check("edit learning rejects long private content", EditCorrection.Find(new string('a',2001),"b") is null);
+    }
+    finally { Directory.Delete(dir, true); }
+}
+// ---- microphone start-up advice
+
+{
+    Check("fast microphone gets no advice", !Messages.MicrophoneStartup(120).Contains("蓝牙"));
+    Check("slow microphone gets advice", Messages.MicrophoneStartup(900).Contains("变红"));
+}
+
+// ---- prompt file: the system prompt edited as a text file
+
+{
+    const string def = "Line one\nLine two";
+    Check("no prompt file means the default", PromptFile.OverrideFrom(null, def) is null);
+    Check("an empty prompt file means the default", PromptFile.OverrideFrom(" \r\n ", def) is null);
+    Check("the default with Notepad line endings is not a change", PromptFile.OverrideFrom("Line one\r\nLine two\r\n", def) is null);
+    Eq("an edited prompt file is sent without CRLF", PromptFile.OverrideFrom("Mine\r\nsecond\r\n", def), "Mine\nsecond");
+    Eq("a new prompt file starts with the default", PromptFile.Initial(null, def), "Line one\r\nLine two\r\n");
+    Eq("a new prompt file keeps an existing replacement", PromptFile.Initial("Old", def), "Old\r\n");
+}
+
+// ---- Windows release lookup: Mac keeps GitHub's "latest"; Windows reads its own assets
+
+{
+    var json = """
+    [
+      {"tag_name":"v1.17.0","html_url":"https://example.invalid/mac","draft":false,"prerelease":false,"assets":[{"name":"TypeLeast-1.17.0-macOS-AppleSilicon.zip"}]},
+      {"tag_name":"windows-v1.16.1","html_url":"https://example.invalid/win","draft":false,"prerelease":false,"assets":[{"name":"TypeLeast-1.16.1-Windows-x64-Setup.exe"},{"name":"TypeLeast-1.16.1-Windows-x64-Portable.zip"}]},
+      {"tag_name":"windows-v1.18.0","html_url":"https://example.invalid/draft","draft":true,"prerelease":false,"assets":[{"name":"TypeLeast-1.18.0-Windows-x64-Setup.exe"}]},
+      {"tag_name":"windows-v1.17.5","html_url":"https://example.invalid/pre","draft":false,"prerelease":true,"assets":[{"name":"TypeLeast-1.17.5-Windows-x64-Setup.exe"}]},
+      {"tag_name":"v1.5.0","html_url":"https://example.invalid/old","draft":false,"prerelease":false,"assets":[{"name":"TypeLeast-1.5.0-Windows-x64-Setup.exe"}]}
+    ]
+    """;
+    var newest = WindowsRelease.Newest(json);
+    Eq("windows release ignores mac-only releases", newest?.Version, "1.16.1");
+    Eq("windows release keeps its own tag", newest?.Tag, "windows-v1.16.1");
+    Check("windows release is newer than 1.16.0", WindowsRelease.IsNewer("1.16.1", "1.16.0"));
+    Check("same windows version is not newer", !WindowsRelease.IsNewer("1.16.1", "1.16.1"));
+    Check("1.10.0 is newer than 1.9.3", WindowsRelease.IsNewer("1.10.0", "1.9.3"));
+    Check("no windows asset gives no release", WindowsRelease.Newest("[{\"tag_name\":\"v1\",\"assets\":[{\"name\":\"x.dmg\"}]}]") is null);
+    Check("a non-list answer gives no release", WindowsRelease.Newest("{\"message\":\"Not Found\"}") is null);
+}
 
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;

@@ -30,30 +30,34 @@ internal sealed class MainWindow : Window
     {
         this.host = host;
         Title = "TypeLeast";
-        Width = 940;
-        Height = 660;
-        MinWidth = 760;
-        MinHeight = 520;
+        Width = double.IsFinite(host.Settings.WindowWidth) ? Math.Clamp(host.Settings.WindowWidth, Math.Min(836, SystemParameters.WorkArea.Width), SystemParameters.WorkArea.Width) : Math.Min(956, SystemParameters.WorkArea.Width);
+        Height = double.IsFinite(host.Settings.WindowHeight) ? Math.Clamp(host.Settings.WindowHeight, Math.Min(599, SystemParameters.WorkArea.Height), SystemParameters.WorkArea.Height) : Math.Min(679, SystemParameters.WorkArea.Height);
+        MinWidth = Math.Min(836, SystemParameters.WorkArea.Width);
+        MinHeight = Math.Min(599, SystemParameters.WorkArea.Height);
+        ShowInTaskbar = host.Settings.ShowInTaskbar;
         Background = Theme.Background;
         FontFamily = Theme.Font;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        var root = new Grid();
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(210) });
+        var root = new Grid { Background = Theme.Background };
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(214) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var side = new DockPanel { Background = Theme.Sidebar, LastChildFill = false };
-        var brand = Theme.Text("TypeLeast", 17, bold: true);
+        var brand = Theme.Row(9, BrandIcon(), Theme.Text("TypeLeast", 17, bold: true));
         brand.Margin = new Thickness(20, 22, 0, 18);
         DockPanel.SetDock(brand, Dock.Top);
         side.Children.Add(brand);
-        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("词典")), (Page.Settings, L10n.T("设置")) })
+        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("词典")) })
         {
             var b = NavButton(label, () => ShowPage(page));
             DockPanel.SetDock(b, Dock.Top);
             nav[page] = b;
             side.Children.Add(b);
         }
+        var settings = NavButton(L10n.T("设置"), () => ShowPage(Page.Settings));
+        nav[Page.Settings] = settings; settings.Margin = new Thickness(10, 4, 10, 16);
+        DockPanel.SetDock(settings, Dock.Bottom); side.Children.Add(settings);
         var badge = new Border
         {
             Background = Theme.CardFill,
@@ -71,6 +75,15 @@ internal sealed class MainWindow : Window
         root.Children.Add(scroll);
         Content = root;
 
+        Activated += (_, _) => _ = host.RefreshHealth();
+        Loaded += (_, _) =>
+        {
+            if (host.Settings.WindowLeft is { } left && host.Settings.WindowTop is { } top && double.IsFinite(left) && double.IsFinite(top))
+            {
+                Left = Math.Clamp(left, SystemParameters.VirtualScreenLeft, Math.Max(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - ActualWidth));
+                Top = Math.Clamp(top, SystemParameters.VirtualScreenTop, Math.Max(SystemParameters.VirtualScreenTop, SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - ActualHeight));
+            }
+        };
         host.Changed += Refresh;
         ShowPage(Page.Home);
     }
@@ -90,13 +103,26 @@ internal sealed class MainWindow : Window
     {
         // The app lives in the tray; the window only hides.
         e.Cancel = true;
+        if (WindowState == WindowState.Normal)
+        { host.Settings.WindowLeft = Left; host.Settings.WindowTop = Top; host.Settings.WindowWidth = ActualWidth; host.Settings.WindowHeight = ActualHeight; host.SaveSettings(); }
         Hide();
+    }
+    private static UIElement BrandIcon()
+    {
+        try
+        {
+            using var resource = typeof(MainWindow).Assembly.GetManifestResourceStream("TypeLeast.Icon");
+            using var icon = resource is not null ? new System.Drawing.Icon(resource) : System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
+            var bitmap = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon!.Handle, Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromWidthAndHeight(26, 26));
+            bitmap.Freeze(); return new Image { Width = 26, Height = 26, Source = bitmap };
+        }
+        catch (Exception) { return Theme.Text("◉", 24); }
     }
 
     public void ShowPage(Page page)
     {
         current = page;
-        foreach (var (p, b) in nav) b.Background = p == page ? Theme.Selected : Brushes.Transparent;
+        foreach (var (p, b) in nav) { b.Background = p == page ? Theme.Selected : Brushes.Transparent; b.FontWeight = p == page ? FontWeights.SemiBold : FontWeights.Normal; }
         if (!pages.TryGetValue(page, out var view))
         {
             view = page switch
@@ -136,7 +162,10 @@ internal sealed class HomePage : IPage
     private readonly TextBlock hint = Theme.Text("", 12.5, Theme.Grey);
     private readonly StackPanel checklist = new();
     private readonly Border setupCard;
-    private readonly TextBlock stats = Theme.Text("", 13, Theme.Grey);
+    private readonly WrapPanel stats = new();
+    private readonly StackPanel recent = new();
+    private readonly TextBlock engine = Theme.Text("", 12, Theme.Grey);
+    private readonly ContentControl keycaps = new();
     private readonly System.Windows.Controls.Border activityCard = Theme.Card(new StackPanel());
 
     public UIElement View => root;
@@ -152,12 +181,21 @@ internal sealed class HomePage : IPage
         root.Children.Add(Theme.Card(hero, 24));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
-        root.Children.Add(Theme.Card(stats));
+        root.Children.Add(stats);
+        root.Children.Add(Theme.Text(L10n.T("根据保留的历史估算；假设键盘输入每分钟 40 字。并非精确测量或完整终身累计。"), 11, Theme.Grey));
+        root.Children.Insert(0, Theme.Text(L10n.T(DateTime.Now.Hour is >= 5 and < 12 ? "早上好" : DateTime.Now.Hour is >= 12 and < 18 ? "下午好" : "晚上好"), 28, bold: true));
+        root.Children.Insert(1, keycaps);
         root.Children.Add(activityCard);
+        root.Children.Add(Theme.Card(Theme.Stack(12, Theme.SettingRow(L10n.T("最近历史"), null,
+            Theme.Secondary(L10n.T("查看全部"), () => window.ShowPage(MainWindow.Page.History))), recent)));
+        root.Children.Add(Theme.Card(engine));
+        stats.SizeChanged += (_, _) => { foreach (FrameworkElement tile in stats.Children) tile.Width = Math.Max(130, (stats.ActualWidth - 16) / (L10n.Language == "en" || stats.ActualWidth < 650 ? 2 : 4) - 8); };
     }
 
     public void Refresh()
     {
+        keycaps.Content = Theme.Keycaps(host.HotkeyLabel);
+        engine.Text = (host.Speech?.ModelName ?? "SenseVoice Small") + " · " + host.ServiceSummary + " · " + host.ModelSummary;
         heroTitle.Text = L10n.T("按 ") + host.HotkeyLabel + L10n.T(" 开始听写");
         tryButton.Content = host.Phase == AppHost.DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("试一下");
         tryButton.IsEnabled = host.Phase != AppHost.DictationPhase.Thinking;
@@ -180,12 +218,25 @@ internal sealed class HomePage : IPage
         checklist.Children.Add(Item(host.LlmConfigured, L10n.T("整理模型（自己的 API Key）"),
             host.LlmConfigured ? host.ModelSummary : L10n.T("填上 Key 才会整理成通顺的书面语；不填也能用，只去口水词。"),
             (L10n.T("去设置"), openSettings)));
-        checklist.Children.Add(Item(true, L10n.T("麦克风"), L10n.T("如果录不到声音：设置 → 隐私和安全性 → 麦克风 → 允许桌面应用访问麦克风"),
+        checklist.Children.Add(Item(host.MicrophoneReady == true, L10n.T("麦克风"), L10n.T("如果录不到声音：设置 → 隐私和安全性 → 麦克风 → 允许桌面应用访问麦克风"),
             (L10n.T("打开设置"), openPrivacy), showActionWhenDone: true));
-        setupCard.Visibility = running && speech?.Ready == true && host.LlmConfigured ? Visibility.Collapsed : Visibility.Visible;
+        setupCard.Visibility = running && speech?.Ready == true && host.LlmConfigured && host.MicrophoneReady == true ? Visibility.Collapsed : Visibility.Visible;
 
         var (count, chars, seconds) = host.History.Stats();
-        stats.Text = L10n.T("已听写 {0} 次 · 共 {1} 字 · 说了 {2} 分钟", count, chars, Math.Round(seconds / 60, 1));
+        stats.Children.Clear();
+        foreach (var (title, value) in new[] { (L10n.T("听写字数"), chars.ToString("N0")),
+            (L10n.T("估算节省时间"), Math.Max(0, chars / 40.0 - seconds / 60).ToString("F1") + " " + L10n.T("分钟")),
+            (L10n.T("平均说话速度"), (seconds > 0 ? chars * 60 / seconds : 0).ToString("F0") + " " + L10n.T("字/分钟")),
+            (L10n.T("听写次数"), count.ToString("N0")) })
+        {
+            var tile = Theme.Card(Theme.Stack(8, Theme.Text(title, 12, Theme.Grey), Theme.Text(value, 21, bold: true)));
+            tile.Width = Math.Max(130, (stats.ActualWidth - 16) / (L10n.Language == "en" || stats.ActualWidth < 650 ? 2 : 4) - 8);
+            tile.Margin = new Thickness(0, 0, 8, 12); stats.Children.Add(tile);
+        }
+        stats.ToolTip = L10n.T("根据保留的历史估算；假设键盘输入每分钟 40 字。并非精确测量或完整终身累计。");
+        recent.Children.Clear();
+        foreach (var entry in host.History.Entries.Take(3)) recent.Children.Add(Theme.Text(entry.Time.ToLocalTime().ToString("g", L10n.Culture) + "  " + entry.Text, 13));
+        if (recent.Children.Count == 0) recent.Children.Add(Theme.Text(L10n.T("还没有听写记录。"), 13, Theme.Grey));
         activityCard.Child = ActivityView.Build(host.Activity, DateTime.Now);
     }
 
@@ -211,117 +262,3 @@ internal sealed class HomePage : IPage
     }
 }
 
-/// <summary>Recent dictations with copy and delete.</summary>
-internal sealed class HistoryPage : IPage
-{
-    private readonly AppHost host;
-    private readonly StackPanel root = new();
-    private readonly StackPanel list = new();
-    private string shownFirst = "";
-    private int shownCount = -1;
-
-    public UIElement View => root;
-
-    public HistoryPage(AppHost host)
-    {
-        this.host = host;
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 14) };
-        var clear = Theme.Secondary(L10n.T("清空"), () =>
-        {
-            if (MessageBox.Show(L10n.T("清空全部历史？"), "TypeLeast", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
-            {
-                host.ClearHistory();
-                Refresh();
-            }
-        });
-        DockPanel.SetDock(clear, Dock.Right);
-        header.Children.Add(clear);
-        header.Children.Add(Theme.Text(L10n.T("历史"), 22, bold: true));
-        root.Children.Add(header);
-        root.Children.Add(Theme.Text(L10n.T("只保存在这台电脑上（最近 500 条）。"), 12, Theme.Grey));
-        list.Margin = new Thickness(0, 12, 0, 0);
-        root.Children.Add(list);
-    }
-
-    public void Refresh()
-    {
-        var entries = host.History.Entries;
-        var first = entries.FirstOrDefault()?.Id ?? "";
-        if (first == shownFirst && entries.Count == shownCount) return;
-        shownFirst = first;
-        shownCount = entries.Count;
-        list.Children.Clear();
-        if (entries.Count == 0) list.Children.Add(Theme.Text(L10n.T("还没有听写记录。"), 13, Theme.Grey));
-        foreach (var e in entries.Take(200))
-        {
-            var meta = e.Time.ToLocalTime().ToString(L10n.T("M月d日 HH:mm")) + (e.App.Length > 0 ? " · " + e.App : "")
-                + (Messages.FallbackNote(e.Reason) is { } note ? " · " + note : "");
-            var actions = Theme.Row(8,
-                Theme.Secondary(L10n.T("复制"), () => Paster.SetText(e.Text)),
-                Theme.Secondary(L10n.T("复制原话"), () => Paster.SetText(e.Raw.Length > 0 ? e.Raw : e.Text)),
-                Theme.Secondary(L10n.T("删除"), () => { host.History.Remove(e.Id); Refresh(); }));
-            list.Children.Add(Theme.Card(Theme.Stack(8,
-                Theme.Text(meta, 11.5, e.Fallback && e.Reason != "strength-off" ? Theme.Warning : Theme.Tertiary),
-                new TextBox { Text = e.Text, IsReadOnly = true, BorderThickness = new Thickness(0), Background = Brushes.Transparent, TextWrapping = TextWrapping.Wrap, FontFamily = Theme.Font, FontSize = 14 },
-                actions), 14));
-        }
-    }
-}
-
-/// <summary>Words the model must spell exactly, and "heard=word" rules.</summary>
-internal sealed class DictionaryPage : IPage
-{
-    private readonly AppHost host;
-    private readonly StackPanel root = new();
-    private readonly WrapPanel words = new();
-    private readonly TextBlock status = Theme.Text("", 12, Theme.Warning);
-    private string shown = "\u0001";
-
-    public UIElement View => root;
-
-    public DictionaryPage(AppHost host)
-    {
-        this.host = host;
-        root.Children.Add(Theme.Text(L10n.T("词典"), 22, bold: true));
-        root.Children.Add(Theme.Text(L10n.T("整理时一定按这里的写法输出。写成「听成=正确写法」可以纠正固定的识别错误，例如「德普西克=DeepSeek」。"), 12.5, Theme.Grey));
-        var input = Theme.Input("", 320);
-        void Add()
-        {
-            host.AddWord(input.Text);
-            input.Text = "";
-            Refresh();
-        }
-        input.KeyDown += (_, e) => { if (e.Key == Key.Enter) Add(); };
-        var row = Theme.Row(8, input, Theme.Primary(L10n.T("添加"), Add));
-        row.Margin = new Thickness(0, 14, 0, 10);
-        root.Children.Add(row);
-        root.Children.Add(status);
-        words.Margin = new Thickness(0, 10, 0, 0);
-        root.Children.Add(words);
-    }
-
-    public void Refresh()
-    {
-        status.Text = host.DictionarySynced == false ? L10n.T("本地服务暂时没有收到最新词典，服务就绪后会自动同步。") : "";
-        var key = string.Join("\n", host.Settings.Words);
-        if (key == shown) return;
-        shown = key;
-        words.Children.Clear();
-        if (host.Settings.Words.Count == 0) words.Children.Add(Theme.Text(L10n.T("还没有词条。"), 13, Theme.Grey));
-        foreach (var w in host.Settings.Words)
-        {
-            var remove = new Button { Content = "✕", Margin = new Thickness(8, 0, 0, 0), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Cursor = Cursors.Hand, Foreground = Theme.Grey, ToolTip = L10n.T("删除") };
-            remove.Click += (_, _) => { host.RemoveWord(w); Refresh(); };
-            words.Children.Add(new Border
-            {
-                Background = Theme.CardFill,
-                BorderBrush = Theme.Line,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(10, 5, 6, 5),
-                Margin = new Thickness(0, 0, 8, 8),
-                Child = Theme.Row(0, Theme.Text(w, 13, wrap: false), remove),
-            });
-        }
-    }
-}

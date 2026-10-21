@@ -35,6 +35,7 @@ internal static class Program
         app.DispatcherUnhandledException += (_, e) =>
         {
             Log.Write("ui.error", e.Exception.GetType().Name);
+            host.Cancel();
             e.Handled = true;
         };
         app.Startup += (_, _) =>

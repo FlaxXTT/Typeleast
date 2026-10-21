@@ -19,6 +19,8 @@ public sealed class ActivityLog
     private readonly string path;
     public Dictionary<string, ActivityDay> Days { get; private set; } = new();
     public bool IsStarted => File.Exists(path);
+    public string? LastError { get; private set; }
+    private bool locked;
 
     public ActivityLog(string path)
     {
@@ -27,9 +29,11 @@ public sealed class ActivityLog
         {
             Days = JsonSerializer.Deserialize<Dictionary<string, ActivityDay>>(File.ReadAllText(path), Json.Options) ?? new();
         }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {
             Days = new();
+            locked = true; LastError = "activity-unavailable";
         }
     }
 
@@ -53,8 +57,8 @@ public sealed class ActivityLog
 
     public void Clear()
     {
-        Days.Clear();
-        Save();
+        try { File.Delete(path); Days.Clear(); locked = false; LastError = null; Save(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { LastError = "activity-unavailable"; }
     }
 
     public int ActiveDays => Days.Values.Count(d => d.Dictations > 0);
@@ -124,15 +128,18 @@ public sealed class ActivityLog
 
     private void Save()
     {
+        if (locked) { LastError = "activity-unavailable"; return; }
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var temp = path + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(Days, Json.Options));
             File.Move(temp, path, overwrite: true);
+            LastError = null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            LastError = "activity-unavailable";
         }
     }
 }
