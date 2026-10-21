@@ -78,6 +78,8 @@ public sealed class ServiceClient
         BaseUri = new Uri("http://127.0.0.1:" + port);
     }
 
+    public void InvalidatePort() { LastPort = null; BaseUri = new Uri("http://127.0.0.1:1"); }
+
     /// <summary>Port the service published, or null when the file is absent or malformed.</summary>
     public int? PublishedPort()
     {
@@ -180,6 +182,8 @@ public sealed class ServiceClient
         }
     }
 
+    private static Task<T> Once<T>(Func<Task<T>> body) => body();
+
     // ---- endpoints
 
     public Task<HealthResponse> HealthAsync(CancellationToken ct = default) => WithPortRetry(() => HealthOnceAsync(ct));
@@ -206,7 +210,7 @@ public sealed class ServiceClient
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
         string? translateTo = null, string? variants = null) =>
-        WithPortRetry(async () =>
+        Once(async () =>
         {
             var headers = new Dictionary<string, string>
             {
@@ -231,7 +235,7 @@ public sealed class ServiceClient
     /// <summary>Prompt Beta: write the prompt without answers (skip), or forget the questions (cancel).</summary>
     public Task<DictateResponse> BetaAsync(string sessionId, bool skip, string appHint, LlmRoute? llm, CancellationToken ct = default,
         string? variants = null) =>
-        WithPortRetry(async () =>
+        Once(async () =>
         {
             var headers = new Dictionary<string, string> { ["x-voice-app"] = appHint };
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
@@ -255,6 +259,13 @@ public sealed class ServiceClient
                 ? d.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!).ToList()
                 : new List<string>();
         });
+
+    public async Task LearnCorrectionAsync(string from, string to, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(new { from, to });
+        var (status, body) = await SendAsync(HttpMethod.Post, "/learn", new StringContent(json, Encoding.UTF8, "application/json"), null, ShortTimeout, ct);
+        if (status != HttpStatusCode.OK) throw HttpError(status, body);
+    }
 
     /// <summary>Start the one-time model download (about 241 MB); progress shows in /health.</summary>
     public Task<bool> DownloadModelsAsync(string? endpoint, CancellationToken ct = default) =>

@@ -23,6 +23,9 @@ internal sealed class KeyboardHook : IDisposable
     public event Action? Tapped;
     /// <summary>A clean tap of the translate key.</summary>
     public event Action? TranslateTapped;
+    public event Action? PasteLast;
+    public string CopyShortcut { get; set; } = "CtrlShiftV";
+    private bool copyPressed;
     /// <summary>Esc while <see cref="SwallowEscape"/> is set (recording).</summary>
     public event Action? Escape;
     /// <summary>When true, Esc is consumed instead of reaching the focused app.</summary>
@@ -64,6 +67,19 @@ internal sealed class KeyboardHook : IDisposable
             var isDown = message is Native.WM_KEYDOWN or Native.WM_SYSKEYDOWN;
             var injected = (info.flags & Native.LLKHF_INJECTED) != 0;
             var vk = (int)info.vkCode;
+            if (!injected && vk == Native.VK_V)
+            {
+                if (copyPressed)
+                {
+                    if (!isDown) { copyPressed = false; PasteLast?.Invoke(); }
+                    return new IntPtr(1);
+                }
+                var ctrl = (Native.GetAsyncKeyState(0x11) & 0x8000) != 0;
+                var shift = (Native.GetAsyncKeyState(0x10) & 0x8000) != 0;
+                var alt = (Native.GetAsyncKeyState(0x12) & 0x8000) != 0;
+                if (isDown && ctrl && (CopyShortcut == "CtrlShiftV" && shift && !alt || CopyShortcut == "CtrlAltV" && alt && !shift))
+                { copyPressed = true; return new IntPtr(1); }
+            }
 
             if (!injected && vk == Native.VK_ESCAPE && SwallowEscape)
             {

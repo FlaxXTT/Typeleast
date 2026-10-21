@@ -9,6 +9,26 @@ namespace TypeLeast;
 
 internal static class Native
 {
+    [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    /// <summary>The top-level owner of a window (GA_ROOTOWNER), or the window itself.</summary>
+    public static IntPtr RootOwner(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return IntPtr.Zero;
+        var root = GetAncestor(hwnd, 3);
+        return root == IntPtr.Zero ? hwnd : root;
+    }
+
+    /// <summary>Windows 11 rounded corners for a window (DWMWA_WINDOW_CORNER_PREFERENCE); ignored on Windows 10.</summary>
+    public static void RoundCorners(IntPtr hwnd, bool small)
+    {
+        var preference = small ? 3 : 2;
+        try { DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int)); } catch (Exception) { }
+    }
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
     public const uint LLKHF_INJECTED = 0x10;

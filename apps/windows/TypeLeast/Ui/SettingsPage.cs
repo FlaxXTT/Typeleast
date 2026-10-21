@@ -22,12 +22,17 @@ internal sealed class SettingsPage : IPage
     private readonly TextBlock speechStatus = Theme.Text("", 12, Theme.Grey);
     private readonly ProgressBar progress = new() { Width = 160, Height = 6, Minimum = 0, Maximum = 1, Visibility = Visibility.Collapsed };
     private readonly Button downloadButton;
+    private readonly ComboBox preset = Theme.Choice(220);
+    private readonly TextBlock settingsSaveStatus = Theme.Text("", 12, Theme.Warning);
     private readonly TextBlock llmStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBlock keyStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBox baseUrl = Theme.Input("", 300);
     private readonly PasswordBox key = new() { Width = 220, Padding = new Thickness(6, 4, 6, 4), FontSize = 13 };
     private readonly TextBox model = Theme.Input("", 200);
     private readonly ComboBox modelList = Theme.Choice(160);
+    private readonly TextBlock keyboardStatus = Theme.Text("", 12, Theme.Grey);
+    private readonly TextBlock microphoneStatus = Theme.Text("", 12, Theme.Grey);
+    private readonly TextBlock updateStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBlock missing = Theme.Text("", 12, Theme.Warning);
     private bool busy;
     private bool refreshingLanguage;
@@ -41,7 +46,8 @@ internal sealed class SettingsPage : IPage
         this.host = host;
         speechModels = new SpeechModelsPanel(host);
         var s = host.Settings;
-        root.Children.Add(Theme.Text(L10n.T("设置"), 22, bold: true));
+        root.Children.Add(Theme.Text(L10n.T("设置"), 28, bold: true));
+        root.Children.Add(settingsSaveStatus);
 
         var uiLanguage = Theme.Choice(160);
         foreach (var (code, label) in new[] { ("system", L10n.T("跟随系统")), ("zh-Hans", "简体中文"), ("en", "English") })
@@ -77,12 +83,13 @@ internal sealed class SettingsPage : IPage
         enVariant.SelectedIndex = Array.IndexOf(AppSettings.EnVariants, s.EnVariant);
         enVariant.SelectionChanged += (_, _) => { if (enVariant.SelectedItem is ComboBoxItem { Tag: string v }) { s.EnVariant = v; host.SaveSettings(); } };
 
-        root.Children.Add(Section(L10n.T("语言"),
-            Theme.SettingRow(L10n.T("界面语言"), Theme.Text(L10n.T("重启应用后生效；不会改变听写或输出语言。"), 12, Theme.Grey), uiLanguage),
+        var languageRows = new UIElement[]
+        {
             Theme.SettingRow(L10n.T("听写语言"), Theme.Text(L10n.T("可选择当前模型支持的语言；不支持的语言设置使用自动识别。"), 12, Theme.Grey), dictationLanguage),
             Theme.SettingRow(L10n.T("翻译成"), Theme.Text(L10n.T("按翻译快捷键说的话，会整理后翻译成这种语言再插入。需要填好整理模型。"), 12, Theme.Grey), translateTarget),
             Theme.SettingRow(L10n.T("中文写法"), Theme.Text(L10n.T("输出的中文用简体还是繁体；繁体在本机转换，并换成当地用语（软件 → 軟體）。"), 12, Theme.Grey), zhVariant),
-            Theme.SettingRow(L10n.T("英文拼写"), Theme.Text(L10n.T("输出的英文用美式还是英式拼写（color / colour）。"), 12, Theme.Grey), enVariant)));
+            Theme.SettingRow(L10n.T("英文拼写"), Theme.Text(L10n.T("输出的英文用美式还是英式拼写（color / colour）。"), 12, Theme.Grey), enVariant),
+        };
 
         // ---- dictation
         var hotkey = Theme.Choice(160);
@@ -131,21 +138,13 @@ internal sealed class SettingsPage : IPage
         mic.SelectedIndex = s.MicrophoneDevice >= 0 && s.MicrophoneDevice < devices.Length ? s.MicrophoneDevice + 1 : 0;
         mic.SelectionChanged += (_, _) => { if (mic.SelectedItem is ComboBoxItem { Tag: int v }) { s.MicrophoneDevice = v; host.SaveSettings(); } };
 
-        var restore = new CheckBox { IsChecked = s.RestoreClipboard, VerticalAlignment = VerticalAlignment.Center };
-        restore.Click += (_, _) => { s.RestoreClipboard = restore.IsChecked == true; host.SaveSettings(); };
-        var login = new CheckBox { IsChecked = s.LaunchAtLogin, VerticalAlignment = VerticalAlignment.Center };
-        login.Click += (_, _) => { s.LaunchAtLogin = login.IsChecked == true; Autostart.Apply(s.LaunchAtLogin); host.SaveSettings(); };
-
-        root.Children.Add(Section(L10n.T("听写"),
-            Theme.SettingRow(L10n.T("快捷键"), Theme.Text(L10n.T("单独按一下开始，再按一下结束；录音时按 Esc 取消。右 Alt 在部分欧洲键盘上是 AltGr，这时换一个键。"), 12, Theme.Grey), hotkey),
-            Theme.SettingRow(L10n.T("翻译快捷键"), Theme.Text(L10n.T("单独按一下开始，再按一下结束，插入翻译后的文字；要和听写快捷键不同。"), 12, Theme.Grey), translateKey),
-            Theme.SettingRow(L10n.T("整理方式"), Theme.Text(L10n.T("自然整理：去口水词、改通顺。提示词模式：改写成结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），角色和格式会自动补全，事实不编造。提示词 Beta：先问几个关键问题，口头回答后起草，再独立审查并修补，写出目标明确、没有矛盾的提示词，较慢。原话转写：只去口水词。"), 12, Theme.Grey), strength),
-            Theme.SettingRow(L10n.T("麦克风"), null, mic),
-            Theme.SettingRow(L10n.T("粘贴后恢复剪贴板"), Theme.Text(L10n.T("粘贴完把你原来复制的文字放回剪贴板。"), 12, Theme.Grey), restore),
-            Theme.SettingRow(L10n.T("开机自动启动"), null, login)));
-
+        var restore = Theme.Toggle(s.RestoreClipboard, value => { s.RestoreClipboard = value; host.SaveSettings(); });
+        var login = Theme.Toggle(s.LaunchAtLogin, value => { s.LaunchAtLogin = value; if (host.SaveSettings()) Autostart.Apply(value); });
+        var pasteKey = Theme.Choice(180);
+        foreach (var code in new[] { "CtrlShiftV", "CtrlAltV", "off" }) pasteKey.Items.Add(new ComboBoxItem { Content = code == "off" ? L10n.T("关闭") : code == "CtrlShiftV" ? "Ctrl + Shift + V" : "Ctrl + Alt + V", Tag = code });
+        pasteKey.SelectedIndex = s.PasteLastShortcut == "CtrlAltV" ? 1 : s.PasteLastShortcut == "off" ? 2 : 0;
+        pasteKey.SelectionChanged += (_, _) => { if (pasteKey.SelectedItem is ComboBoxItem { Tag: string code }) { s.PasteLastShortcut = code; host.SaveSettings(); } };
         // ---- cleanup model
-        var preset = Theme.Choice(220);
         foreach (var p in LlmPreset.All) preset.Items.Add(new ComboBoxItem { Content = p.Name, Tag = p.Id });
         preset.SelectedIndex = Math.Max(0, LlmPreset.All.ToList().FindIndex(p => p.Id == s.LlmPresetId));
         preset.SelectionChanged += (_, _) =>
@@ -167,37 +166,146 @@ internal sealed class SettingsPage : IPage
         var fetch = Theme.Secondary(L10n.T("获取列表"), () => _ = FetchModels());
         var test = Theme.Primary(L10n.T("测试连接"), () => _ = Test());
 
-        root.Children.Add(Section(L10n.T("整理模型"),
+        var modelSection = Section(L10n.T("整理模型"),
             Theme.Text(L10n.T("用你自己的 API Key 调用大模型，把识别出的话整理成通顺的书面语。Key 只存在这台电脑的 Windows 凭据管理器里，只发给本机的 TypeLeast 服务。"), 12.5, Theme.Grey),
             Theme.SettingRow(L10n.T("服务商"), null, preset),
             Theme.SettingRow(L10n.T("接口地址"), Theme.Text(L10n.T("需要 https；本机服务可以用 http://127.0.0.1"), 12, Theme.Grey), baseUrl),
             Theme.SettingRow("API Key", keyStatus, Theme.Row(8, key, saveKey)),
             Theme.SettingRow(L10n.T("模型"), Theme.Text(L10n.T("填模型 ID，或者点「获取列表」"), 12, Theme.Grey), Theme.Row(8, model, modelList, fetch)),
             Theme.Row(10, test, llmStatus),
-            missing));
+            missing);
 
-        // ---- prompt mode's system prompt
-        root.Children.Add(new PromptifyPanel(host).View);
+        var insertion = Theme.Choice(200);
+        var insertionCodes = new[] { "autoPaste", "clipboardOnly", "preview" };
+        foreach (var label in new[] { "自动粘贴", "仅复制", "先预览" }) insertion.Items.Add(L10n.T(label));
+        insertion.SelectedIndex = Array.IndexOf(insertionCodes, s.InsertionMode);
+        insertion.SelectionChanged += (_, _) => { if (insertion.SelectedIndex >= 0) { s.InsertionMode = insertionCodes[insertion.SelectedIndex]; host.SaveSettings(); } };
+        var appearance = Theme.Choice(180); var appearances = new[] { "system", "light", "dark" };
+        foreach (var label in new[] { "跟随系统", "浅色", "深色" }) appearance.Items.Add(L10n.T(label));
+        appearance.SelectedIndex = Array.IndexOf(appearances, s.Appearance);
+        appearance.SelectionChanged += (_, _) => { if (appearance.SelectedIndex >= 0) { s.Appearance = appearances[appearance.SelectedIndex]; host.SaveSettings(); } };
 
-        // ---- local service
         downloadButton = Theme.Primary(L10n.T("下载（约 241 MB）"), () => _ = host.DownloadModels());
         var mirror = Theme.Input(s.ModelMirror, 240, L10n.T("例如 https://hf-mirror.com"));
         mirror.LostFocus += (_, _) => { s.ModelMirror = mirror.Text.Trim(); host.SaveSettings(); };
         var chooseNode = Theme.Secondary(L10n.T("选择 Node.js…"), ChooseNode);
-        root.Children.Add(Section(L10n.T("本地服务"),
-            Theme.SettingRow(L10n.T("本地服务"), serviceStatus, Theme.Row(8, chooseNode, Theme.Secondary(L10n.T("重新启动"), host.RestartService))),
-            Theme.SettingRow(L10n.T("当前识别模型"), speechStatus, Theme.Row(8, progress, downloadButton)),
-            Theme.SettingRow(L10n.T("模型下载镜像（可选）"), Theme.Text(L10n.T("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。"), 12, Theme.Grey), mirror)));
-
-        // ---- about
         var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
-        root.Children.Add(speechModels.View);
 
-        root.Children.Add(Section(L10n.T("关于"),
-            Theme.SettingRow("TypeLeast " + version, Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
-                Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
-
+        // Five tabs, each a few cards that put related settings together.
+        AddTab(L10n.T("听写"),
+            Section(L10n.T("快捷键"),
+                Theme.SettingRow(L10n.T("听写快捷键"), Theme.Text(L10n.T("单独按一下开始，再按一下结束；右 Alt 在部分键盘上是 AltGr，可换一个键。"), 12, Theme.Grey), hotkey),
+                Theme.SettingRow(L10n.T("翻译快捷键"), Theme.Text(L10n.T("必须与听写键不同。"), 12, Theme.Grey), translateKey),
+                Theme.SettingRow(L10n.T("粘贴上一条"), Theme.Text(L10n.T("与其他应用冲突时可更换或关闭。"), 12, Theme.Grey), pasteKey),
+                Theme.SettingRow(L10n.T("取消"), Theme.Text(L10n.T("录音和处理期间均可取消。"), 12, Theme.Grey), Theme.Keycaps("Esc"))),
+            Section(L10n.T("语言"), languageRows),
+            Section(L10n.T("麦克风与声音"),
+                Theme.SettingRow(L10n.T("麦克风"), null, mic),
+                Theme.SettingRow(L10n.T("麦克风测试"), Theme.Text(L10n.T("点击才开启麦克风，最长 15 秒，不识别或保留录音；会显示麦克风启动用时。"), 12, Theme.Grey), Theme.Secondary(L10n.T("开始测试"), () => MicrophoneTestPanel.Show(host))),
+                Theme.SettingRow(L10n.T("提示音"), Theme.Text(L10n.T("麦克风真正开始收音时响一声，听到后再说话。"), 12, Theme.Grey), Theme.Toggle(s.PlaySounds, v => { s.PlaySounds = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("录音时静音其他声音"), Theme.Text(L10n.T("临时静音已有播放会话，结束后恢复；新启动的播放会话可能不受影响。"), 12, Theme.Grey), Theme.Toggle(s.MuteOtherAudio, v => { s.MuteOtherAudio = v; host.SaveSettings(); }))));
+        var prompts = new PromptifyPanel(host);
+        AddTab(L10n.T("整理"),
+            modelSection,
+            Section(L10n.T("整理方式"),
+                Theme.SettingRow(L10n.T("整理档位"), Theme.Text(L10n.T("自然整理、提示词、提示词 Beta 或原话转写；Beta 分阶段处理，耗时更长。"), 12, Theme.Grey), strength),
+                Theme.SettingRow(L10n.T("参考输入框内容"), Theme.Text(L10n.T("仅获取当前字段的有限上下文；密码框和已知凭据应用不采集。不能识别一切敏感信息。"), 12, Theme.Grey), Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("自动学习更正"), Theme.Text(L10n.T("插入后最多观察同一字段 30 秒，仅学习有限术语更正，不记录键盘输入。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("格式化编号列表"), Theme.Text(L10n.T("同时提供富文本与纯文本；终端始终使用过滤后的纯文本。"), 12, Theme.Grey), Theme.Toggle(s.FormattedLists, v => { s.FormattedLists = v; host.SaveSettings(); }))),
+            Section(L10n.T("提示词模式"), prompts.Rows));
+        AddTab(L10n.T("通用"),
+            Section(L10n.T("插入"),
+                Theme.SettingRow(L10n.T("插入方式"), Theme.Text(L10n.T("前台窗口变化或权限不足时，只复制结果，不强制切换应用。"), 12, Theme.Grey), insertion),
+                Theme.SettingRow(L10n.T("粘贴后恢复剪贴板"), Theme.Text(L10n.T("仅在剪贴板未再次变化时恢复，避免覆盖你新复制的内容。"), 12, Theme.Grey), restore)),
+            Section(L10n.T("外观与启动"),
+                Theme.SettingRow(L10n.T("界面语言"), Theme.Text(L10n.T("重启应用后生效；不会改变听写或输出语言。"), 12, Theme.Grey), uiLanguage),
+                Theme.SettingRow(L10n.T("外观"), null, appearance),
+                Theme.SettingRow(L10n.T("登录启动"), null, login),
+                Theme.SettingRow(L10n.T("任务栏显示主窗口"), Theme.Text(L10n.T("关闭窗口会留在后台，可从托盘恢复；退出请使用托盘菜单。"), 12, Theme.Grey), Theme.Toggle(s.ShowInTaskbar, v => { s.ShowInTaskbar = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("常驻小语音条"), null, Theme.Toggle(s.ShowIdleBar, v => { s.ShowIdleBar = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("新手引导"), null, Theme.Secondary(L10n.T("重新打开引导"), host.ShowOnboarding))));
+        AddTab(L10n.T("隐私与权限"),
+            Section(L10n.T("隐私与数据"),
+                Theme.SettingRow(L10n.T("历史保留"), Theme.Text(L10n.T("不保存时，上一条结果仅留在本次进程内，退出清空；活动计数不含正文。"), 12, Theme.Grey), Controls.Retention(host)),
+                Theme.SettingRow(L10n.T("保留录音用于重试"), Theme.Text(L10n.T("使用当前用户 DPAPI 保护，最多保留 24 小时；关闭后清理。不保存历史时不保留录音。"), 12, Theme.Grey), Theme.Toggle(s.KeepAudio24h, v => { s.KeepAudio24h = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("删除全部数据记录"), null, Theme.Secondary(L10n.T("清空历史与活动"), () => { if (MessageBox.Show(L10n.T("删除全部历史、活动计数和保留录音？此操作无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory(); }))),
+            Section(L10n.T("权限"),
+                Theme.SettingRow(L10n.T("麦克风"), microphoneStatus, Theme.Secondary(L10n.T("打开系统权限"), () => Shell.Open("ms-settings:privacy-microphone"))),
+                Theme.SettingRow(L10n.T("键盘与跨进程插入"), keyboardStatus, Theme.Text(L10n.T("键盘钩子通常无需管理员权限；无法向更高权限窗口注入按键时，请手动粘贴。不会自动提权。"), 12, Theme.Grey))));
+        AddTab(L10n.T("服务与更新"),
+            Section(L10n.T("本地服务"),
+                Theme.SettingRow(L10n.T("本地服务"), serviceStatus, Theme.Row(8, chooseNode, Theme.Secondary(L10n.T("重新启动"), host.RestartService))),
+                Theme.SettingRow(L10n.T("当前识别模型"), speechStatus, Theme.Row(8, progress, downloadButton)),
+                Theme.SettingRow(L10n.T("模型下载镜像（可选）"), Theme.Text(L10n.T("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。"), 12, Theme.Grey), mirror)),
+            speechModels.View,
+            Section(L10n.T("版本与更新"),
+                Theme.SettingRow("TypeLeast " + version, updateStatus,
+                    Theme.Row(8, Theme.Secondary(L10n.T("检查版本"), () => _ = CheckUpdates()), Theme.Secondary(L10n.T("查看发布与下载"), () => Shell.Open("https://github.com/FlaxXTT/Typeleast/releases")))),
+                Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
+                    Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
+        root.Children.Add(tabBar);
+        root.Children.Add(tabContent);
+        ShowTab(Math.Clamp(lastTab, 0, tabs.Count - 1));
         LoadPreset();
+    }
+    private async Task CheckUpdates()
+    {
+        updateStatus.Text = L10n.T("正在检查…");
+        try
+        {
+            using var client = new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(12) };
+            var current = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "0";
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("TypeLeast/" + current);
+            using var response = await client.GetAsync(WindowsRelease.ListUrl);
+            if (!response.IsSuccessStatusCode) { updateStatus.Text = L10n.T("仓库可能需要登录；请在浏览器中查看发布版本。不会自动安装。"); return; }
+            var newest = WindowsRelease.Newest(await response.Content.ReadAsStringAsync());
+            updateStatus.Text = newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
+                : WindowsRelease.IsNewer(newest.Version, current) ? L10n.T("有新的 Windows 版本：{0}。请在发布页下载，不会自动安装。", newest.Version)
+                : L10n.T("已是最新的 Windows 版本（{0}）。", current);
+        }
+        catch (Exception) { updateStatus.Text = L10n.T("版本检查失败，请在浏览器中查看发布。不会自动安装。"); }
+    }
+
+    private readonly WrapPanel tabBar = new() { Margin = new Thickness(0, 14, 0, 0) };
+    private readonly StackPanel tabContent = new();
+    private readonly System.Collections.Generic.List<(Button Button, UIElement[] Cards)> tabs = new();
+    private static int lastTab;
+
+    private void AddTab(string title, params UIElement[] cards)
+    {
+        var index = tabs.Count;
+        var button = new Button
+        {
+            Content = title, FontFamily = Theme.Font, FontSize = 13, Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 0, 6, 6),
+            Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(0),
+        };
+        var template = new ControlTemplate(typeof(Button));
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
+        border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        border.SetBinding(Border.PaddingProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        border.AppendChild(presenter);
+        template.VisualTree = border;
+        button.Template = template;
+        button.Click += (_, _) => ShowTab(index);
+        tabs.Add((button, cards));
+        tabBar.Children.Add(button);
+    }
+
+    private void ShowTab(int index)
+    {
+        lastTab = index;
+        tabContent.Children.Clear();
+        foreach (var card in tabs[index].Cards) tabContent.Children.Add(card);
+        for (var i = 0; i < tabs.Count; i++)
+        {
+            var (button, _) = tabs[i];
+            button.Background = i == index ? Theme.Ink : Theme.CardFill;
+            button.Foreground = i == index ? Theme.InkInverse : Theme.Ink;
+            button.FontWeight = i == index ? FontWeights.SemiBold : FontWeights.Normal;
+        }
     }
 
     private static Border Section(string title, params UIElement[] rows)
@@ -210,6 +318,9 @@ internal sealed class SettingsPage : IPage
         return card;
     }
 
+    private void SetBusyControls(bool value)
+    { preset.IsEnabled = !value; baseUrl.IsEnabled = !value; model.IsEnabled = !value; modelList.IsEnabled = !value; key.IsEnabled = !value && host.Settings.Preset.NeedsKey; }
+
     private void LoadPreset()
     {
         var s = host.Settings;
@@ -217,7 +328,7 @@ internal sealed class SettingsPage : IPage
         model.Text = s.LlmModel;
         modelList.Items.Clear();
         modelList.Visibility = Visibility.Collapsed;
-        var stored = CredentialStore.Read(s.LlmPresetId) ?? "";
+        var stored = host.Credentials.Read(s.LlmPresetId) ?? "";
         key.Password = stored;
         key.IsEnabled = s.Preset.NeedsKey;
         keyStatus.Text = !s.Preset.NeedsKey ? L10n.T("本机服务不需要 Key") : stored.Length > 0 ? L10n.T("已保存在 Windows 凭据管理器") : L10n.T("粘贴 Key，再点保存或测试连接");
@@ -231,14 +342,14 @@ internal sealed class SettingsPage : IPage
         var s = host.Settings;
         var parts = new System.Collections.Generic.List<string>();
         if (!LlmPreset.IsAllowedBaseUrl(s.LlmBaseUrl)) parts.Add(L10n.T("接口地址不可用"));
-        if (s.Preset.NeedsKey && (CredentialStore.Read(s.LlmPresetId) ?? "").Length == 0) parts.Add(L10n.T("还没保存 Key"));
+        if (s.Preset.NeedsKey && (host.Credentials.Read(s.LlmPresetId) ?? "").Length == 0) parts.Add(L10n.T("还没保存 Key"));
         if (s.LlmModel.Length == 0) parts.Add(L10n.T("还没填模型"));
         missing.Text = parts.Count == 0 ? "" : string.Join("、", parts) + L10n.T("。在此之前听写照常可用：只去掉口水词，不改写。");
     }
 
     private bool SaveKey(bool quiet)
     {
-        var ok = CredentialStore.Write(host.Settings.LlmPresetId, key.Password);
+        var ok = host.Credentials.Write(host.Settings.LlmPresetId, key.Password);
         keyStatus.Text = ok ? (key.Password.Length > 0 ? L10n.T("已保存在 Windows 凭据管理器") : L10n.T("已删除")) : L10n.T("没能保存到凭据管理器");
         if (!quiet) host.SaveSettings();
         UpdateMissing();
@@ -249,18 +360,17 @@ internal sealed class SettingsPage : IPage
     private LlmRoute? DraftRoute()
     {
         var s = host.Settings;
-        s.LlmBaseUrl = baseUrl.Text;
-        s.LlmModel = model.Text;
-        var k = key.Password.Length > 0 ? key.Password : CredentialStore.Read(s.LlmPresetId) ?? "";
-        if (!LlmPreset.IsAllowedBaseUrl(s.LlmBaseUrl) || s.LlmModel.Length == 0 || (s.Preset.NeedsKey && k.Length == 0)) return null;
-        return new LlmRoute(s.LlmBaseUrl, s.LlmModel, k);
+        var url = baseUrl.Text.Trim(); var id = model.Text.Trim();
+        var k = key.Password.Length > 0 ? key.Password : host.Credentials.Read(s.LlmPresetId) ?? "";
+        if (!LlmPreset.IsAllowedBaseUrl(url) || id.Length == 0 || (s.Preset.NeedsKey && k.Length == 0)) return null;
+        return new LlmRoute(url, id, k);
     }
 
     private async Task FetchModels()
     {
         var s = host.Settings;
         s.LlmBaseUrl = baseUrl.Text;
-        var k = key.Password.Length > 0 ? key.Password : CredentialStore.Read(s.LlmPresetId) ?? "";
+        var k = key.Password.Length > 0 ? key.Password : host.Credentials.Read(s.LlmPresetId) ?? "";
         if (!LlmPreset.IsAllowedBaseUrl(s.LlmBaseUrl)) { Status(L10n.T("接口地址需要 https"), false); return; }
         Status(L10n.T("正在获取…"), true);
         try
@@ -282,15 +392,18 @@ internal sealed class SettingsPage : IPage
         if (busy) return;
         var route = DraftRoute();
         if (route is null) { Status(L10n.T("先填好地址、Key 和模型"), false); return; }
-        busy = true;
+        busy = true; SetBusyControls(true);
         Status(L10n.T("正在测试…"), true);
         try
         {
             var result = await host.Client.TestLlmAsync(route);
+            Log.Write("operation.complete", new DiagnosticEvent("connection-test", "complete", result.Code, result.Ms).Format());
             if (result.Ok)
             {
                 var saved = key.Password.Length == 0 || SaveKey(quiet: true);
-                host.SaveSettings();
+                host.Settings.LlmBaseUrl = route.BaseUrl; host.Settings.LlmModel = route.Model;
+                var routeSaved = host.SaveSettings();
+                if (!routeSaved) { Status(L10n.T("连接测试成功，但地址或模型未能保存，听写继续使用原配置。"), false); return; }
                 Status(L10n.T("连接成功，用时 ") + (int)(result.Ms ?? 0) + L10n.T(" 毫秒") + (saved ? L10n.T("，Key 已保存") : L10n.T("，但 Key 没能保存"))
                     + (result.Code == "thinking" ? L10n.T("。这个模型会先思考再回答，整理会慢一些") : ""), saved);
                 Log.Write("llm.test.ok", "connected");
@@ -298,7 +411,7 @@ internal sealed class SettingsPage : IPage
             else
             {
                 Status(Messages.ExplainLlmCode(result.Code, result.Error), false);
-                Log.Write("llm.test.fail", "code=" + (result.Code ?? "?"));
+                Log.Write("llm.test.fail", "code=" + DiagnosticEvent.SafeReason(result.Code));
             }
         }
         catch (ServiceException e)
@@ -307,7 +420,7 @@ internal sealed class SettingsPage : IPage
         }
         finally
         {
-            busy = false;
+            busy = false; SetBusyControls(false);
             UpdateMissing();
         }
     }
@@ -331,6 +444,9 @@ internal sealed class SettingsPage : IPage
 
     public void Refresh()
     {
+        settingsSaveStatus.Text = host.SettingsSaveError ?? "";
+        keyboardStatus.Text = host.HotkeyReady switch { true => L10n.T("键盘钩子已注册"), false => L10n.T("键盘钩子注册失败，可使用托盘入口"), _ => L10n.T("键盘钩子尚未启动") };
+        microphoneStatus.Text = host.MicrophoneReady switch { true => L10n.T("上次麦克风打开成功"), false => L10n.T("上次麦克风打开失败，请检查权限和设备"), _ => L10n.T("尚未测试；点击测试确认设备和权限") };
         speechModels.Refresh();
         refreshingLanguage = true;
         dictationLanguage.IsEnabled = host.Speech?.CanSetLanguage != false;
