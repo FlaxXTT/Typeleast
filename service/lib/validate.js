@@ -189,12 +189,28 @@ export function factTokens(text) {
   // into the other is not fabrication.
   for (const token of source.match(/\d+(?:[.:/-]\d+)*/g) ?? []) set.add("N:" + token);
   // An ordinal ("第二点", "第三个") is sequence, not quantity: never a fact.
-  for (const token of source.match(/(?<!第)[零一二三四五六七八九十百千万亿两]{1,4}(?=[个条元块岁天分秒人年次件点步项位名号周])/g) ?? []) {
+  for (const match of source.matchAll(/(?<!第)([零一二三四五六七八九十百千万亿两]{1,4})(?=([个条元块岁天分秒人年月日次件点步项位名号周]))/g)) {
+    const [, token, unit] = match;
     // A bare 一 before a measure word is usually the indefinite article
     // ("一个问题"); a rewrite adds it freely, so it is not evidence of invention.
-    if (token === "一") continue;
+    // Before 月, 日 and 号 it is a date ("一月一号"), which a rewrite writes as "1月1日".
+    if (token === "一" && !"月日号".includes(unit)) continue;
     const value = chineseNumeral(token);
     set.add("N:" + (value === null ? token : String(value)));
+  }
+  // Spoken forms a cleanup writes in digits: a decimal or version read with 点
+  // ("三点一二" -> 3.12, "五点二" -> 5.2) and a percentage ("百分之二十五" -> 25).
+  for (const [, whole, fraction] of source.matchAll(/([零一二三四五六七八九十百千两]+)点([零一二三四五六七八九]+)/g)) {
+    const integer = chineseNumeral(whole);
+    const decimals = chineseNumeral(fraction);
+    if (integer === null || decimals === null) continue;
+    const value = integer + "." + Array.from(fraction).map((c) => CN_DIGITS[c]).join("");
+    set.add("N:" + value);
+    set.add("W:" + value);
+  }
+  for (const [, amount] of source.matchAll(/百分之([零一二三四五六七八九十百千两]+)/g)) {
+    const value = chineseNumeral(amount);
+    if (value !== null) set.add("N:" + String(value));
   }
   const calendar = source.match(/(?:周一|周二|周三|周四|周五|周六|周日|周天|星期一|星期二|星期三|星期四|星期五|星期六|星期日|今天|明天|后天|昨天|上周|本周|下周|这周|下个月|上个月|今年|明年|去年|上午|下午|晚上|早上|中午)/g) ?? [];
   for (const token of calendar) set.add("D:" + (CALENDAR_SYNONYMS[token] ?? token));
@@ -205,7 +221,8 @@ export function factTokens(text) {
   // "- Update the parser". A single-day name in a latin sentence is a known gap
   // in this guard; the system prompt and the fallback path are what cover it.
   for (const token of source.match(/@[A-Za-z0-9_.-]+|[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+/g) ?? []) {
-    set.add("W:" + token);
+    // "v5.2" and "5.2" name the same version.
+    set.add("W:" + token.replace(/^[vV](?=\d+(?:\.\d+)+$)/, ""));
   }
   return set;
 }

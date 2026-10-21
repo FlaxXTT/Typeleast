@@ -70,7 +70,7 @@ enum EnglishVariant: String, CaseIterable {
     }
 }
 
-/// Cleanup is the Erduo prompt or nothing. The host's other strength names
+/// Cleanup is the natural-cleanup prompt or nothing. The host's other strength names
 /// (conservative, maximal) only change validation strictness, so the app no longer
 /// offers them; a value saved by an older build reads as `.prompt`.
 enum VoiceStrength: String, CaseIterable {
