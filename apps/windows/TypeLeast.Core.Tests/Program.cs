@@ -514,6 +514,25 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     }
     finally { Directory.Delete(dir, true); }
 }
+// ---- microphone start-up advice
+
+{
+    Check("fast microphone gets no advice", !Messages.MicrophoneStartup(120).Contains("蓝牙"));
+    Check("slow microphone gets advice", Messages.MicrophoneStartup(900).Contains("变红"));
+}
+
+// ---- prompt file: the system prompt edited as a text file
+
+{
+    const string def = "Line one\nLine two";
+    Check("no prompt file means the default", PromptFile.OverrideFrom(null, def) is null);
+    Check("an empty prompt file means the default", PromptFile.OverrideFrom(" \r\n ", def) is null);
+    Check("the default with Notepad line endings is not a change", PromptFile.OverrideFrom("Line one\r\nLine two\r\n", def) is null);
+    Eq("an edited prompt file is sent without CRLF", PromptFile.OverrideFrom("Mine\r\nsecond\r\n", def), "Mine\nsecond");
+    Eq("a new prompt file starts with the default", PromptFile.Initial(null, def), "Line one\r\nLine two\r\n");
+    Eq("a new prompt file keeps an existing replacement", PromptFile.Initial("Old", def), "Old\r\n");
+}
+
 // ---- Windows release lookup: Mac keeps GitHub's "latest"; Windows reads its own assets
 
 {

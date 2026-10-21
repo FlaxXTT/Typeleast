@@ -13,6 +13,8 @@ namespace TypeLeast.Ui;
 /// The floating capsule at the bottom of the screen, drawn like the Mac pill: a small
 /// dark capsule with × (cancel), a red live dot, a waveform and a stop disc while
 /// listening; three breathing dots while the service works; the result for a moment.
+/// Until the microphone delivers its first audio the dot is grey and the waveform dim,
+/// so the user can see when speech is really being captured.
 /// It never takes focus from the app being dictated into. Everything is drawn in code
 /// so the glyphs sit exactly in their circles at any DPI.
 /// </summary>
@@ -94,9 +96,9 @@ internal sealed class RecordingBar : Window
         if (recorder is { } r)
         {
             var left = AudioRecorder.MaxSeconds - (DateTime.UtcNow - startedAt).TotalSeconds;
-            pill.Advance(PillView.Loudness(r.Level), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null);
+            pill.Advance(PillView.Loudness(r.Level), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, r.HasAudio);
         }
-        else pill.Advance(0, null);
+        else pill.Advance(0, null, true);
     }
 }
 
@@ -113,6 +115,7 @@ internal sealed class PillView : FrameworkElement
     private static readonly Brush HoverWhite = Theme.Hex("#33FFFFFF");
     private static readonly Brush Ink = Theme.Hex("#161616");
     private static readonly Brush Live = Theme.Hex("#FF453A");
+    private static readonly Brush Waiting = Theme.Hex("#8C8C8C");
     private static readonly Brush Badge = Theme.Hex("#3E9BE9");
     private static readonly Brush Orange = Theme.Hex("#F0A04B");
     private static readonly Brush Green = Theme.Hex("#4CC27A");
@@ -131,6 +134,7 @@ internal sealed class PillView : FrameworkElement
     private bool warning;
     private int? countdown;
     private double level;
+    private bool listening;
     private double phase;
     private Rect cancelRect, stopRect;
     private bool overCancel, overStop;
@@ -156,7 +160,7 @@ internal sealed class PillView : FrameworkElement
 
     public void SetRecording(string tag)
     {
-        look = Look.Recording; badge = tag; countdown = null; level = 0; Array.Clear(bars);
+        look = Look.Recording; badge = tag; countdown = null; level = 0; listening = false; Array.Clear(bars);
         Refresh();
     }
 
@@ -171,8 +175,9 @@ internal sealed class PillView : FrameworkElement
     }
 
     /// <summary>One animation step: bars rise fast and fall gently towards the live level.</summary>
-    public void Advance(double loudness, int? secondsLeft)
+    public void Advance(double loudness, int? secondsLeft, bool audio)
     {
+        listening = audio;
         phase += 0.12;
         if (phase > Math.PI * 2000) phase = 0;
         level += (loudness - level) * (loudness > level ? 0.6 : 0.25);
@@ -235,9 +240,10 @@ internal sealed class PillView : FrameworkElement
                 dc.DrawRoundedRectangle(Ink, null, new Rect(stopCentre.X - 3.5, stopCentre.Y - 3.5, 7, 7), 1.6, 1.6);
                 // the microphone is on: a small red dot that brightens with the voice
                 var dot = new Point(cancelRect.Right + 10 + 3, mid);
-                dc.PushOpacity(0.55 + 0.45 * Math.Min(1, level * 1.4));
-                dc.DrawEllipse(Live, null, dot, 3, 3);
+                dc.PushOpacity(listening ? 0.55 + 0.45 * Math.Min(1, level * 1.4) : 1);
+                dc.DrawEllipse(listening ? Live : Waiting, null, dot, 3, 3);
                 dc.Pop();
+                if (!listening) dc.PushOpacity(0.4);
                 // waveform: mirrored bars, one colour, snapped to whole device pixels
                 var x = dot.X + 3 + 10;
                 var barWidth = Math.Max(1 / scale, Snap(BarWidth));
@@ -247,6 +253,7 @@ internal sealed class PillView : FrameworkElement
                     var left = Snap(x + i * (BarWidth + BarGap));
                     dc.DrawRoundedRectangle(White, null, new Rect(left, Snap(mid - h / 2), barWidth, h), barWidth / 2, barWidth / 2);
                 }
+                if (!listening) dc.Pop();
                 var right = x + WaveWidth + 8;
                 if (badge.Length > 0)
                 {
