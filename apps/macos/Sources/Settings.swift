@@ -84,11 +84,20 @@ enum VoiceStrength: String, CaseIterable {
         }
     }
 
+    var shortDetail: String {
+        switch self {
+        case .prompt: return L10n.text("去掉口水词、改通顺，适合日常输入。")
+        case .promptify: return L10n.text("一次整理核心意图，用自然段和编号表达，不套角色等模板。")
+        case .promptbeta: return L10n.text("多轮补充背景、目标和期望，由你决定何时生成；用量随轮次增加。")
+        case .off: return L10n.text("不调用整理模型，只去掉口水词。")
+        }
+    }
+
     var detail: String {
         switch self {
         case .prompt: return L10n.text("自然整理：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。")
-        case .promptify: return L10n.text("把你说的话改写成一份结构化提示词（角色、背景、任务、要求、语气与受众、输出格式），可以直接发给 AI。角色、语气、格式会自动补全；数字、日期、人名等事实你没说就不写。")
-        case .promptbeta: return L10n.text("写最好的提示词：先问你几个关键问题，口头回答后起草，再另开上下文审查并修补。目标、成功标准、约束写清楚；拿不准或矛盾的要求不会两个都塞进去。比提示词模式慢，用量约 3–4 倍。")
+        case .promptify: return L10n.text("一次整理核心意图，用自然段和编号表达，语言简洁、严谨，不套角色等模板；有把握才还原名称。")
+        case .promptbeta: return L10n.text("通过多轮补充说清背景、目标和期望；每次回答后重新检查遗漏与矛盾，由你决定何时生成。只整理你的意思，不扩展目标；轮次越多，用量越高。")
         case .off: return L10n.text("不调用大模型，只在本机去掉口头禅。速度最快。")
         }
     }

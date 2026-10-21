@@ -3,6 +3,13 @@ namespace TypeLeast.Core;
 /// <summary>What the app tells the user, in one place (the same wording as on macOS).</summary>
 public static class Messages
 {
+    public static string BetaNotice(string code) => code switch {
+        "empty-transcript" => L10n.T("没有听到有效补充，请再说一次；已有信息保留。"),
+        "beta-input-limit" => L10n.T("本次补充超出会话容量，未被接收。请缩短后重说，或先生成已有内容。"),
+        "beta-validation" => L10n.T("结果未通过原意或事实检查，未插入。已有信息保留，可继续补充或重试生成。"),
+        _ => L10n.T("本轮处理未完成，已有信息保留。请重说本次补充或重试生成。")
+    };
+
     /// <summary>How long the microphone took from the request to its first audio. Speech before that is lost,
     /// so a slow device gets advice; 350 ms is roughly where a quick speaker loses the first syllable.</summary>
     public static string MicrophoneStartup(long ms) => ms <= 350

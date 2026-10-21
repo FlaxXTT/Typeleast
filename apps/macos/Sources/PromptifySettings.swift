@@ -1,134 +1,56 @@
 import SwiftUI
 import AppKit
 
-// PromptifySettings.swift - the system prompt of prompt mode (提示词模式).
-//
-// The default prompt is locked: it is shown read-only, and the user adds their
-// own instructions at the end. Replacing the default is possible but guarded:
-// a serious warning, a second confirmation, and a one-time code to type. Once it
-// has been replaced, "恢复默认" puts the default back in one step.
-
+// Prompt text stays in a configuration file, never in a page-sized editor.
 struct PromptifySection: View {
     @EnvironmentObject var model: AppModel
     @State private var settings: PromptifySettings?
-    @State private var appendix = ""
-    @State private var editing = false
-    @State private var draft = ""
     @State private var status = ""
     @State private var statusOK = true
 
     var body: some View {
         SettingsSection(title: L10n.text("提示词模式的系统提示词")) {
-            if let s = settings {
-                HStack(spacing: 8) {
-                    Image(systemName: s.modified ? "exclamationmark.triangle.fill" : "lock.fill")
-                        .foregroundColor(s.modified ? Theme.warning : Theme.secondary)
-                    Text(s.modified ? L10n.text("默认提示词已被修改") : L10n.text("默认提示词（锁定，不能直接删改）"))
-                        .font(.system(size: 13, weight: .semibold))
-                    Spacer()
-                    if s.modified {
-                        Button(L10n.text("恢复默认")) { restoreDefault() }.buttonStyle(PrimaryButtonStyle())
-                    }
-                    if !editing {
-                        Button(L10n.text("修改默认提示词…")) { beginEdit(s) }.buttonStyle(SecondaryButtonStyle())
-                    }
+            Text(settings == nil ? L10n.text("正在读取…") : settings?.modified == true ? L10n.text("默认提示词已被修改") : L10n.text("正在使用默认提示词"))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(settings?.modified == true ? Theme.warning : Theme.secondary)
+            Text(L10n.text("默认提示词不建议修改。需要调整时，在配置文件中编辑；保存后下一次整理生效。"))
+                .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button(L10n.text("打开配置文件…")) { openConfiguration() }.buttonStyle(SecondaryButtonStyle())
+                    .disabled(settings == nil)
+                if settings?.modified == true {
+                    Button(L10n.text("恢复默认")) { restoreDefault() }.buttonStyle(SecondaryButtonStyle())
                 }
-                if editing {
-                    Text(L10n.text("正在修改默认提示词。保存后，提示词模式会用你的版本；随时可以「恢复默认」。"))
-                        .font(.system(size: 12)).foregroundColor(Theme.warning)
-                    TextEditor(text: $draft)
-                        .font(.system(size: 12, design: .monospaced))
-                        .frame(height: 260)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.warning.opacity(0.6)))
-                    HStack {
-                        Button(L10n.text("保存修改")) { saveOverride() }.buttonStyle(PrimaryButtonStyle())
-                        Button(L10n.text("取消")) { editing = false }.buttonStyle(SecondaryButtonStyle())
-                        Spacer()
-                    }
-                } else {
-                    ScrollView {
-                        Text(s.override ?? s.default)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(Theme.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(10)
-                    }
-                    .frame(height: 180)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
-                }
-                Text(L10n.text("追加内容（加在提示词结尾，作为「补充要求」）"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .padding(.top, 6)
-                Text(L10n.text("例如：「所有提示词都用英文写」「输出格式一律用 Markdown 表格」。不影响上面的默认内容。"))
-                    .font(.system(size: 12)).foregroundColor(Theme.secondary)
-                TextEditor(text: $appendix)
-                    .font(.system(size: 13))
-                    .frame(height: 90)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.secondary.opacity(0.3)))
-                HStack(spacing: 10) {
-                    Button(L10n.text("保存追加内容")) { saveAppendix() }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .disabled(appendix.trimmingCharacters(in: .whitespacesAndNewlines) == s.appendix)
-                    if !status.isEmpty {
-                        Text(status).font(.system(size: 12)).foregroundColor(statusOK ? Theme.success : Theme.warning)
-                    }
-                    Spacer()
-                }
-            } else {
-                Text(status.isEmpty ? L10n.text("正在读取…") : status)
-                    .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Button(L10n.text("重新读取")) { load() }.buttonStyle(SecondaryButtonStyle())
+            }
+            if !status.isEmpty {
+                Text(status).font(.system(size: 12)).foregroundColor(statusOK ? Theme.success : Theme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .onAppear { load() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in load() }
     }
-
-    // MARK: actions
 
     private func load() {
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try ServiceClient.shared.promptifySync() }
             DispatchQueue.main.async {
                 switch result {
-                case .success(let s):
-                    settings = s
-                    appendix = s.appendix
-                case .failure:
-                    status = L10n.text("本地服务还没就绪，就绪后再打开这一页。")
+                case .success(let s): settings = s
+                case .failure: status = L10n.text("本地服务还没就绪，就绪后再打开这一页。"); statusOK = false
                 }
             }
         }
-    }
-
-    private func apply(_ work: @escaping () throws -> PromptifySettings, done message: String) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try work() }
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let s):
-                    settings = s
-                    appendix = s.appendix
-                    status = message
-                    statusOK = true
-                case .failure(let error):
-                    status = L10n.text("保存失败：") + ((error as? ServiceError)?.description ?? error.localizedDescription)
-                    statusOK = false
-                }
-            }
-        }
-    }
-
-    private func saveAppendix() {
-        let text = appendix
-        apply({ try ServiceClient.shared.setPromptifySync(appendix: text) }, done: L10n.text("追加内容已保存"))
     }
 
     /// Three gates: a serious warning, a second confirmation, and a typed code.
-    private func beginEdit(_ s: PromptifySettings) {
+    private func openConfiguration() {
         let first = NSAlert()
         first.alertStyle = .critical
         first.messageText = L10n.text("修改默认提示词有风险")
-        first.informativeText = L10n.text("默认提示词经过调校：它规定了固定的提示词结构，并要求模型不得编造数字、日期、人名等事实。改动它可能让提示词模式的效果明显变差，甚至输出不可用的内容。\n\n如果只是想加要求，请用下面的「追加内容」，那不会影响默认提示词。")
+        first.informativeText = L10n.text("默认提示词用于忠实保留你的意思，不建议修改。改动可能使结果偏离原意。只需补充要求时，请只修改配置文件中的 appendix，保留 override。")
         first.addButton(withTitle: L10n.text("取消"))
         first.addButton(withTitle: L10n.text("我了解风险，继续"))
         guard first.runModal() == .alertSecondButtonReturn else { return }
@@ -158,20 +80,19 @@ struct PromptifySection: View {
             statusOK = false
             return
         }
-        draft = s.override ?? s.default
-        editing = true
-        status = ""
-    }
-
-    private func saveOverride() {
-        let text = draft
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            status = L10n.text("提示词不能为空；想用默认的请点「恢复默认」。")
-            statusOK = false
-            return
+        guard let s = settings else { return }
+        let path = (ServiceClient.stateDirectory as NSString).appendingPathComponent("promptify.json")
+        do {
+            let existing = FileManager.default.contents(atPath: path)
+            let data = try PromptifyConfigFile.editableData(existing: existing, settings: s)
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            guard let editor = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.TextEdit") else { throw CocoaError(.fileNoSuchFile) }
+            NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: editor,
+                                    configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+            status = L10n.text("保存配置文件后，下一次整理生效。"); statusOK = true
+        } catch {
+            status = L10n.text("配置文件无法打开，原文件已保留。请检查格式和文件权限。"); statusOK = false
         }
-        editing = false
-        apply({ try ServiceClient.shared.setPromptifySync(override: .some(text)) }, done: L10n.text("已保存你的提示词"))
     }
 
     private func restoreDefault() {
@@ -181,7 +102,14 @@ struct PromptifySection: View {
         alert.addButton(withTitle: L10n.text("恢复默认"))
         alert.addButton(withTitle: L10n.text("取消"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        editing = false
-        apply({ try ServiceClient.shared.setPromptifySync(override: .some(nil)) }, done: L10n.text("已恢复默认提示词"))
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try ServiceClient.shared.setPromptifySync(override: .some(nil)) }
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let s): settings = s; status = L10n.text("已恢复默认提示词"); statusOK = true
+                case .failure: status = L10n.text("保存失败，请重试。"); statusOK = false
+                }
+            }
+        }
     }
 }

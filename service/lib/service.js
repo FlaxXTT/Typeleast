@@ -31,7 +31,7 @@ import { validateWav } from "./wav.js";
 import { PROMPTIFY_LIMITS, PROMPTIFY_PROMPT, promptifySystemPrompt } from "./prompts/promptify.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
-  cleanPromptReply, draftMessage, hasContent, normaliseQuestions, parseJsonReply, reviewMessage,
+  cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
 } from "./prompts/prompt-beta.js";
 import { TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
 import { applyVariants, parseVariants, variantInstruction } from "./variants.js";
@@ -235,7 +235,7 @@ export class VoicePolishService {
       const parsed = JSON.parse(await readFile(this.promptifyPath, "utf8"));
       this.promptify = {
         appendix: typeof parsed?.appendix === "string" ? parsed.appendix.slice(0, PROMPTIFY_LIMITS.appendix) : "",
-        override: typeof parsed?.override === "string" && parsed.override.trim().length > 0 ? parsed.override.slice(0, PROMPTIFY_LIMITS.override) : null,
+        override: typeof parsed?.override === "string" && parsed.override.trim().length > 0 && parsed.override.trim() !== PROMPTIFY_PROMPT ? parsed.override.slice(0, PROMPTIFY_LIMITS.override) : null,
       };
     } catch {
       this.promptify = { appendix: "", override: null };
@@ -282,7 +282,10 @@ export class VoicePolishService {
     };
     // Skipping Prompt Beta's questions sends no answer at all, which is not an empty dictation.
     const betaSkip = strength === "promptbeta" && request.betaSkip === true && Boolean(request.betaSession);
-    if (rawText.length === 0 && !betaSkip) return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
+    if (rawText.length === 0 && !betaSkip && !(strength === "promptbeta" && request.betaSession)) {
+      if (strength === "promptbeta") return { ...base, text: "", fallback: true, reason: "empty-transcript" };
+      return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
+    }
     // 翻译模式 has its own hotkey and always needs the model, whatever the strength.
     const translateTo = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
     if (translateTo) {
@@ -477,123 +480,113 @@ export class VoicePolishService {
     }
   }
 
-  /**
-   * Prompt Beta (提示词 Beta): interview -> (questions) -> draft -> fresh review -> minimal patch.
-   *
-   * A new request runs the interview only. When it has questions they are returned with a
-   * session id and nothing is inserted; the next dictation carries that id and is taken as
-   * the spoken answers. A request that needs no questions goes straight to the draft.
-   * @returns {Promise<object>} a result whose `beta.questions` is set when answers are needed.
-   */
+  /** Keep the whole clarification in memory until the user explicitly generates or cancels. */
   async polishBeta({ request, base, route, started, rawText, skip }) {
-    const redact = (text) => (this.config.redactSecrets === false ? text : redactSecrets(text));
-    const call = async (system, user, { maxTokens, temperature }) => {
+    const redact = text => this.config.redactSecrets === false ? text : redactSecrets(text);
+    const call = async (system, user, maxTokens = 1800) => {
       this.stats.modelCalls += 1;
-      const result = await completeOpenAI({
-        route, system, user, maxTokens, temperature,
-        // Three calls of a whole prompt each: generous room and time, quality over speed.
-        timeoutMs: Math.max(this.config.timeoutMs, 60000),
-        signal: request.signal,
-        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
-      });
+      const result = await completeOpenAI({ route, system, user: redact(user), maxTokens, temperature: 0.2,
+        timeoutMs: Math.max(this.config.timeoutMs, 60000), signal: AbortSignal.any([request.signal, session.controller.signal].filter(Boolean)),
+        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
+      request.signal?.throwIfAborted();
       return result.text;
     };
     this.pruneBetaSessions();
-    let session = null;
-    if (request.betaSession) {
-      session = this.betaSessions.get(request.betaSession) ?? null;
-      if (!session) throw Object.assign(new Error("the questions have expired; dictate the request again"), { code: "beta-expired" });
-      this.betaSessions.delete(request.betaSession);
-    }
-    // A silent or filler-only request has nothing to write a prompt about.
+    const id = request.betaSession || randomUUID();
+    let session = this.betaSessions.get(id);
+    if (request.betaSession && !session) throw Object.assign(new Error('clarification expired'), { code: 'beta-expired' });
+    if (session?.busy) throw Object.assign(new Error('clarification in progress'), { code: 'model-busy' });
     if (!session && !hasContent(rawText)) {
-      return await this.recordAndReturn(request, { ...base, text: "", fallback: true, reason: "empty-transcript" });
+      return { ...base, raw: '', text: '', fallback: true, reason: 'empty-transcript' };
     }
-    const original = session ? session.request : rawText;
-    // An answer that says nothing counts as skipping the questions.
-    const skipped = Boolean(session) && (skip || !hasContent(rawText));
-    const answers = session && !skipped ? rawText : "";
-    const source = answers ? `${original}\n${answers}` : original;
+    if (!session) {
+      if (rawText.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
+      // Do not evict another user's active operation to admit a new one.
+      if (this.betaSessions.size >= BETA_LIMITS.sessions) throw Object.assign(new Error('too many clarifications'), { code: 'busy' });
+      session = { request: rawText, turns: [], questions: [], confirmed: [], created: Date.now(), ready: false };
+      this.betaSessions.set(id, session);
+    }
+    const pending = notice => ({ ...base, text: '', raw: rawText,
+      beta: { sessionId: id, questions: session.questions, confirmed: session.confirmed,
+        round: session.turns.length + 1, ready: session.ready, ...(notice ? { notice } : {}) }, ms: timing(started, 0) });
+    if (request.betaSession && !skip && !hasContent(rawText)) return pending('empty-transcript');
+    const turns = [...session.turns];
+    if (request.betaSession && !skip) turns.push({ questions: [...session.questions], answer: rawText });
+    const source = [session.request, ...turns.map(t => t.answer)].join('\n');
+    if (source.length > BETA_LIMITS.inputChars) return pending('beta-input-limit');
+    session.busy = true;
+    session.created = Date.now();
+    session.controller = new AbortController();
     try {
-      let spec = session?.spec ?? null;
-      let questions = session?.questions ?? [];
-      if (!session) {
-        const reply = parseJsonReply(await call(BETA_INTERVIEW_PROMPT, redact(rawText), { maxTokens: 1600, temperature: 0.3 }));
-        if (reply) {
-          spec = {
-            goal: reply.goal ?? "", audience: reply.audience ?? "", success: reply.success ?? [],
-            constraints: reply.constraints ?? [], output: reply.output ?? "", assumptions: reply.assumptions ?? [],
-          };
+      if (!skip) {
+        const reply = parseJsonReply(await call(BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns)));
+        if (!reply || !Array.isArray(reply.questions) || !Array.isArray(reply.confirmed)) {
+          throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
         }
-        questions = normaliseQuestions(reply?.questions);
-        if (questions.length > 0) {
-          const sessionId = randomUUID();
-          this.betaSessions.set(sessionId, { request: rawText, spec, questions, created: Date.now() });
-          // Not recorded: nothing was written for the user yet.
-          return { ...base, text: "", beta: { sessionId, questions }, ms: timing(started, 0) };
-        }
+        if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
+        const questions = normaliseQuestions(reply.questions);
+        if (reply.questions.length && !questions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
+        session.turns = turns;
+        session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
+        session.confirmed = reply.confirmed.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, 6);
+        session.questions = questions;
+        session.ready = session.questions.length === 0;
+        session.created = Date.now();
+        return pending();
       }
-      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT,
-        draftMessage({ request: redact(original), spec, questions, answers: redact(answers), skipped }),
-        { maxTokens: 3200, temperature: 0.5 }));
-      if (!draft) throw Object.assign(new Error("empty draft"), { code: "output-format" });
-      // Review in a fresh call that only diagnoses, then a separate minimal patch.
-      const review = parseJsonReply(await call(BETA_REVIEW_PROMPT,
-        reviewMessage({ request: redact(original), answers: redact(answers), draft }),
-        { maxTokens: 1600, temperature: 0.2 }));
-      const issues = (Array.isArray(review?.issues) ? review.issues : [])
-        .filter((issue) => issue && typeof issue === "object" && issue.type).slice(0, 8);
+      const material = { request: session.request, spec: session.spec, turns,
+        questions: session.questions, skipped: true };
+      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), 3200));
+      if (!draft) throw Object.assign(new Error('empty draft'), { code: 'output-format' });
+      const reviewDraft = async text => {
+        const review = parseJsonReply(await call(BETA_REVIEW_PROMPT, reviewMessage({ ...material, draft: text })));
+        if (!review || !Array.isArray(review.issues)) throw Object.assign(new Error('invalid review'), { code: 'output-format' });
+        if (review.issues.some(issue => !issue || typeof issue !== 'object' || typeof issue.type !== 'string')) {
+          throw Object.assign(new Error('invalid review issue'), { code: 'output-format' });
+        }
+        return review.issues.slice(0, 8);
+      };
+      const issues = await reviewDraft(draft);
       let final = draft;
-      if (issues.length > 0) {
-        const patched = cleanPromptReply(await call(BETA_PATCH_PROMPT,
-          reviewMessage({ request: redact(original), answers: redact(answers), draft, issues }),
-          { maxTokens: 3200, temperature: 0.2 }));
-        if (patched) final = patched;
+      if (issues.length) {
+        final = cleanPromptReply(await call(BETA_PATCH_PROMPT, reviewMessage({ ...material, draft, issues }), 3200));
+        if (!final || (await reviewDraft(final)).length) throw Object.assign(new Error('intent review failed'), { code: 'beta-validation' });
       }
-      let verdict = validateOutput({ rawText: source, output: final, strength: "promptify" });
-      if (!verdict.ok && final !== draft) {
-        // The patch may have introduced the problem; the reviewed draft is still usable.
-        const before = validateOutput({ rawText: source, output: draft, strength: "promptify" });
-        if (before.ok) { final = draft; verdict = before; }
-      }
-      if (!verdict.ok) {
-        const tidyOnly = tidy(source);
-        return await this.recordFallback(request, {
-          ...base, raw: source, text: tidyOnly.text, fallback: true, reason: verdict.reason,
-          detail: describeVerdict(verdict.metrics), ms: timing(started, 0), metrics: verdict.metrics,
-        });
-      }
-      return await this.recordAndReturn(request, {
-        ...base, raw: source, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
-        beta: { reviewed: true, issues: issues.length, patched: final !== draft },
-      });
+      const verdict = validateOutput({ rawText: source, output: final, strength: 'promptify' });
+      if (!verdict.ok) throw Object.assign(new Error('fact check failed'), { code: 'beta-validation' });
+      if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
+      request.signal?.throwIfAborted();
+      const result = await this.recordAndReturn(request, { ...base, raw: source, text: verdict.text,
+        ms: timing(started, 0), metrics: verdict.metrics, beta: { reviewed: true, issues: issues.length, patched: final !== draft } });
+      this.betaSessions.delete(id);
+      return result;
     } catch (error) {
-      const reason = request.signal?.aborted
-        ? "cancelled"
-        : error instanceof ModelCallError ? failureReason(error) : (error.code === "output-format" ? "output-format" : "internal-error");
-      const detail = this.redactDetail(failureDetail(error)).split(route.apiKey || "\u0000").join("[redacted-key]");
-      this.stats.lastError = `${reason}: ${detail}`;
-      this.logger.warn?.("typeleast: prompt beta failed (%s: %s); using the raw transcript", reason, detail);
-      const tidyOnly = tidy(source);
-      return await this.recordFallback(request, {
-        ...base, raw: source, text: tidyOnly.text, fallback: true, reason, detail, ms: timing(started, 0),
-      });
+      // Never insert a partial draft or lose accepted answers after a failed round.
+      if (request.signal?.aborted || this.betaSessions.get(id) !== session) throw error;
+      const notice = error.code === 'beta-validation' ? 'beta-validation' : error instanceof ModelCallError ? failureReason(error) : 'output-format';
+      return pending(notice);
+    } finally {
+      session.busy = false;
     }
   }
 
   /** Drop expired Prompt Beta sessions and keep the map bounded. */
   pruneBetaSessions(now = Date.now()) {
     for (const [id, session] of this.betaSessions) {
-      if (now - session.created > BETA_LIMITS.sessionMs) this.betaSessions.delete(id);
+      if (!session.busy && now - session.created > BETA_LIMITS.sessionMs) this.betaSessions.delete(id);
     }
     while (this.betaSessions.size > BETA_LIMITS.sessions) {
-      this.betaSessions.delete(this.betaSessions.keys().next().value);
+      const idle = [...this.betaSessions].find(([, session]) => !session.busy);
+      if (!idle) break;
+      this.betaSessions.delete(idle[0]);
     }
   }
 
   /** Forget a Prompt Beta session the user cancelled. */
   cancelBeta(sessionId) {
-    return this.betaSessions.delete(String(sessionId ?? ""));
+    const id = String(sessionId ?? "");
+    this.betaSessions.get(id)?.controller?.abort();
+    return this.betaSessions.delete(id);
   }
 
   /**
@@ -696,7 +689,7 @@ export class VoicePolishService {
       const result = {
         requestId: request.requestId,
         text: polished.text,
-        raw: spoken.text,
+        raw: polished.raw ?? spoken.text,
         fallback: polished.fallback,
         fallbackReason: polished.reason ?? undefined,
         model: polished.model,

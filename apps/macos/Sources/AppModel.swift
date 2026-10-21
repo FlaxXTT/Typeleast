@@ -31,6 +31,7 @@ enum HubPage: String, CaseIterable, Identifiable {
 
 /// What the windows may ask the app to do. Implemented by AppDelegate.
 protocol AppActions: AnyObject {
+    func setCleanupMode(_ code: String)
     func toggleDictation()
     func pasteLast()
     func copyEntry(id: String, raw: Bool)
@@ -60,6 +61,7 @@ final class AppModel: ObservableObject {
     weak var actions: AppActions?
 
     @Published var page: HubPage = .home
+    @Published var settingsCategory = 0
     @Published private(set) var history: [LocalHistoryEntry] = []
     @Published private(set) var stats = DictationStats()
     /// Bumped when the per-day activity changes; the heatmap reads ActivityLog.shared.
@@ -130,6 +132,13 @@ final class AppModel: ObservableObject {
                 then?()
             }
         )
+    }
+
+    func selectStrength(_ code: String) {
+        guard phase == .idle else { return }
+        if let actions = actions { actions.setCleanupMode(code) }
+        else { setting(\.strength).wrappedValue = code }
+        objectWillChange.send()
     }
 
     var hotkeyLabel: String {

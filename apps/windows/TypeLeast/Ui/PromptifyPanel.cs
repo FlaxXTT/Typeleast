@@ -6,84 +6,65 @@ using TypeLeast.Core;
 
 namespace TypeLeast.Ui;
 
-/// <summary>
-/// Settings for prompt mode (提示词模式). Additions are typed here and kept at the end
-/// of the prompt. The prompt itself is edited as a file, like a configuration file:
-/// "打开提示词文件" opens promptify-system.md in Notepad, and saving it takes effect on
-/// the next dictation. "恢复默认" removes the file and the replacement.
-/// </summary>
+/// <summary>No prompt editor in Settings. Changing the config requires three confirmations.</summary>
 internal sealed class PromptifyPanel
 {
     private readonly AppHost host;
     private readonly TextBlock state = Theme.Text(L10n.T("正在读取…"), 13, bold: true);
-    private readonly TextBox appendix = new()
-    {
-        AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 90, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        FontFamily = Theme.Font, FontSize = 13, BorderBrush = Theme.Line, Padding = new Thickness(8, 6, 8, 6),
-    };
     private readonly TextBlock status = Theme.Text("", 12, Theme.Grey);
     private readonly Button restore;
-
-    /// <summary>The rows, to place inside a settings card.</summary>
     public UIElement[] Rows { get; }
 
     public PromptifyPanel(AppHost host)
     {
         this.host = host;
         restore = Theme.Secondary(L10n.T("恢复默认"), () => _ = RestoreDefault());
-        var open = Theme.Secondary(L10n.T("打开提示词文件"), () => _ = host.PromptFile.OpenAsync());
-        var saveAppendix = Theme.Primary(L10n.T("保存补充要求"), () => _ = SaveAppendix());
-
-        var fileRow = Theme.SettingRow(L10n.T("提示词模式的系统提示词"),
-            Theme.Text(L10n.T("在记事本中编辑，保存后下一次整理生效。默认提示词经过调校，改动可能让效果变差；只想加要求时，用下面的「补充要求」。"), 12, Theme.Grey),
-            Theme.Row(8, open, restore));
-        var label = Theme.Text(L10n.T("补充要求（加在提示词结尾）"), 13, bold: true);
-        label.Margin = new Thickness(0, 10, 0, 2);
-        appendix.Margin = new Thickness(0, 6, 0, 6);
-        Rows = new UIElement[]
-        {
-            fileRow, state, label,
-            Theme.Text(L10n.T("例如：「所有提示词都用英文写」「输出格式一律用 Markdown 表格」。"), 12, Theme.Grey),
-            appendix, Theme.Row(10, saveAppendix, status),
-        };
-        host.PromptFile.Status += (text, ok) => { Status(text, ok); _ = Load(); };
+        var open = Theme.Secondary(L10n.T("打开配置文件…"), () => _ = OpenConfiguration());
+        Rows = new UIElement[] { state,
+            Theme.Text(L10n.T("默认提示词不建议修改。需要调整时，在配置文件中编辑；保存后下一次整理生效。"), 12, Theme.Grey),
+            Theme.Row(8, open, restore, Theme.Secondary(L10n.T("重新读取"), () => _ = Load())), status };
+        host.PromptFile.Status += (text, ok) => { status.Text = text; status.Foreground = ok ? Theme.Success : Theme.Warning; _ = Load(); };
         _ = Load();
     }
 
     private async Task Load()
     {
-        try { Apply(await host.Client.GetPromptifyAsync(), keepAppendix: appendix.IsKeyboardFocusWithin); }
-        catch (ServiceException)
+        try
         {
-            state.Text = L10n.T("本地服务还没就绪，就绪后再打开设置。");
-            restore.Visibility = Visibility.Collapsed;
+            var s = await host.Client.GetPromptifyAsync();
+            state.Text = s.Modified ? L10n.T("默认提示词已被修改") : L10n.T("正在使用默认提示词");
+            state.Foreground = s.Modified ? Theme.Warning : Theme.Grey;
+            restore.Visibility = s.Modified ? Visibility.Visible : Visibility.Collapsed;
         }
+        catch (ServiceException) { state.Text = L10n.T("本地服务还没就绪，就绪后再打开设置。"); }
     }
 
-    private void Apply(PromptifySettings s, bool keepAppendix = false)
+    private async Task OpenConfiguration()
     {
-        if (!keepAppendix) appendix.Text = s.Appendix;
-        state.Text = s.Modified ? L10n.T("⚠ 正在使用你修改的提示词") : L10n.T("正在使用默认提示词");
-        state.Foreground = s.Modified ? Theme.Warning : Theme.Grey;
-        state.FontWeight = s.Modified ? FontWeights.SemiBold : FontWeights.Normal;
-        restore.Visibility = s.Modified || System.IO.File.Exists(host.PromptFile.FilePath) ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void Status(string text, bool ok)
-    {
-        status.Text = text;
-        status.Foreground = ok ? Theme.Success : Theme.Warning;
-    }
-
-    private async Task SaveAppendix()
-    {
-        try { Apply(await host.Client.SetPromptifyAsync(appendix: appendix.Text)); Status(L10n.T("补充要求已保存"), true); }
-        catch (ServiceException e) { Status(L10n.T("保存失败：") + e.Message, false); }
+        var owner = Window.GetWindow(state);
+        if (MessageBox.Show(owner,
+            L10n.T("默认提示词用于忠实保留你的意思，不建议修改。改动可能使结果偏离原意。只需补充要求时，请只修改配置文件中的 appendix，保留 override。"),
+            L10n.T("修改默认提示词有风险"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        if (MessageBox.Show(owner, L10n.T("修改后，提示词模式会完全使用你的版本。你随时可以在这里点「恢复默认」。"),
+            L10n.T("再次确认：要修改默认提示词吗？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        var code = PromptifyGuard.MakeCode();
+        var dialog = new Window { Title = L10n.T("输入验证码以解锁"), Owner = owner, Width = 420,
+            SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Theme.Background };
+        var field = Theme.Input("", 180);
+        var confirm = Theme.Primary(L10n.T("打开配置文件…"), () => dialog.DialogResult = true);
+        confirm.IsEnabled = false; confirm.IsDefault = true;
+        field.TextChanged += (_, _) => confirm.IsEnabled = PromptifyGuard.Matches(field.Text, code);
+        var cancel = Theme.Secondary(L10n.T("取消"), () => dialog.DialogResult = false);
+        cancel.IsCancel = true;
+        var content = Theme.Stack(12, Theme.Text(L10n.T("请输入下面的 6 位验证码：\n\n") + code, 13), field, Theme.Row(8, cancel, confirm));
+        content.Margin = new Thickness(24); dialog.Content = content;
+        dialog.Loaded += (_, _) => field.Focus();
+        if (dialog.ShowDialog() == true) await host.PromptFile.OpenAsync();
     }
 
     private async Task RestoreDefault()
     {
-        if (MessageBox.Show(L10n.T("删除提示词文件，改回默认提示词？补充要求会保留。"), L10n.T("恢复默认提示词？"), MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        if (MessageBox.Show(L10n.T("你修改过的版本会被丢弃，追加内容保留。"), L10n.T("恢复默认提示词？"), MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         await host.PromptFile.RestoreDefaultAsync();
     }
 }

@@ -9,6 +9,11 @@ let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1]
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 // This tool must never run as the installed application.
 precondition(Bundle.main.bundleIdentifier != "com.dsh.voice")
+// All service reads must stay inside this render's fixtures, even when Settings appears.
+let isolatedState = (outDir as NSString).appendingPathComponent("isolated-state")
+try FileManager.default.createDirectory(atPath: isolatedState, withIntermediateDirectories: true)
+setenv("TYPELEAST_HOME", isolatedState, 1)
+
 KeychainStore.stub = [:]
 HistorySeal.reset()
 // Discard only this command-line tool's generated fixtures from earlier renders.
@@ -110,10 +115,27 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODELS_ONLY"] == "1" {
     exit(0)
 }
 
+if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_FOCUS"] == "settings" {
+    for dark in [false, true] {
+        for category in 0..<5 {
+            model.settingsCategory = category
+            model.page = .settings
+            snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)),
+                     size: NSSize(width: 820, height: 560), name: "settings-" + String(category), dark: dark)
+        }
+        let info = BetaInfo(sessionId: "fixture", questions: [L10n.text("项目主要给谁使用？"), L10n.text("你提到的现有流程有什么问题？")],
+                            confirmed: [L10n.text("项目需要支持团队日常使用。"), L10n.text("先把现有流程说清楚，再确定目标。")], round: 3, ready: false)
+        snapshot(NSHostingView(rootView: BetaQuestionsView(info: info, hotkey: "fn", skip: {}, cancel: {})
+            .background(Theme.card).environment(\.colorScheme, dark ? .dark : .light)),
+            size: NSSize(width: 440, height: 540), name: "beta-round", dark: dark)
+    }
+    exit(0)
+}
+
 for dark in [false, true] {
     for page in HubPage.allCases {
         model.page = page
-        let height: CGFloat = page == .settings ? 1900 : 680
+        let height: CGFloat = 680
         snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)), size: NSSize(width: ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MINIMUM"] == "1" ? 820 : 960, height: height),
                  name: "hub-" + page.rawValue, dark: dark)
     }

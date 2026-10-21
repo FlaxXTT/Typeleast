@@ -572,6 +572,29 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("a non-list answer gives no release", WindowsRelease.Newest("{\"message\":\"Not Found\"}") is null);
 }
 
+
+{
+    var waiting = JsonSerializer.Deserialize<DictateResponse>("""{"text":"","raw":"latest answer","beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}""")!;
+    Check("ready clarification waits for explicit generate", waiting.BetaWaiting);
+    Eq("ready clarification inserts nothing", waiting.InsertableText, "");
+    Eq("round metadata decodes", waiting.Beta?.Round, 3);
+    Eq("confirmed metadata decodes", waiting.Beta?.Confirmed?[0], "confirmed");
+    Eq("notice metadata decodes", waiting.Beta?.Notice, "beta-validation");
+    var current = new PromptifySettings { Default = "Default body", Appendix = "Keep appendix" };
+    using var initial = JsonDocument.Parse(PromptConfiguration.Prepare(null, current));
+    Eq("config editor starts with current default", initial.RootElement.GetProperty("override").GetString(), "Default body");
+    Eq("config editor retains appendix", initial.RootElement.GetProperty("appendix").GetString(), "Keep appendix");
+    using var custom = JsonDocument.Parse(PromptConfiguration.Prepare("""{"override":"Mine","appendix":"My additions","extra":true}""", current));
+    Eq("config preserves replacement", custom.RootElement.GetProperty("override").GetString(), "Mine");
+    Eq("config preserves existing appendix", custom.RootElement.GetProperty("appendix").GetString(), "My additions");
+    Check("config preserves unknown fields", custom.RootElement.GetProperty("extra").GetBoolean());
+    foreach (var invalid in new[] { "broken", """{"override":false}""", """{"appendix":42}""", new string('a', 100_001) }) {
+        var rejected = false;
+        try { PromptConfiguration.Prepare(invalid, current); } catch (Exception e) when (e is JsonException or InvalidDataException) { rejected = true; }
+        Check("invalid config is not overwritten", rejected);
+    }
+}
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

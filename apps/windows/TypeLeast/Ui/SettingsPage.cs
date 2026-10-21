@@ -39,7 +39,8 @@ internal sealed class SettingsPage : IPage
     private readonly SpeechModelsPanel speechModels;
     private readonly ComboBox dictationLanguage = Theme.Choice(160);
 
-    public UIElement View => root;
+    private readonly DockPanel surface = new();
+    public UIElement View => surface;
 
     public SettingsPage(AppHost host)
     {
@@ -198,13 +199,12 @@ internal sealed class SettingsPage : IPage
                 Theme.SettingRow(L10n.T("录音时静音其他声音"), Theme.Text(L10n.T("临时静音已有播放会话，结束后恢复；新启动的播放会话可能不受影响。"), 12, Theme.Grey), Theme.Toggle(s.MuteOtherAudio, v => { s.MuteOtherAudio = v; host.SaveSettings(); }))));
         var prompts = new PromptifyPanel(host);
         AddTab(L10n.T("整理"),
-            Section(L10n.T("整理档位"), Theme.Text(L10n.T("下一次听写生效。也可以在首页、托盘菜单或任务栏按钮的右键菜单中切换。"), 12, Theme.Grey), Spacer(8), ModePicker.Cards(host)),
             modelSection,
             Section(L10n.T("整理选项"),
                 Theme.SettingRow(L10n.T("参考输入框内容"), Theme.Text(L10n.T("仅获取当前字段的有限上下文；密码框和已知凭据应用不采集。不能识别一切敏感信息。"), 12, Theme.Grey), Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("自动学习更正"), Theme.Text(L10n.T("插入后最多观察同一字段 30 秒，仅学习有限术语更正，不记录键盘输入。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("格式化编号列表"), Theme.Text(L10n.T("同时提供富文本与纯文本；终端始终使用过滤后的纯文本。"), 12, Theme.Grey), Theme.Toggle(s.FormattedLists, v => { s.FormattedLists = v; host.SaveSettings(); }))),
-            Section(L10n.T("提示词模式"), prompts.Rows));
+            new Expander { Header = L10n.T("提示词配置（高级）"), Margin = new Thickness(0, 16, 0, 0), Content = Section(L10n.T("提示词模式"), prompts.Rows) });
         AddTab(L10n.T("通用"),
             Section(L10n.T("插入"),
                 Theme.SettingRow(L10n.T("插入方式"), Theme.Text(L10n.T("前台窗口变化或权限不足时，只复制结果，不强制切换应用。"), 12, Theme.Grey), insertion),
@@ -235,8 +235,9 @@ internal sealed class SettingsPage : IPage
                     Theme.Row(8, Theme.Secondary(L10n.T("检查版本"), () => _ = CheckUpdates()), Theme.Secondary(L10n.T("查看发布与下载"), () => Shell.Open("https://github.com/FlaxXTT/Typeleast/releases")))),
                 Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
                     Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
-        root.Children.Add(tabBar);
-        root.Children.Add(tabContent);
+        DockPanel.SetDock(root, Dock.Top); surface.Children.Add(root);
+        DockPanel.SetDock(tabBar, Dock.Top); surface.Children.Add(tabBar);
+        surface.Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = tabContent });
         ShowTab(Math.Clamp(lastTab, 0, tabs.Count - 1));
         LoadPreset();
     }

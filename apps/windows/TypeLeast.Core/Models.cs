@@ -96,6 +96,10 @@ public sealed class BetaInfo
 {
     [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
     [JsonPropertyName("questions")] public List<string>? Questions { get; set; }
+    [JsonPropertyName("confirmed")] public List<string>? Confirmed { get; set; }
+    [JsonPropertyName("round")] public int? Round { get; set; }
+    [JsonPropertyName("ready")] public bool? Ready { get; set; }
+    [JsonPropertyName("notice")] public string? Notice { get; set; }
     [JsonPropertyName("issues")] public int? Issues { get; set; }
     [JsonPropertyName("patched")] public bool? Patched { get; set; }
 }
@@ -119,7 +123,8 @@ public sealed class DictateResponse
         Beta?.SessionId is null ? Array.Empty<string>() : (IReadOnlyList<string>?)Beta.Questions ?? Array.Empty<string>();
 
     /// <summary>When fallback is true the service has already put the raw transcript in Text.</summary>
-    [JsonIgnore] public string InsertableText => Text.Length > 0 ? Text : Raw;
+    [JsonIgnore] public bool BetaWaiting => !string.IsNullOrWhiteSpace(Beta?.SessionId);
+    [JsonIgnore] public string InsertableText => BetaWaiting ? "" : Text.Length > 0 ? Text : Raw;
 }
 
 public sealed class LlmTestResult

@@ -1136,6 +1136,31 @@ do {
     try? FileManager.default.removeItem(atPath: dir)
 }
 
+// Multi-round waiting never leaks the latest answer into the insertion path.
+do {
+    let waiting = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"","raw":"latest answer","fallback":false,"beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}"#.utf8))
+    check("ready clarification still waits for the user's Generate", waiting.betaWaiting)
+    checkEq("ready clarification inserts nothing", waiting.insertableText, "")
+    checkEq("round metadata decodes", waiting.beta?.round, 3)
+    checkEq("confirmed metadata decodes", waiting.beta?.confirmed, ["confirmed"])
+    checkEq("notice metadata decodes", waiting.beta?.notice, "beta-validation")
+    let settings = PromptifySettings(default: "Default body", appendix: "Keep appendix", override: nil, modified: false, effective: "Default body")
+    let data = try PromptifyConfigFile.editableData(existing: nil, settings: settings)
+    let object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+    checkEq("editor contains the current default", object["override"] as? String, "Default body")
+    checkEq("editor retains appendix", object["appendix"] as? String, "Keep appendix")
+    let existing = Data(#"{"override":"My version","appendix":"Mine","extra":true}"#.utf8)
+    let custom = try JSONSerialization.jsonObject(with: PromptifyConfigFile.editableData(existing: existing, settings: settings)) as! [String: Any]
+    checkEq("editor keeps an existing replacement", custom["override"] as? String, "My version")
+    checkEq("editor keeps existing additions", custom["appendix"] as? String, "Mine")
+    checkEq("editor preserves unrelated fields", custom["extra"] as? Bool, true)
+    for invalid in [Data("broken".utf8), Data(#"{"appendix":42}"#.utf8), Data(#"{"override":false}"#.utf8), Data(repeating: 65, count: 100_001)] {
+        var rejected = false
+        do { _ = try PromptifyConfigFile.editableData(existing: invalid, settings: settings) } catch { rejected = true }
+        check("malformed config is not overwritten", rejected)
+    }
+} catch { check("new Beta/config decoding", false) }
+
 server.stop()
 print("")
 print("TESTS: " + String(passed) + " passed, " + String(failed) + " failed")

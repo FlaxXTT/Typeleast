@@ -176,6 +176,7 @@ test("Prompt Beta endpoints: skip and cancel take a session id; an expired one i
   service.polish = async (request) => {
     seen.push(request);
     if (request.betaSession === "gone") throw Object.assign(new Error("expired"), { code: "beta-expired" });
+    if (request.betaSession === "waiting") return { text: "", raw: "r", fallback: false, ms: {}, beta: { sessionId: "waiting", questions: [], confirmed: ["用户的信息"], round: 3, ready: true, notice: "beta-validation" } };
     return { text: "## 目标\nx", raw: "r", fallback: false, ms: {} };
   };
   service.cancelBeta = (id) => id === "live";
@@ -192,6 +193,12 @@ test("Prompt Beta endpoints: skip and cancel take a session id; an expired one i
   assert.equal(JSON.parse(done.body).text, "## 目标\nx");
   assert.equal(seen[0].betaSkip, true);
   assert.equal(seen[0].strength, "promptbeta");
+  const pending = JSON.parse((await post("/prompts/beta/finish", { sessionId: "waiting" })).body);
+  assert.equal(pending.text, "");
+  assert.equal(pending.beta.sessionId, "waiting");
+  assert.equal(pending.beta.round, 3);
+  assert.equal(pending.beta.notice, "beta-validation");
+  assert.deepEqual(pending.beta.confirmed, ["用户的信息"]);
   assert.equal((await post("/prompts/beta/finish", { sessionId: "gone" })).status, 410);
   assert.equal(JSON.parse((await post("/prompts/beta/cancel", { sessionId: "live" })).body).cancelled, true);
 });
