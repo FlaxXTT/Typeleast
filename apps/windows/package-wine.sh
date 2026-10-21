@@ -59,7 +59,7 @@ curl -fsSL -o "$work/SHASUMS256.txt" "$base/SHASUMS256.txt"
 (cd "$work" && unzip -q "$zip_name")
 mkdir -p "$stage/node"
 cp "$work/node-v$node_version-win-x64/node.exe" "$work/node-v$node_version-win-x64/LICENSE" "$stage/node/"
-cp "$root/THIRD-PARTY-NOTICES.md" "$stage/"
+cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$stage/"
 
 # 4. Portable zip and installer.
 name="TypeLeast-$version-Windows-x64"
