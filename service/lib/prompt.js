@@ -1,13 +1,11 @@
 /**
- * Prompt construction for dictated-text polishing: the Article prompt, and only it.
+ * Prompt construction for dictated-text polishing.
  *
- * The user chose Article's "a third-party article" prompt as the one set of
- * instructions (see ./prompts/article-budget-reference.js and THIRD-PARTY-NOTICES.md).
- * The request follows the article's design:
- *   system  the article's prompt and its two demonstrations, byte for byte,
- *           then a delimited addendum carrying only the facts the upstream
- *           prompt cannot know: the user's dictionary and the text already in
- *           the box being typed into (when there is any)
+ * Natural cleanup uses the project's own prompt (./prompts/cleanup.js):
+ *   system  the prompt with its examples, exactly as written, then a delimited
+ *           addendum carrying only what the prompt cannot know: the user's
+ *           dictionary and the text already in the box being typed into
+ *           (when there is any)
  *   user    the raw recognised text, nothing else
  *
  * The earlier built-in prompt set (strength tiers, list detection, per-app
@@ -16,14 +14,14 @@
  * @module typeleast-service/prompt
  */
 
-import { articleSystemPrompt } from "./prompts/article-budget-reference.js";
+import { cleanupSystemPrompt } from "./prompts/cleanup.js";
 import { promptifySystemPrompt } from "./prompts/promptify.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-19.6-article+subject+promptify+beta+translate";
+export const PROMPT_VERSION = "2026-10-21.1-cleanup+promptify+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
-export const PROMPT_SOURCES = ["article"];
+export const PROMPT_SOURCES = ["typeleast"];
 
 /**
  * The version recorded in history, so a stored result can be traced to the
@@ -77,14 +75,14 @@ export function harnessAddendum({ dictionary, fieldContext }) {
 }
 
 /**
- * The system prompt for one request: Article's cleanup prompt, or for the
+ * The system prompt for one request: the cleanup prompt, or for the
  * "promptify" strength (提示词模式) the structured-prompt rewriter. Both get the
  * same addendum (dictionary and field context).
  * @param {object} input - strength, the user's prompt-mode settings, and the dictionary and field context the addendum needs.
  * @returns {string} the system prompt.
  */
 export function systemPromptFor({ dictionary, fieldContext, strength, promptify } = {}) {
-  const base = strength === "promptify" ? promptifySystemPrompt(promptify) : articleSystemPrompt();
+  const base = strength === "promptify" ? promptifySystemPrompt(promptify) : cleanupSystemPrompt();
   return base + harnessAddendum({ dictionary, fieldContext });
 }
 
