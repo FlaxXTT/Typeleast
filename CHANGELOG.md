@@ -2,6 +2,11 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## Windows 1.16.2（未发布，仅 Windows）
+
+- 界面字体改为开源字体（SIL OFL 1.1），随程序内置：英文和数字用 Inter，中文用思源黑体（Noto Sans SC，只保留 GB2312 常用字、标点和界面用字）。其他字符使用系统的微软雅黑。字体许可证随安装包放在 `licenses` 文件夹。
+- 任务栏右键菜单重新设计：改用与主窗口一致的字体和配色，圆角卡片带阴影；顶部显示服务状态（绿色就绪、橙色未就绪）；每项带图标和快捷键提示；菜单出现在鼠标上方并保持在屏幕工作区内，点击别处或按 Esc 关闭。
+
 ## Windows 1.16.1（2026-10-20，仅 Windows）
 
 Mac 和 Windows 从这一版起分开发布。GitHub 的「最新版本」标记只用于 Mac 发布；Windows 发布使用 `windows-v` 开头的标签，Windows 的「检查版本」只找带 Windows 安装包的发布。Mac 仍是 1.16.0，本次没有 Mac 安装包。

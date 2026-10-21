@@ -12,7 +12,17 @@ namespace TypeLeast.Ui;
 /// </summary>
 internal static class Theme
 {
-    public static readonly FontFamily Font = new("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI");
+    /// <summary>Inter for Latin text and Noto Sans SC for Chinese (both SIL OFL, embedded); characters
+    /// outside the Chinese subset fall back to the system's Microsoft YaHei UI.</summary>
+    public static readonly FontFamily Font = new(new Uri("pack://application:,,,/TypeLeast;component/"),
+        "./Fonts/#Inter, ./Fonts/#Noto Sans SC, Microsoft YaHei UI, Segoe UI");
+
+    static Theme()
+    {
+        // Every window, tooltip and menu starts from the app font; their contents inherit it.
+        foreach (var type in new[] { typeof(Window), typeof(ToolTip), typeof(ContextMenu) })
+            Control.FontFamilyProperty.OverrideMetadata(type, new FrameworkPropertyMetadata(Font, FrameworkPropertyMetadataOptions.Inherits));
+    }
     private sealed class PaletteColor : System.ComponentModel.INotifyPropertyChanged
     {
         private Color value;
