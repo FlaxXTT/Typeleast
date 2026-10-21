@@ -1,33 +1,29 @@
 TypeLeast：按快捷键说话，本机识别，再用你自己的整理模型处理文字并插入光标处。
 
-## 1.16.2 的变化
+## 1.17.0 的变化
 
-- **两端自然整理同步新提示词**，正文按维护者提供的版本保留。数字、百分比、日期和版本号的转换可通过防编造检查；模型返回 `uncertain` 时使用其最佳猜测，结果仍须通过校验。
-- Mac 同步 DeepSeek 官方预设修正，模型提示改为 `deepseek-flash`；已保存的地址、模型和 Key 不自动改写。
-- Windows 修复部分应用只复制不粘贴、录音开头截断等问题；处理中可取消，整理失败显示分类原因。
-- Windows 更新录音条、波形、字体、提示音、圆角和五页设置；首页、设置、托盘及任务栏菜单可切换整理档位。
-- Windows 包含翻译、语言变体、活动热力图、历史筛选与同一录音重试、词典来源与 CSV 导入等此前已合并的功能。
+- **普通提示词模式一次生成**：理解核心意图，用编号穿插自然段表达，不再套角色等固定模板，不扩展你没提出的要求。名称只根据上下文和模型知识还原；没有把握时保留描述，不新增联网检索。
+- **多轮 Beta**：每次补充都会重新检查遗漏、矛盾和新歧义，显示当前理解。可以继续补充、纠正，直到主动点击“结束补充并生成”。失败保留已接受信息，不粘贴半成品；修补后再次审查。
+- **设置更清楚，模式随时可切换**：设置按五类分组，四种整理模式固定在主窗口顶部；Mac 菜单栏也可选择。录音和整理期间暂不可切换，离开未完成的 Beta 前会提醒。
+- **提示词移到配置文件**：设置不显示正文；通过警告、再次确认及验证码后，可在外部编辑器打开配置文件。已有自定义内容保留，可恢复新默认。
+- 修复英文最小窗口的分类栏裁切。自然整理继续使用维护者提供的原创提示词，正文未改。
+- 仓库加入 GPL-3.0 许可和网站部署配置；Mac 包内附许可文件，托管工作流改为手动触发。
 
-## 下载哪个
+## 下载
 
-| 电脑 | 文件 |
+| 电脑 | 本次安装包 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.16.2-macOS-AppleSilicon.dmg` 或 `.zip` |
-| macOS 13 以上，Intel | `TypeLeast-1.16.2-macOS-Intel.dmg` 或 `.zip` |
-| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.16.2-Windows-x64-Setup.exe` 或 `TypeLeast-1.16.2-Windows-x64-Portable.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.17.0-macOS-AppleSilicon.dmg` 或 `.zip` |
+| macOS 13 以上，Intel | `TypeLeast-1.17.0-macOS-Intel.dmg` 或 `.zip` |
 
-本次共 6 个安装包，全部为 1.16.2。Mac 构建号为 8，不附带旧 Mac 1.16.0 包。文件校验清单随包提供。
+本次只发布 Mac，共 4 个安装包及软件内更新所需的校验清单，Mac 构建号为 9。Windows 源码已同步至 1.17.0；本次没有 Windows 新安装包，请从 [v1.16.2](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.16.2) 下载旧版。旧 Windows 包不包含本轮新功能，不将它改名为 1.17.0。
 
-## 验证范围
+## 验证与限制
 
-本轮服务 208 项、Mac 392 项、Windows Core 在 Mac 上 525 项测试通过，Windows 应用交叉编译通过（保留既有 WFAC010 警告）。本地化检查通过。Mac 两种架构的打包、版本与签名检查通过；Windows 便携包中的服务代码和新提示词与对应源码一致。
+服务 219 项、Mac 406 项、Windows Core 539 项测试通过。Windows 应用在 Mac 上交叉编译通过，保留原有 WFAC010 警告。中英文覆盖、脱敏和事实检查通过。Mac 使用虚构数据与隔离状态目录检查中英文、浅深色和最小窗口布局。
 
-Windows 安装文件由维护者提供，此前交接说明其使用 .NET 8 和 Wine 中的 Inno Setup 构建。本轮没有 Windows 真机安装与界面操作验证，也没有 Intel 或 Rosetta 运行验证。Windows 原生 DPAPI 分支未在本机执行。未读取真实 API Key，未使用真实模型试用新提示词，不将单元测试当作整理效果证明。托管 CI 没有额度，本次沿用维护者已授权的本机验证与手动发布方式，不声称三平台 CI 通过。
+托管 CI 没有额度，本次使用维护者已授权的本地验证与手动发布，不声称三平台 CI 通过。未完成 Windows 真机 UI、Intel/Rosetta 运行、真实外部模型效果或长期压力测试；没有读取真实 Key 或私人听写记录。独立更新签名与本地服务身份认证仍是已知缺口。
 
-## 安装与已知限制
+Mac 包没有 Apple Developer ID 公证。这台 Mac 使用原有本机证书重签更新，不导出或替换证书。Beta 会话只在内存中，空闲十五分钟过期；服务重启会丢失未生成的对话，多轮补充会增加模型用量。
 
-Mac 包没有 Apple Developer ID 公证。已有用户可在 App 内检查更新；这台 Mac 继续使用现有本机证书重签，不导出证书。Windows 安装包没有代码签名；识别引擎需要 Microsoft Visual C++ 运行库（x64）。
-
-连接测试成功只说明短请求可达，不能保证每次整理成功。已保存旧 DeepSeek 模型的用户需自行改为当前有效模型。新提示词真实效果、Windows 真机 UI、长期压力测试仍需继续验证；独立更新签名与本地服务身份认证仍是已知缺口。
-
-完整变化见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)，本轮记录见 [1.16.2 发布交接](https://github.com/FlaxXTT/Typeleast/blob/main/docs/v1.16.2-发布交接.md)。
+完整变化见 [CHANGELOG](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)，验证范围见 [设置与提示词模式验证记录](https://github.com/FlaxXTT/Typeleast/blob/main/docs/设置与提示词模式-验证记录.md)。
