@@ -143,7 +143,7 @@
 
 ## 下载
 
-Mac 和 Windows 的最新版都是 [**v1.17.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)，在同一个发布页里：
+Mac 最新版是 [**v1.17.1**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.1)。Windows 安装包待补，目前可下载 [**v1.17.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
@@ -366,7 +366,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 - Windows 安装包可以在 Linux 上构建：`apps/windows/package-wine.sh`（需要 Microsoft .NET 8 SDK、Node.js 和 wine 中的 Inno Setup，用法见文件开头）；在 Windows 上用 `apps\windows\package.ps1`。
 - Windows 独立发布脚本为 `apps\windows\publish-release.ps1`，默认会复制旧 Mac 包；运行前检查版本和参数。双端同步发布时，使用统一 `v<版本>` 标签和同版本的 6 个安装包，手动创建 Release 并提供更新程序需要的校验清单，不把旧 Mac 包当成新版。
-- 当前 CI 与 Release 工作流只支持手动触发；推送标签不会自动打包。手动运行 Release 时指定标签，例如 `v1.17.0`（需要 Actions 额度）。
+- 当前 CI 与 Release 工作流只支持手动触发；推送标签不会自动打包。手动运行 Release 时指定标签，例如 `v1.17.1`（需要 Actions 额度）。
 
 ### 目录结构
 
