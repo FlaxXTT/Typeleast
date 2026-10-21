@@ -16,6 +16,7 @@ internal sealed class BetaPanel : Window
 {
     private readonly StackPanel list = new();
     private readonly TextBlock hint;
+    private readonly TextBlock roundLabel = Theme.Text("", 12, Theme.Grey);
 
     public BetaPanel(Action skip, Action cancel)
     {
@@ -33,12 +34,12 @@ internal sealed class BetaPanel : Window
 
         var title = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
         title.Children.Add(Theme.Text(L10n.T("提示词 Beta"), 12, Theme.Accent, bold: true));
-        title.Children.Add(Theme.Text("  " + L10n.T("先回答几个问题"), 12, Theme.Grey));
+        title.Children.Add(roundLabel);
         hint = Theme.Text("", 11.5, Theme.Grey);
         hint.Margin = new Thickness(0, 10, 0, 12);
         var buttons = new DockPanel { LastChildFill = false };
         var cancelButton = Theme.Secondary(L10n.T("取消"), cancel);
-        var skipButton = Theme.Primary(L10n.T("跳过，直接生成"), skip);
+        var skipButton = Theme.Primary(L10n.T("结束补充并生成"), skip);
         DockPanel.SetDock(cancelButton, Dock.Left);
         DockPanel.SetDock(skipButton, Dock.Right);
         buttons.Children.Add(cancelButton);
@@ -46,7 +47,7 @@ internal sealed class BetaPanel : Window
 
         var content = new StackPanel();
         content.Children.Add(title);
-        content.Children.Add(list);
+        content.Children.Add(new ScrollViewer { Content = list, MaxHeight = 300, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         content.Children.Add(hint);
         content.Children.Add(buttons);
         Content = new Border
@@ -60,19 +61,30 @@ internal sealed class BetaPanel : Window
         };
     }
 
-    public void ShowQuestions(IReadOnlyList<string> questions, string hotkey)
+    public void ShowQuestions(BetaInfo info, string hotkey)
     {
         list.Children.Clear();
-        for (var i = 0; i < questions.Count; i++)
+        roundLabel.Text = "  " + L10n.T("第 {0} 轮", info.Round ?? 1);
+        list.Children.Add(Theme.Text(info.Ready == true ? L10n.T("目前信息已清楚，可以继续补充，也可以生成。") : L10n.T("先把信息说清楚"), 12, Theme.Grey));
+        if (info.Confirmed is { Count: > 0 })
         {
-            var line = Theme.Text((i + 1) + ".  " + questions[i], 13.5, Theme.Ink);
-            line.Margin = new Thickness(0, 0, 0, 6);
-            list.Children.Add(line);
+            list.Children.Add(Theme.Text(L10n.T("当前理解，请核对"), 12, bold: true));
+            foreach (var item in info.Confirmed) list.Children.Add(Theme.Text("• " + item, 12.5, Theme.Ink));
         }
-        hint.Text = L10n.T("按 {0} 口头回答，一次说完所有问题即可；没回答的会列进「待确认」。", hotkey);
+        if (info.Questions is { Count: > 0 })
+        {
+            list.Children.Add(Theme.Text(L10n.T("待补充的信息"), 12, bold: true));
+            for (var i = 0; i < info.Questions.Count; i++)
+            {
+                var line = Theme.Text((i + 1) + ".  " + info.Questions[i], 13.5, Theme.Ink);
+                line.Margin = new Thickness(0, 0, 0, 6); list.Children.Add(line);
+            }
+        }
+        if (info.Notice is { } notice) list.Children.Add(Theme.Text(Messages.BetaNotice(notice), 12, Theme.Warning));
+        hint.Text = L10n.T("按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。", hotkey);
         var area = SystemParameters.WorkArea;
-        Left = area.Right - Width - 24;
-        Top = area.Top + 24;
+        MaxHeight = Math.Max(240, area.Height - 48);
+        Left = area.Right - Width - 24; Top = area.Top + 24;
         Show();
     }
 }

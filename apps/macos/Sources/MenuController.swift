@@ -14,9 +14,11 @@ struct MenuState {
     var hotkeySummary: String = ""
     var pasteLastSummary: String = ""
     var hasLast: Bool = false
+    var strength = "prompt"
 }
 
 protocol MenuActionTarget: AnyObject {
+    func menuSetStrength(_ code: String)
     func menuToggleDictation()
     func menuCancelDictation()
     func menuPasteLast()
@@ -44,6 +46,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     private var axItem: NSMenuItem!
     private var launchItem: NSMenuItem!
     private var updateItem: NSMenuItem!
+    private var modeItems: [NSMenuItem] = []
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -73,6 +76,17 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(cancelItem)
         pasteItem = item(L10n.text("粘贴上一条转写"), #selector(onPasteLast))
         menu.addItem(pasteItem)
+        let modes = NSMenu()
+        for strength in VoiceStrength.allCases {
+            let choice = item(strength.label, #selector(onMode(_:)))
+            choice.representedObject = strength.rawValue
+            modes.addItem(choice)
+            modeItems.append(choice)
+        }
+        let modeMenu = item(L10n.text("整理档位"), nil)
+        modeMenu.submenu = modes
+        menu.addItem(modeMenu)
+
 
         hintItem = item("", nil)
         hintItem.isEnabled = false
@@ -112,6 +126,10 @@ final class MenuController: NSObject, NSMenuDelegate {
             toggleItem.title = L10n.text("整理中…")
             setIcon("ellipsis.circle")
         }
+        for item in modeItems {
+            item.state = item.representedObject as? String == s.strength ? .on : .off
+            item.isEnabled = s.phase == .idle
+        }
         toggleItem.keyEquivalent = ""
         toggleItem.isEnabled = s.phase != .thinking
         cancelItem.isHidden = s.phase != .recording
@@ -149,6 +167,9 @@ final class MenuController: NSObject, NSMenuDelegate {
         return flat.count <= n ? flat : String(flat.prefix(n)) + "…"
     }
 
+    @objc private func onMode(_ sender: NSMenuItem) {
+        if let code = sender.representedObject as? String { target?.menuSetStrength(code) }
+    }
     @objc private func onToggle() { target?.menuToggleDictation() }
     @objc private func onCheckForUpdates() { target?.menuCheckForUpdates() }
     @objc private func onCancel() { target?.menuCancelDictation() }

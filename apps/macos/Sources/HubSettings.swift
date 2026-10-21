@@ -11,30 +11,37 @@ struct SettingsPage: View {
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
 
+    private let categories = ["听写", "整理", "通用", "隐私与权限", "服务与更新"]
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                PageHeader(title: L10n.text("设置"))
-                VStack(alignment: .leading, spacing: 26) {
-                    shortcuts
-                    ModelSection()
-                    cleanup
-                    PromptifySection()
-                    language
-                    audio
-                    insertion
-                    general
-                    privacy
-                    permissions
-                    service
+        VStack(spacing: 0) {
+            PageHeader(title: L10n.text("设置"))
+            HStack(spacing: 2) {
+                ForEach(categories.indices, id: \.self) { index in
+                    FlexibleSegment(label: L10n.text(categories[index]), selected: model.settingsCategory == index) {
+                        model.settingsCategory = index
+                    }
                 }
-                .padding(.horizontal, 36)
-                .padding(.bottom, 40)
+            }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.card))
+            .padding(.horizontal, 36).padding(.bottom, 16)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    switch model.settingsCategory {
+                    case 0: shortcuts; language; audio
+                    case 1:
+                        ModelSection(); cleanup
+                        DisclosureGroup(L10n.text("提示词配置（高级）")) { PromptifySection() }
+                    case 2: insertion; general
+                    case 3: privacy; permissions
+                    default: service
+                    }
+                }
+                .padding(.horizontal, 36).padding(.bottom, 32)
             }
+            .id(model.settingsCategory)
         }
+        .onChange(of: model.settingsCategory) { _ in meter.stop() }
         .onAppear {
-            // Opening Settings must never open the microphone: the meter starts only
-            // from the "测试麦克风" button below.
             devices = AudioDevices.inputs()
             model.refreshPermissions()
         }
@@ -69,16 +76,7 @@ struct SettingsPage: View {
     }
 
     private var cleanup: some View {
-        SettingsSection(title: L10n.text("整理")) {
-            VStack(spacing: 8) {
-                ForEach(VoiceStrength.allCases, id: \.self) { strength in
-                    StrengthOption(strength: strength,
-                                   selected: model.settings.strength == strength.rawValue) {
-                        model.setting(\.strength).wrappedValue = strength.rawValue
-                    }
-                }
-            }
-            .padding(.vertical, 4)
+        SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考输入框里的内容"), detail: L10n.text("听写开始时读取光标附近的文字，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。"),
                       isOn: model.setting(\.readFieldContext))
             ToggleRow(title: L10n.text("自动学习我的更正"), detail: L10n.text("听写后你改过的词，会作为「自动添加」放进词典。"),
@@ -96,13 +94,6 @@ struct SettingsPage: View {
     }
     private var language: some View {
         SettingsSection(title: L10n.text("语言")) {
-            SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启应用后生效；不会改变听写或输出语言。")) {
-                Picker("", selection: model.setting(\.interfaceLanguage)) {
-                    Text(L10n.text("跟随系统")).tag("system")
-                    Text("简体中文").tag("zh-Hans")
-                    Text("English").tag("en")
-                }.labelsHidden().frame(width: 150)
-            }
             SettingRow(title: L10n.text("听写语言"), detail: model.speech?.canSetLanguage == false ? L10n.text("当前模型自动检测语言，不能强制指定。") : L10n.text("可选择当前模型支持的语言；不支持的语言设置使用自动识别。")) {
                 Picker("", selection: dictationLanguage) {
                     ForEach(VoiceLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue).disabled(model.speech?.languages?.contains($0.rawValue) == false) }
@@ -170,13 +161,22 @@ struct SettingsPage: View {
 
     private var general: some View {
         SettingsSection(title: L10n.text("通用")) {
+            SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启应用后生效；不会改变听写或输出语言。")) {
+                Picker("", selection: model.setting(\.interfaceLanguage)) {
+                    Text(L10n.text("跟随系统")).tag("system")
+                    Text("简体中文").tag("zh-Hans")
+                    Text("English").tag("en")
+                }.labelsHidden().frame(width: 150)
+            }
             SettingRow(title: L10n.text("外观"), detail: nil) {
-                Picker("", selection: model.setting(\.appearance, then: { model.actions?.applyGeneralSettings() })) {
-                    ForEach(AppearancePreference.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 220)
+                HStack(spacing: 2) {
+                    ForEach(AppearancePreference.allCases, id: \.self) { preference in
+                        FlexibleSegment(label: preference.label, selected: model.settings.appearance == preference) {
+                            model.setting(\.appearance, then: { model.actions?.applyGeneralSettings() }).wrappedValue = preference
+                        }
+                    }
+                }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.window))
+                    .frame(width: 220)
             }
             ToggleRow(title: L10n.text("开机时启动"), detail: loginError.isEmpty ? L10n.text("登录后自动在后台运行") : loginError,
                       isOn: Binding(get: { SMAppService.mainApp.status == .enabled }, set: { setLogin($0) }))
@@ -393,39 +393,6 @@ private struct PermissionRow: View {
                 Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
             }
         }
-    }
-}
-
-private struct StrengthOption: View {
-    let strength: VoiceStrength
-    let selected: Bool
-    let choose: () -> Void
-
-    var body: some View {
-        Button(action: choose) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 15))
-                    .foregroundColor(selected ? Theme.ink : Theme.tertiary)
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(strength.label).font(.system(size: 13.5, weight: .semibold))
-                        if strength == .prompt { Badge(text: L10n.text("推荐")) }
-                    }
-                    Text(strength.detail).font(.system(size: 12)).foregroundColor(Theme.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-            }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(selected ? Theme.window : Color.clear))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(selected ? Theme.ink.opacity(0.85) : Theme.border, lineWidth: selected ? 1.5 : 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 

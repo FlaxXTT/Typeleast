@@ -56,13 +56,17 @@ struct HubRootView: View {
                 .frame(width: 214)
                 .background(Theme.sidebar)
             Divider().opacity(0.6)
-            ZStack {
-                Theme.window
-                switch model.page {
-                case .home: HomePage()
-                case .history: HistoryPage()
-                case .dictionary: DictionaryPage()
-                case .settings: SettingsPage()
+            VStack(spacing: 0) {
+                CleanupModeBar()
+                Divider().opacity(0.5)
+                ZStack {
+                    Theme.window
+                    switch model.page {
+                    case .home: HomePage()
+                    case .history: HistoryPage()
+                    case .dictionary: DictionaryPage()
+                    case .settings: SettingsPage()
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -190,7 +194,7 @@ struct PageHeader<Trailing: View>: View {
             trailing
         }
         .padding(.horizontal, 36)
-        .padding(.top, 44)
+        .padding(.top, 24)
         .padding(.bottom, 18)
     }
 }
@@ -198,5 +202,53 @@ struct PageHeader<Trailing: View>: View {
 extension PageHeader where Trailing == EmptyView {
     init(title: String, subtitle: String? = nil) {
         self.init(title: title, subtitle: subtitle) { EmptyView() }
+    }
+}
+
+/// Always visible while browsing any main-window page.
+struct CleanupModeBar: View {
+    @EnvironmentObject var model: AppModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(L10n.text("整理档位")).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
+                Spacer()
+                Text(model.phase == .idle ? L10n.text("下一次听写生效") : L10n.text("录音或整理完成后可切换"))
+                    .font(.system(size: 11)).foregroundColor(Theme.secondary)
+            }
+            HStack(spacing: 2) {
+                ForEach(VoiceStrength.allCases, id: \.self) { strength in
+                    FlexibleSegment(label: strength.label, selected: model.settings.strength == strength.rawValue) {
+                        model.selectStrength(strength.rawValue)
+                    }
+                }
+            }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.card))
+                .disabled(model.phase != .idle)
+            Text((VoiceStrength(rawValue: model.settings.strength) ?? .prompt).shortDetail)
+                .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 24).padding(.top, 34).padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading).background(Theme.window)
+    }
+}
+
+/// Equal-width segments can wrap translated labels without widening the window.
+struct FlexibleSegment: View {
+    let label: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label).font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+                .foregroundColor(Theme.ink).multilineTextAlignment(.center)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 34)
+                .padding(.horizontal, 4)
+                .background(RoundedRectangle(cornerRadius: 7).fill(selected ? Theme.selection : Color.clear))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

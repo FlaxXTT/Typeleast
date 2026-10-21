@@ -18,8 +18,8 @@ public static class CleanupModes
 
     public static string Detail(string code) => code switch
     {
-        "promptify" => L10n.T("改写成结构化提示词，可直接发给 AI。"),
-        "promptbeta" => L10n.T("先问几个关键问题，再起草和审查提示词；较慢。"),
+        "promptify" => L10n.T("一次整理核心意图，用自然段和编号表达，不套角色等模板。"),
+        "promptbeta" => L10n.T("多轮补充背景、目标和期望，由你决定何时生成；用量随轮次增加。"),
         "off" => L10n.T("不调用整理模型，只去掉口水词。"),
         _ => L10n.T("去掉口水词、改通顺，适合日常输入。"),
     };

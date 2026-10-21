@@ -64,6 +64,7 @@ extension AppDelegate {
             return
         }
         phase = .recording
+        if pendingTranslate == nil && betaPending != nil { betaPanel.hide() }
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
@@ -121,6 +122,7 @@ extension AppDelegate {
             recordingStartedAt = nil
             recordingBar.hide()
             let msg = (error as? RecorderError)?.description ?? error.localizedDescription
+            if betaPending != nil { showBetaQuestions() }
             setHint(msg, warning: true)
             applyState()
             updateIdleBar()
@@ -139,6 +141,7 @@ extension AppDelegate {
             pendingField = nil
             recordingBar.hide()
             pendingTranslate = nil
+            if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("已取消，录音已丢弃"))
             applyState()
             updateIdleBar()
@@ -162,8 +165,10 @@ extension AppDelegate {
         applyState()
         let context = field?.context.encoded()
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
-        let llm = settings.activeLLMRoute
-        let variants = settings.variantsHeader
+        let previousBeta = betaSession == nil ? nil : betaPending
+        let llm = previousBeta?.llm ?? settings.activeLLMRoute
+        let effectiveLanguage = previousBeta?.language ?? language
+        let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
@@ -172,7 +177,7 @@ extension AppDelegate {
                 if data.count > Wav.maxBytes {
                     throw ServiceError.transport(L10n.text("录音超过 4 MiB 上限"))
                 }
-                outcome = .success(try self.client.dictateSync(wav: data, language: language,
+                outcome = .success(try self.client.dictateSync(wav: data, language: effectiveLanguage,
                                                               appBundleId: appBundleId, strength: strength,
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
@@ -182,14 +187,15 @@ extension AppDelegate {
             }
             if deleteWhenDone { try? FileManager.default.removeItem(at: audioURL) }
             DispatchQueue.main.async {
-                self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength,
-                                   audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert)
+                self.finishRequest(outcome, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
+                                   audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
             }
         }
     }
 
     func finishRequest(_ outcome: Result<DictateResponse, Error>, appBundleId: String, language: String,
-                       strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool) {
+                       strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool,
+                       llm: LLMRoute? = nil, variants: String? = nil) {
         // A failed request or Beta question does not retain an untracked raw recording.
         defer {
             if let path = audioPath, !path.hasSuffix(".sealed") {
@@ -206,12 +212,16 @@ extension AppDelegate {
         case .success(let resp):
             serviceUp = true
             model.serviceProblem = ""
-            if let sessionId = resp.beta?.sessionId, !resp.betaQuestions.isEmpty {
-                betaPending = BetaPending(sessionId: sessionId, questions: resp.betaQuestions,
-                                          appBundleId: appBundleId, field: field)
+            if let sessionId = resp.beta?.sessionId, let info = resp.beta {
+                let previous = betaPending
+                betaPending = BetaPending(sessionId: sessionId, info: info,
+                                          llm: previous?.llm ?? llm, language: previous?.language ?? language,
+                                          variants: previous == nil ? variants : previous?.variants,
+                                          appBundleId: previous?.appBundleId ?? appBundleId,
+                                          field: previous == nil ? field : previous?.field)
                 recordingBar.hide()
                 showBetaQuestions()
-                setHint(L10n.text("提示词 Beta：先回答面板里的问题"))
+                setHint(L10n.text("提示词 Beta：可继续补充或结束生成"))
                 applyState()
                 return
             }
@@ -219,7 +229,7 @@ extension AppDelegate {
             var appBundleId = appBundleId, field = field
             if let pending = betaPending, strength == VoiceStrength.promptbeta.rawValue, resp.translated == nil {
                 appBundleId = pending.appBundleId
-                field = pending.field ?? field
+                field = pending.field
                 betaPending = nil
                 betaPanel.hide()
             }
@@ -276,6 +286,7 @@ extension AppDelegate {
                 scheduleHealthRetry()
             }
             recordingBar.showResult(serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), warning: true)
+            if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("听写失败：") + (d?.description ?? error.localizedDescription), warning: true)
             applyState()
         }
@@ -383,19 +394,19 @@ extension AppDelegate {
         guard let pending = betaPending else { return }
         betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
         betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
-        betaPanel.show(questions: pending.questions, hotkey: model.hotkeyLabel)
+        betaPanel.show(info: pending.info, hotkey: model.hotkeyLabel)
     }
 
-    /// "跳过，直接生成": write the prompt now; unanswered points go to 「待确认」.
+    /// Explicitly finish clarification; unanswered points stay unconfirmed.
     func finishBetaWithoutAnswers() {
         guard phase == .idle, let pending = betaPending else { return }
         betaPanel.hide()
         phase = .thinking
         recordingBar.showThinking(detail: "")
         applyState()
-        let llm = settings.activeLLMRoute
-        let language = settings.language
-        let variants = settings.variantsHeader
+        let llm = pending.llm
+        let language = pending.language
+        let variants = pending.variants
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.betaSync(sessionId: pending.sessionId, skip: true,
@@ -404,7 +415,7 @@ extension AppDelegate {
             DispatchQueue.main.async {
                 self.finishRequest(outcome, appBundleId: pending.appBundleId, language: language,
                                    strength: VoiceStrength.promptbeta.rawValue, audioPath: nil, seconds: nil,
-                                   field: pending.field, insert: true)
+                                   field: pending.field, insert: true, llm: llm, variants: variants)
             }
         }
     }
@@ -414,7 +425,7 @@ extension AppDelegate {
         guard let pending = betaPending else { return }
         betaPending = nil
         betaPanel.hide()
-        let llm = settings.activeLLMRoute
+        let llm = pending.llm
         DispatchQueue.global(qos: .utility).async { [weak self] in
             _ = try? self?.client.betaSync(sessionId: pending.sessionId, skip: false, appBundleId: pending.appBundleId, llm: llm)
         }

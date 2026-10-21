@@ -20,10 +20,11 @@ internal sealed class MainWindow : Window
 
     private readonly AppHost host;
     private readonly Dictionary<Page, Button> nav = new();
-    private readonly ContentControl content = new();
+    private readonly ContentControl content = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private readonly TextBlock badgeText = Theme.Text("", 11.5, Theme.Grey, wrap: false);
     private readonly System.Windows.Shapes.Ellipse badgeDot = new() { Width = 7, Height = 7 };
     private readonly Dictionary<Page, IPage> pages = new();
+    private readonly Dictionary<Page, UIElement> pageSurfaces = new();
     private Page current = Page.Home;
 
     public MainWindow(AppHost host)
@@ -70,9 +71,15 @@ internal sealed class MainWindow : Window
         side.Children.Add(badge);
         root.Children.Add(side);
 
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = content, Padding = new Thickness(36, 28, 36, 28) };
-        Grid.SetColumn(scroll, 1);
-        root.Children.Add(scroll);
+        var right = new DockPanel();
+        var modeBar = ModePicker.Pills(host);
+        modeBar.Margin = new Thickness(24, 16, 24, 0);
+        DockPanel.SetDock(modeBar, Dock.Top);
+        right.Children.Add(modeBar);
+        content.Margin = new Thickness(36, 16, 36, 28);
+        right.Children.Add(content);
+        Grid.SetColumn(right, 1);
+        root.Children.Add(right);
         Content = root;
 
         Activated += (_, _) => _ = host.RefreshHealth();
@@ -133,8 +140,9 @@ internal sealed class MainWindow : Window
                 _ => new SettingsPage(host),
             };
             pages[page] = view;
+            pageSurfaces[page] = page == Page.Settings ? view.View : new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = view.View };
         }
-        content.Content = view.View;
+        content.Content = pageSurfaces[page];
         Refresh();
     }
 
@@ -179,7 +187,6 @@ internal sealed class HomePage : IPage
             Theme.Text(L10n.T("在任何输入框里按一下开始说话，再按一下结束。识别在这台电脑上完成，整理好的文字会直接出现在光标处。"), 13, Theme.Grey),
             Theme.Row(10, tryButton, hint));
         root.Children.Add(Theme.Card(hero, 24));
-        root.Children.Add(ModePicker.Pills(host));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
         root.Children.Add(stats);

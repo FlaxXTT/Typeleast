@@ -243,6 +243,10 @@ struct DynKey: CodingKey {
 struct BetaInfo: Codable, Equatable {
     var sessionId: String?
     var questions: [String]?
+    var confirmed: [String]?
+    var round: Int?
+    var ready: Bool?
+    var notice: String?
     var issues: Int?
     var patched: Bool?
 }
@@ -260,6 +264,7 @@ struct DictateResponse: Codable, Equatable {
     /// 翻译模式: the target language the text was written in.
     var translated: String?
     /// Prompt Beta asked questions: nothing to insert yet.
+    var betaWaiting: Bool { beta?.sessionId?.isEmpty == false }
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
@@ -288,6 +293,7 @@ struct DictateResponse: Codable, Equatable {
     /// When fallback is true the service has ALREADY substituted the raw transcript into
     /// "text". Guard anyway against a service that only flips the flag.
     var insertableText: String {
+        if betaWaiting { return "" }
         if !text.isEmpty { return text }
         return raw
     }
@@ -822,4 +828,34 @@ struct LLMTestResult: Codable, Equatable {
     var code: String?
     var error: String?
     var sample: String?
+}
+
+/// Pure config-file preparation. Malformed existing files must never be overwritten.
+enum PromptifyConfigFile {
+    static func editableData(existing: Data?, settings: PromptifySettings) throws -> Data {
+        if let existing = existing, existing.count > 100_000 { throw CocoaError(.fileReadTooLarge) }
+        var object: [String: Any] = [:]
+        if let existing = existing {
+            guard let parsed = try JSONSerialization.jsonObject(with: existing) as? [String: Any] else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            object = parsed
+            if let appendix = object["appendix"], !(appendix is String) { throw CocoaError(.fileReadCorruptFile) }
+            if let value = object["override"], !(value is String) && !(value is NSNull) { throw CocoaError(.fileReadCorruptFile) }
+        }
+        if object["appendix"] == nil { object["appendix"] = settings.appendix }
+        if (object["override"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false { object["override"] = settings.override ?? settings.default }
+        return try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+    }
+}
+
+enum BetaMessages {
+    static func notice(_ code: String) -> String {
+        switch code {
+        case "empty-transcript": return L10n.text("没有听到有效补充，请再说一次；已有信息保留。")
+        case "beta-input-limit": return L10n.text("本次补充超出会话容量，未被接收。请缩短后重说，或先生成已有内容。")
+        case "beta-validation": return L10n.text("结果未通过原意或事实检查，未插入。已有信息保留，可继续补充或重试生成。")
+        default: return L10n.text("本轮处理未完成，已有信息保留。请重说本次补充或重试生成。")
+        }
+    }
 }

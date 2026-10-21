@@ -395,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applyState() {
         var s = MenuState()
         s.phase = phase
+        s.strength = settings.strength
         s.elapsed = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         s.hint = hint
         s.hintWarning = hintWarning
@@ -642,6 +643,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     // MARK: MenuActionTarget
+
+    func setCleanupMode(_ code: String) {
+        guard phase == .idle, VoiceStrength(rawValue: code) != nil, code != settings.strength else { return }
+        if betaPending != nil && code != "promptbeta" {
+            let alert = NSAlert()
+            alert.messageText = L10n.text("结束本次信息补充？")
+            alert.informativeText = L10n.text("切换模式会结束这次 Beta 对话，尚未生成的内容不会插入。")
+            alert.addButton(withTitle: L10n.text("取消"))
+            alert.addButton(withTitle: L10n.text("切换模式"))
+            guard alert.runModal() == .alertSecondButtonReturn else { return }
+            dropBeta(notify: false)
+        }
+        settings.strength = code
+        model.objectWillChange.send()
+        applyState()
+    }
+    func menuSetStrength(_ code: String) { setCleanupMode(code) }
 
     func menuToggleDictation() { toggleDictation() }
     func menuCancelDictation() { cancelDictation() }

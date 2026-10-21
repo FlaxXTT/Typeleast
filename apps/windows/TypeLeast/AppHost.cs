@@ -380,6 +380,7 @@ internal sealed class AppHost
         try
         {
             wav = RetainedAudio.Load(entry.AudioId!);
+            if (request.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
                 ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants);
             if (!operations.IsCurrent(operation)) return;
@@ -407,7 +408,12 @@ internal sealed class AppHost
     /// recording bar for entries outside the main window.</summary>
     public void SetStrength(string code, bool announce = false)
     {
-        if (!CleanupModes.IsKnown(code)) return;
+        if (!CleanupModes.IsKnown(code) || Phase != DictationPhase.Idle) return;
+        if (betaSession is not null && code != "promptbeta") {
+            if (MessageBox.Show(L10n.T("切换模式会结束这次 Beta 对话，尚未生成的内容不会插入。"),
+                L10n.T("结束本次信息补充？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            DropBeta();
+        }
         if (Settings.Strength != code)
         {
             Settings.Strength = code;
@@ -460,6 +466,7 @@ internal sealed class AppHost
             return;
         }
         Phase = DictationPhase.Recording;
+        if (translating is null && betaSession is not null) betaPanel?.Hide();
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
         Raise();
@@ -498,6 +505,7 @@ internal sealed class AppHost
     {
         learner.Stop();
         ducking.Dispose(); IsMicrophoneTesting = false;
+        var preserveBeta = Phase == DictationPhase.Recording && betaSession is not null;
         var lease = operations.Active;
         operations.Cancel();
         recorder.Cancel();
@@ -505,7 +513,7 @@ internal sealed class AppHost
         hook.SwallowEscape = false;
         translating = null;
         Phase = DictationPhase.Idle;
-        DropBeta();
+        if (preserveBeta) betaPanel?.Show(); else DropBeta();
         bar.ShowResult(L10n.T("已取消"), warning: false);
         Raise();
     }
@@ -524,6 +532,7 @@ internal sealed class AppHost
             operations.Complete(operation);
             Phase = DictationPhase.Idle;
             bar.ShowResult(L10n.T("录音太短"), warning: true);
+            if (betaSession is not null) betaPanel?.Show();
             Raise();
             return;
         }
@@ -542,12 +551,13 @@ internal sealed class AppHost
         try
         {
             var requestOptions = answering is not null ? betaOptions ?? options : options;
+            if (requestOptions.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants);
             if (!operations.IsCurrent(operation)) return;
             if (ShowBetaQuestions(result))
             {
-                betaOptions = options;
+                betaOptions = requestOptions;
                 return;
             }
             if (answering is not null)
@@ -575,7 +585,11 @@ internal sealed class AppHost
         finally
         {
             System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav);
-            if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; Raise(); }
+            if (operations.IsCurrent(operation)) {
+                Phase = DictationPhase.Idle; hook.SwallowEscape = false;
+                if (betaSession is not null) betaPanel?.Show();
+                Raise();
+            }
             operations.Complete(operation);
         }
     }
@@ -638,36 +652,41 @@ internal sealed class AppHost
     /// <summary>Prompt Beta asked questions: show them and keep the session. True when shown.</summary>
     private bool ShowBetaQuestions(DictateResponse result)
     {
-        if (result.Beta?.SessionId is not { } id || result.BetaQuestions.Count == 0) return false;
+        if (result.Beta?.SessionId is not { } id) return false;
+        if (betaSession is null) { betaWindow = targetWindow; betaApp = targetApp; betaField = targetField; }
         betaSession = id;
-        betaWindow = targetWindow;
-        betaApp = targetApp;
-        betaField = targetField;
         betaPanel ??= new BetaPanel(() => _ = FinishBetaWithoutAnswers(), DropBeta);
-        betaPanel.ShowQuestions(result.BetaQuestions, HotkeyLabel);
-        bar.ShowResult(L10n.T("提示词 Beta：先回答面板里的问题"), warning: false);
+        betaPanel.ShowQuestions(result.Beta!, HotkeyLabel);
+        bar.ShowResult(L10n.T("提示词 Beta：可继续补充或结束生成"), warning: false);
         return true;
     }
 
-    /// <summary>"跳过，直接生成": write the prompt now; unanswered points go to 「待确认」.</summary>
+    /// <summary>Explicitly finish clarification; unanswered points stay unconfirmed.</summary>
     private async Task FinishBetaWithoutAnswers()
     {
         if (Phase != DictationPhase.Idle || betaSession is not { } id || betaOptions is not { } options) return;
         var operation = operations.TryBegin();
         if (operation is null) return;
         targetWindow = betaWindow; targetApp = betaApp; targetField = betaField;
-        ClearBeta();
+        betaPanel?.Hide();
         Phase = DictationPhase.Thinking; hook.SwallowEscape = true;
         bar.ShowThinking(); Raise();
         try
         {
             var result = await Client.BetaAsync(id, true, targetApp, options.Route, operation.Token, options.Variants);
-            if (operations.IsCurrent(operation)) await Deliver(result, 0, operation, options);
+            if (operations.IsCurrent(operation)) {
+                if (ShowBetaQuestions(result)) return;
+                ClearBeta();
+                await Deliver(result, 0, operation, options);
+            }
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
         catch (ServiceException e)
         {
-            if (operations.IsCurrent(operation)) bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说一遍需求") : L10n.T("生成失败，请重试"), true);
+            if (operations.IsCurrent(operation)) {
+                if (e.Status == 410) ClearBeta(); else betaPanel?.Show();
+                bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说一遍需求") : L10n.T("生成失败，请重试"), true);
+            }
         }
         finally
         {
