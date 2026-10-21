@@ -3,7 +3,7 @@
 macOS 和 Windows 两个 App 共用的后台服务（Node.js，没有界面）：
 
 - **本地识别**：SenseVoice int8，用 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 在本机运行；超过 20 秒的录音先用 Silero VAD 按停顿切分。
-- **整理**：用 App 随请求带来的模型和 API Key（任何 OpenAI 兼容接口）调用大模型，提示词是 Erduo 的《Budget Typeless DIY》；没有 Key 时返回去掉口水词的原文。
+- **整理**：用 App 随请求带来的模型和 API Key（任何 OpenAI 兼容接口）调用大模型，提示词见 `lib/prompts/cleanup.js`；没有 Key 时返回去掉口水词的原文。
 - **校验**：防止模型编造数字、日期等事实，或改换语言；不通过就退回原文。
 - **历史和词典**：保存在状态目录里。
 
@@ -81,4 +81,4 @@ node scripts/check-facts.mjs
 node scripts/tune-novelty.mjs
 ```
 
-`npm test` 不联网；装好模型后会多跑一项真实识别。`scripts/live-acceptance.mjs` 和 `scripts/erduo-acceptance.mjs` 对正在运行的服务调用真实模型（会消耗额度），需要先设置 `TYPELEAST_LLM_BASE_URL`、`TYPELEAST_LLM_MODEL`、`TYPELEAST_LLM_KEY`。
+`npm test` 不联网；装好模型后会多跑一项真实识别。`scripts/live-acceptance.mjs` 和 `scripts/cleanup-acceptance.mjs` 对正在运行的服务调用真实模型（会消耗额度），需要先设置 `TYPELEAST_LLM_BASE_URL`、`TYPELEAST_LLM_MODEL`、`TYPELEAST_LLM_KEY`。

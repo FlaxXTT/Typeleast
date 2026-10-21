@@ -98,19 +98,19 @@ test("without an API key the tidied transcript is returned and nothing is called
   assert.equal(model.calls.length, 0);
 });
 
-test("the model prompt is the vendored erduo prompt plus a dictionary addendum", async () => {
+test("the model prompt is the cleanup prompt plus a dictionary addendum", async () => {
   const model = fakeModel("Send the report on Wednesday.");
   const service = makeService({ model, config: { dictionary: ["SenseVoice", "第四批=TypeLeast"] } });
   await service.polish({ rawText: RAW, strength: "prompt", appHint: "com.apple.mail", llm: ROUTE });
   const [system, user] = model.calls[0].body.messages;
   assert.equal(system.role, "system");
   assert.match(system.content, /ASR post-processing expert/);
-  assert.match(system.content, /output in JSON format/);
-  // Our constraints ride in a delimited addendum, never woven into the upstream text.
+  assert.match(system.content, /Output ONLY a JSON object/);
+  // Our constraints ride in a delimited addendum, never woven into the prompt text.
   assert.match(system.content, /=== HARNESS ADDENDUM \(not part of the upstream prompt\) ===/);
   assert.match(system.content, /Dictionary entries are hard constraints/);
   assert.match(system.content, /SenseVoice/);
-  // The user message is the recognised text alone, as the Erduo article intends.
+  // The user message is the recognised text alone.
   assert.equal(user.role, "user");
   assert.equal(user.content, RAW);
   assert.equal(model.calls[0].body.messages.length, 2);

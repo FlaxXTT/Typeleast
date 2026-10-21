@@ -85,7 +85,7 @@ test("/health keeps the fields the native client decodes and adds failure detail
   assert.equal(before.json.queue, 0);
   assert.equal(before.json.pid, process.pid);
   assert.deepEqual(before.json.stats, { dictations: 0, polished: 0, fallback: 0, lastError: null, lastMs: null, modelCalls: 0, modelFallbacks: 0, jsonFallback: 0, jsonRecovered: 0 });
-  assert.equal(before.json.promptSource, "erduo");
+  assert.equal(before.json.promptSource, "typeleast");
   assert.equal(before.json.temperature, 0.8);
   assert.deepEqual(before.json.recentFailures, []);
 

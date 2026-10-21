@@ -1,11 +1,10 @@
 import { llmRoute, serviceBase, serviceToken } from './service-env.mjs';
 
 /**
- * Live acceptance for the vendored erduo prompt.
+ * Live acceptance for the cleanup prompt.
  *
- * The two cases with a known expected shape come from the article's own
- * few-shot examples; the rest are this project's standing cases. Start the
- * service first (npm start). Uses your API quota.
+ * Cases with a known expected shape, from the prompt's own rules and this
+ * project's standing cases. Start the service first (npm start). Uses your API quota.
  */
 const BASE = await serviceBase();
 const token = await serviceToken();
@@ -13,16 +12,16 @@ const llm = llmRoute();
 
 const CASES = [
   {
-    label: 'article few-shot 1: terminology + hesitation',
-    text: "Um… today we're gonna talk about that… that React Hooks usage, like it's in the… in the App, the performance is better than that VS Code.",
-    must: [/React Hooks/, /VS Code/],
-    mustNot: [/\bUm\b/i, /gonna/],
+    label: 'ITN: spoken numbers to digits',
+    text: '不是派森，是派森三，呃，三点一二版本，转化率提高了百分之二十五',
+    must: [/Python 3\.12/, /25%/],
+    mustNot: [/呃/],
   },
   {
-    label: 'article few-shot 2: repetition + GitHub',
-    text: 'You take that code… code and push it to GitHub, and also… also remember to check the… check the branch.',
+    label: 'repetition + GitHub capitalisation',
+    text: 'You take that code… code and push it to github, remember to check the branch.',
     must: [/GitHub/],
-    mustNot: [/code… code/, /also… also/],
+    mustNot: [/code… code/],
   },
   {
     label: 'phonetic mapping: Chinese homophones to English',
@@ -63,5 +62,5 @@ for (const item of CASES) {
   if (problems.length > 0) console.log('      !! ' + problems.join('; '));
 }
 console.log('');
-console.log(failures === 0 ? 'ALL ERDUO CASES PASSED' : failures + ' CASE(S) FAILED');
+console.log(failures === 0 ? 'ALL CLEANUP CASES PASSED' : failures + ' CASE(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

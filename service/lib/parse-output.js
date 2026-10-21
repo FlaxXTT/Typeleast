@@ -1,8 +1,10 @@
 /**
  * Parse a polishing reply into insertable text.
  *
- * The vendored erduo prompt asks the model to answer with
- * `{ "status": "ok", "text": "...", "reason": "..." }`, but a model does not
+ * The cleanup prompt asks the model to answer with
+ * `{ "status": "ok" | "uncertain", "text": "...", "reason": "..." }`, where
+ * "uncertain" still carries the model's best guess (it is used, and the usual
+ * checks still apply). A model does not
  * always comply: it may fence the JSON, add a sentence before it, or ignore the
  * schema entirely. None of those may end up in the user's document — a stray
  * brace or a duplicated answer is worse than falling back to the raw transcript.
@@ -50,7 +52,7 @@ export function parsePolishOutput(raw) {
     if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
       const status = typeof parsed.status === "string" ? parsed.status : undefined;
       const reason = typeof parsed.reason === "string" ? parsed.reason : null;
-      if (status !== undefined && status !== "ok") {
+      if (status !== undefined && status !== "ok" && status !== "uncertain") {
         return { ok: false, text: "", reason, mode: "json", failure: `status:${status}` };
       }
       if (typeof parsed.text === "string") {

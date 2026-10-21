@@ -136,7 +136,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     File.WriteAllText(file, "{ broken");
     Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
-    Eq("an old strength reads as Erduo", AppSettings.Load(file).Strength, "prompt");
+    Eq("an old strength reads as natural cleanup", AppSettings.Load(file).Strength, "prompt");
     File.WriteAllText(file, "{\"Strength\":\"promptify\"}");
     Eq("prompt mode is remembered", AppSettings.Load(file).Strength, "promptify");
 

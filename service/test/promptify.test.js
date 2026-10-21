@@ -26,8 +26,8 @@ test("提示词模式用固定的 CO-STAR 加角色结构，并写明补全和�
   assert.match(system, /可以自行补全：角色、语气与受众、输出格式/);
   assert.match(system, /绝不编造：数字、日期/);
   assert.match(system, /整节省略/);
-  assert.doesNotMatch(system, /ASR post-processing expert/, "不是 Erduo 整理的提示词");
-  assert.match(systemPromptFor({ strength: "prompt" }), /ASR post-processing expert/, "其他档仍用 Erduo");
+  assert.doesNotMatch(system, /ASR post-processing expert/, "不是自然整理的提示词");
+  assert.match(systemPromptFor({ strength: "prompt" }), /ASR post-processing expert/, "其他档仍用自然整理的提示词");
   // 词典和输入框上下文照常附加。
   assert.match(systemPromptFor({ strength: "promptify", dictionary: ["TypeLeast"] }), /HARNESS ADDENDUM[\s\S]*TypeLeast/);
 });
@@ -78,13 +78,10 @@ test("提示词模式给模型更多输出空间和时间", async () => {
   assert.equal(calls[1].max_tokens, 800, "其他档不变");
 });
 
-test("Erduo 整理多了第 5 条「统一主语」策略：接在原文之后、示例之前，原文一字不改", async () => {
-  const { ERDUO_PROMPT, SUBJECT_CONSOLIDATION, erduoSystemPrompt } = await import("../lib/prompts/erduo-budget-typeless.js");
-  const system = erduoSystemPrompt();
-  assert.ok(system.startsWith(ERDUO_PROMPT + "\n\n5. **Subject Consolidation:**"), "紧跟原文的第 4 条之后");
-  assert.ok(system.indexOf(SUBJECT_CONSOLIDATION) < system.indexOf("# Few-Shot Examples"), "在示例之前");
-  assert.match(SUBJECT_CONSOLIDATION, /Principle:[\s\S]*Execution:[\s\S]*Cases:/, "与原文同样的三段写法");
-  assert.match(systemPromptFor({ strength: "prompt" }), /Subject Consolidation/);
+test("自然整理包含「统一主语」规则，在示例之前；提示词模式不受影响", () => {
+  const system = systemPromptFor({ strength: "prompt" });
+  assert.ok(system.indexOf("## 6. Subject Consolidation") < system.indexOf("# Few-Shot Examples"), "在示例之前");
+  assert.match(system, /Subject Consolidation/);
   assert.doesNotMatch(systemPromptFor({ strength: "promptify" }), /Subject Consolidation/, "提示词模式不受影响");
 });
 
