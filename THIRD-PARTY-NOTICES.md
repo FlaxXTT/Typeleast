@@ -12,7 +12,7 @@ TypeLeast uses or downloads the following work. Each keeps its own licence.
 | [NAudio](https://github.com/naudio/NAudio) (`NAudio.WinMM`, `NAudio.Core`) | Windows app, microphone capture | MIT |
 | .NET runtime (self-contained Windows build) | Windows app | MIT |
 | [Inter](https://github.com/rsms/inter) 4.1 (Regular, Medium, SemiBold, Bold) and Inter Display (Regular, SemiBold, Bold) | Windows app, interface font (embedded in `TypeLeast.exe`) | SIL Open Font License 1.1 (`licenses\Inter-OFL.txt`) |
-| [Noto Sans SC](https://github.com/notofonts/noto-cjk) (Regular, Medium, Bold), subset to GB2312 plus punctuation and the app's own text | Windows app, Chinese interface font (embedded in `TypeLeast.exe`); other characters use Microsoft YaHei UI | SIL Open Font License 1.1 (`licenses\NotoSansSC-OFL.txt`) |
+| [Noto Sans SC](https://github.com/notofonts/noto-cjk) (Regular, Medium, Bold), subset to GB2312 plus punctuation and the app's own text | Windows app, Chinese interface font (embedded in `TypeLeast.exe`); other characters use Microsoft YaHei UI. Both fonts are modified: wider character spacing (+0.03 em Inter, +0.01 em Inter Display, +0.06 em Noto Sans SC) and renamed "TypeLeast Inter", "TypeLeast Inter Display" and "TypeLeast Noto Sans SC" | SIL Open Font License 1.1 (`licenses\NotoSansSC-OFL.txt`) |
 | Microsoft Visual C++ runtime (`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`) | Windows: next to the sherpa-onnx DLLs | Microsoft Visual C++ Redistributable licence |
 
 ## Downloaded by the app on request (not part of this repository or the packages)
