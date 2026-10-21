@@ -18,5 +18,7 @@
 *.wav    binary
 *.onnx   binary
 *.ico    binary
+*.ttf    binary
+*.otf    binary
 *.dmg    binary
 *.zip    binary

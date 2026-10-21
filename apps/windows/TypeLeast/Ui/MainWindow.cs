@@ -107,16 +107,16 @@ internal sealed class MainWindow : Window
         { host.Settings.WindowLeft = Left; host.Settings.WindowTop = Top; host.Settings.WindowWidth = ActualWidth; host.Settings.WindowHeight = ActualHeight; host.SaveSettings(); }
         Hide();
     }
-    private static UIElement BrandIcon()
+    internal static UIElement BrandIcon(int size = 26)
     {
         try
         {
             using var resource = typeof(MainWindow).Assembly.GetManifestResourceStream("TypeLeast.Icon");
             using var icon = resource is not null ? new System.Drawing.Icon(resource) : System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
-            var bitmap = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon!.Handle, Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromWidthAndHeight(26, 26));
-            bitmap.Freeze(); return new Image { Width = 26, Height = 26, Source = bitmap };
+            var bitmap = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon!.Handle, Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromWidthAndHeight(size, size));
+            bitmap.Freeze(); return new Image { Width = size, Height = size, Source = bitmap };
         }
-        catch (Exception) { return Theme.Text("◉", 24); }
+        catch (Exception) { return Theme.Text("◉", size - 2); }
     }
 
     public void ShowPage(Page page)
@@ -162,7 +162,7 @@ internal sealed class HomePage : IPage
     private readonly TextBlock hint = Theme.Text("", 12.5, Theme.Grey);
     private readonly StackPanel checklist = new();
     private readonly Border setupCard;
-    private readonly WrapPanel stats = new();
+    private readonly System.Windows.Controls.Primitives.UniformGrid stats = new() { Columns = 4 };
     private readonly StackPanel recent = new();
     private readonly TextBlock engine = Theme.Text("", 12, Theme.Grey);
     private readonly ContentControl keycaps = new();
@@ -179,6 +179,7 @@ internal sealed class HomePage : IPage
             Theme.Text(L10n.T("在任何输入框里按一下开始说话，再按一下结束。识别在这台电脑上完成，整理好的文字会直接出现在光标处。"), 13, Theme.Grey),
             Theme.Row(10, tryButton, hint));
         root.Children.Add(Theme.Card(hero, 24));
+        root.Children.Add(ModePicker.Pills(host));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
         root.Children.Add(stats);
@@ -189,7 +190,7 @@ internal sealed class HomePage : IPage
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.SettingRow(L10n.T("最近历史"), null,
             Theme.Secondary(L10n.T("查看全部"), () => window.ShowPage(MainWindow.Page.History))), recent)));
         root.Children.Add(Theme.Card(engine));
-        stats.SizeChanged += (_, _) => { foreach (FrameworkElement tile in stats.Children) tile.Width = Math.Max(130, (stats.ActualWidth - 16) / (L10n.Language == "en" || stats.ActualWidth < 650 ? 2 : 4) - 8); };
+        stats.SizeChanged += (_, _) => LayoutStats();
     }
 
     public void Refresh()
@@ -230,14 +231,24 @@ internal sealed class HomePage : IPage
             (L10n.T("听写次数"), count.ToString("N0")) })
         {
             var tile = Theme.Card(Theme.Stack(8, Theme.Text(title, 12, Theme.Grey), Theme.Text(value, 21, bold: true)));
-            tile.Width = Math.Max(130, (stats.ActualWidth - 16) / (L10n.Language == "en" || stats.ActualWidth < 650 ? 2 : 4) - 8);
-            tile.Margin = new Thickness(0, 0, 8, 12); stats.Children.Add(tile);
+            stats.Children.Add(tile);
         }
+        LayoutStats();
         stats.ToolTip = L10n.T("根据保留的历史估算；假设键盘输入每分钟 40 字。并非精确测量或完整终身累计。");
         recent.Children.Clear();
         foreach (var entry in host.History.Entries.Take(3)) recent.Children.Add(Theme.Text(entry.Time.ToLocalTime().ToString("g", L10n.Culture) + "  " + entry.Text, 13));
         if (recent.Children.Count == 0) recent.Children.Add(Theme.Text(L10n.T("还没有听写记录。"), 13, Theme.Grey));
         activityCard.Child = ActivityView.Build(host.Activity, DateTime.Now);
+    }
+
+    /// <summary>Two or four equal tiles (two in English, or when narrow) with 8 px gaps, filling the row.</summary>
+    private void LayoutStats()
+    {
+        var columns = L10n.Language == "en" || (stats.ActualWidth > 0 && stats.ActualWidth < 650) ? 2 : 4;
+        stats.Columns = columns;
+        for (var i = 0; i < stats.Children.Count; i++)
+            if (stats.Children[i] is FrameworkElement tile)
+                tile.Margin = new Thickness(i % columns == 0 ? 0 : 4, 0, i % columns == columns - 1 ? 0 : 4, 12);
     }
 
     private static Grid Item(bool done, string title, string detail, (string Label, Action Run)? action, bool showActionWhenDone = false)
