@@ -13,12 +13,14 @@ namespace TypeLeast.Ui;
 internal static class Theme
 {
     /// <summary>Inter for Latin text and Noto Sans SC for Chinese (both SIL OFL, embedded); characters
-    /// outside the Chinese subset fall back to the system's Microsoft YaHei UI.</summary>
+    /// outside the Chinese subset fall back to the system's Microsoft YaHei UI. WPF has no letter
+    /// spacing, so the embedded copies are widened and renamed "TypeLeast …": +0.03 em per Latin
+    /// character, +0.06 em per Chinese character.</summary>
     public static readonly FontFamily Font = new(new Uri("pack://application:,,,/TypeLeast;component/"),
-        "./Fonts/#Inter, ./Fonts/#Noto Sans SC, Microsoft YaHei UI, Segoe UI");
-    /// <summary>Titles from 20 px up: Inter Display, drawn tighter for large sizes (as iOS switches to its Display face).</summary>
+        "./Fonts/#TypeLeast Inter, ./Fonts/#TypeLeast Noto Sans SC, Microsoft YaHei UI, Segoe UI");
+    /// <summary>Titles from 20 px up: Inter Display (+0.01 em), tighter for large sizes, as iOS switches to its Display face.</summary>
     public static readonly FontFamily DisplayFont = new(new Uri("pack://application:,,,/TypeLeast;component/"),
-        "./Fonts/#Inter Display, ./Fonts/#Noto Sans SC, Microsoft YaHei UI, Segoe UI");
+        "./Fonts/#TypeLeast Inter Display, ./Fonts/#TypeLeast Noto Sans SC, Microsoft YaHei UI, Segoe UI");
     private const double DisplaySize = 20;
 
     static Theme()
@@ -244,6 +246,8 @@ internal static class Theme
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
             TextTrimming = wrap ? TextTrimming.None : TextTrimming.CharacterEllipsis,
         };
+        // Text that can wrap gets 1.5× line height, so notes and descriptions are not cramped.
+        if (wrap) { block.LineHeight = Math.Round(size * 1.5); block.LineStackingStrategy = LineStackingStrategy.BlockLineHeight; }
         // Large text is mostly titles and statistics: equal-width digits keep numbers from shifting.
         if (size >= DisplaySize) System.Windows.Documents.Typography.SetNumeralAlignment(block, FontNumeralAlignment.Tabular);
         return block;
