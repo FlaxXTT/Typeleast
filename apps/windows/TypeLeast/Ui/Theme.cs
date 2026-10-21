@@ -64,14 +64,16 @@ internal static class Theme
         {
             app.Resources["TL.Ink"] = Ink; app.Resources["TL.Card"] = CardFill; app.Resources["TL.Line"] = Line;
             app.Resources["TL.Success"] = Success; app.Resources["TL.Tertiary"] = Tertiary; app.Resources["TL.Grey"] = Grey;
+            app.Resources["TL.Background"] = Background; app.Resources["TL.Selected"] = Selected;
             if (app.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] is null && ScrollBarStyle() is { } bar)
                 app.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = bar;
             foreach (var type in new[] { typeof(TextBox), typeof(PasswordBox), typeof(ComboBox), typeof(ComboBoxItem), typeof(CheckBox) })
             {
                 var style = new Style(type);
-                style.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("TL.Ink"))); style.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("TL.Card")));
+                style.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("TL.Ink"))); style.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension(type == typeof(TextBox) || type == typeof(PasswordBox) || type == typeof(ComboBox) ? "TL.Background" : "TL.Card")));
                 style.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension("TL.Line")));
                 if (type == typeof(ComboBox)) style.Setters.Add(new Setter(Control.TemplateProperty, ComboTemplate()));
+                if (FieldTemplate(type) is { } template) style.Setters.Add(new Setter(Control.TemplateProperty, template));
                 app.Resources[type] = style;
             }
             app.Resources[SystemColors.WindowBrushKey] = CardFill; app.Resources[SystemColors.WindowTextBrushKey] = Ink;
@@ -85,6 +87,50 @@ internal static class Theme
         var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
         brush.Freeze();
         return brush;
+    }
+
+    /// <summary>Rounded text and password fields (8 px corners; the border darkens on hover and focus), and
+    /// rounded rows in drop-down lists. Null (the system look stays) if the markup cannot be loaded.</summary>
+    private static ControlTemplate? FieldTemplate(Type type)
+    {
+        const string ns = "xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"";
+        const string triggers = """
+  <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource TL.Tertiary}"/></Trigger>
+    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource TL.Ink}"/></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Box" Property="Opacity" Value="0.5"/></Trigger>
+  </ControlTemplate.Triggers>
+""";
+        string? xaml = type == typeof(TextBox) ? $"""
+<ControlTemplate {ns} TargetType="TextBox">
+  <Border x:Name="Box" CornerRadius="8" Background="{"{"}TemplateBinding Background{"}"}" BorderBrush="{"{"}TemplateBinding BorderBrush{"}"}" BorderThickness="{"{"}TemplateBinding BorderThickness{"}"}" SnapsToDevicePixels="True">
+    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="{"{"}TemplateBinding ScrollViewer.VerticalScrollBarVisibility{"}"}"/>
+  </Border>
+{triggers}</ControlTemplate>
+"""
+            : type == typeof(PasswordBox) ? $"""
+<ControlTemplate {ns} TargetType="PasswordBox">
+  <Border x:Name="Box" CornerRadius="8" Background="{"{"}TemplateBinding Background{"}"}" BorderBrush="{"{"}TemplateBinding BorderBrush{"}"}" BorderThickness="{"{"}TemplateBinding BorderThickness{"}"}" SnapsToDevicePixels="True">
+    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+  </Border>
+{triggers}</ControlTemplate>
+"""
+            : type == typeof(ComboBoxItem) ? $"""
+<ControlTemplate {ns} TargetType="ComboBoxItem">
+  <Border x:Name="Row" CornerRadius="6" Margin="0,1" Padding="8,5" Background="Transparent">
+    <ContentPresenter/>
+  </Border>
+  <ControlTemplate.Triggers>
+    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Row" Property="Background" Value="{"{"}DynamicResource TL.Selected{"}"}"/></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter Property="FontWeight" Value="SemiBold"/></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Row" Property="Opacity" Value="0.4"/></Trigger>
+  </ControlTemplate.Triggers>
+</ControlTemplate>
+"""
+            : null;
+        if (xaml is null) return null;
+        try { return (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml); }
+        catch (Exception) { Log.Write("theme.field.fail", type.Name); return null; }
     }
 
     /// <summary>A thin rounded scrollbar in the palette: no arrow buttons, transparent track, darker while dragged.
@@ -161,7 +207,7 @@ internal static class Theme
         toggle.SetBinding(Control.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
         toggle.SetBinding(Control.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
         var buttonTemplate = new ControlTemplate(typeof(System.Windows.Controls.Primitives.ToggleButton));
-        var border = new FrameworkElementFactory(typeof(Border)); border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        var border = new FrameworkElementFactory(typeof(Border)); border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
         border.SetValue(Border.BorderThicknessProperty, new Thickness(1)); border.SetValue(Border.PaddingProperty, new Thickness(8, 5, 8, 5));
         border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
         border.SetBinding(Border.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
@@ -176,8 +222,10 @@ internal static class Theme
         popup.SetValue(System.Windows.Controls.Primitives.Popup.PlacementProperty, System.Windows.Controls.Primitives.PlacementMode.Bottom);
         popup.SetValue(System.Windows.Controls.Primitives.Popup.AllowsTransparencyProperty, true);
         popup.SetBinding(System.Windows.Controls.Primitives.Popup.IsOpenProperty, new System.Windows.Data.Binding("IsDropDownOpen") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-        var popupBorder = new FrameworkElementFactory(typeof(Border)); popupBorder.SetResourceReference(Border.BackgroundProperty, "TL.Card"); popupBorder.SetResourceReference(Border.BorderBrushProperty, "TL.Line");
+        var popupBorder = new FrameworkElementFactory(typeof(Border)); popupBorder.SetResourceReference(Border.BackgroundProperty, "TL.Background"); popupBorder.SetResourceReference(Border.BorderBrushProperty, "TL.Line");
         popupBorder.SetValue(Border.BorderThicknessProperty, new Thickness(1)); popupBorder.SetValue(FrameworkElement.MaxHeightProperty, 320.0);
+        popupBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(10)); popupBorder.SetValue(Border.PaddingProperty, new Thickness(4));
+        popupBorder.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 4, 0, 0));
         popupBorder.SetBinding(FrameworkElement.MinWidthProperty, new System.Windows.Data.Binding("ActualWidth") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
         var scroll = new FrameworkElementFactory(typeof(ScrollViewer)); scroll.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
         scroll.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter))); popupBorder.AppendChild(scroll); popup.AppendChild(popupBorder); grid.AppendChild(popup);
@@ -284,8 +332,8 @@ internal static class Theme
             Width = width,
             FontFamily = Font,
             FontSize = 13,
-            Padding = new Thickness(6, 4, 6, 4),
-            BorderBrush = Line, Background = CardFill, Foreground = Ink,
+            Padding = new Thickness(8, 5, 8, 5),
+            BorderBrush = Line, Background = Background, Foreground = Ink,
             VerticalContentAlignment = VerticalAlignment.Center,
             ToolTip = tooltip,
         };
@@ -293,7 +341,7 @@ internal static class Theme
 
     public static ComboBox Choice(double width)
     {
-        return new ComboBox { Background = CardFill, Foreground = Ink, BorderBrush = Line, Width = width, FontFamily = Font, FontSize = 13, Padding = new Thickness(6, 4, 6, 4) };
+        return new ComboBox { Background = Background, Foreground = Ink, BorderBrush = Line, Width = width, FontFamily = Font, FontSize = 13, Padding = new Thickness(6, 4, 6, 4) };
     }
 
     /// <summary>A settings line: title and detail on the left, controls on the right.</summary>
@@ -355,7 +403,7 @@ internal static class Theme
     {
         var row = new WrapPanel();
         foreach (var key in label.Split('+')) row.Children.Add(new Border { Background = Background, BorderBrush = Line, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(5), Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 4, 0), Child = Text(key.Trim(), 12, bold: true) });
+            CornerRadius = new CornerRadius(7), Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 4, 0), Child = Text(key.Trim(), 12, bold: true) });
         return row;
     }
 

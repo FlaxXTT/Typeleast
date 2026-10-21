@@ -59,7 +59,7 @@ internal static class ModePicker
             DockPanel.SetDock(mark, Dock.Right); title.Children.Add(mark); title.Children.Add(Theme.Text(CleanupModes.Title(code), 14, bold: true));
             var card = new Border
             {
-                CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 12, 14, 12), Cursor = Cursors.Hand,
+                CornerRadius = new CornerRadius(12), Padding = new Thickness(14, 12, 14, 12), Cursor = Cursors.Hand,
                 Margin = new Thickness(i % 2 == 0 ? 0 : 5, 0, i % 2 == 0 ? 5 : 0, 10),
                 Child = Theme.Stack(4, title, Theme.Text(CleanupModes.Detail(code), 12, Theme.Grey)),
             };
