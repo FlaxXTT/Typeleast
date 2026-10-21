@@ -383,6 +383,7 @@ public static class L10n
         ["用你自己的 API Key 调用大模型，把识别出的话整理成通顺的书面语。Key 只存在这台电脑的 Windows 凭据管理器里，只发给本机的 TypeLeast 服务。"] = "Use your API key to clean up speech. The key stays in Windows Credential Manager and is passed to the local service for the provider request.",
         ["界面语言"] = "Interface language",
         ["窗口已切换，已复制到剪贴板"] = "Window changed. Copied to clipboard",
+        ["就绪 · 按 {0} 听写"] = "Ready · press {0} to dictate",
         ["⚠ 正在使用你修改的提示词"] = "⚠ Using your edited prompt",
         ["例如：「所有提示词都用英文写」「输出格式一律用 Markdown 表格」。"] = "For example: \"Write every prompt in English\" or \"Always use a Markdown table for the output format\".",
         ["保存补充要求"] = "Save additions",

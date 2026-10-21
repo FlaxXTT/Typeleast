@@ -107,16 +107,16 @@ internal sealed class MainWindow : Window
         { host.Settings.WindowLeft = Left; host.Settings.WindowTop = Top; host.Settings.WindowWidth = ActualWidth; host.Settings.WindowHeight = ActualHeight; host.SaveSettings(); }
         Hide();
     }
-    private static UIElement BrandIcon()
+    internal static UIElement BrandIcon(int size = 26)
     {
         try
         {
             using var resource = typeof(MainWindow).Assembly.GetManifestResourceStream("TypeLeast.Icon");
             using var icon = resource is not null ? new System.Drawing.Icon(resource) : System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
-            var bitmap = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon!.Handle, Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromWidthAndHeight(26, 26));
-            bitmap.Freeze(); return new Image { Width = 26, Height = 26, Source = bitmap };
+            var bitmap = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon!.Handle, Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromWidthAndHeight(size, size));
+            bitmap.Freeze(); return new Image { Width = size, Height = size, Source = bitmap };
         }
-        catch (Exception) { return Theme.Text("◉", 24); }
+        catch (Exception) { return Theme.Text("◉", size - 2); }
     }
 
     public void ShowPage(Page page)

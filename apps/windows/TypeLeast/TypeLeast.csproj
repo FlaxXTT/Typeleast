@@ -21,4 +21,9 @@
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Interface fonts (SIL OFL 1.1), embedded; their licences ship beside the app. -->
+    <Resource Include="Fonts\*.ttf;Fonts\*.otf" />
+    <None Include="Fonts\*-OFL.txt" Link="licenses\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
