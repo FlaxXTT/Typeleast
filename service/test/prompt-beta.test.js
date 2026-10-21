@@ -113,14 +113,14 @@ test('malformed review is not treated as approval; user can retry without losing
 
 test('a patch is reviewed again before it can be inserted', async () => {
   let reviews = 0;
-  const p = provider({ review: () => ++reviews === 1 ? '{"issues":[{"type":"invented","fix":"remove expansion"}]}' : '{"issues":[]}' });
+  const p = provider({ review: () => ++reviews === 1 ? '{"issues":[{"type":"invented","quote":"详细纪要","fix":"remove expansion"}]}' : '{"issues":[]}' });
   const s = serviceFor(p), a = await send(s), done = await finish(s, a.beta.sessionId);
   assert.equal(done.text, DRAFT); assert.equal(reviews, 2);
   assert.deepEqual(p.calls.map(c => c.stage), ['interview', 'draft', 'review', 'patch', 'review']);
 });
 
 test('remaining unsupported goals or facts block insertion and retain the session', async () => {
-  const p = provider({ review: '{"issues":[{"type":"invented","fix":"remove new feature"}]}' });
+  const p = provider({ review: '{"issues":[{"type":"invented","quote":"详细纪要","fix":"remove new feature"}]}' });
   const history = [], s = serviceFor(p, history), a = await send(s), r = await finish(s, a.beta.sessionId);
   assert.equal(r.text, ''); assert.equal(r.beta.notice, 'beta-validation'); assert.equal(history.length, 0);
 });
@@ -207,4 +207,17 @@ test('the WAV pipeline preserves clarification metadata and suppresses silent ra
   s.recognizer.transcribe = async () => ({ text: '<sil>' });
   const empty = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE });
   assert.equal(empty.raw, ''); assert.equal(empty.text, ''); assert.equal(p.calls.length, 1);
+});
+
+
+test('review must cite the current draft, not an old user statement', async () => {
+  const p = provider({ review: '{"issues":[{"type":"contradiction","quote":"先给客户看","fix":"confirm audience"}]}' });
+  const history = [], service = serviceFor(p, history);
+  const first = await send(service);
+  const result = await finish(service, first.beta.sessionId);
+  assert.equal(result.text, '');
+  assert.equal(result.beta.notice, 'output-format');
+  assert.equal(result.beta.sessionId, first.beta.sessionId);
+  assert.equal(history.length, 0);
+  assert.equal(p.calls.some(c => c.stage === 'patch'), false, 'do not patch from invalid review evidence');
 });
