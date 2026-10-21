@@ -122,14 +122,6 @@ internal sealed class SettingsPage : IPage
             SyncTranslateKey();
         };
 
-        var strength = Theme.Choice(160);
-        strength.Items.Add(new ComboBoxItem { Content = L10n.T("自然整理"), Tag = "prompt" });
-        strength.Items.Add(new ComboBoxItem { Content = L10n.T("提示词模式"), Tag = "promptify" });
-        strength.Items.Add(new ComboBoxItem { Content = L10n.T("提示词 Beta"), Tag = "promptbeta" });
-        strength.Items.Add(new ComboBoxItem { Content = L10n.T("原话转写"), Tag = "off" });
-        strength.SelectedIndex = s.Strength switch { "promptify" => 1, "promptbeta" => 2, "off" => 3, _ => 0 };
-        strength.SelectionChanged += (_, _) => { if (strength.SelectedItem is ComboBoxItem { Tag: string v }) { s.Strength = v; host.SaveSettings(); } };
-
         var mic = Theme.Choice(220);
         mic.Items.Add(new ComboBoxItem { Content = L10n.T("系统默认麦克风"), Tag = -1 });
         var devices = Array.Empty<string>();
@@ -206,9 +198,9 @@ internal sealed class SettingsPage : IPage
                 Theme.SettingRow(L10n.T("录音时静音其他声音"), Theme.Text(L10n.T("临时静音已有播放会话，结束后恢复；新启动的播放会话可能不受影响。"), 12, Theme.Grey), Theme.Toggle(s.MuteOtherAudio, v => { s.MuteOtherAudio = v; host.SaveSettings(); }))));
         var prompts = new PromptifyPanel(host);
         AddTab(L10n.T("整理"),
+            Section(L10n.T("整理档位"), Theme.Text(L10n.T("下一次听写生效。也可以在首页、托盘菜单或任务栏按钮的右键菜单中切换。"), 12, Theme.Grey), Spacer(8), ModePicker.Cards(host)),
             modelSection,
-            Section(L10n.T("整理方式"),
-                Theme.SettingRow(L10n.T("整理档位"), Theme.Text(L10n.T("自然整理、提示词、提示词 Beta 或原话转写；Beta 分阶段处理，耗时更长。"), 12, Theme.Grey), strength),
+            Section(L10n.T("整理选项"),
                 Theme.SettingRow(L10n.T("参考输入框内容"), Theme.Text(L10n.T("仅获取当前字段的有限上下文；密码框和已知凭据应用不采集。不能识别一切敏感信息。"), 12, Theme.Grey), Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("自动学习更正"), Theme.Text(L10n.T("插入后最多观察同一字段 30 秒，仅学习有限术语更正，不记录键盘输入。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("格式化编号列表"), Theme.Text(L10n.T("同时提供富文本与纯文本；终端始终使用过滤后的纯文本。"), 12, Theme.Grey), Theme.Toggle(s.FormattedLists, v => { s.FormattedLists = v; host.SaveSettings(); }))),
@@ -274,22 +266,7 @@ internal sealed class SettingsPage : IPage
     private void AddTab(string title, params UIElement[] cards)
     {
         var index = tabs.Count;
-        var button = new Button
-        {
-            Content = title, FontFamily = Theme.Font, FontSize = 13, Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 0, 6, 6),
-            Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(0),
-        };
-        var template = new ControlTemplate(typeof(Button));
-        var border = new FrameworkElementFactory(typeof(Border));
-        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
-        border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-        border.SetBinding(Border.PaddingProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
-        presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-        border.AppendChild(presenter);
-        template.VisualTree = border;
-        button.Template = template;
-        button.Click += (_, _) => ShowTab(index);
+        var button = Theme.PillButton(title, () => ShowTab(index));
         tabs.Add((button, cards));
         tabBar.Children.Add(button);
     }
@@ -301,12 +278,11 @@ internal sealed class SettingsPage : IPage
         foreach (var card in tabs[index].Cards) tabContent.Children.Add(card);
         for (var i = 0; i < tabs.Count; i++)
         {
-            var (button, _) = tabs[i];
-            button.Background = i == index ? Theme.Ink : Theme.CardFill;
-            button.Foreground = i == index ? Theme.InkInverse : Theme.Ink;
-            button.FontWeight = i == index ? FontWeights.SemiBold : FontWeights.Normal;
+            Theme.SetPillSelected(tabs[i].Button, i == index);
         }
     }
+
+    private static UIElement Spacer(double height) => new Border { Height = height };
 
     private static Border Section(string title, params UIElement[] rows)
     {

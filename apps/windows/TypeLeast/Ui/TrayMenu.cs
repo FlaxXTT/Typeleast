@@ -61,20 +61,27 @@ internal sealed class TrayMenu : Window
         var recording = host.Phase == AppHost.DictationPhase.Recording;
         var busy = host.Phase != AppHost.DictationPhase.Idle;
         Separator();
-        Item("", recording ? L10n.T("结束听写") : L10n.T("开始听写"), host.HotkeyLabel, host.Phase != AppHost.DictationPhase.Thinking, host.Toggle);
-        Item("", L10n.T("开始翻译"), host.Settings.TranslateHotkey is { } t ? TapDetector.Label(t) : "", !busy, host.ToggleTranslate);
-        Item("", L10n.T("取消"), "Esc", busy, host.Cancel);
+        Item("\uE720", recording ? L10n.T("结束听写") : L10n.T("开始听写"), host.HotkeyLabel, host.Phase != AppHost.DictationPhase.Thinking, host.Toggle);
+        Item("\uE774", L10n.T("开始翻译"), host.Settings.TranslateHotkey is { } t ? TapDetector.Label(t) : "", !busy, host.ToggleTranslate);
+        Item("\uE711", L10n.T("取消"), "Esc", busy, host.Cancel);
         Separator();
-        Item("", L10n.T("粘贴上一条"), PasteShortcut(host.Settings.PasteLastShortcut), !busy, () => _ = host.PasteLast());
-        Item("", L10n.T("复制上一条"), "", true, host.CopyLast);
+        Heading(L10n.T("整理档位"));
+        foreach (var code in CleanupModes.Codes)
+        {
+            var chosen = code == host.Settings.Strength;
+            Item(chosen ? "\uE73E" : "", CleanupModes.Title(code), "", true, () => host.SetStrength(code, announce: true), chosen);
+        }
         Separator();
-        Item("", L10n.T("打开 TypeLeast"), "", true, () => host.ShowWindow(MainWindow.Page.Home));
-        Item("", L10n.T("历史"), "", true, () => host.ShowWindow(MainWindow.Page.History));
-        Item("", L10n.T("词典"), "", true, () => host.ShowWindow(MainWindow.Page.Dictionary));
-        Item("", L10n.T("设置"), "", true, () => host.ShowWindow(MainWindow.Page.Settings));
+        Item("\uE77F", L10n.T("粘贴上一条"), PasteShortcut(host.Settings.PasteLastShortcut), !busy, () => _ = host.PasteLast());
+        Item("\uE8C8", L10n.T("复制上一条"), "", true, host.CopyLast);
         Separator();
-        Item("", L10n.T("重新启动本地服务"), "", true, host.RestartService);
-        Item("", L10n.T("退出 TypeLeast"), "", true, host.Quit);
+        Item("\uE80F", L10n.T("打开 TypeLeast"), "", true, () => host.ShowWindow(MainWindow.Page.Home));
+        Item("\uE81C", L10n.T("历史"), "", true, () => host.ShowWindow(MainWindow.Page.History));
+        Item("\uE82D", L10n.T("词典"), "", true, () => host.ShowWindow(MainWindow.Page.Dictionary));
+        Item("\uE713", L10n.T("设置"), "", true, () => host.ShowWindow(MainWindow.Page.Settings));
+        Separator();
+        Item("\uE72C", L10n.T("重新启动本地服务"), "", true, host.RestartService);
+        Item("\uE7E8", L10n.T("退出 TypeLeast"), "", true, host.Quit);
 
         Content = new Border
         {
@@ -133,14 +140,22 @@ internal sealed class TrayMenu : Window
 
     private void Separator() => rows.Children.Add(new Border { Height = 1, Background = Theme.Line, Margin = new Thickness(10, 5, 10, 5) });
 
-    private void Item(string glyph, string label, string shortcut, bool enabled, Action action)
+    private void Heading(string text)
+    {
+        var label = Theme.Text(text, 11.5, Theme.Grey, wrap: false);
+        label.Margin = new Thickness(10, 4, 10, 2);
+        rows.Children.Add(label);
+    }
+
+    private void Item(string glyph, string label, string shortcut, bool enabled, Action action, bool chosen = false)
     {
         var grid = new Grid { Height = 34 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var icon = new TextBlock { Text = glyph, FontFamily = Icons, FontSize = 15, Foreground = Theme.Grey, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left };
-        var text = Theme.Text(label, 13.5, Theme.Ink, wrap: false);
+        var text = Theme.Text(label, 13.5, Theme.Ink, bold: chosen, wrap: false);
+        if (chosen) icon.Foreground = Theme.Ink;
         text.VerticalAlignment = VerticalAlignment.Center;
         if (HasIcons) grid.Children.Add(icon);
         Grid.SetColumn(text, 1); grid.Children.Add(text);
