@@ -1,46 +1,33 @@
 TypeLeast：按快捷键说话，本机识别，再用你自己的整理模型处理文字并插入光标处。
 
-这个版本同时提供 **Windows 1.16.2** 和当前的 **Mac 1.16.0** 安装包（Mac 没有变化），按你的电脑选择下载。
+## 1.16.2 的变化
+
+- **两端自然整理同步新提示词**，正文按维护者提供的版本保留。数字、百分比、日期和版本号的转换可通过防编造检查；模型返回 `uncertain` 时使用其最佳猜测，结果仍须通过校验。
+- Mac 同步 DeepSeek 官方预设修正，模型提示改为 `deepseek-flash`；已保存的地址、模型和 Key 不自动改写。
+- Windows 修复部分应用只复制不粘贴、录音开头截断等问题；处理中可取消，整理失败显示分类原因。
+- Windows 更新录音条、波形、字体、提示音、圆角和五页设置；首页、设置、托盘及任务栏菜单可切换整理档位。
+- Windows 包含翻译、语言变体、活动热力图、历史筛选与同一录音重试、词典来源与 CSV 导入等此前已合并的功能。
 
 ## 下载哪个
 
-| 你的电脑 | 文件 |
+| 电脑 | 文件 |
 |---|---|
-| Windows 11 / 10（1809 以上），64 位 | `TypeLeast-1.16.2-Windows-x64-Setup.exe`（安装版）或 `…-Portable.zip`（解压即用） |
-| Mac · Apple 芯片 | `TypeLeast-1.16.0-macOS-AppleSilicon.dmg` |
-| Mac · Intel 芯片 | `TypeLeast-1.16.0-macOS-Intel.dmg` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.16.2-macOS-AppleSilicon.dmg` 或 `.zip` |
+| macOS 13 以上，Intel | `TypeLeast-1.16.2-macOS-Intel.dmg` 或 `.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.16.2-Windows-x64-Setup.exe` 或 `TypeLeast-1.16.2-Windows-x64-Portable.zip` |
 
-## Windows 1.16.2 的变化
-
-**更好用**
-- 修复：很多应用里文字只复制、没有粘贴到光标处。
-- 修复：说话开头被截掉。现在先打开麦克风；录音条圆点变红后再说话。
-- 整理档位一键切换：首页、设置、托盘菜单、任务栏按钮右键菜单都可以切换。
-- 提示词在文件中编辑（记事本打开，保存即生效），补充要求仍在设置里填写。
-
-**更好看**
-- 重新设计的录音条：更小，波形居中对称、跟着声音实时起伏。
-- 内置开源字体（Inter 和思源黑体，SIL OFL），加大字距和行距。
-- 设置分为五个标签页；输入框、下拉框和托盘菜单改为圆角，支持浅色和深色。
-- 新的提示音：开始清脆，结束柔和，不再使用 Windows 系统声音。
-
-**整理效果**
-- 自然整理改用项目自己的提示词：数字和日期写成阿拉伯数字（一百二十三 → 123、三点一二 → 3.12、百分之二十五 → 25%），按上下文纠正同音词（cloud → Claude），更多中英文术语映射。
-
-**其他**
-- Windows 与 Mac 界面结构对齐：历史筛选和搜索、同一录音重试、词典来源和 CSV 导入、插入方式（自动粘贴、仅复制、先预览）。
-- 处理中可以取消；整理失败时显示分类原因，不记录正文和 Key。
-- DeepSeek 官方预设的模型提示改为 `deepseek-flash`；已保存的模型不自动改写。
-
-完整变化见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)。
-
-## 安装
-
-- **Windows**：安装包没有代码签名，SmartScreen 可能提示「Windows 已保护你的电脑」：点「更多信息 → 仍要运行」。安装不需要管理员权限。识别引擎需要 Microsoft Visual C++ 运行库；如果识别无法启动，请安装 Visual C++ Redistributable（x64）。
-- **Mac**：把 TypeLeast 拖进「应用程序」。第一次打开如被拦下，到「系统设置 → 隐私与安全性」点「仍要打开」。
-
-第一次打开时会下载一次语音模型（约 241 MB）。下载慢可在「设置 → 服务与更新 → 模型下载镜像」填 `https://hf-mirror.com`。
+本次共 6 个安装包，全部为 1.16.2。Mac 构建号为 8，不附带旧 Mac 1.16.0 包。文件校验清单随包提供。
 
 ## 验证范围
 
-Windows 安装包在 Linux 上用 Microsoft .NET 8 SDK 和 wine 中的 Inno Setup 构建，没有使用 GitHub Actions。Windows 核心逻辑 525 项、服务 204 项测试通过（1 项因没有识别模型而跳过）；界面在 Windows 真机上由维护者试用确认。文件校验值见 `SHA256SUMS.txt`。
+本轮服务 208 项、Mac 392 项、Windows Core 在 Mac 上 525 项测试通过，Windows 应用交叉编译通过（保留既有 WFAC010 警告）。本地化检查通过。Mac 两种架构的打包、版本与签名检查通过；Windows 便携包中的服务代码和新提示词与对应源码一致。
+
+Windows 安装文件由维护者提供，此前交接说明其使用 .NET 8 和 Wine 中的 Inno Setup 构建。本轮没有 Windows 真机安装与界面操作验证，也没有 Intel 或 Rosetta 运行验证。Windows 原生 DPAPI 分支未在本机执行。未读取真实 API Key，未使用真实模型试用新提示词，不将单元测试当作整理效果证明。托管 CI 没有额度，本次沿用维护者已授权的本机验证与手动发布方式，不声称三平台 CI 通过。
+
+## 安装与已知限制
+
+Mac 包没有 Apple Developer ID 公证。已有用户可在 App 内检查更新；这台 Mac 继续使用现有本机证书重签，不导出证书。Windows 安装包没有代码签名；识别引擎需要 Microsoft Visual C++ 运行库（x64）。
+
+连接测试成功只说明短请求可达，不能保证每次整理成功。已保存旧 DeepSeek 模型的用户需自行改为当前有效模型。新提示词真实效果、Windows 真机 UI、长期压力测试仍需继续验证；独立更新签名与本地服务身份认证仍是已知缺口。
+
+完整变化见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)，本轮记录见 [1.16.2 发布交接](https://github.com/FlaxXTT/Typeleast/blob/main/docs/v1.16.2-发布交接.md)。
