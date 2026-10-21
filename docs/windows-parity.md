@@ -38,7 +38,9 @@ and compilation alone are insufficient. Evidence refers to the baseline sources,
 
 Five stacked PRs: diagnostics; lifecycle/security; data/features; UI; acceptance/packages.
 Do not merge or publish. Do not change the historical API prefix, Mac bundle identifier,
-upstream prompt text or third-party attribution. Keep shared changes additive and tested.
+owner-provided cleanup prompt text or unrelated third-party attribution. Natural cleanup
+uses only `service/lib/prompts/cleanup.js`; do not restore the removed legacy prompt.
+Keep shared changes additive and tested.
 Use repository-local maintainer identity and UTC commit timestamps. No AI attribution.
 
 Only synthetic text/audio, fake credentials, isolated state and provider substitutes are
