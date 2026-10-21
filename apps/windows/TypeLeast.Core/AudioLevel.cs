@@ -20,12 +20,12 @@ public sealed class AudioLevel
         return Math.Clamp((20 * Math.Log10(rms) - FloorDb) / (CeilingDb - FloorDb), 0, 1);
     }
 
-    /// <summary>Display height 0..1 for one ~33 ms frame.</summary>
-    public double Next(double level)
+    /// <summary>Display height 0..1 for a frame <paramref name="dt"/> seconds after the last.</summary>
+    public double Next(double level, double dt = 1 / 30.0)
     {
         var gated = Math.Max(0, Loudness(level) - Gate) / (1 - Gate);
-        // The reference rises at once with louder speech and relaxes over a few seconds.
-        peak = Math.Max(MinPeak, Math.Max(gated, peak * 0.995));
+        // The reference rises at once with louder speech and relaxes over a few seconds (time constant 6 s).
+        peak = Math.Max(MinPeak, Math.Max(gated, peak * Math.Exp(-dt / 6)));
         return Math.Min(1, gated / peak);
     }
 
