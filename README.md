@@ -19,7 +19,7 @@
 
 <br>
 
-## 聊着天，就把项目讲清楚了
+## 长提示词，聊着就写好了
 
 <p align="center">
 <picture>
@@ -28,15 +28,14 @@
 </picture>
 </p>
 
-脑子里的项目总是比说出口的多。给 AI 写一篇长提示词，难的不是打字，而是把背景、目标和限制一次想全。**提示词 Beta** 不让你对着空白页套模板，而是陪你聊：
+说说你的项目。**提示词 Beta** 问几个关键问题，你回答。说完了，你得到一份完整的提示词，可以直接交给 ChatGPT、Claude、DeepSeek 或任何 AI。
 
-- **为你写**：说几分钟、分几轮补充都没关系。整场对话最后写成一篇完整的长提示词，背景、目标、要求、待确认，可以直接交给 ChatGPT、Claude、DeepSeek 或任何 AI。
-- **为你问**：每轮重新读完整段对话，只问会影响理解的缺口，每轮最多 4 问。答过的不重复问，可以只答一部分。
-- **为你核对**：每答一轮，「当前理解」就更新一次，它听懂了什么一眼就能看到。由你点「结束补充并生成」才出稿。
-- **为你改**：说错了直接改口，以最后的说法为准。出稿后再独立审查一遍：删掉没有来源的扩展，补回被漏掉的原话。
-- **只写你说过的**：数字、日期、人名、产品名、功能都不会凭空出现。前后矛盾时不替你二选一，原样列进「待确认」。
+- **它来问**：每轮最多 4 个问题，只问缺的。答过的不再问，只答一部分也可以。
+- **你来核对**：每答一轮，「当前理解」更新一次。不对，直接改口。你点「结束补充并生成」，它才动笔。
+- **它再检查**：出稿后对照你的原话再审一遍。多写的删掉，漏掉的补回。
+- **不编造**：数字、名字、功能都来自你的原话。前后矛盾时，它不替你选，列进「待确认」。
 
-赶时间时用**提示词模式**：一次说完，直接整理成简洁、严谨的编号段落，不来回追问。
+赶时间时用**提示词模式**：说一次，直接整理成简洁的编号段落。
 
 <sub>上图为示意，对话内容是虚构的示例。</sub>
 
@@ -54,8 +53,8 @@
 ## 看它工作
 
 <p align="center">
-  <a href="docs/media/promo.mp4"><img src="docs/media/promo.gif" alt="10 秒宣传片：按一下 fn 随口说，口头禅去掉、改口照办，整理好的文字直接写进光标处" width="880"></a>
-  <br><sub>10 秒宣传片 · 点击看高清 MP4</sub>
+  <a href="docs/media/promo.mp4"><img src="docs/media/promo.gif" alt="24 秒产品影片：说话后整理成文字写进光标处；提示词 Beta 追问后写出长提示词；说中文写英文；四种整理方式切换；音频不出电脑" width="880"></a>
+  <br><sub>24 秒产品影片 · 点击看高清 MP4 · <a href="docs/media/promo-en.mp4">English</a></sub>
 </p>
 
 <p align="center">
@@ -353,7 +352,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 - Windows 截图和录音条动画：`apps/windows/Tools/MediaRenderer/make-media.sh` 用示例数据离屏渲染真实的 WPF 界面，再加圆角和阴影，输出在 `docs/media/windows/`。
 - 截图：`apps/macos/Tools/render.sh` 用示例数据离屏渲染所有页面，再用 `apps/macos/Tools/demo/FrameShot.swift` 加圆角和阴影。
-- 宣传片：先用 `record-demo.sh` 录好 `demo.mov`，再用 `apps/macos/Tools/demo/MakePromo.swift` 把它和真实界面截图剪成 10 秒的 MP4 和 GIF（用法见文件开头）。
+- 产品影片：网站首屏的动画写在 `site/film.js`。`node site/record-film.mjs` 把它逐帧录成 `docs/media/promo.mp4`、`promo.gif`、`promo-poster.jpg` 和英文版 `promo-en.mp4`（需要 Playwright 与 ffmpeg）。
 - 演示 GIF：`apps/macos/Tools/demo/record-demo.sh <输出目录>`。它用 macOS 合成语音代替麦克风，走真实的识别、整理和粘贴流程，只录演示用的编辑器窗口。需要已安装、已授权辅助功能并配置好整理模型的 TypeLeast，以及运行脚本的终端有「屏幕录制」权限；录制约 20 秒，期间不要动鼠标键盘。
 
 ### 发布
