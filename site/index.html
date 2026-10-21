@@ -4,73 +4,143 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TypeLeast · 说出来，就写好了</title>
-<meta name="description" content="TypeLeast 是免费的 Mac 和 Windows 听写工具：按一下快捷键说话，语音在你自己的电脑上识别，再用你自己的大模型整理成通顺的文字，直接写进光标处。">
-<meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="description" content="TypeLeast 是免费的 Mac 和 Windows 听写工具：按一下快捷键说话，语音在你自己的电脑上识别，再用你自己的大模型整理成通顺的文字。提示词 Beta 陪你聊着天把项目讲清楚，替你写好长提示词。">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
 <meta property="og:title" content="TypeLeast · 说出来，就写好了">
-<meta property="og:description" content="免费的 Mac 和 Windows 听写工具。本机识别，音频不出电脑；用你自己的模型整理，直接写进光标处。">
+<meta property="og:description" content="免费的 Mac 和 Windows 听写工具。聊着天把项目讲清楚，长提示词替你写好、审好、改好。">
 <meta property="og:image" content="assets/promo-poster.jpg">
 <link rel="icon" href="assets/icon.png">
 <style>
-/* Apple-style: quiet neutrals, generous space, system fonts (San Francisco and PingFang on Apple devices). */
+/* Pure black, Apple-style: quiet neutrals, generous space, system fonts. */
 :root {
-  --bg: #fbfbfd; --bg-alt: #f5f5f7; --card: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73; --ink-3: #86868b;
-  --line: rgba(0, 0, 0, .08); --accent: #0071e3; --accent-ink: #ffffff; --glow: rgba(62, 155, 233, .18);
+  --bg: #000000; --bg-alt: #0a0a0b; --card: #111113; --card-2: #1a1a1d; --ink: #f5f5f7; --ink-2: #a1a1a6; --ink-3: #86868b;
+  --line: rgba(255, 255, 255, .1); --accent: #2997ff; --accent-ink: #ffffff; --glow: rgba(41, 151, 255, .22);
+  --violet: #a77bff; --pink: #ff6fae; --green: #30d158; --red: #ff453a;
   --radius: 22px; --max: 1080px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #000000; --bg-alt: #0c0c0d; --card: #161617; --ink: #f5f5f7; --ink-2: #a1a1a6; --ink-3: #86868b;
-    --line: rgba(255, 255, 255, .1); --accent: #2997ff; --glow: rgba(41, 151, 255, .22); }
-}
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; background: var(--bg); }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); line-height: 1.5;
-  letter-spacing: .01em; -webkit-font-smoothing: antialiased; }
+  letter-spacing: .01em; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 img, video { display: block; max-width: 100%; }
-.wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
-section { padding: 112px 0; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; position: relative; }
+section { padding: 120px 0; position: relative; }
 .eyebrow { color: var(--ink-2); font-size: 17px; font-weight: 600; margin: 0 0 10px; }
 h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.015em; }
-h2 { font-size: clamp(32px, 5vw, 56px); line-height: 1.08; }
-.lead { color: var(--ink-2); font-size: clamp(19px, 2.2vw, 24px); line-height: 1.4; max-width: 720px; margin: 18px 0 0; }
+h2 { font-size: clamp(34px, 5.4vw, 64px); line-height: 1.08; }
+.lead { color: var(--ink-2); font-size: clamp(19px, 2.2vw, 24px); line-height: 1.45; max-width: 760px; margin: 20px 0 0; }
 .center { text-align: center; } .center .lead { margin-left: auto; margin-right: auto; }
+.grad { background: linear-gradient(90deg, #3e9be9, var(--violet) 55%, var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* parallax background: three soft lights that drift at different speeds */
+.sky { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.sky i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; will-change: transform; }
+.sky .o1 { width: 52vmax; height: 52vmax; left: -18vmax; top: -10vmax; background: radial-gradient(closest-side, rgba(41,151,255,.55), transparent); }
+.sky .o2 { width: 46vmax; height: 46vmax; right: -16vmax; top: 40vh; background: radial-gradient(closest-side, rgba(167,123,255,.45), transparent); }
+.sky .o3 { width: 40vmax; height: 40vmax; left: 20vw; top: 140vh; background: radial-gradient(closest-side, rgba(255,111,174,.32), transparent); }
 
 /* navigation: translucent bar */
-nav { position: sticky; top: 0; z-index: 10; backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
-  background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line); }
+nav { position: sticky; top: 0; z-index: 20; backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: rgba(0, 0, 0, .86); border-bottom: 1px solid var(--line); }
 nav .wrap { display: flex; align-items: center; gap: 28px; height: 52px; }
 nav .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; font-size: 17px; margin-right: auto; }
 nav .brand img { width: 24px; height: 24px; }
 nav a.link { color: var(--ink-2); font-size: 14px; }
 nav a.link:hover { color: var(--ink); text-decoration: none; }
 nav .cta { font-size: 13px; padding: 5px 14px; }
-@media (max-width: 640px) { nav a.link { display: none; } }
+@media (max-width: 680px) { nav a.link { display: none; } nav a.link.keep { display: inline; } }
 
 /* buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 12px 24px;
   font-size: 17px; font-weight: 500; background: var(--accent); color: var(--accent-ink); border: 0; cursor: pointer; transition: transform .2s, filter .2s; }
-.btn:hover { text-decoration: none; filter: brightness(1.08); }
+.btn:hover { text-decoration: none; filter: brightness(1.1); }
 .btn:active { transform: scale(.98); }
 .btn.ghost { background: transparent; color: var(--accent); padding-left: 8px; padding-right: 8px; }
 .btn.ghost::after { content: "›"; font-size: 20px; line-height: 1; }
 .btn.small { font-size: 14px; padding: 8px 16px; }
-.btn.quiet { background: var(--bg-alt); color: var(--ink); border: 1px solid var(--line); }
+.btn.quiet { background: var(--card-2); color: var(--ink); border: 1px solid var(--line); }
 
 /* hero */
-.hero { padding: 96px 0 40px; text-align: center; overflow: hidden; }
-.hero .icon { width: 112px; height: 112px; margin: 0 auto 22px; filter: drop-shadow(0 14px 24px rgba(0,0,0,.22)); }
-.hero h1 { font-size: clamp(48px, 9vw, 96px); line-height: 1.02; letter-spacing: -.03em; }
+.hero { padding: 104px 0 40px; text-align: center; }
+.hero .icon { width: 112px; height: 112px; margin: 0 auto 22px; filter: drop-shadow(0 14px 34px rgba(41,151,255,.25)); }
+.hero h1 { font-size: clamp(50px, 9.5vw, 104px); line-height: 1.02; letter-spacing: -.03em; }
 .hero h1 .nobr { display: inline-block; }
-.hero h1 .grad { background: linear-gradient(90deg, #3e9be9, #8e6cf0 55%, #e46b9b); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.hero .lead { margin: 22px auto 0; }
+.hero .lead { margin: 24px auto 0; }
 .hero .actions { display: flex; flex-wrap: wrap; gap: 14px 22px; justify-content: center; align-items: center; margin-top: 34px; }
 .hero .meta { color: var(--ink-3); font-size: 13px; margin-top: 16px; }
-.stage { position: relative; margin: 72px auto 0; max-width: 980px; }
-.stage::before { content: ""; position: absolute; inset: 8% 10% -6%; background: radial-gradient(closest-side, var(--glow), transparent); filter: blur(30px); z-index: -1; }
-.stage video, .stage img { width: 100%; border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.18); background: #000; }
+.stage { position: relative; margin: 80px auto 0; max-width: 980px; transform-origin: 50% 0; will-change: transform; }
+.stage::before { content: ""; position: absolute; inset: 6% 8% -8%; background: radial-gradient(closest-side, var(--glow), transparent); filter: blur(40px); z-index: -1; }
+.stage video { width: 100%; border-radius: 20px; border: 1px solid var(--line); box-shadow: 0 40px 120px rgba(0,0,0,.8); background: #000; }
+
+/* prompt: the headline feature */
+.prompt-intro { padding-bottom: 40px; }
+.prompt-intro h2 { font-size: clamp(40px, 7vw, 84px); line-height: 1.04; letter-spacing: -.025em; }
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 64px; text-align: left; }
+.pillar { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 30px 28px; }
+.pillar .k { font-size: 15px; font-weight: 600; }
+.pillar h3 { font-size: 26px; margin: 8px 0 10px; }
+.pillar p { color: var(--ink-2); margin: 0; font-size: 16px; }
+.pillar:nth-child(1) .k { color: var(--accent); } .pillar:nth-child(2) .k { color: var(--violet); } .pillar:nth-child(3) .k { color: var(--pink); }
+@media (max-width: 820px) { .pillars { grid-template-columns: 1fr; } }
+
+/* prompt story: steps scroll past a sticky window */
+.story { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 56px; margin-top: 40px; }
+.story .steps-col { padding: 10vh 0 20vh; }
+.chapter { min-height: 72vh; display: flex; flex-direction: column; justify-content: center; opacity: .28; transition: opacity .5s ease; }
+.chapter.on { opacity: 1; }
+.chapter .n { font-size: 15px; font-weight: 600; color: var(--violet); }
+.chapter h3 { font-size: clamp(28px, 3.4vw, 40px); line-height: 1.15; margin: 10px 0 12px; }
+.chapter p { color: var(--ink-2); font-size: 18px; margin: 0; max-width: 440px; }
+.screen-col { position: relative; }
+.screen { position: sticky; top: calc(50vh - 260px); height: 520px; border-radius: 26px; background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 40px 120px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.02) inset; overflow: hidden; }
+.screen .top { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.screen .top b { color: var(--violet); font-weight: 600; }
+.screen .top .dots { margin-left: auto; display: flex; gap: 6px; } .screen .top .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--card-2); }
+.frame { position: absolute; inset: 46px 0 0; padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 12px; overflow: hidden;
+  opacity: 0; transform: translateY(18px); transition: opacity .55s ease, transform .55s cubic-bezier(.2,.7,.2,1); }
+.frame.on { opacity: 1; transform: none; }
+.label { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: .04em; }
+.bubble { align-self: flex-end; max-width: 92%; background: var(--accent); color: #fff; border-radius: 18px 18px 6px 18px; padding: 12px 15px; font-size: 15px; line-height: 1.55; }
+.bubble.soft { background: var(--card-2); color: var(--ink); border: 1px solid var(--line); }
+.wave { display: flex; align-items: center; gap: 3px; height: 26px; align-self: flex-end; }
+.wave i { width: 3px; border-radius: 2px; background: var(--ink-2); animation: wv 1s ease-in-out infinite; }
+@keyframes wv { 0%,100% { height: 6px; } 50% { height: 24px; } }
+.list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.list li { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; font-size: 14.5px; }
+.list.q li::before { content: "？"; color: var(--violet); font-weight: 700; margin-right: 6px; }
+.list.ok li::before { content: "✓"; color: var(--green); font-weight: 700; margin-right: 8px; }
+.go { align-self: flex-start; margin-top: auto; font-size: 14px; padding: 9px 18px; border-radius: 999px; background: var(--violet); color: #fff; font-weight: 600; }
+.doc { background: #0b0b0d; border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); flex: 1; overflow: hidden; position: relative; }
+.doc h4 { margin: 10px 0 2px; font-size: 13.5px; color: var(--ink); } .doc h4:first-child { margin-top: 0; }
+.doc p { margin: 0; }
+.doc::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: linear-gradient(transparent, #0b0b0d); }
+.doc .pend { color: #ffd60a; }
+.diff { display: flex; flex-direction: column; gap: 10px; }
+.diff div { border-radius: 14px; padding: 11px 14px; font-size: 14.5px; border: 1px solid var(--line); }
+.diff .del { background: rgba(255,69,58,.1); } .diff .del s { color: #ff8a80; }
+.diff .add { background: rgba(48,209,88,.1); color: #9ff0b4; }
+.diff small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 3px; }
+.sample { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 18px; }
+@media (max-width: 860px) {
+  .story { grid-template-columns: 1fr; gap: 0; }
+  .screen-col { order: -1; position: sticky; top: 64px; z-index: 2; height: 0; }
+  .screen { position: relative; top: 0; height: 460px; }
+  .frame { padding: 16px 16px 14px; gap: 10px; }
+  .list li { font-size: 13.5px; padding: 8px 12px; }
+  .bubble { font-size: 14px; }
+  .story .steps-col { padding: 500px 0 10vh; }
+  .chapter { min-height: 64vh; justify-content: flex-start; padding-top: 48px; }
+  .chapter.on { opacity: 1; }
+  .screen { box-shadow: 0 0 0 12px #000, 0 30px 60px 12px #000; }
+}
+.quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 24px; }
+.quick .pillar h3 { font-size: 22px; }
+@media (max-width: 820px) { .quick { grid-template-columns: 1fr; } }
 
 /* how it works */
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 56px; }
@@ -78,27 +148,27 @@ nav .cta { font-size: 13px; padding: 5px 14px; }
 .step .n { font-size: 15px; font-weight: 600; color: var(--accent); }
 .step h3 { font-size: 24px; margin: 8px 0 8px; }
 .step p { color: var(--ink-2); margin: 0; font-size: 16px; }
-.kbd { display: inline-block; font-size: 14px; font-weight: 600; padding: 2px 9px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 7px; background: var(--bg-alt); color: var(--ink); }
+.kbd { display: inline-block; font-size: 14px; font-weight: 600; padding: 2px 9px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 7px; background: var(--card-2); color: var(--ink); }
 .bar { margin: 48px auto 0; max-width: 520px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); }
 @media (max-width: 820px) { .steps { grid-template-columns: 1fr; } }
 
 /* bento features */
-.alt { background: var(--bg-alt); }
 .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px; margin-top: 56px; }
 .tile { background: var(--card); border-radius: var(--radius); padding: 34px 32px; border: 1px solid var(--line); grid-column: span 2; display: flex; flex-direction: column; }
 .tile.wide { grid-column: span 3; } .tile.full { grid-column: span 6; }
 .tile .big { font-size: clamp(40px, 5vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1; margin-bottom: 14px;
-  background: linear-gradient(180deg, var(--ink), color-mix(in srgb, var(--ink) 55%, transparent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  background: linear-gradient(180deg, var(--ink), rgba(245,245,247,.5)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .tile h3 { font-size: 22px; margin-bottom: 8px; }
 .tile p { color: var(--ink-2); margin: 0; font-size: 16px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.chip { font-size: 13px; padding: 5px 12px; border-radius: 999px; background: var(--bg-alt); border: 1px solid var(--line); color: var(--ink); }
+.chip { font-size: 13px; padding: 5px 12px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); color: var(--ink); }
+.chip.hot { border-color: var(--violet); color: #d9c8ff; }
 @media (max-width: 820px) { .bento { grid-template-columns: 1fr; } .tile, .tile.wide, .tile.full { grid-column: auto; } }
 
 /* gallery */
-.tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--bg-alt); border: 1px solid var(--line); margin-top: 36px; }
+.tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); margin-top: 36px; }
 .tabs button { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--ink-2); padding: 7px 18px; border-radius: 999px; cursor: pointer; }
-.tabs button[aria-selected="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.tabs button[aria-selected="true"] { background: var(--card-2); color: var(--ink); }
 .shots { display: none; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 40px; }
 .shots.on { display: grid; }
 .shots figure { margin: 0; }
@@ -111,7 +181,7 @@ nav .cta { font-size: 13px; padding: 5px 14px; }
 .use { padding: 28px 30px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); }
 .use h3 { font-size: 20px; margin-bottom: 6px; }
 .use p { margin: 0; color: var(--ink-2); }
-.use .ex { margin-top: 14px; font-size: 14px; color: var(--ink); background: var(--bg-alt); border-radius: 12px; padding: 12px 14px; }
+.use .ex { margin-top: 14px; font-size: 14px; color: var(--ink); background: var(--card-2); border-radius: 12px; padding: 12px 14px; }
 .use .ex span { color: var(--ink-3); display: block; font-size: 12px; margin-bottom: 4px; }
 @media (max-width: 820px) { .uses { grid-template-columns: 1fr; } }
 
@@ -139,19 +209,25 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: 
 footer a { color: var(--ink-2); }
 
 /* reveal on scroll */
-.reveal { opacity: 0; transform: translateY(24px); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1); }
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.2,1); }
 .reveal.in { opacity: 1; transform: none; }
-@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .frame, .chapter { opacity: 1; transform: none; transition: none; }
+  .wave i { animation: none; height: 14px; }
+  html { scroll-behavior: auto; }
+}
 </style>
 </head>
 <body>
 
+<div class="sky" aria-hidden="true"><i class="o1" data-drift="-0.12"></i><i class="o2" data-drift="-0.28"></i><i class="o3" data-drift="-0.45"></i></div>
+
 <nav>
   <div class="wrap">
     <a class="brand" href="#"><img src="assets/icon.png" alt="">TypeLeast</a>
+    <a class="link keep" href="#prompt">提示词</a>
     <a class="link" href="#how">工作方式</a>
     <a class="link" href="#features">功能</a>
-    <a class="link" href="#uses">用法</a>
     <a class="link" href="#privacy">隐私</a>
     <a class="link" data-link="repo" href="#">GitHub</a>
     <a class="btn small cta" href="#download">下载</a>
@@ -160,19 +236,95 @@ footer a { color: var(--ink-2); }
 
 <header class="hero">
   <div class="wrap">
-    <img class="icon reveal" src="assets/icon.png" alt="TypeLeast 图标">
-    <h1 class="reveal"><span class="nobr">说出来，</span><span class="nobr grad">就写好了。</span></h1>
-    <p class="lead reveal">按一下快捷键说话，再按一下。语音在你自己的电脑上识别，用你自己的大模型整理成通顺的文字，直接写进光标处。</p>
-    <div class="actions reveal">
-      <a class="btn" id="hero-download" href="#download">免费下载</a>
-      <a class="btn ghost" href="#how">看看怎么用</a>
+    <div data-speed="0.35">
+      <img class="icon reveal" src="assets/icon.png" alt="TypeLeast 图标">
+      <h1 class="reveal"><span class="nobr">说出来，</span><span class="nobr grad">就写好了。</span></h1>
     </div>
-    <p class="meta reveal">macOS 13 以上 · Windows 10 / 11 · 免费，无需注册</p>
-    <div class="stage reveal">
+    <div data-speed="0.18">
+      <p class="lead reveal">按一下快捷键说话，再按一下。语音在你自己的电脑上识别，用你自己的大模型整理成通顺的文字。<br>要给 AI 写长提示词？跟它聊几句，项目就讲清楚了。</p>
+      <div class="actions reveal">
+        <a class="btn" id="hero-download" href="#download">免费下载</a>
+        <a class="btn ghost" href="#prompt">看它怎么写提示词</a>
+      </div>
+      <p class="meta reveal">macOS 13 以上 · Windows 10 / 11 · 免费，无需注册</p>
+    </div>
+    <div class="stage reveal" id="stage">
       <video src="assets/promo.mp4" poster="assets/promo-poster.jpg" autoplay muted loop playsinline preload="metadata" aria-label="TypeLeast 10 秒演示"></video>
     </div>
   </div>
 </header>
+
+<section id="prompt" class="prompt-intro">
+  <div class="wrap center">
+    <p class="eyebrow reveal">提示词</p>
+    <h2 class="reveal">聊着天，<br><span class="grad">就把项目讲清楚了。</span></h2>
+    <p class="lead reveal">脑子里的项目总是比说出口的多。提示词 Beta 不让你对着空白页憋模板：你随口说，它只问真正缺的那几处；你答、你纠正，它把理解摆出来给你核对。你说可以了，它才把这场对话写成一篇完整的长提示词，再独立审一遍、改一遍。</p>
+    <div class="pillars">
+      <div class="pillar reveal"><div class="k">为你写</div><h3>超长提示词，说出来</h3><p>说几分钟、分几轮补充都没关系。背景、目标、要求、限制，最后汇成一篇可以直接交给 AI 的长提示词。</p></div>
+      <div class="pillar reveal"><div class="k">为你问</div><h3>只问缺的，每轮最多 4 问</h3><p>每轮重新读完整段对话，找出遗漏、矛盾和新的歧义。答过的不重复问，可以只答一部分。</p></div>
+      <div class="pillar reveal"><div class="k">为你改</div><h3>随时改口，出稿再审</h3><p>说错了直接改口，以最后的说法为准。出稿后独立审查：删掉没有来源的扩展，补回被漏掉的原话。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="story-wrap" style="padding-top:0">
+  <div class="wrap">
+    <div class="story" id="story">
+      <div class="steps-col">
+        <div class="chapter" data-step="0"><div class="n">01 · 你随口说</div><h3>想到哪说到哪。</h3><p>按一下快捷键，把脑子里的项目一口气说出来。口头禅、跑题、说一半忘词都没关系，录音在本机识别。</p></div>
+        <div class="chapter" data-step="1"><div class="n">02 · 它只问缺的</div><h3>几个关键问题，<br>不是一张表格。</h3><p>它不替你设计方案，也不为了凑「角色、受众、格式」去问你。只问会影响理解的缺口。</p></div>
+        <div class="chapter" data-step="2"><div class="n">03 · 你核对它的理解</div><h3>它听懂了什么，<br>一眼就能看到。</h3><p>每答一轮，「当前理解」就更新一次。不对就直接说，它重新核对。由你决定什么时候结束补充。</p></div>
+        <div class="chapter" data-step="3"><div class="n">04 · 写好长提示词</div><h3>整场对话，<br>写成一篇提示词。</h3><p>结构跟着内容走，没说过的部分直接省略。还没说清的，放进末尾的「待确认」，不替你决定。</p></div>
+        <div class="chapter" data-step="4"><div class="n">05 · 再审一遍、改一遍</div><h3>多写的删掉，<br>漏掉的补回。</h3><p>出稿后，审查员对照你的原话逐条检查，编辑只做最小修改。最后写进光标处，直接发给任何 AI。</p></div>
+      </div>
+      <div class="screen-col">
+        <div class="screen" aria-label="提示词 Beta 对话示意">
+          <div class="top"><b>提示词 Beta</b><span>先把信息说清楚</span><span class="dots"><i></i><i></i><i></i></span></div>
+          <div class="frame on" data-frame="0">
+            <div class="label">你说</div>
+            <div class="bubble">嗯……我想给我们社区的羽毛球群做个小程序。现在每周约场都在群里接龙，经常有人报了名又不来，场地费也是我一个个去收，很麻烦。就是想要一个能报名、能自动算钱的东西，最好别太复杂，群里很多是中老年人。</div>
+            <div class="wave" aria-hidden="true"><i style="animation-delay:-.1s"></i><i style="animation-delay:-.5s"></i><i style="animation-delay:-.3s"></i><i style="animation-delay:-.8s"></i><i style="animation-delay:-.2s"></i><i style="animation-delay:-.6s"></i><i style="animation-delay:-.4s"></i></div>
+          </div>
+          <div class="frame" data-frame="1">
+            <div class="label">待补充的信息</div>
+            <ul class="list q"><li>场地费怎么分摊：报名人数平分，还是按实际到场？</li><li>报了名没来的人，你希望怎么处理？</li><li>大家平时用什么付款？</li></ul>
+            <div class="label" style="margin-top:6px">你说</div>
+            <div class="bubble">按实际到场的人平分。放鸽子的，下次报名排在后面。付款都用微信。</div>
+          </div>
+          <div class="frame" data-frame="2">
+            <div class="label">当前理解，请核对</div>
+            <ul class="list ok"><li>给社区羽毛球群用的报名小程序，替代群接龙</li><li>场地费按实际到场人数平分</li><li>报名没来的人，下次排在后面</li><li>付款用微信</li><li>群里多为中老年人，操作要简单</li></ul>
+            <div style="font-size:13px;color:var(--ink-3)">目前信息已清楚，可以继续补充，也可以生成。</div>
+            <span class="go">结束补充并生成</span>
+          </div>
+          <div class="frame" data-frame="3">
+            <div class="label">初稿</div>
+            <div class="doc">
+              <h4>## 背景与现状</h4><p>社区羽毛球群目前每周在群里接龙约场。常有人报名后不到场；场地费由组织者逐个收取，负担较重。</p>
+              <h4>## 目标</h4><p>做一个报名小程序，替代群接龙，并自动计算每人应付的场地费；增加积分排行榜，激励按时到场。</p>
+              <h4>## 要求</h4><p>一、场地费按实际到场人数平分。<br>二、报名后未到场的人，下次报名排在后面。<br>三、付款使用微信。<br>四、每场人数上限为 8 人。</p>
+              <h4>## 待确认</h4><p class="pend">每周的场次尚未说明。</p>
+            </div>
+          </div>
+          <div class="frame" data-frame="4">
+            <div class="label">独立审查 · 最小修改</div>
+            <div class="diff">
+              <div class="del"><s>增加积分排行榜，激励按时到场。</s><small>你没有提出过 · 删除</small></div>
+              <div class="del"><s>每场人数上限为 8 人。</s><small>你没说过这个数字 · 删除，改列入「待确认」</small></div>
+              <div class="add">+ 用户多为中老年人，操作要尽量简单。<small>你说过，初稿漏了 · 补回</small></div>
+            </div>
+            <div style="margin-top:auto;font-size:14px;color:var(--ink-2)">✓ 已写入光标处，可以直接发给 ChatGPT、Claude、DeepSeek……</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="sample">以上为示意，对话内容是虚构的示例。</p>
+    <div class="quick">
+      <div class="pillar reveal"><div class="k" style="color:var(--accent)">赶时间</div><h3>提示词模式：一句话说完就出稿</h3><p>不来回追问，一次把口述整理成简洁、严谨的编号段落。没把握的名称保留你的原话，真正矛盾的地方在末尾说明。</p></div>
+      <div class="pillar reveal"><div class="k" style="color:var(--green)">只写你说过的</div><h3>不编造，不替你做决定</h3><p>数字、日期、人名、产品名、功能都不会凭空出现。前后矛盾时不替你二选一，原样列进「待确认」。</p></div>
+    </div>
+  </div>
+</section>
 
 <section id="how">
   <div class="wrap center">
@@ -187,7 +339,7 @@ footer a { color: var(--ink-2); }
   </div>
 </section>
 
-<section id="features" class="alt">
+<section id="features">
   <div class="wrap">
     <div class="center">
       <p class="eyebrow reveal">功能</p>
@@ -196,8 +348,8 @@ footer a { color: var(--ink-2); }
     <div class="bento">
       <div class="tile wide reveal"><div class="big">0 字节</div><h3>音频不出电脑</h3><p>语音在本机用 SenseVoice 等开源模型识别，录音只留在内存里。发给模型的只有文字，发送前还会抹掉像密码、密钥的内容。</p></div>
       <div class="tile wide reveal"><div class="big">你的 Key</div><h3>用你自己的模型</h3><p>DeepSeek、智谱、Kimi、通义千问、OpenRouter、OpenAI，或者完全离线的本机 Ollama。Key 只存在系统钥匙串或凭据管理器里。</p></div>
-      <div class="tile reveal"><h3>四种整理档位</h3><p>首页、托盘或任务栏一键切换。</p>
-        <div class="chips"><span class="chip">自然整理</span><span class="chip">提示词模式</span><span class="chip">提示词 Beta</span><span class="chip">原话转写</span></div></div>
+      <div class="tile reveal"><h3>四种整理档位</h3><p>每个页面顶部、托盘或任务栏一键切换。</p>
+        <div class="chips"><span class="chip">自然整理</span><span class="chip hot">提示词模式</span><span class="chip hot">提示词 Beta</span><span class="chip">原话转写</span></div></div>
       <div class="tile reveal"><h3>任何输入框</h3><p>微信、邮件、浏览器、Word、VS Code……光标在哪，文字就写到哪。</p></div>
       <div class="tile reveal"><h3>翻译</h3><p>按翻译快捷键说中文，直接写出英文。支持 10 种语言。</p></div>
       <div class="tile reveal"><h3>词典</h3><p>人名、产品名、术语按你要的写法输出，也能学会你改过的词。</p></div>
@@ -217,10 +369,10 @@ footer a { color: var(--ink-2); }
       <button role="tab" aria-selected="false" data-tab="mac">macOS</button>
     </div>
     <div class="shots on" data-shots="win">
-      <figure><picture><source media="(prefers-color-scheme: dark)" srcset="assets/win-home-dark.png"><img src="assets/win-home-light.png" alt="Windows 首页" loading="lazy"></picture><figcaption>首页 · 整理档位一键切换</figcaption></figure>
+      <figure><img src="assets/win-home-dark.png" alt="Windows 首页，深色模式" loading="lazy"><figcaption>首页 · 整理档位一键切换</figcaption></figure>
       <figure><img src="assets/win-settings-light.png" alt="Windows 设置" loading="lazy"><figcaption>设置 · 五个标签页</figcaption></figure>
       <figure><img src="assets/win-history-light.png" alt="Windows 历史" loading="lazy"><figcaption>历史 · 搜索、筛选、重试</figcaption></figure>
-      <figure><img src="assets/win-home-dark.png" alt="Windows 深色模式" loading="lazy"><figcaption>深色模式</figcaption></figure>
+      <figure><img src="assets/win-home-light.png" alt="Windows 首页，浅色模式" loading="lazy"><figcaption>浅色模式</figcaption></figure>
     </div>
     <div class="shots" data-shots="mac">
       <figure><img src="assets/mac-home.png" alt="Mac 首页" loading="lazy"><figcaption>首页 · 统计与最近的听写</figcaption></figure>
@@ -231,7 +383,7 @@ footer a { color: var(--ink-2); }
   </div>
 </section>
 
-<section id="uses" class="alt">
+<section id="uses">
   <div class="wrap">
     <div class="center">
       <p class="eyebrow reveal">定位与用法</p>
@@ -241,8 +393,8 @@ footer a { color: var(--ink-2); }
     <div class="uses">
       <div class="use reveal"><h3>日常输入</h3><p>自然整理去掉口头禅、改通顺，说到一半改口也照办。</p>
         <div class="ex"><span>你说</span>嗯那个周三的会我们改到下午三点吧然后记得把报告带上<span style="margin-top:8px">写出</span>周三的会改到下午三点，记得带上报告。</div></div>
-      <div class="use reveal"><h3>给 AI 提需求</h3><p>提示词模式把随口说的需求写成结构化提示词：角色、背景、任务、要求、格式。事实不编造。</p></div>
-      <div class="use reveal"><h3>写出更好的提示词</h3><p>提示词 Beta 先问几个关键问题，你口头回答后起草，再独立审查一遍，适合重要的任务。</p></div>
+      <div class="use reveal"><h3>把项目讲给 AI 听</h3><p>提示词 Beta 多轮追问、核对理解，再写成完整的长提示词。适合新项目、复杂需求和重要任务。</p></div>
+      <div class="use reveal"><h3>快速提需求</h3><p>提示词模式一次说完，整理成简洁的编号段落。不套「角色、背景」模板，不扩展你没提的要求。</p></div>
       <div class="use reveal"><h3>完全离线</h3><p>整理模型换成本机 Ollama：识别和整理都在你的电脑上，断网也能用，零费用。</p></div>
       <div class="use reveal"><h3>说中文，写外文</h3><p>翻译快捷键把你说的话整理后翻译成英、日、韩、法、德等 10 种语言。</p></div>
       <div class="use reveal"><h3>按你的习惯定制</h3><p>词典固定专有名词；提示词可在配置文件里修改；快捷键、插入方式都能换。</p></div>
@@ -271,7 +423,7 @@ footer a { color: var(--ink-2); }
   </div>
 </section>
 
-<section id="privacy" class="alt">
+<section id="privacy">
   <div class="wrap center">
     <p class="eyebrow reveal">隐私</p>
     <h2 class="reveal">你的声音，留在你的电脑上。</h2>
@@ -346,6 +498,53 @@ const io = "IntersectionObserver" in window ? new IntersectionObserver((entries)
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
 }, { rootMargin: "0px 0px -8% 0px" }) : null;
 for (const el of document.querySelectorAll(".reveal")) io ? io.observe(el) : el.classList.add("in");
+
+// Prompt story: the chapter nearest the middle of the screen picks the frame in the sticky window.
+const chapters = [...document.querySelectorAll(".chapter")];
+const frames = [...document.querySelectorAll(".frame")];
+let current = -1;
+function pickChapter() {
+  const mid = innerHeight * (innerWidth <= 860 ? 0.75 : 0.5);
+  let best = 0, bestDist = Infinity;
+  chapters.forEach((c, i) => {
+    const r = c.getBoundingClientRect();
+    const d = Math.abs((r.top + Math.min(r.height, innerHeight) / 2) - mid);
+    if (d < bestDist) { bestDist = d; best = i; }
+  });
+  if (best === current) return;
+  current = best;
+  chapters.forEach((c, i) => c.classList.toggle("on", i === best));
+  frames.forEach((f, i) => f.classList.toggle("on", i === best));
+}
+
+// Parallax: layers move at different speeds; the hero video settles to full size as it reaches the top.
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const layers = [...document.querySelectorAll("[data-speed]")];
+const lights = [...document.querySelectorAll("[data-drift]")];
+const stage = document.getElementById("stage");
+function parallax() {
+  if (still.matches) return;
+  const y = scrollY, h = innerHeight;
+  for (const l of lights) l.style.transform = `translate3d(0, ${y * l.dataset.drift}px, 0)`;
+  for (const el of layers) {
+    const r = el.parentElement.getBoundingClientRect();
+    const offset = (r.top + r.height / 2) - h / 2;
+    el.style.transform = `translate3d(0, ${(-offset * el.dataset.speed).toFixed(1)}px, 0)`;
+  }
+  const s = stage.getBoundingClientRect();
+  const t = Math.min(1, Math.max(0, 1 - (s.top - h * 0.15) / (h * 0.7)));
+  stage.style.transform = `perspective(1400px) rotateX(${(1 - t) * 14}deg) scale(${0.9 + 0.1 * t})`;
+}
+
+let queued = false;
+function onScroll() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => { queued = false; parallax(); pickChapter(); });
+}
+addEventListener("scroll", onScroll, { passive: true });
+addEventListener("resize", onScroll);
+onScroll();
 </script>
 </body>
 </html>

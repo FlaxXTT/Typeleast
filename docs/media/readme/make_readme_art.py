@@ -227,15 +227,14 @@ def features(t):
 
     # 4. Prompt mode.
     y3 = y2 + ROW + G
-    lines = ["## 角色", "## 背景", "## 任务", "## 要求", "## 输出格式"]
+    lines = ["一、请帮我写一份本周周报，发给老板。", "二、本周完成了登录页改版，修复了几个 bug。", "三、篇幅简短。"]
     prompt = [text(32, 52, "提示词模式", 15, "blue", 600),
               text(32, 88, "说需求，得到提示词。", 26, "ink", 700),
-              text(32, 118, "口述直接变成结构化提示词，", 15, "gray"),
-              text(32, 140, "可以马上发给任何 AI。", 15, "gray")]
+              text(32, 118, "一次说完，整理成简洁的编号段落，", 15, "gray"),
+              text(32, 140, "不套模板，不加你没提的要求。", 15, "gray")]
     prompt.append(f'<rect x="24" y="160" width="{half - 48}" height="106" rx="16" fill="{t["card2"]}"/>')
     for i, line in enumerate(lines):
-        col, rowi = (0, i) if i < 3 else (1, i - 3)
-        prompt.append(f'<g class="pl p{i}">{text(44 + col * 180, 190 + rowi * 30, line, 15, "ink", 600)}</g>')
+        prompt.append(f'<g class="pl p{i}">{text(44, 190 + i * 30, line, 14, "ink", 500)}</g>')
     body.append(tile(0, y3, half, ROW, t, "\n".join(prompt)))
 
     # 5. Four local models.
@@ -277,6 +276,76 @@ def features(t):
                "亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。")
 
 
+# ---------------------------------------------------------------- prompt Beta
+# 12 s loop: you talk, it asks only what is missing, you answer, it shows what it understood,
+# then writes the long prompt and a review removes what you never said. Invented example.
+def prompt_story(t):
+    W, H = 880, 560
+    violet = "#8e5cf0" if t is THEMES["light"] else "#a77bff"
+    body = [f'<rect width="{W}" height="{H}" rx="28" fill="{t["card"]}"/>',
+            text(36, 56, "提示词 Beta", 15, "", 600, extra=f'fill="{violet}"'),
+            text(36, 98, "聊着天，就把项目讲清楚了。", 32, "ink", 700),
+            text(36, 132, "它只问缺的，你随时改口；出稿后再审一遍、改一遍。超长提示词，说出来就写好了。", 16, "gray")]
+    # Left: the conversation.
+    L, LW, top = 24, 404, 160
+    body.append(f'<rect x="{L}" y="{top}" width="{LW}" height="{H - top - 24}" rx="20" fill="{t["card2"]}"/>')
+    body.append(f'<g class="s1">{text(L + 20, top + 30, "你说", 12, "faint", 600)}'
+                f'<rect x="{L + 40}" y="{top + 42}" width="{LW - 60}" height="62" rx="16" fill="{t["blue"]}"/>'
+                + text(L + 56, top + 68, "我想给社区羽毛球群做个报名小程序，", 14, "", 500, extra='fill="#ffffff"')
+                + text(L + 56, top + 90, "接龙太乱，场地费也是我一个个收……", 14, "", 500, extra='fill="#ffffff"') + '</g>')
+    qs = ["场地费按报名人数还是到场人数分？", "报了名没来的人，怎么处理？", "大家平时用什么付款？"]
+    q = [f'<g class="s2">{text(L + 20, top + 126, "待补充的信息 · 每轮最多 4 问", 12, "faint", 600)}']
+    for i, line in enumerate(qs):
+        y = top + 136 + i * 32
+        q.append(f'<rect x="{L + 20}" y="{y}" width="{LW - 40}" height="28" rx="10" fill="{t["card"]}" stroke="{t["line"]}"/>'
+                 + text(L + 34, y + 19, "？", 13, "", 700, extra=f'fill="{violet}"') + text(L + 54, y + 19, line, 13, "ink"))
+    body.append("".join(q) + '</g>')
+    body.append(f'<g class="s3"><rect x="{L + 40}" y="{top + 240}" width="{LW - 60}" height="38" rx="14" fill="{t["blue"]}"/>'
+                + text(L + 56, top + 264, "按到场人数平分；放鸽子的下次排后面；用微信。", 13, "", 500, extra='fill="#ffffff"') + '</g>')
+    body.append(f'<g class="s4">{text(L + 20, top + 302, "当前理解，请核对", 12, "faint", 600)}'
+                + text(L + 20, top + 324, "✓ 报名小程序替代接龙　✓ 按到场人数平分", 13, "green", 500)
+                + f'<rect x="{L + 20}" y="{top + 334}" width="138" height="30" rx="15" fill="{violet}"/>'
+                + text(L + 89, top + 354, "结束补充并生成", 13, "", 600, "middle", 'fill="#ffffff"') + '</g>')
+    # Right: the long prompt, then the review.
+    R, RW = L + LW + 16, W - (L + LW + 16) - 24
+    body.append(f'<rect x="{R}" y="{top}" width="{RW}" height="{H - top - 24}" rx="20" fill="{t["card2"]}"/>')
+    body.append(f'<g class="s5">{text(R + 20, top + 30, "写好的提示词", 12, "faint", 600)}</g>')
+    doc = [("## 背景与现状", True), ("群里接龙约场，常有人不到；场地费逐个收取。", False),
+           ("## 目标", True), ("报名小程序，替代接龙，自动计算场地费。", False), ("增加积分排行榜，激励按时到场。", None),
+           ("## 要求", True), ("一、按实际到场人数平分　二、未到者下次排后", False),
+           ("三、微信付款　四、操作简单，适合中老年人", False), ("## 待确认", True), ("每周的场次尚未说明。", False)]
+    y = top + 58
+    for i, (line, head) in enumerate(doc):
+        if head is None:
+            body.append(f'<g class="d{i} bad">{text(R + 20, y, line, 13, "gray")}'
+                        f'<rect class="left strike2" x="{R + 20}" y="{y - 5}" width="{len(line) * 13}" height="1.6" fill="{t["red"]}"/>'
+                        f'<g class="why">{text(R + RW - 20, y, "你没说过 · 删除", 11, "", 600, "end", extra=f'fill="{t["red"]}"')}</g></g>')
+        else:
+            cls = "ink" if head else "gray"
+            if line.startswith("每周"):
+                cls = "faint"
+            body.append(f'<g class="d{i}">{text(R + 20, y, line, 14 if head else 13, cls, 700 if head else 400)}</g>')
+        y += 30 if head else 26
+        if not head and i + 1 < len(doc) and doc[i + 1][1] is True:
+            y += 6
+    body.append(f'<g class="s6">{text(R + 20, H - 46, "✓ 审查完成：删掉没来源的，补回漏掉的。", 13, "green", 600)}</g>')
+
+    def show(name, start):
+        return (f'.{name} {{ animation: {name}K 12s ease-in-out infinite; }}\n'
+                f'@keyframes {name}K {{ 0%,{start}% {{ opacity: 0; transform: translateY(6px); }} '
+                f'{start + 3}%,94% {{ opacity: 1; transform: none; }} 99%,100% {{ opacity: 0; }} }}')
+    css = [show("s1", 2), show("s2", 13), show("s3", 25), show("s4", 34), show("s5", 44), show("s6", 82)]
+    for i in range(len(doc)):
+        css.append(show(f"d{i}", 46 + i * 2.6))
+    css.append(".s1,.s2,.s3,.s4,.s5,.s6," + ",".join(f".d{i}" for i in range(len(doc))) + " { transform-box: fill-box; }")
+    css.append(".strike2 { animation: strikeK 12s ease-in-out infinite; } "
+               "@keyframes strikeK { 0%,74% { transform: scaleX(0); } 80%,94% { transform: scaleX(1); } 99%,100% { transform: scaleX(0); } }")
+    css.append(".why { animation: whyK 12s ease-in-out infinite; } "
+               "@keyframes whyK { 0%,76% { opacity: 0; } 80%,94% { opacity: 1; } 99%,100% { opacity: 0; } }")
+    return svg(W, H, "\n".join(body), "\n".join(css), t,
+               "提示词 Beta：你随口说项目，它只问缺的几个问题，你回答并核对它的理解，然后写成完整的长提示词，再审查一遍，删掉你没说过的内容。")
+
+
 # ---------------------------------------------------------------- free
 def free(t):
     W, H = 880, 330
@@ -315,7 +384,7 @@ def button(label, t, primary):
 
 def main():
     for mode, t in THEMES.items():
-        for name, make in [("hero", hero), ("features", features), ("free", free)]:
+        for name, make in [("hero", hero), ("prompt", prompt_story), ("features", features), ("free", free)]:
             (OUT / f"{name}-{mode}.svg").write_text(make(t), encoding="utf-8")
         (OUT / f"button-download-{mode}.svg").write_text(button("下载最新版", t, True), encoding="utf-8")
         (OUT / f"button-more-{mode}.svg").write_text(button("看它怎么用 ›", t, False), encoding="utf-8")

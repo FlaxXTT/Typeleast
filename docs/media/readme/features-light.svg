@@ -67,14 +67,12 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <g><rect x="104" y="220" width="87" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="147.0" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >VS Code</text></g></g>
 <g transform="translate(0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >提示词模式</text>
 <text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >说需求，得到提示词。</text>
-<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >口述直接变成结构化提示词，</text>
-<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >可以马上发给任何 AI。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >一次说完，整理成简洁的编号段落，</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >不套模板，不加你没提的要求。</text>
 <rect x="24" y="160" width="384.0" height="106" rx="16" fill="#ffffff"/>
-<g class="pl p0"><text x="44" y="190" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 角色</text></g>
-<g class="pl p1"><text x="44" y="220" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 背景</text></g>
-<g class="pl p2"><text x="44" y="250" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 任务</text></g>
-<g class="pl p3"><text x="224" y="190" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 要求</text></g>
-<g class="pl p4"><text x="224" y="220" font-size="15" font-weight="600" text-anchor="start" class="ink" >## 输出格式</text></g></g>
+<g class="pl p0"><text x="44" y="190" font-size="14" font-weight="500" text-anchor="start" class="ink" >一、请帮我写一份本周周报，发给老板。</text></g>
+<g class="pl p1"><text x="44" y="220" font-size="14" font-weight="500" text-anchor="start" class="ink" >二、本周完成了登录页改版，修复了几个 bug。</text></g>
+<g class="pl p2"><text x="44" y="250" font-size="14" font-weight="500" text-anchor="start" class="ink" >三、篇幅简短。</text></g></g>
 <g transform="translate(448.0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >识别模型</text>
 <text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >四个本机模型，随时切换。</text>
 <text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >默认小而快；中文方言、中英混说、</text>
