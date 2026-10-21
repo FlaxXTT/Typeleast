@@ -544,6 +544,11 @@ export class VoicePolishService {
         if (review.issues.some(issue => !issue || typeof issue !== 'object' || typeof issue.type !== 'string')) {
           throw Object.assign(new Error('invalid review issue'), { code: 'output-format' });
         }
+        const issueTypes = new Set(['invented', 'missing', 'contradiction', 'ambiguity', 'overemphasis', 'filler']);
+        if (review.issues.some(issue => !issueTypes.has(issue.type) || typeof issue.quote !== 'string'
+          || (issue.type === 'missing' ? issue.quote !== '' : !issue.quote.trim() || !text.includes(issue.quote)))) {
+          throw Object.assign(new Error('review evidence does not match draft'), { code: 'output-format' });
+        }
         return review.issues.slice(0, 8);
       };
       const issues = await reviewDraft(draft);
