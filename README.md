@@ -356,6 +356,8 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 <details>
 <summary><b>许可与致谢</b></summary>
 
+TypeLeast 以 [GNU GPL v3.0](LICENSE) 许可发布：可以自由使用、修改和再分发，修改后发布的版本也必须以 GPL-3.0 开源。
+
 见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)：sherpa-onnx（Apache-2.0）、SenseVoice 模型（FunAudioLLM）、Silero VAD（MIT）、Node.js（MIT）、NAudio（MIT），以及 Windows 界面字体 Inter 与思源黑体（SIL OFL 1.1）。
 
 </details>

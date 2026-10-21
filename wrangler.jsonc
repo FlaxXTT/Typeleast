@@ -1,0 +1,11 @@
+// Cloudflare Workers: serves the one-page product site as static files.
+// Build command: bash site/build.sh  (assembles site/dist from site/ and docs/media/)
+// Deploy command: npx wrangler deploy
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "typeleast",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./site/dist"
+  }
+}
