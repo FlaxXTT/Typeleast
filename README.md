@@ -51,7 +51,7 @@
 
 <br>
 
-## 界面
+## 界面 · macOS
 
 <table>
   <tr>
@@ -74,6 +74,33 @@
 
 <p align="center"><sub>截图里的历史和词典都是示例数据。</sub></p>
 
+## 界面 · Windows
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/windows/home-dark.png">
+  <img src="docs/media/windows/home-light.png" alt="Windows 首页：一键开始、整理档位、统计" width="880">
+</picture>
+</p>
+
+<p align="center">
+  <img src="docs/media/windows/recording-bar.gif" alt="录音条：说话时波形随声音起伏，结束后显示三个呼吸圆点，完成后显示对勾" width="540">
+  <br><sub>录音条 · 圆点变红就开始收音，波形跟着声音实时起伏，整理完成自动消失</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/windows/settings-light.png" alt="设置：整理档位四个选项和整理模型"></td>
+    <td width="50%"><img src="docs/media/windows/history-light.png" alt="历史：按日期分组，可复制结果和原话"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>设置 · 整理档位一眼可选，五个标签页分好类</sub></td>
+    <td align="center"><sub>历史 · 按日期分组，搜索、筛选、同一录音重试</sub></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Windows 界面内置开源字体 Inter 与思源黑体，跟随系统浅色和深色；截图为示例数据。</sub></p>
+
 ## 识别模型
 
 默认用 SenseVoice Small。在「设置 → 识别模型」里点「下载并启用」，就能换成更大的本机模型：下载时照常听写，每个文件都校验 SHA-256，加载成功才切换，失败保留当前模型。
@@ -89,7 +116,7 @@
 
 ## 下载
 
-到 [**Releases**](https://github.com/FlaxXTT/Typeleast/releases/latest) 下载最新版本：
+到 [**Releases**](https://github.com/FlaxXTT/Typeleast/releases/latest) 下载最新版本。最新版本页面同时放 Windows 和 Mac 的安装包，两个系统的版本号可能不同：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
@@ -156,7 +183,8 @@
 |---|---|---|
 | 开始 / 结束听写 | 单按 **Fn（🌐）**，或 ⌥Space | 单按 **右 Alt**（可在设置里改为右 Ctrl、Caps Lock 或 F8） |
 | 取消 | Esc，或点录音条上的 ✕ | 同左 |
-| 粘贴上一条 | ⌃⌘V | 托盘菜单「复制上一条」 |
+| 粘贴上一条 | ⌃⌘V | Ctrl + Shift + V（可在设置里更换或关闭） |
+| 切换整理档位 | 设置 | 首页「整理档位」卡片、托盘菜单、任务栏按钮右键菜单 |
 
 1. 点一下任意输入框（微信、邮件、浏览器、Word、VS Code…）。
 2. 按一下快捷键，屏幕底部出现录音条，开始说话。
@@ -165,14 +193,15 @@
 - **整理方式**（四档）：
   - 「自然整理」：去口水词、改通顺。
   - 「提示词模式」：把你说的话改写成一份结构化提示词，可以直接发给 AI。格式固定为 CO-STAR 框架加角色：角色、背景、任务、要求、语气与受众、输出格式。角色、语气、格式会按任务自动补全；数字、日期、人名、具体数据这类事实你没说就不写，只能靠编造才写得出的小节会整节省略。
-    - 系统提示词在「设置 → 提示词模式」里查看和追加；也可以直接编辑配置文件 `promptify.json`（Mac：`~/Library/Application Support/TypeLeast/`，Windows：`%APPDATA%\TypeLeast\`）。`appendix` 是追加在结尾的要求，`override` 是替换后的完整提示词（`null` 表示用默认）。保存后下一次整理就生效；文件写坏了会自动用默认提示词。
+    - Windows：「设置 → 整理 → 提示词模式」点「打开提示词文件」，在记事本里编辑 `promptify-system.md`，保存后下一次整理生效；删除文件或点「恢复默认」改回默认。只想加要求，用同一处的「补充要求」。
+    - Mac：在「设置 → 提示词模式」里查看和追加；也可以直接编辑 `~/Library/Application Support/TypeLeast/promptify.json`。`appendix` 是追加在结尾的要求，`override` 是替换后的完整提示词（`null` 表示用默认）。保存后下一次整理就生效；文件写坏了会自动用默认提示词。
   - 「提示词 Beta」：目标是写出最好的提示词。先分析你的需求，只问会改变提示词的关键问题（最多 4 个，前后矛盾的说法会变成问题）；你再按一次快捷键口头回答，或点「跳过，直接生成」。之后起草，再由一次独立调用审查矛盾、歧义、编造和遗漏，并做最小修补。拿不准的要求放进结尾「## 待确认」，不会两种说法都写进去。每次要调用 3–4 次模型，比其他档位慢，也更费 token。
   - 「原话转写」：不调用大模型，只去口水词。
 - **翻译**：按翻译快捷键说话（Mac 默认 ⇧⌥Space；Windows 在设置里选一个单击键），整理后翻译成你选的语言再插入，支持英、中、日、韩、法、德、西、葡、意、俄。需要填好整理模型。
 - **语言变体**：中文输出可选简体、繁体（台湾）或繁体（香港），在本机转换并换成当地用语；英文可选美式或英式拼写。
 - **活动**：首页按天显示听写热力图，以及活跃天数、当前连续和最长连续天数；只记次数和字数，不记文字。
 - **词典**：一定要这样写的词（人名、产品名、术语），或者「听成=正确写法」这种纠错规则，例如 `德普西克=DeepSeek`。
-- **历史**：最近的听写都在主窗口「历史」里，可以复制整理结果或原话。本次未发布版本加入本地历史加密（Mac 钥匙串密钥、Windows 当前用户 DPAPI），并自动迁移旧数据。迁移或解密失败时保留原数据并提示；重置系统凭据可能导致历史无法解密。
+- **历史**：最近的听写都在主窗口「历史」里，可以复制整理结果或原话。历史在本机加密保存（Mac 钥匙串密钥、Windows 当前用户 DPAPI）；解密失败时保留原数据并提示，重置系统凭据可能导致历史无法解密。
 - Windows 上，右 Alt 在部分欧洲键盘布局里是 AltGr（用来打特殊字符），这种情况请在设置里换一个键。
 
 </details>
@@ -298,18 +327,18 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 - 首屏动画、亮点卡片、免费卡片和按钮：`python3 docs/media/readme/make_readme_art.py` 生成浅色和深色两套 SVG（纯 SVG + CSS 动画，GitHub 直接播放）。
 
+- Windows 截图和录音条动画：`apps/windows/Tools/MediaRenderer/make-media.sh` 用示例数据离屏渲染真实的 WPF 界面，再加圆角和阴影，输出在 `docs/media/windows/`。
 - 截图：`apps/macos/Tools/render.sh` 用示例数据离屏渲染所有页面，再用 `apps/macos/Tools/demo/FrameShot.swift` 加圆角和阴影。
 - 宣传片：先用 `record-demo.sh` 录好 `demo.mov`，再用 `apps/macos/Tools/demo/MakePromo.swift` 把它和真实界面截图剪成 10 秒的 MP4 和 GIF（用法见文件开头）。
 - 演示 GIF：`apps/macos/Tools/demo/record-demo.sh <输出目录>`。它用 macOS 合成语音代替麦克风，走真实的识别、整理和粘贴流程，只录演示用的编辑器窗口。需要已安装、已授权辅助功能并配置好整理模型的 TypeLeast，以及运行脚本的终端有「屏幕录制」权限；录制约 20 秒，期间不要动鼠标键盘。
 
 ### 发布
 
-推送一个 `v` 开头的标签，GitHub Actions 会在 macOS 和 Windows 上分别打包，并把所有文件发布到 Releases：
+托管 CI 没有额度时，在本机打包和发布：
 
-```bash
-TZ=UTC git tag -a v1.16.0 -m "TypeLeast 1.16.0"
-git push origin v1.16.0
-```
+- Windows 安装包可以在 Linux 上构建：`apps/windows/package-wine.sh`（需要 Microsoft .NET 8 SDK、Node.js 和 wine 中的 Inno Setup，用法见文件开头）；在 Windows 上用 `apps\windows\package.ps1`。
+- 发布：在已 `gh auth login` 的电脑上运行 `apps\windows\publish-release.ps1 -Version <版本> -Target <提交> -Files <安装包文件夹>`。它创建 `windows-v<版本>` 发布，并把当前 Mac 安装包一起放进去，最新版本页面同时有两个系统的文件。
+- 推送 `v` 开头的标签仍会触发 GitHub Actions 的发布流程（需要 Actions 额度）。
 
 ### 目录结构
 

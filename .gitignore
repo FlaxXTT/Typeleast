@@ -16,3 +16,6 @@ node_modules/
 Thumbs.db
 desktop.ini
 apps/windows/dist/
+
+# Built site (site/build.sh)
+site/dist/

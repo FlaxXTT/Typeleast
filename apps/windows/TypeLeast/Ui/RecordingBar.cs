@@ -21,10 +21,13 @@ namespace TypeLeast.Ui;
 internal sealed class RecordingBar : Window
 {
     private readonly PillView pill;
-    private readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromMilliseconds(33) };
+    // Animation runs on every rendered frame (usually 60 per second) while the bar is live.
+    private readonly System.Diagnostics.Stopwatch frameClock = new();
+    private bool animating;
     private readonly DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(1800) };
     private AudioRecorder? recorder;
     private DateTime startedAt;
+    private readonly AudioLevel level = new();
 
     public RecordingBar(AppHost host)
     {
@@ -42,8 +45,7 @@ internal sealed class RecordingBar : Window
         pill = new PillView(host.Cancel, host.Toggle) { Margin = new Thickness(12) };
         Content = pill;
 
-        tick.Tick += (_, _) => Animate();
-        hideTimer.Tick += (_, _) => { hideTimer.Stop(); tick.Stop(); Hide(); };
+        hideTimer.Tick += (_, _) => { hideTimer.Stop(); StopAnimation(); Hide(); };
         SourceInitialized += (_, _) => TypeLeast.Native.MakeNoActivate(new WindowInteropHelper(this).Handle);
         SizeChanged += (_, _) => Place();
     }
@@ -68,8 +70,9 @@ internal sealed class RecordingBar : Window
     {
         recorder = rec;
         startedAt = DateTime.UtcNow;
+        level.Reset();
         pill.SetRecording(prefix.Trim());
-        tick.Start();
+        StartAnimation();
         ShowBar();
     }
 
@@ -77,28 +80,47 @@ internal sealed class RecordingBar : Window
     {
         recorder = null;
         pill.SetThinking(text);
-        tick.Start();
+        StartAnimation();
         ShowBar();
     }
 
     public void ShowResult(string text, bool warning)
     {
         recorder = null;
-        tick.Stop();
+        StopAnimation();
         pill.SetResult(text, warning);
         ShowBar();
         hideTimer.Interval = TimeSpan.FromMilliseconds(warning ? 3500 : 1600);
         hideTimer.Start();
     }
 
-    private void Animate()
+    private void StartAnimation()
     {
+        if (animating) return;
+        animating = true;
+        frameClock.Restart();
+        CompositionTarget.Rendering += OnFrame;
+    }
+
+    private void StopAnimation()
+    {
+        if (!animating) return;
+        animating = false;
+        CompositionTarget.Rendering -= OnFrame;
+    }
+
+    private void OnFrame(object? sender, EventArgs e)
+    {
+        // Seconds since the last frame, capped so a stall does not jump the animation.
+        var dt = Math.Min(0.1, frameClock.Elapsed.TotalSeconds);
+        frameClock.Restart();
+        if (dt <= 0) return;
         if (recorder is { } r)
         {
             var left = AudioRecorder.MaxSeconds - (DateTime.UtcNow - startedAt).TotalSeconds;
-            pill.Advance(PillView.Loudness(r.Level), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, r.HasAudio);
+            pill.Advance(level.Next(r.Level, dt), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, r.HasAudio, dt);
         }
-        else pill.Advance(0, null, true);
+        else pill.Advance(0, null, true, dt);
     }
 }
 
@@ -149,15 +171,6 @@ internal sealed class PillView : FrameworkElement
         for (var i = 0; i < seeds.Length; i++) seeds[i] = random.NextDouble() * Math.PI * 2;
     }
 
-    /// <summary>Recorder level (RMS × 6, clamped) to 0..1 on a decibel scale, as the Mac app: 0 = room noise, 1 = a raised voice.</summary>
-    public static double Loudness(double level)
-    {
-        var rms = level / 6;
-        if (!(rms > 0)) return 0;
-        var db = 20 * Math.Log10(rms);
-        return Math.Clamp((db + 52) / 38, 0, 1);
-    }
-
     public void SetRecording(string tag)
     {
         look = Look.Recording; badge = tag; countdown = null; level = 0; listening = false; Array.Clear(bars);
@@ -174,17 +187,21 @@ internal sealed class PillView : FrameworkElement
         Refresh();
     }
 
-    /// <summary>One animation step: bars rise fast and fall gently towards the live level.</summary>
-    public void Advance(double loudness, int? secondsLeft, bool audio)
+    /// <summary>One frame, <paramref name="dt"/> seconds after the last. The bars follow the live level
+    /// (0..1, from AudioLevel) with one time-based smoothing: about 15 ms to rise and 60 ms to fall,
+    /// so they move with the voice instead of trailing it.</summary>
+    public void Advance(double loudness, int? secondsLeft, bool audio, double dt)
     {
         listening = audio;
-        phase += 0.12;
+        phase += dt * 3.6;
         if (phase > Math.PI * 2000) phase = 0;
-        level += (loudness - level) * (loudness > level ? 0.6 : 0.25);
+        level = loudness;
+        var rise = 1 - Math.Exp(-dt / 0.015);
+        var fall = 1 - Math.Exp(-dt / 0.060);
         for (var i = 0; i < bars.Length; i++)
         {
             var target = Target(i);
-            bars[i] += (target - bars[i]) * (target > bars[i] ? 0.55 : 0.2);
+            bars[i] += (target - bars[i]) * (target > bars[i] ? rise : fall);
         }
         if (countdown != secondsLeft) { countdown = secondsLeft; Refresh(); }
         else InvalidateVisual();
@@ -196,8 +213,9 @@ internal sealed class PillView : FrameworkElement
         var centre = (bars.Length - 1) / 2.0;
         var distance = Math.Abs(i - centre) / centre;
         var envelope = 0.35 + 0.65 * Math.Pow(Math.Cos(distance * Math.PI / 2), 1.5);
-        var motion = 0.7 + 0.3 * Math.Sin(phase * (1.1 + (i % 5) * 0.23) + seeds[i]);
-        var shaped = Math.Pow(level, 1.4);
+        // A little life of its own per bar; small, so the height follows the voice.
+        var motion = 0.88 + 0.12 * Math.Sin(phase * (1.1 + (i % 5) * 0.23) + seeds[i]);
+        var shaped = level; // already scaled to the speaker by AudioLevel
         return Math.Max(0.11, shaped * envelope * motion);
     }
 

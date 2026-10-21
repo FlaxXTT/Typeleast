@@ -12,6 +12,10 @@ internal static class Native
     [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    /// <summary>Move a window to a position in physical pixels (no size, z-order or activation change).</summary>
+    public static void MoveWindow(IntPtr hwnd, int x, int y) => SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0, 0x0001 | 0x0004 | 0x0010);
 
     /// <summary>The top-level owner of a window (GA_ROOTOWNER), or the window itself.</summary>
     public static IntPtr RootOwner(IntPtr hwnd)

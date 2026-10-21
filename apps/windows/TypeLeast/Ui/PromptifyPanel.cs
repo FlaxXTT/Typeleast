@@ -19,7 +19,7 @@ internal sealed class PromptifyPanel
     private readonly TextBox appendix = new()
     {
         AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 90, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        FontFamily = Theme.Font, FontSize = 13, BorderBrush = Theme.Line,
+        FontFamily = Theme.Font, FontSize = 13, BorderBrush = Theme.Line, Padding = new Thickness(8, 6, 8, 6),
     };
     private readonly TextBlock status = Theme.Text("", 12, Theme.Grey);
     private readonly Button restore;
