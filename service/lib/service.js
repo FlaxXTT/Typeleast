@@ -100,7 +100,7 @@ export class VoicePolishService {
       startedAt: this.startedAt,
       provider: this.lastRoute.provider,
       model: this.lastRoute.model,
-      promptSource: "article",
+      promptSource: "typeleast",
       temperature: this.config.temperature ?? 0.8,
       strength: this.strength,
       dictionarySize: this.dictionary.length,
@@ -319,7 +319,7 @@ export class VoicePolishService {
 
     const context = await this.buildContext(request);
     if (strength === "promptify") await this.refreshPromptify();
-    // Article's prompt and demonstrations, plus an addendum with only the dictionary
+    // The cleanup prompt and its examples, plus an addendum with only the dictionary
     // and the text around the cursor (already redacted by buildContext).
     const system = systemPromptFor({
       dictionary: context.dictionary,
@@ -332,7 +332,7 @@ export class VoicePolishService {
     // already redacted by buildContext. The text the user finally gets is what
     // the model returns (or the unredacted original when it falls back).
     const outboundText = this.config.redactSecrets === false ? rawText : redactSecrets(rawText);
-    // The user message is the recognised text alone, as the Article article intends.
+    // The user message is the recognised text alone; the prompt says everything in it is content.
     const user = buildUserMessage({ rawText: outboundText });
 
     this.stats.modelCalls += 1;
@@ -348,7 +348,7 @@ export class VoicePolishService {
         signal: request.signal,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });
-      // The vendored prompt asks for {status,text,reason}; a model may answer
+      // The prompt asks for {status,text,reason}; a model may answer
       // with plain prose or malformed JSON instead, and none of that may reach
       // the document. Parse first, then clean, then validate.
       const parsed = parsePolishOutput(result.text);

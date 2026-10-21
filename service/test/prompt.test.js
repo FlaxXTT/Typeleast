@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { articleSystemPrompt } from "../lib/prompts/article-budget-reference.js";
+import { cleanupSystemPrompt } from "../lib/prompts/cleanup.js";
 import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSION, systemPromptFor } from "../lib/prompt.js";
 
-test("article is the only prompt source", () => {
-  assert.deepEqual(PROMPT_SOURCES, ["article"]);
-  assert.match(PROMPT_VERSION, /-article\+subject\+promptify\+beta\+translate$/);
+test("the project's own cleanup prompt is the only prompt source", () => {
+  assert.deepEqual(PROMPT_SOURCES, ["typeleast"]);
+  assert.match(PROMPT_VERSION, /-cleanup\+promptify\+beta\+translate$/);
 });
 
 test("the user message is the recognised text and nothing else", () => {
@@ -14,8 +14,8 @@ test("the user message is the recognised text and nothing else", () => {
 });
 
 test("without a dictionary or field context the system prompt is exactly the upstream text", () => {
-  assert.equal(systemPromptFor({ dictionary: [], fieldContext: null }), articleSystemPrompt());
-  assert.equal(systemPromptFor(), articleSystemPrompt());
+  assert.equal(systemPromptFor({ dictionary: [], fieldContext: null }), cleanupSystemPrompt());
+  assert.equal(systemPromptFor(), cleanupSystemPrompt());
 });
 
 test("the addendum carries only the dictionary and the non-empty parts of the field", () => {
@@ -24,7 +24,7 @@ test("the addendum carries only the dictionary and the non-empty parts of the fi
     fieldContext: { before: "Hi Emma,", selected: "", after: "  ", windowTitle: "New Message" },
   });
   const [upstream, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
-  assert.equal(upstream.trimEnd(), articleSystemPrompt().trimEnd());
+  assert.equal(upstream.trimEnd(), cleanupSystemPrompt().trimEnd());
   assert.match(addendum, /Entries: DeepSeek \| 得普=DeepSeek/);
   assert.match(addendum, /Window title: "New Message"/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);
