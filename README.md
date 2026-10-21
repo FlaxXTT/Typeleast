@@ -337,7 +337,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 托管 CI 没有额度时，在本机打包和发布：
 
 - Windows 安装包可以在 Linux 上构建：`apps/windows/package-wine.sh`（需要 Microsoft .NET 8 SDK、Node.js 和 wine 中的 Inno Setup，用法见文件开头）；在 Windows 上用 `apps\windows\package.ps1`。
-- 发布：在已 `gh auth login` 的电脑上运行 `apps\windows\publish-release.ps1 -Version <版本> -Target <提交> -Files <安装包文件夹>`。它创建 `windows-v<版本>` 发布，并把当前 Mac 安装包一起放进去，最新版本页面同时有两个系统的文件。
+- Windows 独立发布脚本为 `apps\windows\publish-release.ps1`，默认会复制旧 Mac 包；运行前检查版本和参数。双端同步发布时，使用统一 `v<版本>` 标签和同版本的 6 个安装包，手动创建 Release 并提供更新程序需要的校验清单，不把旧 Mac 包当成新版。
 - 推送 `v` 开头的标签仍会触发 GitHub Actions 的发布流程（需要 Actions 额度）。
 
 ### 目录结构

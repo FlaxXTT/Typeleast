@@ -1,32 +1,33 @@
 TypeLeast：按快捷键说话，本机识别，再用你自己的整理模型处理文字并插入光标处。
 
-## 1.16.0 的变化
+## 1.16.2 的变化
 
-- 新增独立翻译快捷键，支持 10 种目标语言。
-- 新增中文简体、台湾繁体、香港繁体，以及美式、英式英文拼写选项。
-- 首页新增活动热力图、活跃天数和连续使用天数，只保存日期和计数。
-- 新增「提示词 Beta」：先澄清需求，再起草并审查提示词；比普通整理更慢，模型调用次数更多。
-- Mac 加入菜单栏与常用编辑快捷键修复。
-- 安全加固：Mac Hardened Runtime、资源完整性检查和单实例锁；两端本地服务启动过滤危险环境变量，向已识别终端粘贴时压平换行。
-- Mac 历史及保留录音加密，Windows 历史实现当前用户 DPAPI；旧数据迁移失败保留原数据并提示，不回退为明文。服务历史默认只存文字摘要。
+- **两端自然整理同步新提示词**，正文按维护者提供的版本保留。数字、百分比、日期和版本号的转换可通过防编造检查；模型返回 `uncertain` 时使用其最佳猜测，结果仍须通过校验。
+- Mac 同步 DeepSeek 官方预设修正，模型提示改为 `deepseek-flash`；已保存的地址、模型和 Key 不自动改写。
+- Windows 修复部分应用只复制不粘贴、录音开头截断等问题；处理中可取消，整理失败显示分类原因。
+- Windows 更新录音条、波形、字体、提示音、圆角和五页设置；首页、设置、托盘及任务栏菜单可切换整理档位。
+- Windows 包含翻译、语言变体、活动热力图、历史筛选与同一录音重试、词典来源与 CSV 导入等此前已合并的功能。
 
-## 本次安装包与验证范围
+## 下载哪个
 
-本次提供 Mac 安装包；Windows 用户继续使用 [v1.5.0](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.5.0)，本次没有 Windows 1.16.0 安装包。
-
-| 系统 | 文件 |
+| 电脑 | 文件 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.16.0-macOS-AppleSilicon.dmg` 或 `.zip` |
-| macOS 13 以上，Intel | `TypeLeast-1.16.0-macOS-Intel.dmg` 或 `.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.16.2-macOS-AppleSilicon.dmg` 或 `.zip` |
+| macOS 13 以上，Intel | `TypeLeast-1.16.2-macOS-Intel.dmg` 或 `.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.16.2-Windows-x64-Setup.exe` 或 `TypeLeast-1.16.2-Windows-x64-Portable.zip` |
 
-服务 199 项、Mac 392 项、Windows 核心逻辑在 Mac 上 164 项测试通过。四个识别模型完成 28 次公开样例识别。Mac 两种架构完成编译、打包及签名验证，Apple 芯片包内 Node、本地服务及默认模型启动通过；Intel 包没有在 Intel 或 Rosetta 环境运行。本次没有使用已无额度的托管 CI。
+本次共 6 个安装包，全部为 1.16.2。Mac 构建号为 8，不附带旧 Mac 1.16.0 包。文件校验清单随包提供。
 
-Windows 原生加密、Windows 真机 UI、Linux 原生执行和长期压力测试尚未完成。独立更新签名与本地服务身份认证仍是已知缺口，不能视为已解决。
+## 验证范围
 
-## 安装与更新
+本轮服务 208 项、Mac 392 项、Windows Core 在 Mac 上 525 项测试通过，Windows 应用交叉编译通过（保留既有 WFAC010 警告）。本地化检查通过。Mac 两种架构的打包、版本与签名检查通过；Windows 便携包中的服务代码和新提示词与对应源码一致。
 
-Mac 安装包包含 Node.js 和识别引擎，模型沿用现有下载方式。发布包没有 Apple Developer ID 公证。已有用户可在 App 内检查更新；这台 Mac 的更新会继续使用已有的本机签名证书，不导出证书。
+Windows 安装文件由维护者提供，此前交接说明其使用 .NET 8 和 Wine 中的 Inno Setup 构建。本轮没有 Windows 真机安装与界面操作验证，也没有 Intel 或 Rosetta 运行验证。Windows 原生 DPAPI 分支未在本机执行。未读取真实 API Key，未使用真实模型试用新提示词，不将单元测试当作整理效果证明。托管 CI 没有额度，本次沿用维护者已授权的本机验证与手动发布方式，不声称三平台 CI 通过。
 
-首次启动新版会迁移旧历史与保留录音。重置系统凭据可能使加密历史无法解密；迁移或保存失败会保留原数据并提示。终端保护仅覆盖已识别终端。
+## 安装与已知限制
 
-完整变化见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)，验证边界见 [1.16.0 验证记录](https://github.com/FlaxXTT/Typeleast/blob/main/docs/v1.16.0-验证记录.md)。文件校验记录随安装包提供。
+Mac 包没有 Apple Developer ID 公证。已有用户可在 App 内检查更新；这台 Mac 继续使用现有本机证书重签，不导出证书。Windows 安装包没有代码签名；识别引擎需要 Microsoft Visual C++ 运行库（x64）。
+
+连接测试成功只说明短请求可达，不能保证每次整理成功。已保存旧 DeepSeek 模型的用户需自行改为当前有效模型。新提示词真实效果、Windows 真机 UI、长期压力测试仍需继续验证；独立更新签名与本地服务身份认证仍是已知缺口。
+
+完整变化见 [CHANGELOG.md](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)，本轮记录见 [1.16.2 发布交接](https://github.com/FlaxXTT/Typeleast/blob/main/docs/v1.16.2-发布交接.md)。
