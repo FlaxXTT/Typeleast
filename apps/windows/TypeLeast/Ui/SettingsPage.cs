@@ -27,7 +27,7 @@ internal sealed class SettingsPage : IPage
     private readonly TextBlock llmStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBlock keyStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBox baseUrl = Theme.Input("", 300);
-    private readonly PasswordBox key = new() { Width = 220, Padding = new Thickness(6, 4, 6, 4), FontSize = 13 };
+    private readonly PasswordBox key = new() { Width = 220, Padding = new Thickness(8, 5, 8, 5), FontSize = 13 };
     private readonly TextBox model = Theme.Input("", 200);
     private readonly ComboBox modelList = Theme.Choice(160);
     private readonly TextBlock keyboardStatus = Theme.Text("", 12, Theme.Grey);
