@@ -19,6 +19,29 @@
 
 <br>
 
+## 聊着天，就把项目讲清楚了
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/prompt-dark.svg">
+  <img src="docs/media/readme/prompt-light.svg" alt="提示词 Beta：你随口说项目，它只问缺的几个问题，你回答并核对它的理解，然后写成完整的长提示词，再审查一遍，删掉你没说过的内容。" width="880">
+</picture>
+</p>
+
+脑子里的项目总是比说出口的多。给 AI 写一篇长提示词，难的不是打字，而是把背景、目标和限制一次想全。**提示词 Beta** 不让你对着空白页套模板，而是陪你聊：
+
+- **为你写**：说几分钟、分几轮补充都没关系。整场对话最后写成一篇完整的长提示词，背景、目标、要求、待确认，可以直接交给 ChatGPT、Claude、DeepSeek 或任何 AI。
+- **为你问**：每轮重新读完整段对话，只问会影响理解的缺口，每轮最多 4 问。答过的不重复问，可以只答一部分。
+- **为你核对**：每答一轮，「当前理解」就更新一次，它听懂了什么一眼就能看到。由你点「结束补充并生成」才出稿。
+- **为你改**：说错了直接改口，以最后的说法为准。出稿后再独立审查一遍：删掉没有来源的扩展，补回被漏掉的原话。
+- **只写你说过的**：数字、日期、人名、产品名、功能都不会凭空出现。前后矛盾时不替你二选一，原样列进「待确认」。
+
+赶时间时用**提示词模式**：一次说完，直接整理成简洁、严谨的编号段落，不来回追问。
+
+<sub>上图为示意，对话内容是虚构的示例。</sub>
+
+<br>
+
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/features-dark.svg">
@@ -116,7 +139,7 @@
 
 ## 下载
 
-Mac 最新版为 [**v1.17.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)；Windows 本次未打包，继续从 [**v1.16.2**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.16.2) 下载。两个系统的源码功能已对齐，但 Windows 1.16.2 安装包不包含本轮普通模式和多轮 Beta 改动：
+Mac 和 Windows 的最新版都是 [**v1.17.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)，在同一个发布页里：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
