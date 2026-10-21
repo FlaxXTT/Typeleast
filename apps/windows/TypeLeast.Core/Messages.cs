@@ -3,6 +3,12 @@ namespace TypeLeast.Core;
 /// <summary>What the app tells the user, in one place (the same wording as on macOS).</summary>
 public static class Messages
 {
+    /// <summary>How long the microphone took from the request to its first audio. Speech before that is lost,
+    /// so a slow device gets advice; 350 ms is roughly where a quick speaker loses the first syllable.</summary>
+    public static string MicrophoneStartup(long ms) => ms <= 350
+        ? L10n.T("麦克风启动用时 {0} 毫秒。", ms)
+        : L10n.T("麦克风启动用时 {0} 毫秒，较慢：录音条的圆点变红后再开始说话。蓝牙耳机通常更慢，可在设置中换用电脑自带或有线麦克风。", ms);
+
     /// <summary>What to say about the recogniser, or "" when it is ready.</summary>
     public static string SpeechProblem(SpeechStatus? speech) => (speech?.Phase ?? "") switch
     {

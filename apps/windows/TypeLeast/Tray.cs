@@ -111,7 +111,7 @@ internal sealed class Tray : IDisposable
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
         {
             if (!e.Item.Selected || !e.Item.Enabled) return;
-            var visible = Math.Min(e.Item.Width, e.ToolStrip.Width - 2 * e.Item.Bounds.Left);
+            var visible = Math.Min(e.Item.Width, (e.ToolStrip?.Width ?? e.Item.Width) - 2 * e.Item.Bounds.Left);
             var r = new Rectangle(2, 1, visible - 5, e.Item.Height - 3);
             using var path = Rounded(r, 6);
             using var fill = new SolidBrush(Palette(Theme.Selected));

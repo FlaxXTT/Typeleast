@@ -10,9 +10,13 @@ internal sealed class FieldTarget
     public IntPtr Window { get; }
     private readonly int[]? identity;
     private FieldTarget(IntPtr window, int[]? identity) { Window = window; this.identity = identity; }
-    public static FieldTarget Capture()
+    public static FieldTarget Capture() => CaptureFor(Native.GetForegroundWindow());
+
+    /// <summary>The focused field of <paramref name="window"/>, if it is still in front. UI Automation can
+    /// take a second in browsers and Electron apps, so dictation calls this off the UI thread, after the microphone is open.</summary>
+    public static FieldTarget CaptureFor(IntPtr window)
     {
-        var window = Native.GetForegroundWindow();
+        if (window == IntPtr.Zero || Native.GetForegroundWindow() != window) return new(window, null);
         try { return new(window, AutomationElement.FocusedElement?.GetRuntimeId()); }
         catch (Exception) { return new(window, null); }
     }

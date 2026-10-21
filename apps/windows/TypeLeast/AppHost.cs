@@ -60,9 +60,16 @@ internal sealed class AppHost
     public RetainedAudio RetainedAudio { get; }
     private FieldTarget? targetField;
     private byte[]? recordingContext;
+    // Read in the background while recording; never delays opening the microphone.
+    private Task<FieldTarget>? targetFieldTask;
+    private Task<byte[]?>? recordingContextTask;
+    private readonly System.Diagnostics.Stopwatch micClock = new();
+    /// <summary>Milliseconds from the hotkey to the first audio of the last recording (null before any).</summary>
+    public long? LastMicrophoneStartMs { get; private set; }
     private readonly EditLearner learner = new();
     private FieldTarget? betaField;
     private readonly AudioDucking ducking = new();
+    public PromptFileSync PromptFile { get; }
     private IdleBar? idleBar;
     private Onboarding? onboarding;
     private bool started;
@@ -93,6 +100,7 @@ internal sealed class AppHost
         Service = new ServiceManager(Client) { NodePathOverride = Settings.NodePath, ModelMirror = Settings.ModelMirror };
         hook = new KeyboardHook(Settings.Hotkey, Settings.TranslateHotkey);
         bar = new RecordingBar(this);
+        PromptFile = new PromptFileSync(Client, AppPaths.StateDirectory());
         bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
         if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件无法读取，原文件已保留，已阻止覆盖保存。");
         if (Activity.LastError is not null) Hint = L10n.T("活动计数文件损坏或无法读取，原文件已保留。");
@@ -134,10 +142,11 @@ internal sealed class AppHost
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
         {
-            if (Service.State == ServiceManager.Phase.Running) _ = RefreshHealth();
+            if (Service.State == ServiceManager.Phase.Running) { _ = RefreshHealth(); PromptFile.ServiceReady(); }
             Raise();
         });
         Service.Start();
+        PromptFile.Start();
 
         hook.Tapped += () => app.Dispatcher.InvokeAsync(() => Toggle());
         hook.PasteLast += () => app.Dispatcher.InvokeAsync(() => _ = PasteLast());
@@ -146,6 +155,7 @@ internal sealed class AppHost
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
         HotkeyReady = hook.Install();
         if (HotkeyReady != true) Hint = L10n.T("无法注册快捷键，可以用托盘菜单开始听写");
+        recorder.AudioStarted += OnAudioStarted;
         recorder.LimitReached += () => app.Dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
         recorder.RecordingFailed += () => app.Dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风已断开或录音异常，请重新选择设备后重试。")); });
 
@@ -168,6 +178,7 @@ internal sealed class AppHost
         Cancel();
         DropBeta();
         healthTimer?.Stop();
+        PromptFile.Dispose();
         recorder.Cancel();
         hook.Dispose();
         Service.Stop();
@@ -203,7 +214,7 @@ internal sealed class AppHost
     {
         if (Phase != DictationPhase.Idle || operations.TryBegin() is not { } operation) return false;
         learner.Stop();
-        try { recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
+        try { micClock.Restart(); LastMicrophoneStartMs = null; recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
         catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("无法打开麦克风，请检查设备和 Windows 麦克风权限。")); return false; }
     }
     public void EndMicrophoneTest() { if (IsMicrophoneTesting) Cancel(); }
@@ -414,18 +425,15 @@ internal sealed class AppHost
         }
         var operation = operations.TryBegin();
         if (operation is null) return;
-        learner.Stop();
-        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
-        targetField = FieldTarget.Capture();
-        targetWindow = targetField.Window;
-        recordingContext = Settings.UseFieldContext ? FieldContextReader.Read(targetField) : null;
-        targetApp = Shell.ProcessName(targetWindow);
+        // The microphone opens first: anything slow before it (UI Automation, ducking) would cut
+        // the start of what the user says. Only the foreground window, which is instant, is read before.
+        micClock.Restart();
+        targetWindow = Native.GetForegroundWindow();
+        targetField = null; recordingContext = null;
         try
         {
-            if (Settings.PlaySounds) System.Media.SystemSounds.Asterisk.Play();
             recorder.Start(Settings.MicrophoneDevice);
             MicrophoneReady = true;
-            if (Settings.MuteOtherAudio) ducking.Start();
         }
         catch (InvalidOperationException e)
         {
@@ -439,6 +447,35 @@ internal sealed class AppHost
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
         Raise();
+        learner.Stop();
+        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
+        targetApp = Shell.ProcessName(targetWindow);
+        var window = targetWindow;
+        targetFieldTask = Task.Run(() => FieldTarget.CaptureFor(window));
+        recordingContextTask = Settings.UseFieldContext ? targetFieldTask.ContinueWith(t => FieldContextReader.Read(t.Result), TaskScheduler.Default) : null;
+        if (Settings.MuteOtherAudio) ducking.Start();
+    }
+
+    /// <summary>First audio of a recording: record how long the microphone took, and give the "speak now" cue.</summary>
+    private void OnAudioStarted()
+    {
+        var ms = micClock.ElapsedMilliseconds;
+        app.Dispatcher.InvokeAsync(() =>
+        {
+            if (Phase != DictationPhase.Recording) return;
+            LastMicrophoneStartMs = ms;
+            Log.Write("mic.ready", ms.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (Settings.PlaySounds && !IsMicrophoneTesting) System.Media.SystemSounds.Asterisk.Play();
+            Raise();
+        });
+    }
+
+    /// <summary>A background read, or null if it is not done within <paramref name="ms"/>.</summary>
+    private static async Task<T?> Within<T>(Task<T>? task, int ms) where T : class?
+    {
+        if (task is null) return null;
+        if (await Task.WhenAny(task, Task.Delay(ms)) != task || !task.IsCompletedSuccessfully) return null;
+        return task.Result;
     }
 
     public void Cancel()
@@ -482,6 +519,10 @@ internal sealed class AppHost
         hook.SwallowEscape = true;
         bar.ShowThinking(translateTo is null ? null : L10n.T("翻译中…"));
         Raise();
+        targetField = await Within(targetFieldTask, 300);
+        recordingContext = await Within(recordingContextTask, 300);
+        targetFieldTask = null; recordingContextTask = null;
+        if (!operations.IsCurrent(operation)) return;
         try
         {
             var requestOptions = answering is not null ? betaOptions ?? options : options;

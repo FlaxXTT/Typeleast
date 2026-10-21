@@ -301,13 +301,16 @@ internal static class Theme
             grid.Children.Add(trailing);
             System.Windows.Automation.AutomationProperties.SetName(trailing, title);
             grid.SizeChanged += (_, _) => {
-                var stack = grid.ActualWidth < 760;
+                // Control on the right, as on the Mac, while the title and note keep at least 260 px;
+                // below that (a narrow window, a wide control) the control goes under the text.
+                var stack = grid.ActualWidth - trailing.DesiredSize.Width - 16 < 260;
                 if (trailing is FrameworkElement bound) bound.MaxWidth = System.Math.Max(120, grid.ActualWidth);
                 Grid.SetColumn(trailing, stack ? 0 : 1);
                 Grid.SetRow(trailing, stack ? 1 : 0);
                 grid.ColumnDefinitions[1].Width = stack ? new GridLength(0) : GridLength.Auto;
                 if (trailing is FrameworkElement element) {
                     element.HorizontalAlignment = stack ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+                    element.VerticalAlignment = stack ? VerticalAlignment.Top : VerticalAlignment.Center;
                     element.Margin = stack ? new Thickness(0, 6, 0, 0) : new Thickness(0);
                 }
             };

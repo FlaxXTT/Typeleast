@@ -13,9 +13,8 @@ public static class PrivateStorage
             throw new UnauthorizedAccessException("A dedicated state directory is required");
         for (var parent = new DirectoryInfo(full); parent is not null; parent = parent.Parent)
             if (parent.Exists && parent.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new UnauthorizedAccessException("State link rejected");
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "app-settings.json", "app-history.json", "app-activity.json", "api-token", "runtime.json", "config.json", "speech-model.json", "history.jsonl", "dictionary.json", "promptify.json", "typeleast-app.log", "typeleast-app.log.1" };
-        if (Directory.Exists(full) && Directory.EnumerateFiles(full).Any(f => !names.Contains(Path.GetFileName(f)) && !f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)))
-            throw new UnauthorizedAccessException("State directory contains unrelated files");
+        // Other files in the folder (the prompt file, a user's own notes) are not an error:
+        // failing here would stop the app from starting at all.
         Directory.CreateDirectory(path);
         if (!OperatingSystem.IsWindows()) return;
         var sid = WindowsIdentity.GetCurrent().User ?? throw new UnauthorizedAccessException("No current user SID");
