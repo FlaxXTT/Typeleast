@@ -48,9 +48,10 @@ internal sealed class AudioRecorder
         {
             DeviceNumber = device >= 0 && device < WaveInEvent.DeviceCount ? device : -1,
             WaveFormat = new WaveFormat(Wav.SampleRate, 16, 1),
-            // Short buffers: the first audio (and the "speak now" cue) comes sooner after the device opens.
-            BufferMilliseconds = 30,
-            NumberOfBuffers = 6,
+            // Short buffers: the first audio (and the "speak now" cue) comes sooner after the device opens,
+            // and the waveform's level is at most 20 ms old.
+            BufferMilliseconds = 20,
+            NumberOfBuffers = 8,
         };
         w.DataAvailable += (_, e) =>
         {
