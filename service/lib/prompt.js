@@ -32,7 +32,7 @@ export function promptVersionFor() {
   return PROMPT_VERSION;
 }
 
-/** Marker that separates the vendored prompt from our own additions. */
+/** Context separator; its existing wire text stays compatible with earlier versions. */
 export const HARNESS_ADDENDUM_MARKER = "=== HARNESS ADDENDUM (not part of the upstream prompt) ===";
 
 /** Field-context parts, in the order they are shown to the model. */
@@ -44,11 +44,11 @@ const CONTEXT_PARTS = [
 ];
 
 /**
- * Our additions, appended to the vendored prompt only when they carry facts.
+ * Context appended to the owner's cleanup prompt only when it carries facts.
  *
- * The upstream prompt knows nothing about a personal dictionary or about the
+ * The cleanup prompt knows nothing about a personal dictionary or about the
  * text already in the box being typed into. The section is delimited so a
- * reader (or a test) can strip it and compare the rest with the upstream text
+ * reader (or a test) can strip it and compare the rest with the owner's text
  * byte for byte.
  *
  * @param {object} input - dictionary entries and field context, if any.
@@ -87,7 +87,7 @@ export function systemPromptFor({ dictionary, fieldContext, strength, promptify 
 }
 
 /**
- * The user message: the raw recognised text, as the article intends. The
+ * The user message: the raw recognised text, as the cleanup prompt requires. The
  * prompt already states that everything received is content to be optimised,
  * not a question.
  * @param {object} input - carries rawText.

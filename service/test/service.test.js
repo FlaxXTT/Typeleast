@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
+import { CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
+import { existsSync } from "node:fs";
 
 const RAW = "um so we should send the report on tuesday, no wait, wednesday";
 const ROUTE = { baseURL: "https://api.example.com/v1", model: "chat-model", apiKey: "sk-test-123456789012" };
@@ -80,6 +82,22 @@ test("a clean transcript is polished with the user's own route", async () => {
   assert.equal(model.calls[0].body.model, "chat-model");
   assert.equal(service.snapshot().provider, "custom:api.example.com", "/health names the last route, never the key");
   assert.ok(!JSON.stringify(service.snapshot()).includes(ROUTE.apiKey));
+});
+
+test("legacy cleanup selections send only the owner's prompt and cannot restore the removed prompt", async () => {
+  assert.equal(existsSync(new URL("../lib/prompts/erduo-budget-typeless.js", import.meta.url)), false);
+  for (const strength of ["prompt", "conservative", "maximal"]) {
+    const model = fakeModel("我们周三开会。");
+    const service = makeService({ model, config: { strength, promptSource: "erduo" } });
+    const result = await service.polish({ rawText: "我们周三开会。", strength, llm: ROUTE });
+    assert.equal(result.fallback, false, strength);
+    assert.equal(model.calls.length, 1, strength);
+    assert.deepEqual(model.calls[0].body.messages, [
+      { role: "system", content: CLEANUP_PROMPT },
+      { role: "user", content: "我们周三开会。" },
+    ], strength);
+    assert.equal(service.snapshot().promptSource, "typeleast");
+  }
 });
 
 test("without an API key the tidied transcript is returned and nothing is called", async () => {

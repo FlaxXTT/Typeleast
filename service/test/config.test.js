@@ -12,7 +12,7 @@ test("an empty configuration is valid and returns the documented key set", () =>
     "dictionary", "historyDays", "language", "logRaw", "maxAudioBytes", "maxDurationSeconds",
     "maxOutputTokens", "numThreads", "redactSecrets", "strength", "temperature", "timeoutMs",
   ]);
-  assert.equal(result.value.temperature, 0.8, "the vendored prompt is tuned for 0.8");
+  assert.equal(result.value.temperature, 0.8, "keeps the existing sampling temperature default");
   assert.equal(result.value.strength, "prompt");
   assert.equal(result.value.redactSecrets, true);
   assert.equal(result.value.numThreads, 2);

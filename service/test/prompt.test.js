@@ -13,7 +13,7 @@ test("the user message is the recognised text and nothing else", () => {
   assert.equal(buildUserMessage({}), "");
 });
 
-test("without a dictionary or field context the system prompt is exactly the upstream text", () => {
+test("without a dictionary or field context the system prompt is exactly the owner's text", () => {
   assert.equal(systemPromptFor({ dictionary: [], fieldContext: null }), cleanupSystemPrompt());
   assert.equal(systemPromptFor(), cleanupSystemPrompt());
 });
