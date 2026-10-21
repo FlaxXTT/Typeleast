@@ -8,23 +8,26 @@ namespace TypeLeast;
 /// <summary>
 /// Entry point. One copy runs at a time: starting TypeLeast again just brings the
 /// running copy's window forward. "--autostart" (used by the Run key) starts it
-/// quietly in the tray.
+/// quietly in the tray. "--strength &lt;mode&gt;" (the taskbar jump list) switches the
+/// running copy's cleanup mode instead of showing its window.
 /// </summary>
 internal static class Program
 {
     private const string MutexName = "TypeLeast.SingleInstance";
     private const string ShowEventName = "TypeLeast.ShowWindow";
+    private const string ModeEventPrefix = "TypeLeast.Strength.";
 
     [STAThread]
     private static int Main(string[] args)
     {
+        var mode = JumpList.ModeFrom(args);
         using var mutex = new Mutex(true, MutexName, out var first);
         if (!first)
         {
             try
             {
-                using var show = EventWaitHandle.OpenExisting(ShowEventName);
-                show.Set();
+                using var signal = EventWaitHandle.OpenExisting(mode is null ? ShowEventName : ModeEventPrefix + mode);
+                signal.Set();
             }
             catch (Exception) { }
             return 0;
@@ -40,12 +43,21 @@ internal static class Program
         };
         app.Startup += (_, _) =>
         {
-            host.Start(autostart: args.Contains("--autostart"));
-            // A second launch signals this event: show the window.
-            var show = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            host.Start(autostart: args.Contains("--autostart") || mode is not null);
+            if (mode is not null) host.SetStrength(mode, announce: true);
+            // A second launch signals one of these events: show the window, or switch the cleanup mode.
+            var codes = TypeLeast.Core.CleanupModes.Codes;
+            var signals = new WaitHandle[codes.Length + 1];
+            signals[0] = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            for (var i = 0; i < codes.Length; i++) signals[i + 1] = new EventWaitHandle(false, EventResetMode.AutoReset, ModeEventPrefix + codes[i]);
             var thread = new Thread(() =>
             {
-                while (show.WaitOne()) app.Dispatcher.InvokeAsync(() => host.ShowWindow(Ui.MainWindow.Page.Home));
+                while (true)
+                {
+                    var which = WaitHandle.WaitAny(signals);
+                    if (which == 0) app.Dispatcher.InvokeAsync(() => host.ShowWindow(Ui.MainWindow.Page.Home));
+                    else { var code = codes[which - 1]; app.Dispatcher.InvokeAsync(() => host.SetStrength(code, announce: true)); }
+                }
             }) { IsBackground = true, Name = "TypeLeast.ShowSignal" };
             thread.Start();
         };

@@ -25,6 +25,7 @@ internal sealed class RecordingBar : Window
     private readonly DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(1800) };
     private AudioRecorder? recorder;
     private DateTime startedAt;
+    private readonly AudioLevel level = new();
 
     public RecordingBar(AppHost host)
     {
@@ -68,6 +69,7 @@ internal sealed class RecordingBar : Window
     {
         recorder = rec;
         startedAt = DateTime.UtcNow;
+        level.Reset();
         pill.SetRecording(prefix.Trim());
         tick.Start();
         ShowBar();
@@ -96,7 +98,7 @@ internal sealed class RecordingBar : Window
         if (recorder is { } r)
         {
             var left = AudioRecorder.MaxSeconds - (DateTime.UtcNow - startedAt).TotalSeconds;
-            pill.Advance(PillView.Loudness(r.Level), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, r.HasAudio);
+            pill.Advance(level.Next(r.Level), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, r.HasAudio);
         }
         else pill.Advance(0, null, true);
     }
@@ -149,15 +151,6 @@ internal sealed class PillView : FrameworkElement
         for (var i = 0; i < seeds.Length; i++) seeds[i] = random.NextDouble() * Math.PI * 2;
     }
 
-    /// <summary>Recorder level (RMS × 6, clamped) to 0..1 on a decibel scale, as the Mac app: 0 = room noise, 1 = a raised voice.</summary>
-    public static double Loudness(double level)
-    {
-        var rms = level / 6;
-        if (!(rms > 0)) return 0;
-        var db = 20 * Math.Log10(rms);
-        return Math.Clamp((db + 52) / 38, 0, 1);
-    }
-
     public void SetRecording(string tag)
     {
         look = Look.Recording; badge = tag; countdown = null; level = 0; listening = false; Array.Clear(bars);
@@ -174,7 +167,7 @@ internal sealed class PillView : FrameworkElement
         Refresh();
     }
 
-    /// <summary>One animation step: bars rise fast and fall gently towards the live level.</summary>
+    /// <summary>One animation step: bars rise fast and fall gently towards the live level (0..1, from AudioLevel).</summary>
     public void Advance(double loudness, int? secondsLeft, bool audio)
     {
         listening = audio;
@@ -197,7 +190,7 @@ internal sealed class PillView : FrameworkElement
         var distance = Math.Abs(i - centre) / centre;
         var envelope = 0.35 + 0.65 * Math.Pow(Math.Cos(distance * Math.PI / 2), 1.5);
         var motion = 0.7 + 0.3 * Math.Sin(phase * (1.1 + (i % 5) * 0.23) + seeds[i]);
-        var shaped = Math.Pow(level, 1.4);
+        var shaped = level; // already scaled to the speaker by AudioLevel
         return Math.Max(0.11, shaped * envelope * motion);
     }
 

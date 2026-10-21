@@ -533,6 +533,23 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("a new prompt file keeps an existing replacement", PromptFile.Initial("Old", def), "Old\r\n");
 }
 
+// ---- cue sounds, waveform level and cleanup modes
+
+{
+    var start = Chimes.Start(); var stop = Chimes.Stop();
+    Check("start chime is a WAV", start.Length > 44 && System.Text.Encoding.ASCII.GetString(start, 0, 4) == "RIFF");
+    Check("stop chime is a WAV", stop.Length > 44 && System.Text.Encoding.ASCII.GetString(stop, 8, 4) == "WAVE");
+    var level = new AudioLevel();
+    Eq("silence draws nothing", level.Next(0), 0.0);
+    Check("room noise stays flat", level.Next(6 * Math.Pow(10, -52 / 20.0)) == 0);
+    var quiet = 6 * Math.Pow(10, -38 / 20.0);
+    double shown = 0; for (var i = 0; i < 30; i++) shown = level.Next(quiet);
+    Check("quiet speech fills most of the bar", shown > 0.8, $"shown={shown}");
+    Check("loud speech is clamped", new AudioLevel().Next(6) <= 1);
+    Eq("four cleanup modes", CleanupModes.Codes.Length, 4);
+    Check("natural cleanup keeps its stored id", CleanupModes.IsKnown("prompt") && !CleanupModes.IsKnown("maximal"));
+}
+
 // ---- Windows release lookup: Mac keeps GitHub's "latest"; Windows reads its own assets
 
 {

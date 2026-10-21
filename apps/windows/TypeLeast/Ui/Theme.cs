@@ -359,6 +359,35 @@ internal static class Theme
         return row;
     }
 
+    /// <summary>A rounded choice button (settings tabs, cleanup modes); SetPillSelected marks the chosen one.</summary>
+    public static Button PillButton(string text, Action onClick)
+    {
+        var button = new Button
+        {
+            Content = text, FontFamily = Font, FontSize = 13, Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 0, 6, 6),
+            Cursor = Cursors.Hand, BorderThickness = new Thickness(0), Background = CardFill, Foreground = Ink,
+        };
+        var template = new ControlTemplate(typeof(Button));
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
+        border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        border.SetBinding(Border.PaddingProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        border.AppendChild(presenter);
+        template.VisualTree = border;
+        button.Template = template;
+        button.Click += (_, _) => onClick();
+        return button;
+    }
+
+    public static void SetPillSelected(Button button, bool selected)
+    {
+        button.Background = selected ? Ink : CardFill;
+        button.Foreground = selected ? InkInverse : Ink;
+        button.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
+    }
+
     public static TextBlock SectionTitle(string text) =>
         new() { Text = text, FontFamily = Font, FontSize = 12, Foreground = Grey, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 6, 0, 8) };
 

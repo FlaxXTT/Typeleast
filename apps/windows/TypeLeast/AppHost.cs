@@ -160,6 +160,7 @@ internal sealed class AppHost
         recorder.RecordingFailed += () => app.Dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风已断开或录音异常，请重新选择设备后重试。")); });
 
         tray = new Tray(this);
+        JumpList.Update(Settings.Strength);
         healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         healthTimer.Tick += async (_, _) => await RefreshHealth();
         healthTimer.Start();
@@ -401,6 +402,21 @@ internal sealed class AppHost
     /// <summary>翻译模式's key: starts a recording inserted in the target language; while recording, either key finishes.</summary>
     public void ToggleTranslate() => Toggle(Settings.TranslateTarget);
 
+    /// <summary>Change the cleanup mode (整理档位) from any entry: home, settings, tray or the taskbar
+    /// jump list. It applies to the next recording. <paramref name="announce"/> shows the new mode on the
+    /// recording bar for entries outside the main window.</summary>
+    public void SetStrength(string code, bool announce = false)
+    {
+        if (!CleanupModes.IsKnown(code)) return;
+        if (Settings.Strength != code)
+        {
+            Settings.Strength = code;
+            if (!SaveSettings()) return;
+            JumpList.Update(Settings.Strength);
+        }
+        if (announce && Phase == DictationPhase.Idle) bar.ShowResult(L10n.T("整理档位：") + CleanupModes.Title(code), warning: false);
+    }
+
     private void Toggle(string? translateTo)
     {
         if (IsMicrophoneTesting) return;
@@ -465,7 +481,7 @@ internal sealed class AppHost
             if (Phase != DictationPhase.Recording) return;
             LastMicrophoneStartMs = ms;
             Log.Write("mic.ready", ms.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            if (Settings.PlaySounds && !IsMicrophoneTesting) System.Media.SystemSounds.Asterisk.Play();
+            if (Settings.PlaySounds && !IsMicrophoneTesting) Sounds.Start();
             Raise();
         });
     }
@@ -499,7 +515,7 @@ internal sealed class AppHost
         if (operations.Active is not { } operation || recordingOptions is not { } options) return;
         var (wav, seconds) = recorder.Stop();
         ducking.Dispose();
-        if (Settings.PlaySounds) System.Media.SystemSounds.Asterisk.Play();
+        if (Settings.PlaySounds) Sounds.Stop();
         hook.SwallowEscape = false;
         var translateTo = options.TranslateTo;
         translating = null;

@@ -16,12 +16,22 @@ internal static class MicrophoneTestPanel
         var window = new Window { Title = L10n.T("麦克风测试"), Width = 420, SizeToContent = SizeToContent.Height, Background = Theme.Background,
             WindowStartupLocation = WindowStartupLocation.CenterScreen };
         var startup = Theme.Text(L10n.T("正在打开麦克风…"), 12, Theme.Grey);
-        var content = Theme.Stack(16, text, level, startup, Theme.Primary(L10n.T("停止测试"), () => window.Close())); content.Margin = new Thickness(24); window.Content = content;
+        var volume = Theme.Text(L10n.T("请用平常的音量说几句话。"), 12, Theme.Grey);
+        var content = Theme.Stack(16, text, level, startup, volume, Theme.Primary(L10n.T("停止测试"), () => window.Close())); content.Margin = new Thickness(24); window.Content = content;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) }; var until = DateTime.UtcNow.AddSeconds(15);
+        var loudest = 0.0; var heard = DateTime.MaxValue;
         timer.Tick += (_, _) =>
         {
-            level.Value = host.MicrophoneLevel;
-            if (host.LastMicrophoneStartMs is { } ms) startup.Text = Messages.MicrophoneStartup(ms);
+            var loudness = AudioLevel.Loudness(host.MicrophoneLevel);
+            level.Value = loudness;
+            loudest = Math.Max(loudest, loudness);
+            if (host.LastMicrophoneStartMs is { } ms) { startup.Text = Messages.MicrophoneStartup(ms); if (heard == DateTime.MaxValue) heard = DateTime.UtcNow; }
+            // After a few seconds of listening, judge the loudest moment (0.43 is about -40 dBFS).
+            if (DateTime.UtcNow - heard > TimeSpan.FromSeconds(4))
+            {
+                volume.Text = loudest < 0.43 ? L10n.T("输入音量偏低：可在 Windows 设置 → 系统 → 声音 → 输入 中调高麦克风音量，或离麦克风近一些。") : L10n.T("输入音量正常。");
+                volume.Foreground = loudest < 0.43 ? Theme.Warning : Theme.Success;
+            }
             if (DateTime.UtcNow >= until || !host.IsMicrophoneTesting) window.Close();
         };
         window.Closed += (_, _) => { timer.Stop(); host.EndMicrophoneTest(); }; window.Show(); timer.Start();
