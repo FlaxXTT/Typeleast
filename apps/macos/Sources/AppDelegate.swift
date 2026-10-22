@@ -178,7 +178,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 
-    /// Non-invasive launch diagnostics (used by build/acceptance checks). Never runs normally.
+    #if TYPELEAST_DEV
+    /// Non-invasive launch diagnostics (used by build/acceptance checks). Development builds only.
     func runSelfCheck() {
         // Own-API-key diagnostics, run inside the real bundle (where App Transport
         // Security and the app's Keychain identity apply). The key comes from the
@@ -276,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         fflush(stdout)
         NSApp.terminate(nil)
     }
+    #endif
 
     static func residentMemoryKB() -> Int {
         var info = mach_task_basic_info()
