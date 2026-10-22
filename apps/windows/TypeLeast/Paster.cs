@@ -26,18 +26,13 @@ internal static class Paster
         {
             return SetText(text) ? Outcome.CopiedOnly : Outcome.Failed;
         }
-        IDataObject? previous = null;
-        try { previous = Clipboard.GetDataObject(); } catch (Exception) { }
-        if (!SetText(text)) return Outcome.Failed;
+        var previous = restoreClipboard ? Snapshot() : null;
+        object data = text;
         if (formatted && FormattedText.HtmlClipboard(text) is { } html)
         {
-            try
-            {
-                var data = new DataObject(); data.SetText(text); data.SetData(DataFormats.Html, html);
-                Clipboard.SetDataObject(data, true);
-            }
-            catch (Exception) { return Outcome.CopiedOnly; }
+            var rich = new DataObject(); rich.SetText(text); rich.SetData(DataFormats.Html, html); data = rich;
         }
+        if (!Set(data)) return Outcome.Failed;
         var sequence = Native.GetClipboardSequenceNumber();
         await Task.Delay(30, ct);
         ct.ThrowIfCancellationRequested();
@@ -64,7 +59,29 @@ internal static class Paster
         _ => L10n.T("窗口已切换，已复制到剪贴板"),
     };
 
-    private static async Task RestoreLater(uint sequence, IDataObject previous)
+    private static readonly string[] Kept = { DataFormats.UnicodeText, DataFormats.Text, DataFormats.Rtf, DataFormats.Html, DataFormats.FileDrop, DataFormats.Bitmap };
+
+    /// <summary>A copy of the clipboard's common formats. Clipboard.GetDataObject() is a live view of the
+    /// clipboard, not a copy: putting it back made the clipboard refer to itself, and every app's copy and
+    /// paste failed until TypeLeast quit.</summary>
+    private static DataObject? Snapshot()
+    {
+        IDataObject? current;
+        try { current = Clipboard.GetDataObject(); } catch (Exception) { return null; }
+        if (current is null) return null;
+        DataObject? copy = null;
+        foreach (var format in Kept)
+        {
+            try
+            {
+                if (current.GetDataPresent(format, false) && current.GetData(format, false) is { } value) (copy ??= new DataObject()).SetData(format, value);
+            }
+            catch (Exception) { }
+        }
+        return copy;
+    }
+
+    private static async Task RestoreLater(uint sequence, DataObject previous)
     {
         await Task.Delay(600);
         try { if (sequence == Native.GetClipboardSequenceNumber()) Clipboard.SetDataObject(previous, true); }
@@ -72,18 +89,21 @@ internal static class Paster
     }
 
     /// <summary>The clipboard is sometimes held by another app for a moment: retry briefly.</summary>
-    public static bool SetText(string text)
+    public static bool SetText(string text) => Set(text);
+
+    /// <summary>WPF already retries for about a second per call; more attempts only froze the UI for ten seconds.</summary>
+    private static bool Set(object data)
     {
-        for (var attempt = 0; attempt < 10; attempt++)
+        for (var attempt = 0; attempt < 2; attempt++)
         {
             try
             {
-                Clipboard.SetDataObject(text, true);
+                Clipboard.SetDataObject(data, true);
                 return true;
             }
             catch (Exception)
             {
-                System.Threading.Thread.Sleep(30);
+                System.Threading.Thread.Sleep(50);
             }
         }
         Log.Write("clipboard.fail");
