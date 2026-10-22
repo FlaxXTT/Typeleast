@@ -3,8 +3,7 @@ import ApplicationServices
 
 // FieldContext.swift - what is already in the box the user is dictating into.
 //
-// This is the context Reference relies on for accuracy: the words around the cursor
-// tell the model which homophone, name or term is meant. It is read through the
+// Context for accuracy: the words around the cursor tell the model which homophone, name or term is meant. It is read through the
 // Accessibility API the app already holds for pasting, only at the moment a
 // dictation starts, never from secure fields or password managers, and only the
 // text near the cursor is kept. It travels to the local service, which redacts it

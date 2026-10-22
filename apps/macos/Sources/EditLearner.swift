@@ -2,8 +2,8 @@ import Foundation
 
 // EditLearner.swift - learn a word when the user fixes it right after a dictation.
 //
-// Reference re-reads the field after inserting and adds the corrected word to the
-// dictionary under "Auto-added". This does the same, conservatively:
+// After inserting, the field is read again and a word the user corrected is added to
+// the dictionary under "Auto-added", conservatively:
 //   * only one contiguous correction, short on both sides;
 //   * the replacement must SOUND like what was recognised (pinyin or letters),
 //     so a content edit ("明天" -> "后天") is never mistaken for a spelling fix;

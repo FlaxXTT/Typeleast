@@ -72,8 +72,8 @@ enum AudioInputSelector {
     }
 }
 
-/// A short-lived meter for "speak to test your microphone" (Reference turns its bars
-/// blue when it hears you). Runs only after the user presses a test button, at most
+/// A short-lived meter for "speak to test your microphone" (its bars turn blue when it
+/// hears you). Runs only after the user presses a test button, at most
 /// `maxSeconds`, and stops when its page goes away.
 final class MicMeter: ObservableObject {
     @Published private(set) var level: Float = 0

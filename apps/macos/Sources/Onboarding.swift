@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import Combine
 
-// Onboarding.swift - first-run setup, in the order Reference walks people through it:
+// Onboarding.swift - first-run setup, in this order:
 // welcome, the local service and speech model, microphone, accessibility, the Globe
 // key, a microphone test, a first try.
 

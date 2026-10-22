@@ -1,5 +1,6 @@
 # TypeLeast — Windows app
 
+A tray app for Windows 11 (and Windows 10 1809+, x64):
 tap Right Alt, speak, tap again, and the cleaned-up text is pasted at the caret.
 Recognition and cleanup are done by the TypeLeast local service (`../../service`),
 which the app starts, watches and stops by itself.

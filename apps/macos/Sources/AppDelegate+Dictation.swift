@@ -344,7 +344,7 @@ extension AppDelegate {
         }
     }
 
-    /// Reference "Paste last transcript": re-insert the newest entry at the cursor.
+    /// "Paste last transcript": re-insert the newest entry at the cursor.
     func pasteLast() {
         guard phase == .idle, let last = HistoryStore.shared.last, !last.displayText.isEmpty else {
             NSSound.beep()

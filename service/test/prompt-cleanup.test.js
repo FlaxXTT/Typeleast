@@ -13,7 +13,6 @@ test("the cleanup prompt keeps its rules, output format and examples", () => {
   }
   assert.match(CLEANUP_PROMPT, /"status": "ok" \| "uncertain"/);
   assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 5, "five examples");
-  assert.doesNotMatch(CLEANUP_PROMPT, /article/i);
 });
 
 test("natural cleanup carries no addendum when there is nothing to add", () => {

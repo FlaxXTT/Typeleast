@@ -194,7 +194,7 @@ final class CancelButton: NSButton {
     }
 }
 
-/// Draws the capsule in its three looks (Reference-style: a small dark capsule, a live
+/// Draws the capsule in its three looks (a small dark capsule, a live
 /// waveform, × to cancel and a stop button to finish). Only the two buttons are subviews.
 final class PillView: NSView {
     var onCancel: (() -> Void)?

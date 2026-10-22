@@ -1,6 +1,6 @@
 import AppKit
 
-// MenuController.swift - the menu bar icon and its short menu, after Reference's tray:
+// MenuController.swift - the menu bar icon and its short menu:
 // status, start/stop, paste last, open the app, settings, quit. Everything else lives
 // in the main window.
 

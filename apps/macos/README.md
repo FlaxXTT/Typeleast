@@ -1,5 +1,6 @@
 # TypeLeast — macOS app
 
+A menu-bar app (AppKit + SwiftUI, system frameworks only):
 press Fn (or ⌥Space), speak, press again, and the cleaned-up text is pasted at the
 caret. Recognition and cleanup are done by the TypeLeast local service
 (`../../service`), which this app starts, watches and stops by itself.
@@ -24,6 +25,7 @@ history and the dictionary carry over).
     ./package.sh arm64       # self-contained release for Apple silicon (.dmg + .zip, with Node.js inside)
     ./Tools/render.sh [dir]  # offscreen PNGs of every page, with sample data
     ./Tools/demo/record-demo.sh <dir>  # the README demo GIF (synthetic voice, no microphone; see the script)
+
 
 ## How it finds the local service
 
@@ -74,6 +76,7 @@ default 4) makes the app feed that file in at real-time pace instead of opening
 the microphone, start one dictation by itself into the app in front, and show no
 window of its own. `Tools/demo/record-demo.sh` uses it with macOS's synthetic
 voice, so the README demo involves nobody's real voice.
+
 
 ## Storage and process safeguards
 
