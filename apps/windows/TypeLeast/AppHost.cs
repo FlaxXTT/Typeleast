@@ -140,20 +140,35 @@ internal sealed class AppHost
     public WindowsReleaseInfo? AvailableUpdate { get; private set; }
     public bool Updating { get; private set; }
 
-    /// <summary>Quietly, a little after launch: only the hint and the settings page change.</summary>
-    private async Task QuietUpdateCheck()
+    private bool checkingUpdate;
+
+    /// <summary>On every launch and every time the window is opened. With 自动更新 on, the installed
+    /// copy installs a new version by itself; otherwise only the hint changes.</summary>
+    private async Task AutoUpdateCheck()
     {
-        await Task.Delay(TimeSpan.FromSeconds(20));
+        if (checkingUpdate || Updating || quitting || Environment.GetEnvironmentVariable("TYPELEAST_HOME") is not null) return;
+        checkingUpdate = true;
         try
         {
-            var newest = await Updater.NewestAsync();
-            if (newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion))
+            try
             {
-                AvailableUpdate = newest;
-                SetHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
+                var newest = await Updater.NewestAsync();
+                if (newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion) && AvailableUpdate?.Version != newest.Version)
+                {
+                    AvailableUpdate = newest;
+                    Raise();
+                    if (!(Settings.AutoUpdate && Updater.IsInstalledCopy)) SetHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
+                }
+            }
+            catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
+            if (AvailableUpdate is { } update && Settings.AutoUpdate && Updater.IsInstalledCopy)
+            {
+                Log.Write("update.auto", update.Version);
+                SetHint(L10n.T("正在自动更新到 {0}，完成后会自动重新打开。", update.Version));
+                if (await InstallUpdate() is { } error) SetHint(error);
             }
         }
-        catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
+        finally { checkingUpdate = false; }
     }
 
     public async Task<string> CheckForUpdate()
@@ -184,6 +199,9 @@ internal sealed class AppHost
         try
         {
             var setup = await Updater.DownloadAsync(release);
+            // The download takes a while: never quit in the middle of a dictation started meanwhile.
+            while (Phase != DictationPhase.Idle) await Task.Delay(1000);
+            if (quitting) return null;
             Log.Write("update.install", release.Version);
             Updater.RunInstaller(setup);
             Quit();
@@ -201,7 +219,7 @@ internal sealed class AppHost
     {
         if (started) return;
         started = true;
-        if (Environment.GetEnvironmentVariable("TYPELEAST_HOME") is null) _ = QuietUpdateCheck();
+        _ = AutoUpdateCheck();
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
@@ -258,6 +276,7 @@ internal sealed class AppHost
         window.Show();
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         window.Activate();
+        _ = AutoUpdateCheck();
     }
 
     private void Raise() { UpdateIdleBar(); Changed?.Invoke(); }

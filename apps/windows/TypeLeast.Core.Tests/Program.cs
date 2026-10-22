@@ -139,6 +139,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("an old strength reads as natural cleanup", AppSettings.Load(file).Strength, "prompt");
     File.WriteAllText(file, "{\"Strength\":\"promptify\"}");
     Eq("prompt mode is remembered", AppSettings.Load(file).Strength, "promptify");
+    Eq("automatic updates are on for settings saved before they existed", AppSettings.Load(file).AutoUpdate, true);
 
     var history = new LocalHistory(Path.Combine(dir, "app-history.json"), TestHistoryProtection.Shared);
     history.Add(new HistoryEntry { Text = "第一条", Seconds = 2 });
