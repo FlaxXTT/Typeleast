@@ -577,7 +577,7 @@ struct ModelSection: View {
                     }
                     Spacer()
                 }
-                if settings.activeLLMRoute == nil {
+                if !settings.llmRouteReady {
                     Text(missingParts() + L10n.text("。在此之前听写照常可用：只去掉口水词，不改写。"))
                         .font(.system(size: 11.5)).foregroundColor(Theme.warning)
                 }

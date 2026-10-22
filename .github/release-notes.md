@@ -10,7 +10,6 @@ TypeLeast：按快捷键说话，本机识别，再用你选择的模型整理�
 | 电脑 | 安装包 |
 |---|---|
 | macOS 13 以上，Apple 芯片 | `TypeLeast-1.17.1-macOS-AppleSilicon.dmg` 或 `.zip` |
-| macOS 13 以上，Intel | `TypeLeast-1.17.1-macOS-Intel.dmg` 或 `.zip` |
 
 Mac 构建号为 10。Windows 1.17.1 安装包将在 Windows 构建环境可用后补充；目前 Windows 用户继续使用 [v1.17.0](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)。
 

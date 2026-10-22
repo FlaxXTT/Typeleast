@@ -9,7 +9,8 @@ history and the dictionary carry over).
 
 ## Requirements
 
-- macOS 13 or later, Apple silicon or Intel.
+- macOS 13 or later on Apple silicon. Intel Macs are no longer built; the last
+  Intel release is 1.17.1.
 - To build: Xcode command line tools (`xcode-select --install`) and Node.js 22+
   (`npm` installs the service's dependencies; a build from source also runs the
   service with this Node.js).
@@ -21,11 +22,8 @@ history and the dictionary carry over).
     ./build.sh               # compile, bundle the service, sign, install ~/Applications/TypeLeast.app, relaunch
     ./build.sh --no-install  # build only (build/dist.noindex/TypeLeast.app)
     ./package.sh arm64       # self-contained release for Apple silicon (.dmg + .zip, with Node.js inside)
-    ./package.sh x86_64      # the same for Intel (cross-compiled)
     ./Tools/render.sh [dir]  # offscreen PNGs of every page, with sample data
     ./Tools/demo/record-demo.sh <dir>  # the README demo GIF (synthetic voice, no microphone; see the script)
-
-`TYPELEAST_ARCH=x86_64 ./build.sh` cross-builds for the other architecture.
 
 ## How it finds the local service
 

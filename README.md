@@ -148,7 +148,7 @@ Mac 最新版是 [**v1.17.1**](https://github.com/FlaxXTT/Typeleast/releases/tag
 | 你的电脑 | 下载这个文件 |
 |---|---|
 | Mac · Apple 芯片（M1、M2、M3、M4…） | `TypeLeast-<版本>-macOS-AppleSilicon.dmg` |
-| Mac · Intel 芯片 | `TypeLeast-<版本>-macOS-Intel.dmg` |
+| Mac · Intel 芯片 | 已停止更新，最终版是 [v1.17.1](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.1) 的 `TypeLeast-1.17.1-macOS-Intel.dmg` |
 | Windows 11 / 10（64 位） | `TypeLeast-<版本>-Windows-x64-Setup.exe`，或免安装的 `…-Portable.zip` |
 
 <sub>不确定 Mac 是哪种芯片：点左上角  →「关于本机」，「芯片」写 Apple M… 就是 Apple 芯片。安装包已经带好运行环境，不需要另装任何东西；`SHA256SUMS.txt` 里有每个文件的校验值。</sub>
@@ -335,9 +335,9 @@ cd apps/macos
 ```
 
 - `./build.sh` 编译、把本地服务打进 App、安装到 `~/Applications/TypeLeast.app` 并启动（`--no-install` 只编译）。从源码构建的 App 使用电脑上已有的 Node.js。
-- 软件内更新（仅限装了 GitHub CLI 并已 `gh auth login` 的 Mac，且已用 `./make-signing-cert.sh` 生成本机证书）：菜单「检查更新…」，或「设置 → 版本与更新」，点「立即更新」。会下载发布包、核对 SHA-256、用本机证书重新签名后替换，权限不用重新授予。
+- 软件内更新：菜单「检查更新…」或「设置 → 版本与更新」。从公开的发布页下载（发布页未公开时，用已登录的 GitHub CLI），核对 SHA-256，用本机证书重签后替换并重启。第一次更新会自动生成本机证书，macOS 会请你输入一次登录密码；之后的更新不用再输密码：钥匙串里的 Key 由旧版本交接给新版本。Intel Mac 已停止更新。
 - 先运行一次 `./make-signing-cert.sh`，会在钥匙串里生成一个本机签名证书。之后每次 `./build.sh` 的签名都相同，重新编译不用再授权辅助功能和钥匙串。
-- `./package.sh arm64` 或 `./package.sh x86_64` 生成自带 Node.js 的发布包（`.dmg` 和 `.zip`），输出在 `apps/macos/build/release/`。
+- `./package.sh arm64` 生成自带 Node.js 的发布包（`.dmg` 和 `.zip`），输出在 `apps/macos/build/release/`。Intel 版已停止构建，最终版是 1.17.1。
 
 ### Windows App
 
@@ -375,6 +375,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 | [`service/`](service/) | 本地服务（Node.js）：sherpa-onnx 本地识别、调用你的模型整理、校验防编造、历史和词典；只监听 127.0.0.1 |
 | [`apps/macos/`](apps/macos/) | macOS 菜单栏 App（Swift，只用系统框架） |
 | [`apps/windows/`](apps/windows/) | Windows 托盘 App（C# / WPF） |
+| [`docs/`](docs/) | 开发记录、发布与验证记录 |
 | [`.github/workflows/`](.github/workflows/) | CI 和发布流程 |
 
 </details>

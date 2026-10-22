@@ -60,8 +60,15 @@ enum KeychainStore {
     /// Screenshot/test seam: when set, the Keychain is never touched.
     static var stub: [String: String]?
 
+    // Each item is read from the Keychain at most once per launch. macOS asks the user
+    // whenever a build it has not seen reads an item, so reading on every redraw meant
+    // one password dialog after another after each update.
+    private static var cache: [String: String?] = [:]
+    private static let lock = NSLock()
+
     static func read(account: String) -> String? {
         if let stub = stub { return stub[account] }
+        if let hit = lock.withLock({ cache[account] }) { return hit }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -70,12 +77,44 @@ enum KeychainStore {
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data, let text = String(data: data, encoding: .utf8) else { return nil }
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        let text = status == errSecSuccess ? (item as? Data).flatMap { String(data: $0, encoding: .utf8) } : nil
+        // A refused or cancelled dialog is remembered too: no second dialog this launch.
+        lock.withLock { cache[account] = .some(text) }
         return text
     }
 
-    /// Create only: a locked or unreadable existing key must never be replaced.
+    /// Whether an item exists, from its attributes only: never opens a password dialog.
+    static func exists(account: String) -> Bool {
+        if let stub = stub { return stub[account] != nil }
+        if let hit = lock.withLock({ cache[account] }) { return hit != nil }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
+    }
+
+    /// The accounts this app keeps (attributes only, no dialog).
+    static func accounts() -> [String] {
+        if let stub = stub { return stub.keys.sorted() }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var items: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess,
+              let list = items as? [[String: Any]] else { return [] }
+        return Array(Set(list.compactMap { $0[kSecAttrAccount as String] as? String })).sorted()
+    }
+
+    /// Add an item only when none exists (never replaces one that this build cannot read).
     static func create(_ value: String, account: String) -> Bool {
         if stub != nil {
             guard stub?[account] == nil else { return false }
@@ -89,6 +128,7 @@ enum KeychainStore {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         lastStatus = SecItemAdd(item as CFDictionary, nil)
+        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value) } }
         return lastStatus == errSecSuccess
     }
 
@@ -104,12 +144,85 @@ enum KeychainStore {
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(base as CFDictionary)
+        lock.withLock { cache[account] = .some(nil) }
         guard !value.isEmpty else { return true }
         var item = base
         item[kSecValueData as String] = Data(value.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         lastStatus = SecItemAdd(item as CFDictionary, nil)
+        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value) } }
         return lastStatus == errSecSuccess
+    }
+
+    /// Delete an item this build can reach; false when it is not there or not ours to delete.
+    @discardableResult
+    static func remove(account: String) -> Bool {
+        if stub != nil { return stub?.removeValue(forKey: account) != nil }
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        lock.withLock { cache[account] = nil }
+        return SecItemDelete(base as CFDictionary) == errSecSuccess
+    }
+
+    /// Test seam: forget what was read.
+    static func resetCache() { lock.withLock { cache = [:] } }
+}
+
+/// In-app updates without password dialogs. macOS lets only the build that created a
+/// Keychain item (identified by its code hash when, as here, there is no Apple team ID)
+/// read it without asking; every update is a new build. So the running copy, which can
+/// read its items, hands them over: it writes them to an owner-only file and deletes the
+/// items just before it is replaced, and the next copy to start (the new one, or the old
+/// one put back if the update failed) creates them again as its own.
+enum KeychainHandoff {
+    static var fileURL: URL {
+        URL(fileURLWithPath: ServiceClient.stateDirectory).appendingPathComponent("keychain-handoff.json")
+    }
+
+    /// Called by the copy about to be replaced. Returns false (and changes nothing) when
+    /// the items cannot all be read or the file cannot be written.
+    @discardableResult
+    static func prepare(file: URL = fileURL) -> Bool {
+        var values: [String: String] = [:]
+        for account in KeychainStore.accounts() {
+            guard let value = KeychainStore.read(account: account) else { return false }
+            values[account] = value
+        }
+        guard !values.isEmpty else { return true }
+        guard let data = try? JSONEncoder().encode(values) else { return false }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fm.removeItem(at: file)
+        guard fm.createFile(atPath: file.path, contents: data, attributes: [.posixPermissions: 0o600]) else { return false }
+        var url = file
+        var excluded = URLResourceValues()
+        excluded.isExcludedFromBackup = true
+        try? url.setResourceValues(excluded)
+        for account in values.keys { KeychainStore.remove(account: account) }
+        return true
+    }
+
+    /// Called first thing at launch: recreate handed-over items as this build's own.
+    static func restoreIfPresent(file: URL = fileURL) {
+        guard let data = FileManager.default.contents(atPath: file.path) else { return }
+        defer {
+            // Overwrite before deleting, so the words are not left in a free block either.
+            if let handle = try? FileHandle(forWritingTo: file) {
+                handle.write(Data(count: data.count))
+                try? handle.synchronize()
+                try? handle.close()
+            }
+            try? FileManager.default.removeItem(at: file)
+        }
+        guard let values = try? JSONDecoder().decode([String: String].self, from: data) else { return }
+        for (account, value) in values where !value.isEmpty {
+            // An item left behind (the old copy could not delete it) stays as it is.
+            if KeychainStore.exists(account: account) { continue }
+            KeychainStore.create(value, account: account)
+        }
     }
 }
 
@@ -133,6 +246,14 @@ extension Settings {
     var llmAPIKey: String {
         get { KeychainStore.read(account: llmPresetID) ?? "" }
         set { KeychainStore.write(newValue.trimmingCharacters(in: .whitespacesAndNewlines), account: llmPresetID); notifyChanged() }
+    }
+
+    /// Whether cleanup is set up, for display: checks that a key exists without reading it,
+    /// so drawing the window never opens a Keychain dialog.
+    var llmRouteReady: Bool {
+        let preset = LLMPreset.find(llmPresetID)
+        guard !llmModel.isEmpty, LLMPreset.isAllowedBaseURL(llmBaseURL) else { return false }
+        return !preset.needsKey || KeychainStore.exists(account: llmPresetID)
     }
 
     /// The route to send with a dictation, or nil when it is not complete yet

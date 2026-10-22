@@ -37,6 +37,19 @@ public static class L10n
     }
     public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
+        ["这个发布没有可校验的 Windows 安装包。"] = "This release has no Windows installer that can be checked.",
+        ["发布的校验文件里没有这个安装包。"] = "The release's checksum list does not include this installer.",
+        ["下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。"] = "The downloaded installer does not match the SHA-256 on the release page; the update was stopped.",
+        ["有新版本 {0}，可在「设置 → 服务与更新」中更新。"] = "Version {0} is available: update it in Settings → Service and updates.",
+        ["有新版本 {0}。"] = "Version {0} is available.",
+        ["无法访问发布页。请检查网络；如果发布页还没公开，请在浏览器中登录后下载。"] = "Cannot reach the release page. Check the network; if the releases are not public yet, sign in in a browser and download there.",
+        ["听写结束后再更新。"] = "Update after the dictation finishes.",
+        ["便携版请在发布页下载新版本。"] = "For the portable version, download the new version from the release page.",
+        ["下载更新失败，请稍后再试。"] = "Downloading the update failed; try again later.",
+        ["检查更新"] = "Check for updates",
+        ["正在下载并校验更新…"] = "Downloading and checking the update…",
+        ["立即更新"] = "Update now",
+        ["下载新版本"] = "Download the new version",
         ["提示词 Beta：可继续补充或结束生成"] = "Prompt Beta: add details or finish and generate",
         ["一次整理核心意图，用自然段和编号表达，不套角色等模板。"] = "Clarify your intent once in numbered paragraphs, without a role template.",
         ["保存失败，请重试。"] = "Could not save. Try again.",

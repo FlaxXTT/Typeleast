@@ -823,6 +823,8 @@ do {
     check("an older version is not offered", !Updater.isNewer("1.2.0", than: "1.3.0"))
     checkEq("Apple silicon downloads the AppleSilicon zip", Updater.assetName(version: "1.4.0", arch: "arm64"), "TypeLeast-1.4.0-macOS-AppleSilicon.zip")
     checkEq("Intel downloads the Intel zip", Updater.assetName(version: "1.4.0", arch: "x86_64"), "TypeLeast-1.4.0-macOS-Intel.zip")
+    checkEq("Intel Macs get no new versions", Updater.intelDiscontinued(arch: "x86_64"), true)
+    checkEq("Apple silicon keeps updating", Updater.intelDiscontinued(arch: "arm64"), false)
     let sums = "AAAA1111  TypeLeast-1.4.0-macOS-AppleSilicon.dmg\nbbbb2222  TypeLeast-1.4.0-macOS-AppleSilicon.zip\ncccc3333 *TypeLeast-1.4.0-macOS-Intel.zip\n"
     checkEq("the zip's hash is found", Updater.checksum(for: "TypeLeast-1.4.0-macOS-AppleSilicon.zip", in: sums), "bbbb2222")
     checkEq("binary-mode lines work too", Updater.checksum(for: "TypeLeast-1.4.0-macOS-Intel.zip", in: sums), "cccc3333")
@@ -1160,6 +1162,64 @@ do {
         check("malformed config is not overwritten", rejected)
     }
 } catch { check("new Beta/config decoding", false) }
+
+// MARK: 28. the service proves it is ours before anything is sent to it
+checkEq("HMAC proof matches the service's (RFC 4231 case 2 key)",
+        ServiceClient.proof(key: "4a656665", challenge: "what do ya want for nothing?"),
+        "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+checkEq("a non-hex key gives no proof", ServiceClient.proof(key: "zz", challenge: "x"), nil)
+do {
+    let impostor = ServiceClient()
+    impostor.baseURL = server.baseURL
+    impostor.tokenPath = tokenPath
+    impostor.proofKey = String(repeating: "ab", count: 32)
+    state.mode = "health"
+    do {
+        _ = try impostor.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt",
+                                     llm: LLMRoute(baseURL: "https://api.example.com/v1", model: "m", apiKey: "sk-test-0000"))
+        check("a listener without the proof is refused", false)
+    } catch let e as ServiceError {
+        checkEq("a listener without the proof is refused", e, .untrusted)
+    }
+    checkEq("and the key never reached it", state.lastRequest?.header("x-voice-llm"), "")
+}
+
+// MARK: 29. Keychain: read once, never on a redraw, and handed over across an update
+do {
+    KeychainStore.stub = ["deepseek": "sk-test-0000", "history-encryption-key": "aGVsbG8="]
+    checkEq("existence is known without reading", KeychainStore.exists(account: "deepseek"), true)
+    checkEq("the accounts are listed", KeychainStore.accounts(), ["deepseek", "history-encryption-key"])
+    let file = URL(fileURLWithPath: NSTemporaryDirectory() + "typeleast-handoff-" + UUID().uuidString + ".json")
+    checkEq("the old copy hands the items over", KeychainHandoff.prepare(file: file), true)
+    checkEq("and deletes its own", KeychainStore.accounts(), [String]())
+    checkEq("the hand-over file is owner-only", ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.posixPermissions] as? Int), 0o600)
+    KeychainHandoff.restoreIfPresent(file: file)
+    checkEq("the next copy recreates them", KeychainStore.stub?["deepseek"], "sk-test-0000")
+    checkEq("including the history key", KeychainStore.stub?["history-encryption-key"], "aGVsbG8=")
+    checkEq("and the file is gone", FileManager.default.fileExists(atPath: file.path), false)
+    KeychainStore.stub = ["deepseek": "kept"]
+    try? JSONEncoder().encode(["deepseek": "stale"]).write(to: file)
+    KeychainHandoff.restoreIfPresent(file: file)
+    checkEq("an item still present is not overwritten", KeychainStore.stub?["deepseek"], "kept")
+    KeychainStore.stub = [:]
+}
+
+// MARK: 30. "never keep history" keeps nothing on disk
+do {
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    let suite = "typeleast.tests.never"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    let store = HistoryStore(defaults: defaults)
+    store.keepsNothing = { true }
+    store.add(LocalHistoryEntry(id: "n", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "r", text: "t",
+                                fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1))
+    checkEq("the last entry is kept in memory for paste-last", store.last?.text, "t")
+    checkEq("nothing is written", defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("voice.history") }, [String]())
+    defaults.removePersistentDomain(forName: suite)
+    KeychainStore.stub = [:]
+}
 
 server.stop()
 print("")

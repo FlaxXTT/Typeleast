@@ -9,6 +9,7 @@
  *
  * @module typeleast-service/http
  */
+import { createHmac } from "node:crypto";
 import { authorize } from "./token.js";
 import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
@@ -91,6 +92,12 @@ function classify(error) {
   }
 }
 
+/** The HMAC answer to the app's challenge, or nothing when there is no key or no valid challenge. */
+export function proofFor(proofKey, challenge) {
+  if (!proofKey || typeof challenge !== "string" || !/^[0-9a-f]{32,128}$/.test(challenge)) return {};
+  return { proof: createHmac("sha256", Buffer.from(proofKey, "hex")).update(challenge).digest("hex") };
+}
+
 /**
  * Build the request handler. Dependencies are injected so this module can be
  * exercised in tests without a network listener.
@@ -99,6 +106,8 @@ function classify(error) {
  */
 export function createHandler(options) {
   const { service, logger } = options;
+  // Shared with the app that started this process (see bin/typeleast-service.mjs).
+  const proofKey = typeof options.proofKey === "string" && options.proofKey.length > 0 ? options.proofKey : null;
   const currentToken = options.currentToken;
 
   return async function handle(req, res) {
@@ -133,6 +142,7 @@ export function createHandler(options) {
           pending: state.pending,
           queue: state.queue,
           pid: process.pid,
+          ...proofFor(proofKey, req.headers["x-typeleast-challenge"]),
           // Added fields only: the native client decodes the ones above. These
           // say why polishing fell back, which `ok` (recogniser readiness) does not.
           promptSource: state.promptSource,

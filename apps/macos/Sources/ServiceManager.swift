@@ -192,13 +192,9 @@ final class ServiceManager {
             return
         }
 
-        // A service that already answers (started by hand with `npm start`, or a
-        // second copy of this app) is used as it is.
+        // Always our own child: a service already listening could be anyone's, and the
+        // app proves the identity of the one it talks to (ServiceClient.proofKey).
         let client = ServiceClient.shared
-        if client.discoverBaseURL(), let health = try? client.healthOnce(), health.service == "typeleast" {
-            state = .running(port: client.lastDiscoveredPort ?? 0)
-            return
-        }
 
         guard let dir = ServiceLocator.serviceDirectory(resources: Bundle.main.resourcePath,
                                                         environment: ProcessInfo.processInfo.environment,
@@ -217,7 +213,7 @@ final class ServiceManager {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: node.path)
-        p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid())]
+        p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid()), "--auth-stdin"]
         p.currentDirectoryURL = URL(fileURLWithPath: dir)
         var env = ServiceLocator.serviceEnvironment(ProcessInfo.processInfo.environment)
         if let mirror = modelMirror, !mirror.isEmpty { env["HF_ENDPOINT"] = mirror }
@@ -225,7 +221,14 @@ final class ServiceManager {
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
         p.standardError = err
-        p.standardInput = FileHandle.nullDevice
+        // The identity secret goes through stdin: not in the arguments or the environment,
+        // which other processes of this user can read.
+        let input = Pipe()
+        p.standardInput = input
+        var secret = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, secret.count, &secret)
+        let secretHex = secret.map { String(format: "%02x", $0) }.joined()
+        client.proofKey = secretHex
         stdoutBuffer = ""
         out.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
@@ -242,6 +245,8 @@ final class ServiceManager {
         }
         do {
             try p.run()
+            input.fileHandleForWriting.write(Data((secretHex + "\n").utf8))
+            try? input.fileHandleForWriting.close()
             process = p
             state = .starting
             DiagnosticsLog.write("service.start", ["node": node.version, "pid": String(p.processIdentifier)])

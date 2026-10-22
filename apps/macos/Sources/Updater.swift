@@ -1,14 +1,17 @@
 import Foundation
 import CryptoKit
 
-// Updater.swift - in-app update for this Mac. The repository is private, so the
-// release is fetched with the GitHub CLI's own login (`gh release download`), its
-// SHA-256 is checked against the release's SHA256SUMS.txt, and the app is re-signed
-// with the local "TypeLeast Local Signing" certificate (make-signing-cert.sh) before
-// it replaces the installed copy. Same certificate + same bundle id = same designated
-// requirement, so macOS keeps the Keychain, microphone and Accessibility permissions.
+// Updater.swift - in-app update for this Mac. The release is fetched from GitHub's public
+// release page (no account needed); while the repository is private it falls back to the
+// GitHub CLI's own login (`gh release download`). Its SHA-256 is checked against the
+// release's SHA256SUMS.txt, and the app is re-signed with this Mac's own "TypeLeast Local
+// Signing" certificate (made on the first update if there is none) before it replaces the
+// installed copy. Same certificate + same bundle id = same designated requirement, so macOS
+// keeps the microphone and Accessibility permissions; Keychain items are handed over
+// (KeychainHandoff), so an update asks for no password.
 
 enum UpdateError: LocalizedError {
+    case unreachable
     case noGitHubCLI
     case gh(String)
     case checksum
@@ -19,11 +22,12 @@ enum UpdateError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .unreachable: return L10n.text("无法访问 TypeLeast 的发布页。请检查网络；如果发布页还没公开，安装并登录 GitHub 命令行工具（brew install gh，然后 gh auth login）后再试。")
         case .noGitHubCLI: return L10n.text("没有找到 GitHub 命令行工具 gh。用 Homebrew 安装（brew install gh）并运行 gh auth login 登录后再试。")
         case .gh(let detail): return L10n.text("从 GitHub 获取更新失败：") + detail + L10n.text("\n如果还没登录，在终端运行 gh auth login。")
         case .checksum: return L10n.text("下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。")
         case .badBundle(let detail): return L10n.text("下载的安装包不对：") + detail
-        case .noSigningCertificate: return L10n.text("这台 Mac 上没有「") + Updater.signingIdentity + L10n.text("」签名证书。在源码目录运行 apps/macos/make-signing-cert.sh 生成后再试。")
+        case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书，已放弃更新。")
         case .sign(let detail): return L10n.text("用本机证书签名失败：") + detail
         case .requirementChanged: return L10n.text("新版本签好名后和当前版本的签名要求不一致，装上会丢失权限，已放弃更新。")
         }
@@ -79,11 +83,19 @@ enum Updater {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
+    /// The Mac's own processor. An Intel build running under Rosetta on Apple silicon
+    /// reports arm64, so it updates to the Apple silicon build.
     static var machineArch: String {
+        var translated: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        if sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0, translated == 1 { return "arm64" }
         var info = utsname()
         uname(&info)
         return withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
     }
+
+    /// Intel Macs get no new versions after 1.17.1.
+    static func intelDiscontinued(arch: String = machineArch) -> Bool { arch != "arm64" }
 
     static var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
@@ -122,27 +134,100 @@ enum Updater {
         return (p.terminationStatus, String(decoding: o, as: UTF8.self), String(decoding: e, as: UTF8.self))
     }
 
+    // MARK: the public release page
+
+    /// GET over HTTPS, synchronously; nil on any failure (not found, private repository, offline).
+    static func fetch(_ url: URL, timeout: TimeInterval = 30) -> Data? {
+        guard url.scheme == "https" else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.setValue("TypeLeast/" + currentVersion, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let done = DispatchSemaphore(value: 0)
+        var result: Data?
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            if let http = response as? HTTPURLResponse, http.statusCode == 200 { result = data }
+            done.signal()
+        }.resume()
+        done.wait()
+        return result
+    }
+
+    /// The tag of the newest release as GitHub's public API reports it.
+    static func publicLatestTag() -> String? {
+        guard let data = fetch(URL(string: "https://api.github.com/repos/" + repo + "/releases/latest")!, timeout: 15),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["tag_name"] as? String
+    }
+
+    /// Download a release file from the public release page into `folder`.
+    static func publicDownload(version: String, name: String, to folder: URL) -> Bool {
+        guard let url = URL(string: "https://github.com/" + repo + "/releases/download/v" + version + "/" + name),
+              let data = fetch(url, timeout: 600) else { return false }
+        return (try? data.write(to: folder.appendingPathComponent(name))) != nil
+    }
+
     /// The newest published version, e.g. "1.4.0".
     static func latestVersion() throws -> String {
-        guard let gh = findGH() else { throw UpdateError.noGitHubCLI }
+        if let tag = publicLatestTag() { return version(fromTag: tag) }
+        guard let gh = findGH() else { throw UpdateError.unreachable }
         let r = run(gh, ["release", "view", "--repo", repo, "--json", "tagName", "--jq", ".tagName"])
         guard r.status == 0 else { throw UpdateError.gh(r.err.trimmingCharacters(in: .whitespacesAndNewlines)) }
         return version(fromTag: r.out)
     }
 
+    // MARK: this Mac's signing certificate
+
+    static func hasSigningIdentity() -> Bool {
+        run("/usr/bin/security", ["find-certificate", "-c", signingIdentity]).status == 0
+    }
+
+    /// The same certificate make-signing-cert.sh makes: self-signed, code signing only, valid
+    /// ten years, private key only in this Mac's login keychain. Made once, on the first update.
+    static func ensureSigningIdentity() throws {
+        if hasSigningIdentity() { return }
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-cert-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: work) }
+        let config = """
+        [req]
+        distinguished_name = dn
+        x509_extensions = ext
+        prompt = no
+        [dn]
+        CN = \(signingIdentity)
+        [ext]
+        basicConstraints = critical,CA:false
+        keyUsage = critical,digitalSignature
+        extendedKeyUsage = critical,codeSigning
+        """
+        let cfg = work.appendingPathComponent("cfg"), key = work.appendingPathComponent("key.pem")
+        let cert = work.appendingPathComponent("cert.pem"), p12 = work.appendingPathComponent("id.p12")
+        try config.write(to: cfg, atomically: true, encoding: .utf8)
+        guard run("/usr/bin/openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "3650", "-config", cfg.path,
+                                       "-keyout", key.path, "-out", cert.path]).status == 0 else { throw UpdateError.noSigningCertificate }
+        let pass = UUID().uuidString
+        guard run("/usr/bin/openssl", ["pkcs12", "-export", "-name", signingIdentity, "-inkey", key.path, "-in", cert.path,
+                                       "-out", p12.path, "-passout", "pass:" + pass]).status == 0 else { throw UpdateError.noSigningCertificate }
+        let keychain = NSHomeDirectory() + "/Library/Keychains/login.keychain-db"
+        guard run("/usr/bin/security", ["import", p12.path, "-k", keychain, "-P", pass, "-T", "/usr/bin/codesign"]).status == 0,
+              hasSigningIdentity() else { throw UpdateError.noSigningCertificate }
+    }
+
     /// Download, verify and re-sign `version`; returns the ready app inside a fresh work folder.
     static func prepare(version: String, current: URL = Bundle.main.bundleURL) throws -> (app: URL, work: URL) {
-        guard let gh = findGH() else { throw UpdateError.noGitHubCLI }
-        guard run("/usr/bin/security", ["find-certificate", "-c", signingIdentity]).status == 0 else {
-            throw UpdateError.noSigningCertificate
-        }
+        try ensureSigningIdentity()
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-update-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         do {
             let asset = assetName(version: version, arch: machineArch)
-            let dl = run(gh, ["release", "download", "v" + version, "--repo", repo,
-                              "--pattern", asset, "--pattern", "SHA256SUMS.txt", "--dir", work.path])
-            guard dl.status == 0 else { throw UpdateError.gh(dl.err.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            let publicCopy = publicDownload(version: version, name: "SHA256SUMS.txt", to: work)
+                && publicDownload(version: version, name: asset, to: work)
+            if !publicCopy {
+                guard let gh = findGH() else { throw UpdateError.unreachable }
+                let dl = run(gh, ["release", "download", "v" + version, "--repo", repo, "--clobber",
+                                  "--pattern", asset, "--pattern", "SHA256SUMS.txt", "--dir", work.path])
+                guard dl.status == 0 else { throw UpdateError.gh(dl.err.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            }
 
             let zip = work.appendingPathComponent(asset)
             let sums = (try? String(contentsOf: work.appendingPathComponent("SHA256SUMS.txt"), encoding: .utf8)) ?? ""

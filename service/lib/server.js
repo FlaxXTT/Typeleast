@@ -67,7 +67,7 @@ export async function startService(options = {}) {
   await service.loadPromptify();
   const token = await ensureToken(join(stateDir, "api-token"));
 
-  const handler = createHandler({ service, logger, currentToken: async () => token });
+  const handler = createHandler({ service, logger, currentToken: async () => token, proofKey: options.proofKey ?? null });
   const server = createServer((req, res) => {
     void handler(req, res);
   });

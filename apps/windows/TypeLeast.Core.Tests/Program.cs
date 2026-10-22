@@ -202,6 +202,24 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
     Eq("ordinary dictation sends no target", stub.LastHeaders.GetValueOrDefault("x-voice-translate"), null);
 
+    // The service proves it is ours before anything is sent to it.
+    Eq("HMAC proof matches the service's (RFC 4231 case 2 key)",
+        ServiceClient.Proof("4a656665", "what do ya want for nothing?"), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+    Eq("a non-hex key gives no proof", ServiceClient.Proof("zz", "x"), null);
+    var impostor = new ServiceClient(dir) { ProofKey = string.Concat(Enumerable.Repeat("ab", 32)) };
+    impostor.DiscoverBaseUri();
+    stub.Reply = (200, "{\"ok\":true,\"service\":\"typeleast\",\"speech\":{\"phase\":\"ready\",\"ready\":true}}");
+    try
+    {
+        await impostor.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
+        Check("a listener without the proof is refused", false);
+    }
+    catch (ServiceException e)
+    {
+        Eq("a listener without the proof is refused", e.Kind, ServiceErrorKind.Untrusted);
+        Eq("and the key never reached it", stub.LastHeaders.GetValueOrDefault("x-voice-llm"), null);
+    }
+
     stub.Reply = (503, "{\"error\":\"speech model is not ready\",\"code\":\"speech-not-ready\"}");
     try
     {
@@ -570,6 +588,28 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("1.10.0 is newer than 1.9.3", WindowsRelease.IsNewer("1.10.0", "1.9.3"));
     Check("no windows asset gives no release", WindowsRelease.Newest("[{\"tag_name\":\"v1\",\"assets\":[{\"name\":\"x.dmg\"}]}]") is null);
     Check("a non-list answer gives no release", WindowsRelease.Newest("{\"message\":\"Not Found\"}") is null);
+    var withFiles = WindowsRelease.Newest("""
+    [{"tag_name":"v1.18.0","html_url":"https://github.com/FlaxXTT/Typeleast/releases/tag/v1.18.0","assets":[
+      {"name":"SHA256SUMS.txt","browser_download_url":"https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/SHA256SUMS.txt"},
+      {"name":"TypeLeast-1.18.0-Windows-x64-Setup.exe","browser_download_url":"https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/TypeLeast-1.18.0-Windows-x64-Setup.exe"}]},
+     {"tag_name":"v1.18.1","assets":[{"name":"TypeLeast-1.18.1-Windows-x64-Setup.exe","browser_download_url":"https://evil.example/setup.exe"}]}]
+    """);
+    Eq("the newest Windows release is found", withFiles?.Version, "1.18.1");
+    Eq("a download from anywhere but this repository is dropped", withFiles?.SetupUrl, null);
+    var good = WindowsRelease.Newest("""
+    [{"tag_name":"v1.18.0","assets":[
+      {"name":"SHA256SUMS.txt","browser_download_url":"https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/SHA256SUMS.txt"},
+      {"name":"TypeLeast-1.18.0-Windows-x64-Setup.exe","browser_download_url":"https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/TypeLeast-1.18.0-Windows-x64-Setup.exe"}]}]
+    """);
+    Eq("the installer URL is kept", good?.SetupUrl, "https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/TypeLeast-1.18.0-Windows-x64-Setup.exe");
+    Eq("the checksum list URL is kept", good?.SumsUrl, "https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/SHA256SUMS.txt");
+    var hash = new string('a', 64);
+    Eq("checksum lines are read", WindowsRelease.Checksum("x.exe", hash + "  x.exe\n" + new string('b', 64) + " *y.exe\n"), hash);
+    Eq("binary-mode lines work too", WindowsRelease.Checksum("y.exe", hash + "  x.exe\n" + new string('b', 64) + " *y.exe\n"), new string('b', 64));
+    Eq("a missing file has no checksum", WindowsRelease.Checksum("z.exe", hash + "  x.exe"), null);
+    Check("the installed copy can update in place",
+        WindowsRelease.IsInstalledCopy(Path.Combine("L", "Programs", "TypeLeast"), "L", p => p == Path.Combine("L", "Programs", "TypeLeast", "unins000.exe")));
+    Check("a portable copy cannot", !WindowsRelease.IsInstalledCopy(Path.Combine("D", "Tools", "TypeLeast"), "L", _ => true));
 }
 
 
