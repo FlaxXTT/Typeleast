@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// HubWindow.swift - the main window, laid out like Typeless's desktop app: a quiet
+// HubWindow.swift - the main window: a quiet
 // sidebar (Home, History, Dictionary; Settings at the bottom left) and one page.
 
 final class HubWindowController: NSObject, NSWindowDelegate {

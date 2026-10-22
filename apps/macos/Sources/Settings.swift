@@ -114,7 +114,7 @@ enum AppearancePreference: String, CaseIterable {
     }
 }
 
-/// How long dictations stay in History (Typeless offers the same choices).
+/// How long dictations stay in History.
 enum HistoryRetention: String, CaseIterable {
     case forever, year, month, week, day, never
     var label: String {
@@ -192,7 +192,7 @@ final class Settings {
 
     // MARK: hotkeys
 
-    /// Fn, like Typeless. It is read from modifier changes (FnKeyMonitor) with the
+    /// Fn. It is read from modifier changes (FnKeyMonitor) with the
     /// Accessibility grant; Carbon cannot deliver it. Stored under a new key so a
     /// binding saved by an older build does not silently override the new default.
     var hotkeyMain: HotKeyBinding {
@@ -200,7 +200,7 @@ final class Settings {
         set { encodeBinding("hk.main.v2", newValue); changed() }
     }
 
-    /// Second binding for keyboards without a usable Fn (Typeless's "Add another").
+    /// Second binding for keyboards without a usable Fn ("Add another").
     var hotkeyAlt: HotKeyBinding {
         get { decodeBinding("hk.alt.v2") ?? HotKeyBinding.optionSpaceDefault }
         set { encodeBinding("hk.alt.v2", newValue); changed() }
@@ -212,7 +212,7 @@ final class Settings {
         set { encodeBinding("hk.translate", newValue); changed() }
     }
 
-    /// Re-insert the most recent transcript (Typeless "Paste last transcript").
+    /// Re-insert the most recent transcript ("Paste last transcript").
     var hotkeyPasteLast: HotKeyBinding {
         get { decodeBinding("hk.pasteLast") ?? HotKeyBinding.pasteLastDefault }
         set { encodeBinding("hk.pasteLast", newValue); changed() }
@@ -322,7 +322,7 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: "ui.appearance"); changed() }
     }
 
-    /// Typeless "Show app in dock". On by default so the main window is one click away.
+    /// "Show app in dock". On by default so the main window is one click away.
     var showInDock: Bool {
         get { bool("ui.showInDock", default: true) }
         set { d.set(newValue, forKey: "ui.showInDock"); changed() }
@@ -340,7 +340,7 @@ final class Settings {
         set { d.set(newValue.trimmingCharacters(in: .whitespaces), forKey: "service.modelMirror"); changed() }
     }
 
-    /// Typeless "Show voice bar on desktop": a small resting bar at the bottom of the screen.
+    /// "Show voice bar on desktop": a small resting bar at the bottom of the screen.
     ///
     /// Off by default (new key, so the earlier default-on does not carry over): it
     /// floats above every window and swallows clicks on the spot it covers, which
@@ -378,7 +378,7 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: "history.retention"); changed() }
     }
 
-    /// Keep the recording for 24 h so History can retry with the same audio (Typeless keeps audio too).
+    /// Keep the recording for 24 h so History can retry with the same audio.
     var keepAudio24h: Bool {
         get { bool("voice.keepAudio24h.v2", default: true) }
         set { d.set(newValue, forKey: "voice.keepAudio24h.v2"); changed() }
@@ -429,7 +429,7 @@ final class Settings {
         words = words.filter { $0.id != id }
     }
 
-    /// Import a CSV: one entry per line, "word" or "heard,word" (Typeless "Import CSV").
+    /// Import a CSV: one entry per line, "word" or "heard,word".
     func importCSV(_ text: String) -> Int {
         var added = 0
         for line in text.split(whereSeparator: \.isNewline) {

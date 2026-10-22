@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// HubPages.swift - Home, History and Dictionary, after Typeless's desktop pages.
+// HubPages.swift - Home, History and Dictionary.
 
 // MARK: - shared helpers
 

@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let recorder = Recorder()
     /// Floating capsule shown while listening and thinking.
     let recordingBar = RecordingBar()
-    /// Resting bar at the bottom of the screen (Typeless "show voice bar").
+    /// Resting bar at the bottom of the screen ("show voice bar").
     let idleBar = IdleBar()
     let settings = Settings.shared
     let client = ServiceClient.shared
@@ -311,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
     }
 
-    /// Fn or a shortcut: toggle, exactly like Typeless (press to start, press to stop).
+    /// Fn or a shortcut: toggle (press to start, press to stop).
     func hotkeyPressed() {
         toggleDictation()
     }

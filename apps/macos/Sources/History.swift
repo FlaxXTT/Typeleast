@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 // History.swift - local (UserDefaults) history of dictations, kept for the user's
-// chosen retention (Typeless: Forever / 1 year / 1 month / 1 week / 24 hours / Never).
+// chosen retention (Forever / 1 year / 1 month / 1 week / 24 hours / Never).
 
 struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var id: String

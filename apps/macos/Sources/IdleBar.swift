@@ -1,6 +1,6 @@
 import AppKit
 
-// IdleBar.swift - the resting voice bar (Typeless "Show voice bar on desktop").
+// IdleBar.swift - the resting voice bar ("Show voice bar on desktop").
 //
 // A small, faint capsule at the bottom centre of the screen. Hovering widens it and
 // shows the shortcut; clicking it starts a dictation. Like the recording pill it is a

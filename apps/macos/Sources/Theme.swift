@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// Theme.swift - the Typeless-like look: quiet greys, one strong ink colour for
+// Theme.swift - the look: quiet greys, one strong ink colour for
 // primary actions, soft cards, generous spacing, light and dark.
 
 enum Theme {
@@ -27,7 +27,7 @@ enum Theme {
     static let secondary = dynamic(hex(0x6E6D6B), hex(0x9C9B99))
     static let tertiary = dynamic(hex(0xA3A29F), hex(0x6E6D6B))
     static let selection = dynamic(hex(0xE9E9E7), hex(0x2F2E2E))
-    /// The blue Typeless uses for "your microphone is heard".
+    /// The blue for "your microphone is heard".
     static let accent = dynamic(hex(0x3E9BE9), hex(0x62BBF3))
     static let success = dynamic(hex(0x2E9E5B), hex(0x4CC27A))
     static let warning = dynamic(hex(0xD9822B), hex(0xF0A04B))
@@ -97,7 +97,7 @@ struct IconButton: View {
     }
 }
 
-/// A key drawn the way Typeless shows its shortcuts.
+/// A key drawn as a keycap, for shortcuts.
 struct Keycap: View {
     let label: String
     var large = false
@@ -178,7 +178,7 @@ struct SearchField: View {
     }
 }
 
-/// Live microphone bars that turn blue when the app hears you (Typeless's mic test).
+/// Live microphone bars that turn blue when the app hears you (the mic test).
 struct LevelBars: View {
     let level: Float
     var count = 12

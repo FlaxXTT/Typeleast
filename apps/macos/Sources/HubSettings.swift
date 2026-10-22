@@ -3,7 +3,7 @@ import AppKit
 import ServiceManagement
 
 // HubSettings.swift - the Settings page: Keyboard shortcuts, Cleanup, Language, Audio,
-// Insertion, General, Privacy, Permissions and Service, in Typeless's section style.
+// Insertion, General, Privacy, Permissions and Service, as titled sections of cards.
 
 struct SettingsPage: View {
     @EnvironmentObject var model: AppModel

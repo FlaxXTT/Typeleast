@@ -1,6 +1,6 @@
 # TypeLeast — macOS app
 
-A menu-bar app (AppKit + SwiftUI, system frameworks only) in the style of Typeless:
+A menu-bar app (AppKit + SwiftUI, system frameworks only):
 press Fn (or ⌥Space), speak, press again, and the cleaned-up text is pasted at the
 caret. Recognition and cleanup are done by the TypeLeast local service
 (`../../service`), which this app starts, watches and stops by itself.

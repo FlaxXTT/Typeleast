@@ -1,7 +1,7 @@
 import AppKit
 import Carbon
 
-// FnKey.swift - single-press Fn (Globe) as the dictation key, the way Typeless does it.
+// FnKey.swift - single-press Fn (Globe) as the dictation key.
 //
 // Carbon RegisterEventHotKey accepts a bare Fn but macOS never delivers it, so Fn is
 // read from modifier-change events instead. NSEvent global monitors for
