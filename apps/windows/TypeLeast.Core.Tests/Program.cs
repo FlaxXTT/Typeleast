@@ -511,6 +511,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         Check("edit correction extracts bounded term", EditCorrection.Find("Hello DeepSeak.","Hello DeepSeek.") is not null);
         Check("edit learning rejects credential-like tokens", EditCorrection.Find("key abc123", "key xyz789") is null);
         Check("edit learning rejects long private content", EditCorrection.Find(new string('a',2001),"b") is null);
+        Check("edit learning keeps a Chinese correction to the changed words", EditCorrection.Find("请把数据图发给张伟", "请把数据图发给章伟") is null && EditCorrection.Find("结果分析的数据图不要给我矢量图", "结果分析的数据图给我矢量图") is null && EditCorrection.Find("打开迪普西克设置", "打开深度求索设置") == ("迪普西克", "深度求索"));
     }
     finally { Directory.Delete(dir, true); }
 }
