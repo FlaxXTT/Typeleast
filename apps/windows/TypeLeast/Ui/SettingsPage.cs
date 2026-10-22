@@ -237,6 +237,8 @@ internal sealed class SettingsPage : IPage
             Section(L10n.T("版本与更新"),
                 Theme.SettingRow("TypeLeast " + version, updateStatus,
                     Theme.Row(8, Theme.Secondary(L10n.T("检查更新"), () => _ = CheckUpdates()), installUpdate)),
+                Theme.SettingRow(L10n.T("自动更新"), Theme.Text(L10n.T("安装版每次启动和打开窗口时检查，下载并核对 SHA-256 后在空闲时静默安装，完成后自动重新打开。"), 12, Theme.Grey),
+                    Theme.Toggle(s.AutoUpdate, v => { s.AutoUpdate = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
                     Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
         DockPanel.SetDock(root, Dock.Top); surface.Children.Add(root);
@@ -250,6 +252,8 @@ internal sealed class SettingsPage : IPage
         updateStatus.Text = L10n.T("正在检查…");
         updateStatus.Text = await host.CheckForUpdate();
         RefreshUpdateButton();
+        // Same as at launch: with 自动更新 on, a found update installs right away.
+        if (host.AvailableUpdate is not null && host.Settings.AutoUpdate && Updater.IsInstalledCopy) await RunUpdate();
     }
 
     private async Task RunUpdate()

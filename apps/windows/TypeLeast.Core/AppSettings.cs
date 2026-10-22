@@ -38,6 +38,7 @@ public sealed class AppSettings
     public string NodePath { get; set; } = "";
     public bool LaunchAtLogin { get; set; }
     public bool RestoreClipboard { get; set; } = true;
+    public bool AutoUpdate { get; set; } = true;
     public bool OnboardingDone { get; set; }
     /// <summary>-1 = the system default microphone.</summary>
     public int MicrophoneDevice { get; set; } = -1;
