@@ -47,6 +47,7 @@ public static class L10n
         ["有新版本 {0}。"] = "Version {0} is available.",
         ["无法访问发布页。请检查网络；如果发布页还没公开，请在浏览器中登录后下载。"] = "Cannot reach the release page. Check the network; if the releases are not public yet, sign in in a browser and download there.",
         ["听写结束后再更新。"] = "Update after the dictation finishes.",
+        ["生成或取消这次提示词 Beta 后再更新。"] = "Generate or cancel this Prompt Beta before updating.",
         ["便携版请在发布页下载新版本。"] = "For the portable version, download the new version from the release page.",
         ["下载更新失败，请稍后再试。"] = "Downloading the update failed; try again later.",
         ["检查更新"] = "Check for updates",

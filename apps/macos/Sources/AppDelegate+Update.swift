@@ -55,6 +55,11 @@ extension AppDelegate {
             updateAlert(L10n.text("正在听写"), L10n.text("听写结束后再更新。"))
             return
         }
+        // Restarting would drop the questions and the answers given so far.
+        guard betaPending == nil else {
+            updateAlert(L10n.text("提示词 Beta 还没结束"), L10n.text("生成或取消这次提示词 Beta 后再更新。"))
+            return
+        }
         setHint(L10n.text("正在下载更新 ") + version + "…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try Updater.prepare(version: version) }

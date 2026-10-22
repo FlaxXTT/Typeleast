@@ -7,7 +7,7 @@ using System.Windows.Media;
 namespace TypeLeast.Ui;
 
 /// <summary>
-/// The Reference-like look, built in code: warm light background, white cards with
+/// The TypeLeast look, built in code: warm light background, white cards with
 /// soft borders, black primary buttons, quiet grey secondary text.
 /// </summary>
 internal static class Theme

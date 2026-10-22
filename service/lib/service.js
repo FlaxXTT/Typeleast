@@ -17,7 +17,7 @@
  */
 import { LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { redactFieldContext, redactSecrets } from "./context.js";
 import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } from "./prompt.js";
@@ -221,7 +221,7 @@ export class VoicePolishService {
     this.promptify = next;
     if (this.promptifyPath !== null) {
       await mkdir(dirname(this.promptifyPath), { recursive: true });
-      await writeFile(this.promptifyPath, JSON.stringify(this.promptify, null, 2) + "\n", "utf8");
+      await writePrivate(this.promptifyPath, JSON.stringify(this.promptify, null, 2) + "\n");
       this.promptifyMtime = await mtimeOf(this.promptifyPath);
     }
     return this.promptifySettings();
@@ -256,7 +256,7 @@ export class VoicePolishService {
     if (this.dictionaryPath === null) return;
     try {
       await mkdir(dirname(this.dictionaryPath), { recursive: true });
-      await writeFile(this.dictionaryPath, JSON.stringify(this.dictionary, null, 2) + "\n", "utf8");
+      await writePrivate(this.dictionaryPath, JSON.stringify(this.dictionary, null, 2) + "\n");
     } catch (error) {
       this.logger.warn?.("typeleast: could not persist the dictionary: %s", message(error));
     }
@@ -804,6 +804,16 @@ const hash = textDigest;
 /** Narrow an unknown throwable to a printable message. */
 function message(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Write a file only this user can read, like the token and the history: the dictionary
+ * holds names and terms the user dictates, the prompt file their own instructions.
+ * The mode applies when the file is created; chmod covers files from older versions.
+ */
+async function writePrivate(path, text) {
+  await writeFile(path, text, { encoding: "utf8", mode: 0o600 });
+  await chmod(path, 0o600).catch(() => {});
 }
 
 /** Modification time of a file in ms, or null when it does not exist. */

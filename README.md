@@ -164,7 +164,7 @@ Mac 最新版是 [**v1.17.2**](https://github.com/FlaxXTT/Typeleast/releases/tag
 |---|---|---|
 | 系统 | macOS 13 Ventura 或更新 | Windows 11，或 Windows 10 1809 及以上（64 位） |
 | 磁盘 | 约 450 MB（App 约 200 MB + 语音模型 241 MB） | 约 450 MB（App 约 200 MB + 语音模型 241 MB） |
-| 网络 | 第一次打开时下载一次语音模型（约 241 MB）；之后识别完全离线，只有整理时访问你选的模型服务商 | 同左 |
+| 网络 | 第一次打开时下载一次语音模型（约 241 MB）；之后识别完全离线，只在整理时访问你选的模型服务商、检查更新时访问 GitHub | 同左 |
 | 权限 | 麦克风；辅助功能（自动粘贴、Fn 键） | 麦克风（系统隐私设置里允许桌面应用访问）；不需要管理员权限 |
 | 整理模型 | 任一 OpenAI 兼容服务的 API Key（可选） | 同左 |
 
@@ -256,7 +256,7 @@ Mac 最新版是 [**v1.17.2**](https://github.com/FlaxXTT/Typeleast/releases/tag
 
 DeepSeek 官方当前使用模型 ID `deepseek-flash`。旧名称 `deepseek-chat`、`deepseek-reasoner` 已停用；已有用户需在设置中手动更新模型，或点「获取列表」选择。不要把 `/chat/completions` 填进接口地址，程序会自动追加这个路径。参见 [官方接入文档](https://api-docs.deepseek.com/zh-cn/) 和 [停用公告](https://api-docs.deepseek.com/zh-cn/updates/)。
 
-- Key 只保存在系统自带的安全存储里：macOS 是**钥匙串**，Windows 是**凭据管理器**。它只发给本机的 TypeLeast 服务，由服务直接调用你选的服务商，不会写进任何文件或日志。
+- Key 保存在系统自带的安全存储里：macOS 是**钥匙串**，Windows 是**凭据管理器**，不会写进日志。整理时它只发给本机的 TypeLeast 服务，由服务直接调用你选的服务商；在设置里点「获取列表」时，App 直接向这个服务商请求模型列表。Mac 软件内更新时，为了不再让你输入密码，旧版本会把 Key 暂存在只有你能读的交接文件里，新版本启动后立即导入钥匙串并抹掉这个文件。
 - 远程地址必须是 https；http 只允许本机地址（如 Ollama）。
 - 会先「思考」再回答的模型（推理模型），TypeLeast 会在已知服务商上关闭思考，整理更快、更省 token。
 - 调用费用由你的服务商账户承担。每次整理只发送识别出的文字和你的词典；只有你在设置里打开「参考输入框里的内容」时，才会附带光标附近的少量文字和窗口标题。
@@ -266,7 +266,8 @@ DeepSeek 官方当前使用模型 ID `deepseek-flash`。旧名称 `deepseek-chat
 <details>
 <summary><b>隐私：数据去了哪里</b></summary>
 
-- **音频不出电脑。** 录音只在内存里，交给本机的识别服务后即丢弃（macOS 可选保留 24 小时用于重试）。
+- **音频不出电脑。** 录音交给本机的识别服务，识别后即删除（Mac 会先写成系统临时文件，识别后立即删除）。打开保留录音的设置时（Mac「保留录音 24 小时」，Windows「保留录音用于重试」），录音加密保存在本机，最多 24 小时，用于重试。
+- 听写结果通过系统剪贴板粘贴，之后恢复原来的剪贴板内容；剪贴板管理工具、Windows 剪贴板历史可能会记下这段文字。
 - 发给整理模型服务商的只有：识别出的文字、词典，以及（打开「参考输入框里的内容」时）光标附近的文字和窗口标题；发送前会抹掉看起来像密钥、密码的内容。
 - 本机服务只监听 `127.0.0.1`，端口每次随机，每个请求都要带只有本机用户能读的令牌。
 - 数据位置（删掉即清空）：
@@ -388,6 +389,8 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 <summary><b>许可与致谢</b></summary>
 
 TypeLeast 以 [GNU GPL v3.0](LICENSE) 许可发布：可以自由使用、修改和再分发，修改后发布的版本也必须以 GPL-3.0 开源。
+
+按照 GPL-3.0 第 15、16 条，TypeLeast 按「现状」提供，不附带任何担保。整理、提示词和翻译的结果由你选择的模型生成，可能出错，发送或使用前请自行核对。
 
 见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)：sherpa-onnx（Apache-2.0）、SenseVoice 模型（FunAudioLLM）、Silero VAD（MIT）、Node.js（MIT）、NAudio（MIT），以及 Windows 界面字体 Inter 与思源黑体（SIL OFL 1.1）。
 

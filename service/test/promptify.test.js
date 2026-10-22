@@ -201,3 +201,25 @@ test("配置文件中原样保留的默认提示词仍算默认，追加内容�
     assert.equal(service.promptifySettings().appendix, "保留这条补充");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("词典和提示词文件只有本人可读", { skip: process.platform === "win32" }, async () => {
+  const { mkdtemp, rm, stat, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "typeleast-private-"));
+  try {
+    // A file left by an older version, readable by others, is tightened on the next write.
+    await writeFile(join(dir, "dictionary.json"), "[]\n", { mode: 0o644 });
+    const service = new VoicePolishService({
+      config: { dictionary: [] },
+      dictionaryPath: join(dir, "dictionary.json"),
+      promptifyPath: join(dir, "promptify.json"),
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+    });
+    await service.setDictionary(["TypeLeast"]);
+    await service.setPromptify({ appendix: "用英文写。" });
+    for (const name of ["dictionary.json", "promptify.json"]) {
+      assert.equal((await stat(join(dir, name))).mode & 0o777, 0o600, name);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

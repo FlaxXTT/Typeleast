@@ -221,7 +221,11 @@ enum KeychainHandoff {
         for (account, value) in values where !value.isEmpty {
             // An item left behind (the old copy could not delete it) stays as it is.
             if KeychainStore.exists(account: account) { continue }
-            KeychainStore.create(value, account: account)
+            // The file is wiped either way (it must not keep keys in clear text); a key that
+            // could not be recreated has to be entered again, and the log says why.
+            if !KeychainStore.create(value, account: account) {
+                DiagnosticsLog.write("keychain.handoff.fail", ["status": String(KeychainStore.lastStatus)])
+            }
         }
     }
 }

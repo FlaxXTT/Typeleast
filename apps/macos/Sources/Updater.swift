@@ -272,12 +272,15 @@ enum Updater {
     }
 
     /// Swap the installed app for `newApp` once this process (`pid`) has quit, then open it.
-    /// If the copy fails, the old app is put back.
+    /// If the copy fails, the old app is put back; if the old app cannot even be moved aside
+    /// (no write access to its folder), it is left exactly where it is.
     static func replaceAfterExit(pid: Int32, newApp: URL, installed: URL, work: URL) throws {
         let script = """
         while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
         rm -rf "$3.old"
-        if mv "$3" "$3.old" && /usr/bin/ditto "$2" "$3"; then rm -rf "$3.old"; else rm -rf "$3"; mv "$3.old" "$3"; fi
+        if mv "$3" "$3.old"; then
+          if /usr/bin/ditto "$2" "$3"; then rm -rf "$3.old"; else rm -rf "$3"; mv "$3.old" "$3"; fi
+        fi
         /usr/bin/open "$3"
         rm -rf "$4"
         """

@@ -226,7 +226,11 @@ final class ServiceManager {
         let input = Pipe()
         p.standardInput = input
         var secret = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, secret.count, &secret)
+        // An all-zero secret would be a known one: without randomness, start nothing.
+        guard SecRandomCopyBytes(kSecRandomDefault, secret.count, &secret) == errSecSuccess else {
+            state = .failed(L10n.text("无法生成本地服务的校验密钥，请重新启动 TypeLeast。"))
+            return
+        }
         let secretHex = secret.map { String(format: "%02x", $0) }.joined()
         client.proofKey = secretHex
         stdoutBuffer = ""

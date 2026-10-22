@@ -11,7 +11,7 @@ using TypeLeast.Core;
 namespace TypeLeast.Ui;
 
 /// <summary>
-/// The main window, laid out like Reference: a sidebar (首页, 历史, 词典, 设置) and
+/// The main window, laid out like the Mac app's: a sidebar (首页, 历史, 词典, 设置) and
 /// a content pane. Closing it only hides it; TypeLeast keeps running in the tray.
 /// </summary>
 internal sealed class MainWindow : Window

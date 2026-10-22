@@ -141,6 +141,9 @@ internal sealed class AppHost
     public bool Updating { get; private set; }
 
     private bool checkingUpdate;
+    /// <summary>A version whose automatic download or install failed in this run: it is not
+    /// downloaded again on every window open (检查更新 in settings still can).</summary>
+    private string? autoUpdateFailed;
 
     /// <summary>On every launch and every time the window is opened. With 自动更新 on, the installed
     /// copy installs a new version by itself; otherwise only the hint changes.</summary>
@@ -161,11 +164,17 @@ internal sealed class AppHost
                 }
             }
             catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
-            if (AvailableUpdate is { } update && Settings.AutoUpdate && Updater.IsInstalledCopy)
+            // Not while Prompt Beta's questions are open: the next window open tries again.
+            if (AvailableUpdate is { } update && Settings.AutoUpdate && Updater.IsInstalledCopy
+                && autoUpdateFailed != update.Version && betaSession is null && Phase == DictationPhase.Idle)
             {
                 Log.Write("update.auto", update.Version);
                 SetHint(L10n.T("正在自动更新到 {0}，完成后会自动重新打开。", update.Version));
-                if (await InstallUpdate() is { } error) SetHint(error);
+                if (await InstallUpdate() is { } error)
+                {
+                    autoUpdateFailed = update.Version;
+                    SetHint(error);
+                }
             }
         }
         finally { checkingUpdate = false; }
@@ -193,14 +202,17 @@ internal sealed class AppHost
     {
         if (AvailableUpdate is not { } release || Updating) return null;
         if (Phase != DictationPhase.Idle) return L10n.T("听写结束后再更新。");
+        // Quitting would drop the questions and the answers given so far.
+        if (betaSession is not null) return L10n.T("生成或取消这次提示词 Beta 后再更新。");
         if (!Updater.IsInstalledCopy) { Shell.Open(release.PageUrl.Length > 0 ? release.PageUrl : "https://github.com/FlaxXTT/Typeleast/releases"); return L10n.T("便携版请在发布页下载新版本。"); }
         Updating = true;
         Raise();
         try
         {
             var setup = await Updater.DownloadAsync(release);
-            // The download takes a while: never quit in the middle of a dictation started meanwhile.
-            while (Phase != DictationPhase.Idle) await Task.Delay(1000);
+            // The download takes a while: never quit in the middle of a dictation, or a Prompt Beta
+            // clarification, started meanwhile.
+            while (Phase != DictationPhase.Idle || betaSession is not null) await Task.Delay(1000);
             if (quitting) return null;
             Log.Write("update.install", release.Version);
             Updater.RunInstaller(setup);
