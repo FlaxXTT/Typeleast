@@ -10,6 +10,19 @@ namespace TypeLeast;
 internal static class Native
 {
     [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool OpenClipboard(IntPtr owner);
+    [DllImport("user32.dll")] public static extern bool CloseClipboard();
+    [DllImport("user32.dll")] public static extern bool EmptyClipboard();
+    [DllImport("user32.dll")] public static extern uint EnumClipboardFormats(uint format);
+    [DllImport("user32.dll")] public static extern IntPtr GetClipboardData(uint format);
+    [DllImport("user32.dll")] public static extern IntPtr SetClipboardData(uint format, IntPtr data);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterClipboardFormatW(string name);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClipboardFormatNameW(uint format, System.Text.StringBuilder name, int size);
+    [DllImport("kernel32.dll")] public static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
+    [DllImport("kernel32.dll")] public static extern IntPtr GlobalLock(IntPtr memory);
+    [DllImport("kernel32.dll")] public static extern bool GlobalUnlock(IntPtr memory);
+    [DllImport("kernel32.dll")] public static extern UIntPtr GlobalSize(IntPtr memory);
+    [DllImport("kernel32.dll")] public static extern IntPtr GlobalFree(IntPtr memory);
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
