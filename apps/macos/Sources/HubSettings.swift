@@ -77,7 +77,7 @@ struct SettingsPage: View {
 
     private var cleanup: some View {
         SettingsSection(title: L10n.text("整理选项")) {
-            ToggleRow(title: L10n.text("参考输入框里的内容"), detail: L10n.text("听写开始时读取光标附近的文字，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。"),
+            ToggleRow(title: L10n.text("参考输入框里的内容"), detail: L10n.text("默认关闭。打开后，听写开始时读取光标附近的文字和窗口标题，和识别结果一起（脱敏后）发给整理模型，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。"),
                       isOn: model.setting(\.readFieldContext))
             ToggleRow(title: L10n.text("自动学习我的更正"), detail: L10n.text("听写后你改过的词，会作为「自动添加」放进词典。"),
                       isOn: model.setting(\.autoLearn))

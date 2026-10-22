@@ -265,7 +265,7 @@ enum L10n {
         "听写后你改过的词，会作为「自动添加」放进词典。": "Words you correct after dictation are added to the dictionary automatically.",
         "听写失败": "Dictation failed",
         "听写失败：": "Dictation failed: ",
-        "听写开始时读取光标附近的文字，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。": "Read nearby text when dictation starts to correct names and terms. Secure fields and password managers are excluded.",
+        "默认关闭。打开后，听写开始时读取光标附近的文字和窗口标题，和识别结果一起（脱敏后）发给整理模型，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。": "Off by default. When on, the text near the cursor and the window title are read as dictation starts and sent (with secrets removed) to the cleanup model together with the transcript, to fix homophones, names and terms. Password fields and password managers are never read.",
         "听写总字数": "Total dictated characters",
         "听写时静音其他声音": "Mute other audio while recording",
         "听写次数": "Dictation sessions",
