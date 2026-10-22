@@ -669,6 +669,8 @@ do {
           PasteTarget.matches(expected: "", frontmost: "com.apple.Notes"))
     UserDefaults.standard.removeObject(forKey: "ui.showIdleBar.v2")
     checkEq("the resting voice bar is off by default", Settings.shared.showIdleBar, false)
+    UserDefaults.standard.removeObject(forKey: "voice.fieldContext")
+    checkEq("reading the field around the cursor is off by default", Settings.shared.readFieldContext, false)
 }
 
 // MARK: 18. own API key: route header, model list, URL rules, completeness

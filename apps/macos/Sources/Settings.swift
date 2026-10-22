@@ -277,7 +277,9 @@ final class Settings {
 
     /// Read the text around the cursor at dictation start and send it as context.
     var readFieldContext: Bool {
-        get { bool("voice.fieldContext", default: true) }
+        // Off by default (as on Windows): when on, text near the cursor and the window
+        // title go to the cleanup model's provider with each dictation.
+        get { bool("voice.fieldContext", default: false) }
         set { d.set(newValue, forKey: "voice.fieldContext"); changed() }
     }
 
