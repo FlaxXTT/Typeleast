@@ -15,6 +15,8 @@
 
 <p align="center"><a href="https://typeleast.promptking.workers.dev">访问官网 · Website</a> &nbsp;·&nbsp; <a href="https://github.com/FlaxXTT/Typeleast">GitHub 仓库 · Repository</a></p>
 
+<p align="center"><sub>B 站讲解视频 · 即将上线 / Bilibili walkthrough · Coming soon</sub></p>
+
 <br>
 
 <p align="center">TypeLeast 是一个免费的 Mac 和 Windows 听写工具。<br>按一下快捷键说话，语音在<b>你自己的电脑上</b>识别，再用<b>你自己的大模型</b>整理成通顺的文字，直接写进当前光标处。</p>
