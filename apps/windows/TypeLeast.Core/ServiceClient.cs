@@ -79,7 +79,17 @@ public sealed class ServiceClient
         BaseUri = new Uri("http://127.0.0.1:" + port);
     }
 
-    public void InvalidatePort() { LastPort = null; BaseUri = new Uri("http://127.0.0.1:1"); }
+    /// <summary>
+    /// The service this app started has stopped: point nowhere and forget that its port proved
+    /// itself. Another program may take that port (and runtime.json may still name it) before
+    /// the service is back, so whatever answers there next must answer the challenge again.
+    /// </summary>
+    public void InvalidatePort()
+    {
+        lock (proofGate) { verifiedBase = null; }
+        LastPort = null;
+        BaseUri = new Uri("http://127.0.0.1:1");
+    }
 
     /// <summary>Port the service published, or null when the file is absent or malformed.</summary>
     public int? PublishedPort()

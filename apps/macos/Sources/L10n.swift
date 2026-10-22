@@ -262,7 +262,7 @@ enum L10n {
         "取消": "Cancel",
         "取消听写": "Cancel dictation",
         "取消听写（Esc）": "Cancel dictation (Esc)",
-        "可以在历史里用同一段录音重试；24 小时后自动删除": "Retry from history using the same recording; it is deleted after 24 hours",
+        "可以在历史里用同一段录音重试；24 小时后自动删除。不保存历史时不保留录音": "Retry from history using the same recording; it is deleted after 24 hours. Nothing is kept when history is never kept",
         "听写": "Dictation",
         "听写后你改过的词，会作为「自动添加」放进词典。": "Words you correct after dictation are added to the dictionary automatically.",
         "听写失败": "Dictation failed",

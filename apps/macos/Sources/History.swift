@@ -90,6 +90,16 @@ enum HistorySeal {
             return cached
         }
         guard create else { return nil }
+        // A key still waiting in an old hand-over file is the one the stored history needs:
+        // try it again, and never make a new key that could not open that history.
+        if KeychainHandoff.pending(account: account) {
+            KeychainHandoff.restoreIfPresent()
+            if let saved = KeychainStore.read(account: account), let data = Data(base64Encoded: saved), data.count == 32 {
+                cached = SymmetricKey(data: data)
+                return cached
+            }
+            return nil
+        }
         let fresh = SymmetricKey(size: .bits256)
         guard KeychainStore.create(fresh.withUnsafeBytes { Data($0) }.base64EncodedString(), account: account) else { return nil }
         cached = fresh
@@ -270,19 +280,22 @@ final class HistoryStore {
     }
 
     /// Drop entries older than the retention window. "Never" keeps only the entry
-    /// just added, until the next one arrives, so "paste last" still works.
+    /// just added, in memory, until the next one arrives, so "paste last" still works;
+    /// no recording is kept with it (as on Windows), since nothing may stay on disk.
     func applyRetention(_ retention: HistoryRetention, saving: Bool = true) {
         guard let window = retention.seconds else { return }
         let before = entries.count
         if window == 0 {
-            for dropped in entries.dropFirst() { removeAudio(dropped) }
+            for dropped in entries { removeAudio(dropped) }
             entries = Array(entries.prefix(1))
+            if !entries.isEmpty { entries[0].audioPath = nil }
         } else {
             let cutoff = Date().addingTimeInterval(-window)
             for dropped in entries where dropped.ts < cutoff { removeAudio(dropped) }
             entries.removeAll { $0.ts < cutoff }
         }
-        if saving, entries.count != before { save() }
+        // "Never" also clears what is already stored, even when no entry was dropped.
+        if saving, entries.count != before || window == 0 { save() }
     }
 
     private func removeAudio(_ e: LocalHistoryEntry) {

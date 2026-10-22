@@ -486,6 +486,16 @@ final class ServiceClient {
         baseURL = URL(string: "http://127.0.0.1:" + String(port))!
     }
 
+    /// The service this app started has stopped: point nowhere and forget that its port
+    /// proved itself. Another program may take that port before the service is back, so
+    /// whatever answers there next must answer the challenge again.
+    func invalidatePort() {
+        proofLock.withLock {
+            verifiedBase = nil
+            baseURL = URL(string: "http://127.0.0.1:1")!
+        }
+    }
+
     /// Run one request, and on a transport failure re-read the published port and
     /// retry exactly once.
     ///

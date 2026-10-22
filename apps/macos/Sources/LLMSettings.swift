@@ -114,10 +114,13 @@ enum KeychainStore {
         return Array(Set(list.compactMap { $0[kSecAttrAccount as String] as? String })).sorted()
     }
 
+    /// Test seam: accounts the stub refuses to create, like a locked Keychain.
+    static var stubRefuses: Set<String> = []
+
     /// Add an item only when none exists (never replaces one that this build cannot read).
     static func create(_ value: String, account: String) -> Bool {
         if stub != nil {
-            guard stub?[account] == nil else { return false }
+            guard stub?[account] == nil, !stubRefuses.contains(account) else { return false }
             stub?[account] = value
             return true
         }
@@ -174,18 +177,52 @@ enum KeychainStore {
 /// In-app updates without password dialogs. macOS lets only the build that created a
 /// Keychain item (identified by its code hash when, as here, there is no Apple team ID)
 /// read it without asking; every update is a new build. So the running copy, which can
-/// read its items, hands them over: it writes them to an owner-only file and deletes the
-/// items just before it is replaced, and the next copy to start (the new one, or the old
-/// one put back if the update failed) creates them again as its own.
+/// read its items, hands them straight to the next one: just before it quits, it starts the
+/// new copy's own executable with --receive-keychain-handoff, checks by code hash that the
+/// process is the code it has just verified and signed, deletes its items and writes them
+/// to that process's standard input; the new copy creates them again as its own. Nothing
+/// is written to disk, where any program of this user could read it. If anything fails,
+/// the items are put back as they were, and the new copy asks once.
+///
+/// Versions up to 1.17.2 handed the items over in an owner-only file instead. That file is
+/// still restored once at launch, and it is kept, not wiped, while any item in it could not
+/// be recreated: it is then the only copy of that key (the history key above all).
 enum KeychainHandoff {
+    static let receiveFlag = "--receive-keychain-handoff"
+    /// Test seam: where the old hand-over file is looked for.
+    static var fileOverride: URL?
     static var fileURL: URL {
-        URL(fileURLWithPath: ServiceClient.stateDirectory).appendingPathComponent("keychain-handoff.json")
+        fileOverride ?? URL(fileURLWithPath: ServiceClient.stateDirectory).appendingPathComponent("keychain-handoff.json")
     }
 
-    /// Called by the copy about to be replaced. Returns false (and changes nothing) when
-    /// the items cannot all be read or the file cannot be written.
+    // MARK: the copy being replaced
+
+    /// The code hash (hex) of a signed app or executable: what a `cdhash H"…"` requirement names.
+    static func cdhash(of url: URL) -> String? {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let unique = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data, !unique.isEmpty else { return nil }
+        return unique.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Whether the running process `pid` is exactly the code with this code hash.
+    static func process(_ pid: pid_t, hasCDHash cdhash: String) -> Bool {
+        guard cdhash.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil else { return false }
+        var code: SecCode?
+        guard SecCodeCopyGuestWithAttributes(nil, [kSecGuestAttributePid: pid] as CFDictionary, [], &code) == errSecSuccess,
+              let code else { return false }
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString("cdhash H\"\(cdhash)\"" as CFString, [], &requirement) == errSecSuccess,
+              let requirement else { return false }
+        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+    }
+
+    /// Hand every item to the new copy's `executable`, whose code hash was taken when it was
+    /// signed. Returns true when the new copy now owns them all.
     @discardableResult
-    static func prepare(file: URL = fileURL) -> Bool {
+    static func transfer(toExecutable executable: URL, cdhash: String) -> Bool {
         var values: [String: String] = [:]
         for account in KeychainStore.accounts() {
             guard let value = KeychainStore.read(account: account) else { return false }
@@ -193,40 +230,88 @@ enum KeychainHandoff {
         }
         guard !values.isEmpty else { return true }
         guard let data = try? JSONEncoder().encode(values) else { return false }
-        let fm = FileManager.default
-        try? fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? fm.removeItem(at: file)
-        guard fm.createFile(atPath: file.path, contents: data, attributes: [.posixPermissions: 0o600]) else { return false }
-        var url = file
-        var excluded = URLResourceValues()
-        excluded.isExcludedFromBackup = true
-        try? url.setResourceValues(excluded)
+        let child = Process()
+        child.executableURL = executable
+        child.arguments = [receiveFlag]
+        let input = Pipe()
+        child.standardInput = input
+        child.standardOutput = FileHandle.nullDevice
+        child.standardError = FileHandle.nullDevice
+        do { try child.run() } catch { return false }
+        // Only the code that was downloaded, verified and signed gets the keys, not anything
+        // put in its place since.
+        guard process(child.processIdentifier, hasCDHash: cdhash) else {
+            child.terminate()
+            child.waitUntilExit()
+            DiagnosticsLog.write("keychain.handoff.fail", ["code": "identity"])
+            return false
+        }
         for account in values.keys { KeychainStore.remove(account: account) }
-        return true
+        input.fileHandleForWriting.write(data)
+        try? input.fileHandleForWriting.close()
+        let deadline = Date().addingTimeInterval(20)
+        while child.isRunning && Date() < deadline { usleep(20_000) }
+        if child.isRunning { child.terminate(); child.waitUntilExit() }
+        let received = child.terminationReason == .exit && child.terminationStatus == 0
+        // Whatever the new copy did not take is put back as this copy's own (create never replaces).
+        var lost = 0
+        for (account, value) in values where !KeychainStore.exists(account: account) {
+            if !KeychainStore.create(value, account: account) { lost += 1 }
+        }
+        if !received || lost > 0 { DiagnosticsLog.write("keychain.handoff.fail", ["code": received ? "restore" : "transfer", "status": String(lost)]) }
+        return received && lost == 0
     }
 
-    /// Called first thing at launch: recreate handed-over items as this build's own.
+    // MARK: the new copy
+
+    /// `TypeLeast --receive-keychain-handoff`, started by the copy being replaced: create the
+    /// items written to standard input as this build's own. Exit status 0 when all exist.
+    static func receive() -> Int32 {
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        guard data.count <= 1 << 20, let values = try? JSONDecoder().decode([String: String].self, from: data) else { return 2 }
+        var failed = 0
+        for (account, value) in values where !value.isEmpty {
+            if KeychainStore.exists(account: account) { continue }
+            if !KeychainStore.create(value, account: account) { failed += 1 }
+        }
+        return failed == 0 ? 0 : 1
+    }
+
+    /// Whether an old hand-over file still holds `account` (it could not be recreated yet).
+    static func pending(account: String) -> Bool {
+        guard let data = FileManager.default.contents(atPath: fileURL.path),
+              let values = try? JSONDecoder().decode([String: String].self, from: data) else { return false }
+        return !(values[account] ?? "").isEmpty
+    }
+
+    /// Run first thing at launch: recreate the items an older version handed over in a file.
     static func restoreIfPresent(file: URL = fileURL) {
         guard let data = FileManager.default.contents(atPath: file.path) else { return }
-        defer {
-            // Overwrite before deleting, so the words are not left in a free block either.
-            if let handle = try? FileHandle(forWritingTo: file) {
-                handle.write(Data(count: data.count))
-                try? handle.synchronize()
-                try? handle.close()
-            }
-            try? FileManager.default.removeItem(at: file)
+        guard let values = try? JSONDecoder().decode([String: String].self, from: data) else {
+            wipe(file, bytes: data.count)
+            return
         }
-        guard let values = try? JSONDecoder().decode([String: String].self, from: data) else { return }
+        var notRecreated = 0
         for (account, value) in values where !value.isEmpty {
             // An item left behind (the old copy could not delete it) stays as it is.
             if KeychainStore.exists(account: account) { continue }
-            // The file is wiped either way (it must not keep keys in clear text); a key that
-            // could not be recreated has to be entered again, and the log says why.
             if !KeychainStore.create(value, account: account) {
+                notRecreated += 1
                 DiagnosticsLog.write("keychain.handoff.fail", ["status": String(KeychainStore.lastStatus)])
             }
         }
+        // Wiping the file now would lose a key for good; it is tried again at the next launch.
+        if notRecreated == 0 { wipe(file, bytes: data.count) }
+    }
+
+    /// Overwrite before deleting, so the keys are not left in a free block either.
+    private static func wipe(_ file: URL, bytes: Int) {
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.write(Data(count: bytes))
+            try? handle.synchronize()
+            try? handle.close()
+        }
+        try? FileManager.default.removeItem(at: file)
     }
 }
 

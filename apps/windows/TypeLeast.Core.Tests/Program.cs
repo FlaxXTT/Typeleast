@@ -221,6 +221,28 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
         Eq("and the key never reached it", stub.LastHeaders.GetValueOrDefault("x-voice-llm"), null);
     }
 
+    // The service exited: whatever answers on its old port (runtime.json still names it) proves itself again.
+    var ownKey = string.Concat(Enumerable.Repeat("cd", 32));
+    var owned = new ServiceClient(dir) { ProofKey = ownKey };
+    owned.DiscoverBaseUri();
+    stub.ProofKey = ownKey;
+    stub.Reply = (200, "{\"ok\":true,\"service\":\"typeleast\",\"speech\":{\"phase\":\"ready\",\"ready\":true}}");
+    Check("our own service proves itself", (await owned.HealthAsync()).Ok);
+    owned.InvalidatePort();
+    stub.ProofKey = null;
+    owned.DiscoverBaseUri();
+    try
+    {
+        await owned.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
+        Check("after the service exits, its old port is checked again", false);
+    }
+    catch (ServiceException e)
+    {
+        Eq("after the service exits, its old port is checked again", e.Kind, ServiceErrorKind.Untrusted);
+        Eq("and the key never reached the new listener", stub.LastHeaders.GetValueOrDefault("x-voice-llm"), null);
+    }
+    stub.ProofKey = null;
+
     stub.Reply = (503, "{\"error\":\"speech model is not ready\",\"code\":\"speech-not-ready\"}");
     try
     {
@@ -646,6 +668,8 @@ sealed class StubServer
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
     public int Port { get; }
     public (int Status, string Body) Reply { get; set; } = (200, "{}");
+    /// <summary>When set, a challenge is answered like the real service (the reply must be a JSON object).</summary>
+    public string? ProofKey { get; set; }
     public string LastPath { get; private set; } = "";
     public string LastMethod { get; private set; } = "";
     public Dictionary<string, string> LastHeaders { get; private set; } = new();
@@ -703,7 +727,10 @@ sealed class StubServer
         LastMethod = head[0].Split(' ')[0];
         LastHeaders = headers;
         LastBody = body.ToArray();
-        var payload = Encoding.UTF8.GetBytes(Reply.Body);
+        var reply = Reply.Body;
+        if (ProofKey is not null && headers.TryGetValue("x-typeleast-challenge", out var challenge))
+            reply = reply[..reply.LastIndexOf('}')] + ",\"proof\":\"" + ServiceClient.Proof(ProofKey, challenge) + "\"}";
+        var payload = Encoding.UTF8.GetBytes(reply);
         var response = $"HTTP/1.1 {Reply.Status} X\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
         await stream.WriteAsync(Encoding.ASCII.GetBytes(response));
         await stream.WriteAsync(payload);

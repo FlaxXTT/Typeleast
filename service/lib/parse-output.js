@@ -53,7 +53,9 @@ export function parsePolishOutput(raw) {
       const status = typeof parsed.status === "string" ? parsed.status : undefined;
       const reason = typeof parsed.reason === "string" ? parsed.reason : null;
       if (status !== undefined && status !== "ok" && status !== "uncertain") {
-        return { ok: false, text: "", reason, mode: "json", failure: `status:${status}` };
+        // The status is the model's own text and may repeat what was dictated: it never
+        // goes into the failure code, which reaches the logs, /health and history.
+        return { ok: false, text: "", reason, mode: "json", failure: "unexpected-status" };
       }
       if (typeof parsed.text === "string") {
         const text = parsed.text.trim();

@@ -84,9 +84,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         if !isolatedTestRun { DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showHubNotification, object: nil, queue: .main) { [weak self] _ in
             self?.hub.show()
         } }
-        // After an in-app update: take over the Keychain items the previous copy handed on,
-        // before anything (the history above all) reads them.
-        KeychainHandoff.restoreIfPresent()
         model.actions = self
         menuController.target = self
         mainMenu.openSettings = { [weak self] in self?.menuOpenHub(.settings) }

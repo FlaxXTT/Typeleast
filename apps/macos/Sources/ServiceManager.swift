@@ -160,6 +160,7 @@ final class ServiceManager {
             stopping = true
             process?.terminate()
             process = nil
+            ServiceClient.shared.invalidatePort()
             state = .stopped
         }
     }
@@ -171,6 +172,7 @@ final class ServiceManager {
             self.stopping = true
             self.process?.terminate()
             self.process = nil
+            ServiceClient.shared.invalidatePort()
             self.node = nil
             self.restartAttempts = 0
             self.queue.asyncAfter(deadline: .now() + 0.5) { self.startLocked() }
@@ -283,6 +285,8 @@ final class ServiceManager {
     private func handleExit(_ proc: Process) {
         guard proc === process || process == nil else { return }
         process = nil
+        // Until the next service is up, nothing that answers on the old port is trusted.
+        ServiceClient.shared.invalidatePort()
         DiagnosticsLog.write("service.exit", ["code": String(proc.terminationStatus)])
         if stopping { return }
         restartAttempts += 1

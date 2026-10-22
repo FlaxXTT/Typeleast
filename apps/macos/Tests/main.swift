@@ -52,6 +52,8 @@ final class StubState {
     var newToken = ""
     var requestCount = 0
     var lastRequest: StubServer.Request?
+    /// When set, /health answers a challenge like the real service.
+    var proofKey: String?
 }
 
 let healthJSON = """
@@ -89,7 +91,13 @@ let server = try StubServer { req in
             return .json("{\"error\":\"token rotated\",\"code\":\"unauthorized\"}", status: 401)
         }
     }
-    if req.path.hasPrefix("/api/voice-polish/health") { return .json(healthJSON) }
+    if req.path.hasPrefix("/api/voice-polish/health") {
+        let challenge = req.header("x-typeleast-challenge")
+        if let key = state.proofKey, !challenge.isEmpty, let proof = ServiceClient.proof(key: key, challenge: challenge) {
+            return .json(String(healthJSON.dropLast()) + ",\"proof\":\"" + proof + "\"}")
+        }
+        return .json(healthJSON)
+    }
     if req.path == "/api/voice-polish/models" { return .json(modelCatalogJSON) }
     if req.path.hasPrefix("/api/voice-polish/models/") { return .json("{\"ok\":true,\"phase\":\"accepted\"}", status: 202) }
     if req.path.hasPrefix("/api/voice-polish/dictate") {
@@ -1185,24 +1193,74 @@ do {
     }
     checkEq("and the key never reached it", state.lastRequest?.header("x-voice-llm"), "")
 }
+// The service exited: whatever answers on its old port next proves itself again.
+do {
+    let key = String(repeating: "cd", count: 32)
+    let owned = ServiceClient()
+    owned.baseURL = server.baseURL
+    owned.tokenPath = tokenPath
+    owned.proofKey = key
+    state.mode = "health"
+    state.proofKey = key
+    check("our own service proves itself", (try? owned.healthSync()) != nil)
+    owned.invalidatePort()
+    checkEq("a stopped service leaves no port to talk to", owned.baseURL.port, 1)
+    state.proofKey = nil
+    owned.usePort(Int(server.port))
+    do {
+        _ = try owned.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt",
+                                  llm: LLMRoute(baseURL: "https://api.example.com/v1", model: "m", apiKey: "sk-test-0000"))
+        check("after the service exits, its old port is checked again", false)
+    } catch let e as ServiceError {
+        checkEq("after the service exits, its old port is checked again", e, .untrusted)
+    }
+    checkEq("and the key never reached the new listener", state.lastRequest?.header("x-voice-llm"), "")
+}
 
 // MARK: 29. Keychain: read once, never on a redraw, and handed over across an update
 do {
     KeychainStore.stub = ["deepseek": "sk-test-0000", "history-encryption-key": "aGVsbG8="]
     checkEq("existence is known without reading", KeychainStore.exists(account: "deepseek"), true)
     checkEq("the accounts are listed", KeychainStore.accounts(), ["deepseek", "history-encryption-key"])
+
+    // The new copy is recognised by code hash before any key goes to it.
+    let me = Bundle.main.executableURL!
+    let mine = KeychainHandoff.cdhash(of: me)
+    check("a signed executable has a code hash", mine?.count == 40)
+    checkEq("this process is the code with that hash", KeychainHandoff.process(getpid(), hasCDHash: mine ?? ""), true)
+    checkEq("any other hash does not match", KeychainHandoff.process(getpid(), hasCDHash: String(repeating: "0", count: 40)), false)
+    checkEq("a malformed hash never matches", KeychainHandoff.process(getpid(), hasCDHash: "cdhash"), false)
+
+    // Versions up to 1.17.2 handed the items over in a file: it is restored once, then wiped.
     let file = URL(fileURLWithPath: NSTemporaryDirectory() + "typeleast-handoff-" + UUID().uuidString + ".json")
-    checkEq("the old copy hands the items over", KeychainHandoff.prepare(file: file), true)
-    checkEq("and deletes its own", KeychainStore.accounts(), [String]())
-    checkEq("the hand-over file is owner-only", ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.posixPermissions] as? Int), 0o600)
+    let historyKey = Data(repeating: 7, count: 32).base64EncodedString()
+    KeychainStore.stub = [:]
+    try? JSONEncoder().encode(["deepseek": "sk-test-0000", "history-encryption-key": historyKey]).write(to: file)
     KeychainHandoff.restoreIfPresent(file: file)
     checkEq("the next copy recreates them", KeychainStore.stub?["deepseek"], "sk-test-0000")
-    checkEq("including the history key", KeychainStore.stub?["history-encryption-key"], "aGVsbG8=")
+    checkEq("including the history key", KeychainStore.stub?["history-encryption-key"], historyKey)
     checkEq("and the file is gone", FileManager.default.fileExists(atPath: file.path), false)
     KeychainStore.stub = ["deepseek": "kept"]
     try? JSONEncoder().encode(["deepseek": "stale"]).write(to: file)
     KeychainHandoff.restoreIfPresent(file: file)
     checkEq("an item still present is not overwritten", KeychainStore.stub?["deepseek"], "kept")
+
+    // A key that cannot be recreated is not lost with the file, and no new history key replaces it.
+    KeychainStore.stub = [:]
+    KeychainStore.stubRefuses = ["history-encryption-key"]
+    try? JSONEncoder().encode(["deepseek": "sk-test-0000", "history-encryption-key": historyKey]).write(to: file)
+    KeychainHandoff.restoreIfPresent(file: file)
+    checkEq("a key that could not be recreated keeps its file", FileManager.default.fileExists(atPath: file.path), true)
+    KeychainHandoff.fileOverride = file
+    HistorySeal.reset()
+    check("no new history key is made meanwhile", HistorySeal.key(create: true) == nil)
+    checkEq("so nothing replaces the old one", KeychainStore.stub?["history-encryption-key"], nil)
+    KeychainStore.stubRefuses = []
+    let recovered = HistorySeal.key(create: true)?.withUnsafeBytes { Data($0) }.base64EncodedString()
+    checkEq("the next try takes the handed-over key", recovered, historyKey)
+    checkEq("and only then is the file wiped", FileManager.default.fileExists(atPath: file.path), false)
+    KeychainHandoff.fileOverride = nil
+    HistorySeal.reset()
     KeychainStore.stub = [:]
 }
 
@@ -1219,6 +1277,30 @@ do {
                                 fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1))
     checkEq("the last entry is kept in memory for paste-last", store.last?.text, "t")
     checkEq("nothing is written", defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("voice.history") }, [String]())
+    defaults.removePersistentDomain(forName: suite)
+    KeychainStore.stub = [:]
+}
+// Switching to "never" with exactly one stored entry clears the disk at once, its recording too.
+do {
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    let suite = "typeleast.tests.never-switch"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    var never = false
+    let store = HistoryStore(defaults: defaults)
+    store.keepsNothing = { never }
+    let audio = NSTemporaryDirectory() + "typeleast-test-" + UUID().uuidString + ".wav.sealed"
+    FileManager.default.createFile(atPath: audio, contents: Data([1, 2, 3]))
+    store.add(LocalHistoryEntry(id: "one", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "r", text: "t",
+                                fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: audio, inserted: true, seconds: 1))
+    check("one entry is stored", defaults.data(forKey: "voice.history.sealed.v1") != nil)
+    never = true
+    store.applyRetention(.never)
+    checkEq("switching to never clears the stored entry at once",
+            defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("voice.history") }, [String]())
+    checkEq("and its recording", FileManager.default.fileExists(atPath: audio), false)
+    checkEq("the entry stays in memory for paste-last", store.last?.text, "t")
     defaults.removePersistentDomain(forName: suite)
     KeychainStore.stub = [:]
 }

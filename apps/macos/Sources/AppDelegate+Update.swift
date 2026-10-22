@@ -63,12 +63,15 @@ extension AppDelegate {
         setHint(L10n.text("正在下载更新 ") + version + "…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try Updater.prepare(version: version) }
+            // Hand the Keychain items straight to the new copy, so updating asks for no password.
+            // Without a code hash to check it against, nothing is handed over and the new copy asks once.
+            if case .success(let ready) = result, let cdhash = ready.cdhash {
+                KeychainHandoff.transfer(toExecutable: ready.app.appendingPathComponent("Contents/MacOS/TypeLeast"), cdhash: cdhash)
+            }
             DispatchQueue.main.async {
                 guard let self else { return }
                 switch result {
                 case .success(let ready):
-                    // Hand the Keychain items to the next copy, so updating asks for no password.
-                    KeychainHandoff.prepare()
                     do {
                         try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
                                                      newApp: ready.app, installed: Bundle.main.bundleURL, work: ready.work)
@@ -76,7 +79,6 @@ extension AppDelegate {
                         self.recorder.cancel()
                         NSApp.terminate(nil)
                     } catch {
-                        KeychainHandoff.restoreIfPresent()
                         self.setHint(nil)
                         self.updateAlert(L10n.text("更新失败"), error.localizedDescription)
                     }

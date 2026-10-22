@@ -155,6 +155,18 @@ test("a malformed JSON reply still yields its text field", async () => {
   assert.equal(result.outputMode, "regex");
 });
 
+test("a status the model made up stays out of history, /health and the log", async () => {
+  const { stored, history } = recorder();
+  const warnings = [];
+  const service = makeService({ history, config: { logRaw: false }, model: fakeModel(JSON.stringify({ status: "send the wednesday report", text: "x" })) });
+  service.logger = { info: () => {}, warn: (...args) => warnings.push(args.join(" ")), debug: () => {} };
+  const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
+  assert.equal(result.fallback, true);
+  assert.equal(result.detail, "output-format:unexpected-status");
+  const everywhere = JSON.stringify([stored, service.snapshot(), warnings]);
+  assert.ok(!everywhere.includes("wednesday report"), everywhere);
+});
+
 test("an unusable reply falls back to the transcript and is counted", async () => {
   const service = makeService({ model: fakeModel('{"status":"ok","text": }') });
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });

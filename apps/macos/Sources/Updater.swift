@@ -213,8 +213,9 @@ enum Updater {
               hasSigningIdentity() else { throw UpdateError.noSigningCertificate }
     }
 
-    /// Download, verify and re-sign `version`; returns the ready app inside a fresh work folder.
-    static func prepare(version: String, current: URL = Bundle.main.bundleURL) throws -> (app: URL, work: URL) {
+    /// Download, verify and re-sign `version`; returns the ready app inside a fresh work folder,
+    /// and its code hash as signed (KeychainHandoff hands the Keychain items only to that code).
+    static func prepare(version: String, current: URL = Bundle.main.bundleURL) throws -> (app: URL, work: URL, cdhash: String?) {
         try ensureSigningIdentity()
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-update-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
@@ -258,7 +259,7 @@ enum Updater {
             if let mine, mine.contains("certificate leaf"), designatedRequirement(of: app) != mine {
                 throw UpdateError.requirementChanged
             }
-            return (app, work)
+            return (app, work, KeychainHandoff.cdhash(of: app))
         } catch {
             try? FileManager.default.removeItem(at: work)
             throw error

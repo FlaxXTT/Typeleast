@@ -21,7 +21,13 @@ test("a non-ok status is not inserted", () => {
   const result = parsePolishOutput(JSON.stringify({ status: "error", text: "should not appear", reason: "model refused" }));
   assert.equal(result.ok, false);
   assert.equal(result.text, "");
-  assert.match(result.failure, /status:error/);
+  assert.equal(result.failure, "unexpected-status");
+});
+
+test("the model's own status text never becomes the failure code", () => {
+  const result = parsePolishOutput(JSON.stringify({ status: "明天下午三点和王总开会", text: "x" }));
+  assert.equal(result.ok, false);
+  assert.equal(result.failure, "unexpected-status");
 });
 
 test("a malformed body still yields its text field", () => {

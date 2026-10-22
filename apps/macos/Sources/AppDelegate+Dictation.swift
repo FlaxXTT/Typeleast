@@ -99,7 +99,8 @@ extension AppDelegate {
         let field = pendingField
         let language = settings.language
         let strength = settings.strength
-        let keep = settings.keepAudio24h
+        // With "never keep history" nothing stays on disk, the recording included.
+        let keep = settings.keepAudio24h && settings.historyRetention.seconds != 0
         let translateTo = pendingTranslate
         pendingTranslate = nil
         // A recording made while Prompt Beta's questions are open is the answer to them;
