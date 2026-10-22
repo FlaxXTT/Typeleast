@@ -13,7 +13,6 @@ TypeLeast：按快捷键说话，本机识别，再用你自己的整理模型�
 | 电脑 | 文件 |
 |---|---|
 | macOS 13 以上，Apple 芯片 | `TypeLeast-1.16.2-macOS-AppleSilicon.dmg` 或 `.zip` |
-| macOS 13 以上，Intel | `TypeLeast-1.16.2-macOS-Intel.dmg` 或 `.zip` |
 | Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.16.2-Windows-x64-Setup.exe` 或 `TypeLeast-1.16.2-Windows-x64-Portable.zip` |
 
 本次共 6 个安装包，全部为 1.16.2。Mac 构建号为 8，不附带旧 Mac 1.16.0 包。文件校验清单随包提供。

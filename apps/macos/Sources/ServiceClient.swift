@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // ServiceClient.swift - HTTP client for the TypeLeast local service
@@ -18,6 +19,8 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
     case transport(String)
     case http(status: Int, code: String?, message: String)
     case decoding(String)
+    /// Something answers on the service's port but could not prove it is the service this app started.
+    case untrusted
 
     var description: String {
         switch self {
@@ -25,13 +28,14 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
         case .transport(let m): return "service unreachable: " + m
         case .http(let s, let c, let m): return "HTTP " + String(s) + " " + (c ?? "") + " " + m
         case .decoding(let m): return "bad response: " + m
+        case .untrusted: return "the local service could not prove its identity"
         }
     }
 
     /// Frozen contract: /health non-200 or any transport error means "service not running".
     var serviceUnavailable: Bool {
         switch self {
-        case .noToken, .transport: return true
+        case .noToken, .transport, .untrusted: return true
         case .http(let s, _, _): return s == 401 || s == 403 || s == 404 || s >= 500
         case .decoding: return false
         }
@@ -548,11 +552,50 @@ final class ServiceClient {
     func withTokenRetry<T>(_ op: (String) throws -> T) throws -> T {
         guard let t1 = loadToken() else { throw ServiceError.noToken(tokenPath) }
         do {
+            try ensureVerified(token: t1)
             return try op(t1)
         } catch let e as ServiceError where e.isUnauthorized {
             guard let t2 = loadToken(), t2 != t1 else { throw e }
+            try ensureVerified(token: t2)
             return try op(t2)
         }
+    }
+
+    // MARK: service identity
+
+    /// The secret this app gave the service it started (hex), or nil when it started none
+    /// (tests, a service run by hand): then nothing is checked.
+    var proofKey: String? {
+        get { proofLock.withLock { proofKeyValue } }
+        set { proofLock.withLock { proofKeyValue = newValue; verifiedBase = nil } }
+    }
+    private var proofKeyValue: String?
+    private var verifiedBase: URL?
+    private let proofLock = NSLock()
+
+    /// HMAC-SHA256(key, challenge) in hex, as the service computes it.
+    static func proof(key: String, challenge: String) -> String? {
+        guard let keyData = Data(hexString: key) else { return nil }
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(challenge.utf8), using: SymmetricKey(data: keyData))
+        return mac.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Before anything (an API key above all) goes to a port read from runtime.json, the
+    /// listener there must answer a fresh challenge with the secret only our own child has.
+    private func ensureVerified(token: String) throws {
+        let (key, base, verified) = proofLock.withLock { (proofKeyValue, baseURL, verifiedBase) }
+        guard let key, verified != base else { return }
+        var bytes = [UInt8](repeating: 0, count: 16)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw ServiceError.untrusted }
+        let challenge = bytes.map { String(format: "%02x", $0) }.joined()
+        let req = try makeRequest(path: "/api/voice-polish/health", method: "GET", token: token,
+                                  headers: ["x-typeleast-challenge": challenge], timeout: healthTimeout)
+        let (data, resp) = try performSync(req, timeout: healthTimeout)
+        guard resp.statusCode == 200 else { throw httpError(resp, data) }
+        let answer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["proof"] as? String
+        guard let answer, let expected = ServiceClient.proof(key: key, challenge: challenge),
+              answer.count == expected.count, answer.lowercased() == expected else { throw ServiceError.untrusted }
+        proofLock.withLock { if baseURL == base { verifiedBase = base } }
     }
 
     // MARK: endpoints
@@ -857,5 +900,22 @@ enum BetaMessages {
         case "beta-validation": return L10n.text("结果未通过原意或事实检查，未插入。已有信息保留，可继续补充或重试生成。")
         default: return L10n.text("本轮处理未完成，已有信息保留。请重说本次补充或重试生成。")
         }
+    }
+}
+
+
+extension Data {
+    /// Bytes from a hex string; nil when it is not one.
+    init?(hexString: String) {
+        guard hexString.count % 2 == 0 else { return nil }
+        var bytes = [UInt8]()
+        var index = hexString.startIndex
+        while index < hexString.endIndex {
+            let next = hexString.index(index, offsetBy: 2)
+            guard let byte = UInt8(hexString[index..<next], radix: 16) else { return nil }
+            bytes.append(byte)
+            index = next
+        }
+        self.init(bytes)
     }
 }

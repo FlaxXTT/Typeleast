@@ -59,6 +59,14 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\TypeLeast.exe"; Description: "{cm:LaunchProgram,TypeLeast}"; Flags: nowait postinstall skipifsilent
+; An in-app update runs this installer silently with /RELAUNCH=1: start the new version again.
+Filename: "{app}\TypeLeast.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM TypeLeast.exe /F"; Flags: runhidden; RunOnceId: "StopTypeLeast"
+
+[Code]
+function RelaunchRequested: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;

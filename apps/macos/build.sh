@@ -20,7 +20,7 @@ BUILD_DIR="${TYPELEAST_BUILD_DIR:-$ROOT/build}"
 STAGE_DIR="$BUILD_DIR/dist.noindex"
 APP="$STAGE_DIR/TypeLeast.app"
 SWIFTC="/usr/bin/swiftc"
-# TYPELEAST_ARCH=x86_64 (or arm64) cross-builds for the other kind of Mac.
+# TYPELEAST_ARCH=x86_64 cross-builds for Intel (development only: Intel is no longer released).
 ARCH="${TYPELEAST_ARCH:-$(uname -m)}"
 TARGET="$ARCH-apple-macosx13.0"
 BIN_NAME="TypeLeast"
@@ -52,9 +52,16 @@ while IFS= read -r f; do SOURCES+=("$f"); done < <(find "$ROOT/Sources" -maxdept
 if [ ${#SOURCES[@]} -eq 0 ]; then echo "no sources found in $ROOT/Sources" >&2; exit 1; fi
 echo "sources: ${#SOURCES[@]} files"
 
+# Development builds keep the self-check and demo hooks (environment variables that
+# drive the app); a release (package.sh sets TYPELEAST_RELEASE=1) compiles them out.
+DEV_FLAG=()
+[ "${TYPELEAST_RELEASE:-0}" = 1 ] || DEV_FLAG=(-D TYPELEAST_DEV)
+echo "hooks  : $([ ${#DEV_FLAG[@]} -gt 0 ] && echo 'self-check and demo (development build)' || echo 'none (release build)')"
+
 "$SWIFTC" \
   -swift-version 5 \
   -O \
+  ${DEV_FLAG[@]+"${DEV_FLAG[@]}"} \
   -target "$TARGET" \
   -framework AppKit \
   -framework SwiftUI \

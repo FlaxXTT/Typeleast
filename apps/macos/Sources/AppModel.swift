@@ -148,12 +148,12 @@ final class AppModel: ObservableObject {
 
     var modelSummary: String {
         let preset = LLMPreset.find(settings.llmPresetID)
-        guard settings.activeLLMRoute != nil else { return L10n.text("整理模型未配置（只去口水词，不改写）") }
+        guard settings.llmRouteReady else { return L10n.text("整理模型未配置（只去口水词，不改写）") }
         return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（自己的 Key）"))
     }
 
     /// Whether cleanup is configured: a model and (except for local servers) a key.
-    var llmConfigured: Bool { settings.activeLLMRoute != nil }
+    var llmConfigured: Bool { settings.llmRouteReady }
 
     var speech: SpeechStatus? { health?.speech }
     var modelsMissing: Bool { speech?.modelsMissing ?? false }

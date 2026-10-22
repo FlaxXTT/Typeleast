@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -9,7 +10,7 @@ namespace TypeLeast.Core;
 // repository): local speech recognition plus cleanup with the user's own model.
 // The same contract as apps/macos/Sources/ServiceClient.swift.
 
-public enum ServiceErrorKind { NoToken, Transport, Http, Decoding }
+public enum ServiceErrorKind { NoToken, Transport, Http, Decoding, Untrusted }
 
 public sealed class ServiceException : Exception
 {
@@ -26,7 +27,7 @@ public sealed class ServiceException : Exception
     }
 
     /// <summary>/health not answering, or answering 401/403/404/5xx, means "service not running".</summary>
-    public bool ServiceUnavailable => Kind is ServiceErrorKind.NoToken or ServiceErrorKind.Transport
+    public bool ServiceUnavailable => Kind is ServiceErrorKind.NoToken or ServiceErrorKind.Transport or ServiceErrorKind.Untrusted
         || (Kind == ServiceErrorKind.Http && Status is 401 or 403 or 404 or >= 500);
 }
 
@@ -116,11 +117,60 @@ public sealed class ServiceClient
         }
     }
 
+    // ---- service identity
+
+    private readonly object proofGate = new();
+    private string? proofKey;
+    private Uri? verifiedBase;
+
+    /// <summary>
+    /// The secret this app gave the service it started (hex), or null when it started none
+    /// (tests, a service run by hand): then nothing is checked.
+    /// </summary>
+    public string? ProofKey
+    {
+        get { lock (proofGate) return proofKey; }
+        set { lock (proofGate) { proofKey = value; verifiedBase = null; } }
+    }
+
+    /// <summary>HMAC-SHA256(key, challenge) in lower-case hex, as the service computes it; null for a bad key.</summary>
+    public static string? Proof(string key, string challenge)
+    {
+        try { return Convert.ToHexString(HMACSHA256.HashData(Convert.FromHexString(key), Encoding.UTF8.GetBytes(challenge))).ToLowerInvariant(); }
+        catch (FormatException) { return null; }
+    }
+
+    /// <summary>
+    /// Before anything (an API key above all) goes to a port read from runtime.json, the
+    /// listener there must answer a fresh challenge with the secret only our own child has.
+    /// </summary>
+    private async Task EnsureVerifiedAsync(CancellationToken ct)
+    {
+        string? key; Uri base_;
+        lock (proofGate) { key = proofKey; base_ = BaseUri; if (key is null || verifiedBase == base_) return; }
+        var challenge = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        var (status, body) = await SendAsync(HttpMethod.Get, "/health", null,
+            new Dictionary<string, string> { ["x-typeleast-challenge"] = challenge }, ShortTimeout, ct, verify: false).ConfigureAwait(false);
+        if (status != HttpStatusCode.OK) throw HttpError(status, body);
+        string? answer = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("proof", out var p) && p.ValueKind == JsonValueKind.String) answer = p.GetString();
+        }
+        catch (JsonException) { }
+        var expected = Proof(key, challenge);
+        if (answer is null || expected is null || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(answer.ToLowerInvariant()), Encoding.ASCII.GetBytes(expected)))
+            throw new ServiceException(ServiceErrorKind.Untrusted, "the local service could not prove its identity");
+        lock (proofGate) { if (BaseUri == base_) verifiedBase = base_; }
+    }
+
     // ---- plumbing
 
     private async Task<(HttpStatusCode Status, string Body)> SendAsync(HttpMethod method, string path, HttpContent? content,
-        IDictionary<string, string>? headers, TimeSpan timeout, CancellationToken ct)
+        IDictionary<string, string>? headers, TimeSpan timeout, CancellationToken ct, bool verify = true)
     {
+        if (verify) await EnsureVerifiedAsync(ct).ConfigureAwait(false);
         var token = LoadToken() ?? throw new ServiceException(ServiceErrorKind.NoToken, "token unavailable: " + TokenPath);
         using var request = new HttpRequestMessage(method, new Uri(BaseUri, RoutePrefix + path)) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

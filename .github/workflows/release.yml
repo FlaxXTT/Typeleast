@@ -2,7 +2,6 @@ name: Release
 
 # Run this by hand to build and publish:
 #   TypeLeast-<v>-macOS-AppleSilicon.dmg / .zip
-#   TypeLeast-<v>-macOS-Intel.dmg / .zip
 #   TypeLeast-<v>-Windows-x64-Setup.exe
 #   TypeLeast-<v>-Windows-x64-Portable.zip
 #   SHA256SUMS.txt
@@ -27,7 +26,8 @@ jobs:
     name: macOS ${{ matrix.arch }}
     strategy:
       matrix:
-        arch: [arm64, x86_64]
+        # Intel Macs are no longer built (last Intel release: 1.17.1).
+        arch: [arm64]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

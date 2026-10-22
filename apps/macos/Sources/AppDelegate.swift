@@ -84,6 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         if !isolatedTestRun { DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showHubNotification, object: nil, queue: .main) { [weak self] _ in
             self?.hub.show()
         } }
+        // After an in-app update: take over the Keychain items the previous copy handed on,
+        // before anything (the history above all) reads them.
+        KeychainHandoff.restoreIfPresent()
         model.actions = self
         menuController.target = self
         mainMenu.openSettings = { [weak self] in self?.menuOpenHub(.settings) }
@@ -128,6 +131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.recordingBar.warmUp() }
         }
 
+        #if TYPELEAST_DEV
+        // Development builds only: these hooks let the environment drive the app (paste a
+        // WAV into the front app, read the Keychain for a model check), so a release has none.
         // Demo mode for screen recordings: a synthetic-voice WAV replaces the
         // microphone and one dictation starts by itself after a short delay, into
         // whatever app is in front. No window of TypeLeast is shown.
@@ -143,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.runSelfCheck() }
             return
         }
+        #endif
         if !settings.onboardingDone {
             showOnboarding()
         } else if !launchedAsLoginItem {
@@ -178,9 +185,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         // environment and is never printed.
         if let base = ProcessInfo.processInfo.environment["TYPELEAST_LLMCHECK_URL"] {
             let env = ProcessInfo.processInfo.environment
-            // "@keychain" uses the key saved for the current preset without printing it.
+            // "@keychain" uses the key saved for the current preset without printing it, and only
+            // toward the address that preset already sends it to: never to an address from the environment.
             let keyArg = env["TYPELEAST_LLMCHECK_KEY"] ?? ""
-            let key = keyArg == "@keychain" ? settings.llmAPIKey : keyArg
+            let sameAddress = base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == settings.llmBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let key = keyArg == "@keychain" ? (sameAddress ? settings.llmAPIKey : "") : keyArg
+            if keyArg == "@keychain", !sameAddress { print("LLMCHECK key=refused (address differs from the saved preset)") }
             print("LLMCHECK key=" + (key.isEmpty ? "missing" : "present(" + String(key.count) + " chars)"))
             let route = LLMRoute(baseURL: base, model: env["TYPELEAST_LLMCHECK_MODEL"] ?? "test", apiKey: key)
             do {

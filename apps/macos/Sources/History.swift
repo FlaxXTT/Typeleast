@@ -179,7 +179,16 @@ final class HistoryStore {
 
     /// Stage encrypted audio, then save its paths before removing the original audio.
     /// Failure preserves the old preferences and recordings; no plaintext fallback.
+    /// "从不保存": the last entry lives in memory only, for "paste last", and nothing is on disk.
+    var keepsNothing: () -> Bool = { Settings.shared.historyRetention.seconds == 0 }
+
     private func persist() {
+        if keepsNothing() {
+            d.removeObject(forKey: sealedKey)
+            d.removeObject(forKey: plainKey)
+            persistenceProblem = nil
+            return
+        }
         guard !locked, let key = HistorySeal.key(create: true) else {
             persistenceProblem = "history-unavailable"; return
         }

@@ -62,16 +62,8 @@ internal sealed class ServiceManager
             {
                 ct.ThrowIfCancellationRequested();
                 lock (gate) { if (process is { HasExited: false }) return; }
-                // Existing descriptors remain a discovery mechanism, not independent identity proof.
-                if (client.DiscoverBaseUri())
-                {
-                    try
-                    {
-                        var health = await client.HealthOnceAsync(ct);
-                        if (health.Service == "typeleast") { ct.ThrowIfCancellationRequested(); Port = client.LastPort ?? 0; Set(Phase.Running); return; }
-                    }
-                    catch (ServiceException) { client.InvalidatePort(); }
-                }
+                // Always our own child: a service already listening could be anyone's, and the
+                // app proves the identity of the one it talks to (ServiceClient.ProofKey).
                 var appDir = AppContext.BaseDirectory;
                 var env = AppPaths.Environment();
                 var serviceDir = ServiceLocator.ServiceDirectory(appDir, env, File.Exists);
@@ -79,9 +71,13 @@ internal sealed class ServiceManager
                 if (NodePath is null) FindNode(appDir, env);
                 ct.ThrowIfCancellationRequested();
                 if (NodePath is null || !ServiceLocator.IsSupported(NodeVersion)) { Set(Phase.NoNode, L10n.T("没有找到 Node.js（需要 22 或更新）")); NodePath = null; return; }
-                var start = new ProcessStartInfo(NodePath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = serviceDir };
+                var start = new ProcessStartInfo(NodePath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, WorkingDirectory = serviceDir };
                 start.ArgumentList.Add("--expose-gc"); start.ArgumentList.Add(Path.Combine(serviceDir, "bin", "typeleast-service.mjs"));
                 start.ArgumentList.Add("--parent-pid"); start.ArgumentList.Add(Environment.ProcessId.ToString());
+                // The identity secret goes through stdin, not the command line or the environment.
+                start.ArgumentList.Add("--auth-stdin");
+                var secret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+                client.ProofKey = secret;
                 foreach (var key in ServiceLocator.UnsafeServiceVariables(new List<string>(start.Environment.Keys))) start.Environment.Remove(key);
                 if (ModelMirror.Length > 0) start.Environment["HF_ENDPOINT"] = ModelMirror;
                 var p = new Process { StartInfo = start, EnableRaisingEvents = true };
@@ -101,7 +97,7 @@ internal sealed class ServiceManager
                 {
                     ct.ThrowIfCancellationRequested();
                     process = p; Set(Phase.Starting);
-                    try { p.Start(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); }
+                    try { p.Start(); p.StandardInput.WriteLine(secret); p.StandardInput.Close(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); }
                     catch { process = null; p.Dispose(); throw; }
                 }
                 Log.Write("service.start");

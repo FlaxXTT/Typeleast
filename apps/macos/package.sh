@@ -2,7 +2,7 @@
 # package.sh - build a self-contained TypeLeast for one kind of Mac, as .dmg and .zip.
 #
 #   ./package.sh arm64  [out-dir]     Apple silicon (M1 and later)
-#   ./package.sh x86_64 [out-dir]     Intel
+#   (Intel Macs are no longer built; the last Intel release is 1.17.1.)
 #
 # The app carries everything it runs: the local service, the sherpa-onnx library
 # for that architecture, and an official Node.js (checked against the SHA-256
@@ -13,15 +13,15 @@
 # local node binary instead of downloading one (for testing this script).
 set -euo pipefail
 
-ARCH="${1:?usage: package.sh arm64|x86_64 [out-dir]}"
+ARCH="${1:?usage: package.sh arm64 [out-dir]}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="${2:-$ROOT/build/release}"
 NODE_VERSION="${NODE_VERSION:-24.21.0}"
 SHERPA_VERSION="1.13.8"
 case "$ARCH" in
   arm64) NODE_ARCH="arm64"; SHERPA_PKG="sherpa-onnx-darwin-arm64"; LABEL="AppleSilicon" ;;
-  x86_64) NODE_ARCH="x64"; SHERPA_PKG="sherpa-onnx-darwin-x64"; LABEL="Intel" ;;
-  *) echo "unknown arch: $ARCH (use arm64 or x86_64)" >&2; exit 2 ;;
+  x86_64) echo "Intel Macs are no longer built (the last Intel release is 1.17.1)" >&2; exit 2 ;;
+  *) echo "unknown arch: $ARCH (use arm64)" >&2; exit 2 ;;
 esac
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Info.plist")"
 BUILD_DIR="${TYPELEAST_BUILD_DIR:-$ROOT/build}"
@@ -31,7 +31,7 @@ rm -rf "$WORK"
 mkdir -p "$WORK" "$OUT" "$CACHE"
 
 echo "== TypeLeast $VERSION for $LABEL ($ARCH), Node.js $NODE_VERSION =="
-TYPELEAST_ARCH="$ARCH" "$ROOT/build.sh" --no-install
+TYPELEAST_RELEASE=1 TYPELEAST_ARCH="$ARCH" "$ROOT/build.sh" --no-install
 APP_SRC="$BUILD_DIR/dist.noindex/TypeLeast.app"
 APP="$WORK/TypeLeast.app"
 ditto "$APP_SRC" "$APP"

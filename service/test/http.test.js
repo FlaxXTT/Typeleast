@@ -226,3 +226,19 @@ test("翻译和语言变体：/dictate 读请求头，/polish 读请求体，结
   assert.equal(seen[1].translateTo, "en");
   assert.deepEqual(seen[1].variants, { zh: "hk" });
 });
+
+test("身份校验：带启动密钥时 /health 用 HMAC 回答挑战；没有密钥或挑战格式不对时不回答", async () => {
+  const { createHmac, randomBytes } = await import("node:crypto");
+  const { proofFor } = await import("../lib/http.js");
+  const key = randomBytes(32).toString("hex");
+  const challenge = randomBytes(16).toString("hex");
+  assert.equal(proofFor(key, challenge).proof, createHmac("sha256", Buffer.from(key, "hex")).update(challenge).digest("hex"));
+  assert.deepEqual(proofFor(null, challenge), {});
+  assert.deepEqual(proofFor(key, "not hex!"), {});
+  const service = failingService();
+  service.snapshot = () => ({ speech: { ready: true }, version: "x", provider: null, model: null, strength: "prompt", dictionarySize: 0, pending: 0, queue: 0 });
+  const handler = createHandler({ service, currentToken: async () => TOKEN, proofKey: key });
+  const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(b) { this.body = b; } };
+  await handler({ url: ROUTE_PREFIX + "/health", method: "GET", headers: { host: "127.0.0.1", authorization: `Bearer ${TOKEN}`, "x-typeleast-challenge": challenge } }, res);
+  assert.equal(JSON.parse(res.body).proof, proofFor(key, challenge).proof);
+});

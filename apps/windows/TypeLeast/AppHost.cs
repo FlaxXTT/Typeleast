@@ -134,10 +134,74 @@ internal sealed class AppHost
 
     // ---- lifecycle
 
+    // ---- updates
+
+    /// <summary>A newer Windows release found by the last check, or null.</summary>
+    public WindowsReleaseInfo? AvailableUpdate { get; private set; }
+    public bool Updating { get; private set; }
+
+    /// <summary>Quietly, a little after launch: only the hint and the settings page change.</summary>
+    private async Task QuietUpdateCheck()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(20));
+        try
+        {
+            var newest = await Updater.NewestAsync();
+            if (newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion))
+            {
+                AvailableUpdate = newest;
+                SetHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
+            }
+        }
+        catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
+    }
+
+    public async Task<string> CheckForUpdate()
+    {
+        try
+        {
+            var newest = await Updater.NewestAsync();
+            AvailableUpdate = newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion) ? newest : null;
+            Raise();
+            return newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
+                : AvailableUpdate is not null ? L10n.T("有新版本 {0}。", newest.Version)
+                : L10n.T("已是最新的 Windows 版本（{0}）。", Updater.CurrentVersion);
+        }
+        catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return L10n.T("无法访问发布页。请检查网络；如果发布页还没公开，请在浏览器中登录后下载。");
+        }
+    }
+
+    /// <summary>Download, check and install the available update; returns an error message, or null when the installer started.</summary>
+    public async Task<string?> InstallUpdate()
+    {
+        if (AvailableUpdate is not { } release || Updating) return null;
+        if (Phase != DictationPhase.Idle) return L10n.T("听写结束后再更新。");
+        if (!Updater.IsInstalledCopy) { Shell.Open(release.PageUrl.Length > 0 ? release.PageUrl : "https://github.com/FlaxXTT/Typeleast/releases"); return L10n.T("便携版请在发布页下载新版本。"); }
+        Updating = true;
+        Raise();
+        try
+        {
+            var setup = await Updater.DownloadAsync(release);
+            Log.Write("update.install", release.Version);
+            Updater.RunInstaller(setup);
+            Quit();
+            return null;
+        }
+        catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or InvalidOperationException or System.IO.IOException)
+        {
+            Log.Write("update.fail", e.GetType().Name);
+            return e is InvalidOperationException ? e.Message : L10n.T("下载更新失败，请稍后再试。");
+        }
+        finally { Updating = false; Raise(); }
+    }
+
     public void Start(bool autostart)
     {
         if (started) return;
         started = true;
+        if (Environment.GetEnvironmentVariable("TYPELEAST_HOME") is null) _ = QuietUpdateCheck();
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>

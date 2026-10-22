@@ -33,6 +33,7 @@ internal sealed class SettingsPage : IPage
     private readonly TextBlock keyboardStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBlock microphoneStatus = Theme.Text("", 12, Theme.Grey);
     private readonly TextBlock updateStatus = Theme.Text("", 12, Theme.Grey);
+    private Button installUpdate = null!;
     private readonly TextBlock missing = Theme.Text("", 12, Theme.Warning);
     private bool busy;
     private bool refreshingLanguage;
@@ -183,6 +184,9 @@ internal sealed class SettingsPage : IPage
         mirror.LostFocus += (_, _) => { s.ModelMirror = mirror.Text.Trim(); host.SaveSettings(); };
         var chooseNode = Theme.Secondary(L10n.T("选择 Node.js…"), ChooseNode);
         var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
+        installUpdate = Theme.Primary(L10n.T("立即更新"), () => _ = RunUpdate());
+        RefreshUpdateButton();
+        if (host.AvailableUpdate is { } pending) updateStatus.Text = L10n.T("有新版本 {0}。", pending.Version);
 
         // Five tabs, each a few cards that put related settings together.
         AddTab(L10n.T("听写"),
@@ -232,7 +236,7 @@ internal sealed class SettingsPage : IPage
             speechModels.View,
             Section(L10n.T("版本与更新"),
                 Theme.SettingRow("TypeLeast " + version, updateStatus,
-                    Theme.Row(8, Theme.Secondary(L10n.T("检查版本"), () => _ = CheckUpdates()), Theme.Secondary(L10n.T("查看发布与下载"), () => Shell.Open("https://github.com/FlaxXTT/Typeleast/releases")))),
+                    Theme.Row(8, Theme.Secondary(L10n.T("检查更新"), () => _ = CheckUpdates()), installUpdate)),
                 Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
                     Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
         DockPanel.SetDock(root, Dock.Top); surface.Children.Add(root);
@@ -244,19 +248,23 @@ internal sealed class SettingsPage : IPage
     private async Task CheckUpdates()
     {
         updateStatus.Text = L10n.T("正在检查…");
-        try
-        {
-            using var client = new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(12) };
-            var current = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "0";
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("TypeLeast/" + current);
-            using var response = await client.GetAsync(WindowsRelease.ListUrl);
-            if (!response.IsSuccessStatusCode) { updateStatus.Text = L10n.T("仓库可能需要登录；请在浏览器中查看发布版本。不会自动安装。"); return; }
-            var newest = WindowsRelease.Newest(await response.Content.ReadAsStringAsync());
-            updateStatus.Text = newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
-                : WindowsRelease.IsNewer(newest.Version, current) ? L10n.T("有新的 Windows 版本：{0}。请在发布页下载，不会自动安装。", newest.Version)
-                : L10n.T("已是最新的 Windows 版本（{0}）。", current);
-        }
-        catch (Exception) { updateStatus.Text = L10n.T("版本检查失败，请在浏览器中查看发布。不会自动安装。"); }
+        updateStatus.Text = await host.CheckForUpdate();
+        RefreshUpdateButton();
+    }
+
+    private async Task RunUpdate()
+    {
+        updateStatus.Text = L10n.T("正在下载并校验更新…");
+        var error = await host.InstallUpdate();
+        if (error is not null) updateStatus.Text = error;
+    }
+
+    /// <summary>"立即更新" for the installed copy, "下载新版本" for a portable one; hidden when up to date.</summary>
+    private void RefreshUpdateButton()
+    {
+        installUpdate.Visibility = host.AvailableUpdate is null ? Visibility.Collapsed : Visibility.Visible;
+        installUpdate.Content = Updater.IsInstalledCopy ? L10n.T("立即更新") : L10n.T("下载新版本");
+        installUpdate.IsEnabled = !host.Updating;
     }
 
     private readonly WrapPanel tabBar = new() { Margin = new Thickness(0, 14, 0, 0) };
