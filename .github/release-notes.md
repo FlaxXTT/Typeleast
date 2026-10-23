@@ -1,28 +1,43 @@
 TypeLeast：按快捷键说话，本机识别，再用你选择的模型整理文字并插入光标处。
 
-## 1.18.0 的变化
+## 本次更新 / What is new
 
-- **新的更新界面**（Mac 和 Windows）：圆环进度，下载时显示百分比和已下载 / 总大小；核对、签名、安装时圆环一直转动；下面的步骤点标出走到了哪一步，不会再像卡住了一样。从 1.18.0 往后的更新才会显示这个界面。
-- **内部整理**：两端的「更新」和「词典」拆成独立模块，行为不变，方便以后修改和测试。
+<!-- typeleast-update:zh -->
+- 提示词模式新增普通档：更短、更直白，保留核心意图和条件；标准格式档保留原有行为。
+- 整理和翻译加强本次口述中的连续改口与忘词还原，名称不确定时保留描述。
+- 更新时显示简短的版本变化；词典建议由本地服务统一判断，两端一致。
+- 两端更新、词典、Beta 会话和听写控制器完成职责拆分，保留现有操作流程。
+<!-- /typeleast-update -->
+
+<!-- typeleast-update:en -->
+- Prompt mode now has a plain tier for shorter, clearer wording. The standard tier keeps its existing behavior.
+- Cleanup and translation handle spoken corrections and term descriptions more clearly. Uncertain names stay as descriptions.
+- In-app updates show short release notes. Dictionary suggestions use the same local rules on both platforms.
+- Update, dictionary, Beta session and dictation controllers have separate responsibilities. Existing workflows are retained.
+<!-- /typeleast-update -->
+
+普通档按需要使用自然段、编号，或用户明确要求的表格，保留否定、例外、数字和约束，不输出角色等固定栏目。标准格式档沿用当前编号与自然段及 `promptify.json` 配置。Beta 和原话转写保持原行为。
+
+“不对”等改口只作用于本次口述，不编辑已经粘贴的上一条文字。术语还原仅使用上下文与模型已有知识；不新增联网检索。具体效果取决于识别结果和用户选择的整理模型，不保证每次都能确定改口范围或专业名称。
+
+客户端升级到本版后，后续更新才能显示新的摘要与圆环进度界面。
 
 ## 下载
 
 | 电脑 | 安装包 |
 |---|---|
 | macOS 13 以上，Apple 芯片 | `TypeLeast-1.18.0-macOS-AppleSilicon.dmg` 或 `.zip` |
-| macOS 13 以上，Intel | 已停止更新，使用 [v1.17.1](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.1) |
-| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.18.0-Windows-x64-Setup.exe`（推荐，支持自动更新）或 `TypeLeast-1.18.0-Windows-x64-Portable.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.18.0-Windows-x64-Setup.exe`（安装版，支持自动更新）或 `TypeLeast-1.18.0-Windows-x64-Portable.zip` |
+| Intel Mac | 已停止更新，最终版为 [v1.17.1](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.1) |
 
-已装 1.17.2 及以后版本的可以直接在软件里更新：Mac 在菜单栏图标或「设置 → 本地服务」里点「检查更新」；Windows 安装版默认自动更新，也可以在「设置 → 服务与更新」里点「检查更新」。
-
-**Windows 下载时的风险提示**：安装包没有代码签名，每个新版本刚发布时都没有下载信誉。浏览器可能提示「不常下载」，选「保留」；运行时 SmartScreen 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。安装版之后在软件内更新，不经过浏览器，不会再出现这些提示。`SHA256SUMS.txt` 里有每个文件的校验值。
-
-Mac 构建号为 19。
+已安装的用户可在软件内检查更新；Windows 安装版保留自动更新行为。Mac 构建号为 20。
 
 ## 验证与限制
 
-安装包由 Release 工作流在 GitHub 托管的 macOS 和 Windows 机器上从 `main` 构建；发布前跑了服务、Mac 和 Windows 核心测试，两端测试连续跑了多轮，更新界面的每个状态都渲染检查过，并由维护者在两端实际测试。未用私人录音或 API Key 做测试。Mac 安装包未经过 Apple Developer ID 公证，Windows 安装包没有代码签名。
+服务、Mac 和 Windows 核心测试及三平台 CI 通过；四种识别模型在三平台使用公开短样例完成加载和识别。两端模式选择和更新摘要用虚构数据检查中英文、浅色和深色布局。Windows 未进行真机人工操作验证。
 
-完整变化见 [CHANGELOG](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)。
+提示词回归测试使用虚构口述与假整理服务，没有读取真实 Key 或私人听写记录，没有用真实整理服务验证新规则对所有口述的效果。新增 `pinyin-pro` 为 MIT 许可，随两端安装包交付，无需另外下载，也不增加建议词判断的模型调用。
 
-Code signing policy: [docs/CODE_SIGNING_POLICY.md](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)（Windows 代码签名正在向 SignPath Foundation 申请，尚未通过）。
+Mac 包未经过 Apple Developer ID 公证；Windows 包未进行代码签名，浏览器或 SmartScreen 可能提示下载信誉不足。请从本仓库下载。四个安装包的校验值位于 `SHA256SUMS.txt`。
+
+完整变化见 [CHANGELOG](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)。[代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)。

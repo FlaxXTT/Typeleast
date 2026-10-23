@@ -147,7 +147,7 @@
 
 ## 下载
 
-Mac 和 Windows 的最新版都是 [**v1.17.9**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.9)：
+Mac 和 Windows 的最新版都是 [**v1.18.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.18.0)：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
@@ -377,7 +377,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 ### 发布
 
-- 发布只用 Release 工作流：在 GitHub 托管的 Mac 和 Windows 机器上从 `main` 构建两端安装包和 `SHA256SUMS.txt`。手动运行时指定标签（例如 `v1.17.9`），勾选 `draft` 先建草稿，核对安装包后再发布。
+- 发布只用 Release 工作流：在 GitHub 托管的 Mac 和 Windows 机器上从 `main` 构建两端安装包和 `SHA256SUMS.txt`。手动运行时指定标签（例如 `v1.18.0`），勾选 `draft` 先建草稿，核对安装包后再发布。
 - 本机试打包：Mac 用 `apps/macos/package.sh arm64`，Windows 上用 `apps\windows\package.ps1`。本机打的包不发布。
 - CI 和 Release 工作流都只支持手动触发；推送标签不会自动打包。
 

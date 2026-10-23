@@ -144,7 +144,7 @@ class P
                 foreach (var mode in new[] { "light", "dark" })
                 foreach (var strength in new[] { "promptbrief", "promptify" })
                 {
-                    Theme.Apply(mode); host.SetStrength(strength);
+                    host.SetStrength(strength); Theme.Apply(mode);
                     var picker = ModePicker.Pills(host);
                     picker.Measure(new Size(680, double.PositiveInfinity));
                     Save(picker, Path.Combine(dir, $"modes-{strength}-{mode}-{language}.png"), 680, picker.DesiredSize.Height);

@@ -26,7 +26,7 @@ export const CONFIG_FILE = "config.json";
 const FIELDS = {
   maxOutputTokens: { kind: "integer", default: 800, help: "Upper bound for the polished text." },
   timeoutMs: { kind: "integer", default: 12000, help: "Polishing budget; on expiry the raw transcript is used. Real dictations need 4-6s, so 12s leaves headroom." },
-  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "off skips the model. conservative | prompt | maximal use the cleanup prompt and only change how strict output validation is. promptify (提示词模式) rewrites the user intent once into numbered paragraphs. promptbeta (提示词 Beta) clarifies information over multiple rounds, then drafts only when the user finishes." },
+  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "off skips the model. conservative | prompt | maximal use the cleanup prompt and only change how strict output validation is. promptbrief is concise one-shot intent cleanup; promptify is the compatible standard tier with numbered paragraphs. promptbeta (提示词 Beta) clarifies information over multiple rounds, then drafts only when the user finishes." },
   temperature: { kind: "number", default: 0.8, help: "Sampling temperature. Keeps the existing default; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
