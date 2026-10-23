@@ -9,6 +9,7 @@ TypeLeast uses or downloads the following work. Each keeps its own licence.
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (`sherpa-onnx-node` and its per-platform packages, including ONNX Runtime) | `service/node_modules/`, inside both apps | Apache-2.0 |
 | [Node.js](https://nodejs.org) (official release binary, checked against nodejs.org's SHA-256 list) | macOS: `TypeLeast.app/Contents/Resources/node/`; Windows: `node\` | MIT (its `LICENSE` is shipped beside the binary) |
 | [opencc-js](https://github.com/nk2028/opencc-js) with the [OpenCC](https://github.com/BYVoid/OpenCC) dictionaries (Simplified to Traditional Chinese, 语言变体) | `service/node_modules/opencc-js/`, inside both apps | MIT (opencc-js) and Apache-2.0 (OpenCC dictionaries); both licence files ship with the package |
+| [pinyin-pro](https://github.com/zh-lx/pinyin-pro) 3.29.5 (local pronunciation checks for dictionary suggestions) | `service/node_modules/pinyin-pro/`, inside both apps | MIT (`LICENSE` ships with the package) |
 | [NAudio](https://github.com/naudio/NAudio) (`NAudio.WinMM`, `NAudio.Core`) | Windows app, microphone capture | MIT |
 | .NET runtime (self-contained Windows build) | Windows app | MIT |
 | [Inter](https://github.com/rsms/inter) 4.1 (Regular, Medium, SemiBold, Bold) and Inter Display (Regular, SemiBold, Bold) | Windows app, interface font (embedded in `TypeLeast.exe`) | SIL Open Font License 1.1 (`licenses\Inter-OFL.txt`) |

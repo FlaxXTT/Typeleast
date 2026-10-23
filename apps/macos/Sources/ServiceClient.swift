@@ -255,6 +255,23 @@ struct BetaInfo: Codable, Equatable {
     var patched: Bool?
 }
 
+/// Optional service-computed dictionary suggestion. Older services omit the field.
+struct SuggestionCandidate: Codable, Equatable {
+    let word: String
+    let heardAs: String
+    enum CodingKeys: String, CodingKey { case word, heardAs }
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        word = (try? c?.decode(String.self, forKey: .word)) ?? ""
+        heardAs = (try? c?.decode(String.self, forKey: .heardAs)) ?? ""
+    }
+    var isValid: Bool {
+        (2...30).contains(word.utf16.count) && (1...30).contains(heardAs.utf16.count) &&
+        !(word + heardAs).unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) &&
+        !word.trimmingCharacters(in: .whitespaces).isEmpty && !heardAs.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+}
+
 struct DictateResponse: Codable, Equatable {
     var requestId: String?
     var text: String = ""
@@ -265,6 +282,7 @@ struct DictateResponse: Codable, Equatable {
     var provider: String?
     var ms: MSBreakdown?
     var beta: BetaInfo?
+    var suggestions: [SuggestionCandidate] = []
     /// 翻译模式: the target language the text was written in.
     var translated: String?
     /// Prompt Beta asked questions: nothing to insert yet.
@@ -272,7 +290,7 @@ struct DictateResponse: Codable, Equatable {
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated
+        case requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated, suggestions
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -292,6 +310,7 @@ struct DictateResponse: Codable, Equatable {
         ms = lenient(c, MSBreakdown.self, .ms)
         beta = lenient(c, BetaInfo.self, .beta)
         translated = lenient(c, String.self, .translated)
+        suggestions = Array((lenient(c, [SuggestionCandidate].self, .suggestions) ?? []).prefix(8)).filter(\.isValid)
     }
 
     /// When fallback is true the service has ALREADY substituted the raw transcript into

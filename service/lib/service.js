@@ -18,6 +18,7 @@
  *
  * @module typeleast-service/service
  */
+import { wordSuggestions } from "./word-suggestions.js";
 import { LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -63,6 +64,7 @@ export class VoicePolishService {
     this.config = options.config;
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
+    this.suggestionEngine = options.suggestionEngine ?? wordSuggestions;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
     this.pending = 0;
     this.queue = 0;
@@ -553,6 +555,12 @@ export class VoicePolishService {
   async recordAndReturn(request, result) {
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants));
+    result.suggestions = [];
+    if (!result.fallback && !request.translateTo && !result.translated &&
+        (request.strength ?? this.strength) !== "off" && !result.beta?.sessionId) {
+      try { result.suggestions = await this.suggestionEngine(result.raw, result.text); }
+      catch { /* Optional suggestions must never fail dictation or echo user text into logs. */ }
+    }
     return result;
   }
 
@@ -607,6 +615,7 @@ export class VoicePolishService {
         raw: polished.raw ?? spoken.text,
         fallback: polished.fallback,
         fallbackReason: polished.reason ?? undefined,
+        suggestions: polished.suggestions ?? [],
         model: polished.model,
         provider: polished.provider,
         strength: request.strength ?? this.strength,

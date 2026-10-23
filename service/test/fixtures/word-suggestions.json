@@ -1,0 +1,232 @@
+[
+  {
+    "id": "chinese-transliteration",
+    "raw": "我在用德普西克写代码",
+    "cleaned": "我在用 DeepSeek 写代码",
+    "expected": [
+      "DeepSeek"
+    ]
+  },
+  {
+    "id": "json",
+    "raw": "用杰森传输",
+    "cleaned": "用 JSON 传输",
+    "expected": [
+      "JSON"
+    ]
+  },
+  {
+    "id": "english-phonetics-not-guessed",
+    "raw": "安装派森",
+    "cleaned": "安装 Python",
+    "expected": []
+  },
+  {
+    "id": "api",
+    "raw": "调用阿皮爱",
+    "cleaned": "调用 API",
+    "expected": [
+      "API"
+    ]
+  },
+  {
+    "id": "acronym",
+    "raw": "打开大上海",
+    "cleaned": "打开 DSH",
+    "expected": [
+      "DSH"
+    ]
+  },
+  {
+    "id": "not-acronym",
+    "raw": "打开大上海",
+    "cleaned": "打开 dsh",
+    "expected": []
+  },
+  {
+    "id": "spaced-latin",
+    "raw": "打开 deep seek 的官网",
+    "cleaned": "打开 DeepSeek 的官网",
+    "expected": [
+      "DeepSeek"
+    ]
+  },
+  {
+    "id": "latin-typo",
+    "raw": "安装 deepsaek",
+    "cleaned": "安装 DeepSeek",
+    "expected": [
+      "DeepSeek"
+    ]
+  },
+  {
+    "id": "proper-pair",
+    "raw": "打开 visual studeo",
+    "cleaned": "打开 Visual Studio",
+    "expected": [
+      "Visual Studio"
+    ]
+  },
+  {
+    "id": "case-only",
+    "raw": "安装 python",
+    "cleaned": "安装 Python",
+    "expected": []
+  },
+  {
+    "id": "pair-case-only",
+    "raw": "打开 visual studio",
+    "cleaned": "打开 Visual Studio",
+    "expected": []
+  },
+  {
+    "id": "semantic-day",
+    "raw": "我们 Monday 开会",
+    "cleaned": "我们 Friday 开会",
+    "expected": []
+  },
+  {
+    "id": "unrelated-app",
+    "raw": "我们用 slack 沟通",
+    "cleaned": "我们用 Teams 沟通",
+    "expected": []
+  },
+  {
+    "id": "semantic-translation",
+    "raw": "打开微信",
+    "cleaned": "打开 WeChat",
+    "expected": []
+  },
+  {
+    "id": "fruit-translation",
+    "raw": "买苹果",
+    "cleaned": "买 Apple",
+    "expected": []
+  },
+  {
+    "id": "chinese-rewrite",
+    "raw": "那个我们明天开会",
+    "cleaned": "我们明天开会",
+    "expected": []
+  },
+  {
+    "id": "mixed-output",
+    "raw": "使用德普西克产品",
+    "cleaned": "使用 DeepSeek模型产品",
+    "expected": []
+  },
+  {
+    "id": "clause-output",
+    "raw": "现在把报告发出",
+    "cleaned": "Send the report now",
+    "expected": []
+  },
+  {
+    "id": "long-phrase",
+    "raw": "我们今天下午讨论这个项目",
+    "cleaned": "Project",
+    "expected": []
+  },
+  {
+    "id": "lowercase-phrase",
+    "raw": "执行 send now",
+    "cleaned": "执行 send report",
+    "expected": []
+  },
+  {
+    "id": "proper-rewrite",
+    "raw": "执行 send now",
+    "cleaned": "执行 Send Report",
+    "expected": []
+  },
+  {
+    "id": "short-skeleton",
+    "raw": "用 abcdef",
+    "cleaned": "用 ab",
+    "expected": []
+  },
+  {
+    "id": "numbers-only",
+    "raw": "版本二十五",
+    "cleaned": "版本25",
+    "expected": []
+  },
+  {
+    "id": "punctuation",
+    "raw": "用 Python 写代码",
+    "cleaned": "用 Python 写代码。",
+    "expected": []
+  },
+  {
+    "id": "empty-source",
+    "raw": "",
+    "cleaned": "DeepSeek",
+    "expected": []
+  },
+  {
+    "id": "empty-result",
+    "raw": "德普西克",
+    "cleaned": "",
+    "expected": []
+  },
+  {
+    "id": "two-corrections",
+    "raw": "杰森和派森",
+    "cleaned": "JSON 和 Python",
+    "expected": [
+      "JSON"
+    ]
+  },
+  {
+    "id": "brand-code",
+    "raw": "配置 gpt4o",
+    "cleaned": "配置 GPT-4o",
+    "expected": [
+      "GPT-4o"
+    ]
+  },
+  {
+    "id": "technical-dot",
+    "raw": "使用 nodejs",
+    "cleaned": "使用 Node.js",
+    "expected": [
+      "Node.js"
+    ]
+  },
+  {
+    "id": "cjk-semantic",
+    "raw": "我们明天交付",
+    "cleaned": "我们后天交付",
+    "expected": []
+  },
+  {
+    "id": "mixed-source",
+    "raw": "用 deep西克",
+    "cleaned": "用 DeepSeek",
+    "expected": [
+      "DeepSeek"
+    ]
+  },
+  {
+    "id": "unknown-reading",
+    "raw": "用㐀㐁",
+    "cleaned": "用 DeepSeek",
+    "expected": []
+  },
+  {
+    "id": "polyphonic-place",
+    "raw": "去重庆",
+    "cleaned": "去 Chongqing",
+    "expected": [
+      "Chongqing"
+    ]
+  },
+  {
+    "id": "polyphonic-bank",
+    "raw": "打开银行接口",
+    "cleaned": "打开 Yinhang 接口",
+    "expected": [
+      "Yinhang"
+    ]
+  }
+]

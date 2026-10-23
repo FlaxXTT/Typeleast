@@ -1,0 +1,173 @@
+[
+  {
+    "id": "valid",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": [
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        }
+      ]
+    },
+    "expectedWords": [
+      "DeepSeek"
+    ]
+  },
+  {
+    "id": "missing",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false
+    },
+    "expectedWords": []
+  },
+  {
+    "id": "null",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": null
+    },
+    "expectedWords": []
+  },
+  {
+    "id": "wrong-type",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": "bad"
+    },
+    "expectedWords": []
+  },
+  {
+    "id": "bad-fields",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": [
+        {
+          "word": 7,
+          "heardAs": false
+        }
+      ]
+    },
+    "expectedWords": []
+  },
+  {
+    "id": "mixed",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": [
+        null,
+        "bad",
+        {},
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        }
+      ]
+    },
+    "expectedWords": [
+      "DeepSeek"
+    ]
+  },
+  {
+    "id": "controls",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": [
+        {
+          "word": "API\n",
+          "heardAs": "阿皮爱"
+        }
+      ]
+    },
+    "expectedWords": []
+  },
+  {
+    "id": "oversize",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": [
+        {
+          "word": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "heardAs": "x"
+        }
+      ]
+    },
+    "expectedWords": []
+  },
+  {
+    "id": "limit",
+    "response": {
+      "text": "Result stays usable.",
+      "raw": "Raw stays usable.",
+      "fallback": false,
+      "suggestions": [
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        },
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        }
+      ]
+    },
+    "expectedWords": [
+      "DeepSeek",
+      "DeepSeek",
+      "DeepSeek",
+      "DeepSeek",
+      "DeepSeek",
+      "DeepSeek",
+      "DeepSeek",
+      "DeepSeek"
+    ]
+  }
+]

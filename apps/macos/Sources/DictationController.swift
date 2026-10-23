@@ -300,7 +300,7 @@ final class DictationController {
             entry.model = resp.model ?? resp.provider
             entry.translated = resp.translated
             HistoryStore.shared.add(entry)
-            if !resp.fallback, resp.translated == nil { dictionary.cleaned(raw: resp.raw, into: text) }
+            if !resp.fallback, resp.translated == nil { dictionary.received(resp.suggestions) }
             if text.isEmpty {
                 recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
                 setHint(L10n.text("没有识别到内容"), warning: true)

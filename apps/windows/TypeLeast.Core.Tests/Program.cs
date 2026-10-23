@@ -759,18 +759,23 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("the next dictation judges an edit at once", new EditPoll(t0, v => v != "x").Final("y"), "y");
     Eq("…but not an untouched paste", new EditPoll(t0, v => v != "x").Final("x"), null);
 
-    // Suggestions from what the cleanup model corrected.
-    List<string> Words(string raw, string cleaned) => WordSuggestions.Candidates(raw, cleaned).Select(c => c.Word).ToList();
-    Eq("a Chinese-heard term becomes a suggestion", string.Join(",", Words("我在用德普西克写代码嗯", "我在用 DeepSeek 写代码。")), "DeepSeek");
-    Eq("a split latin term too", string.Join(",", Words("打开 deep seek 的官网", "打开 DeepSeek 的官网")), "DeepSeek");
-    Eq("only the case changed: nothing", Words("我喜欢 python", "我喜欢 Python。").Count, 0);
-    Eq("rewording into other Chinese words: nothing", Words("就是那个嗯明天开会", "明天开会。").Count, 0);
-    Eq("a different latin word: nothing", Words("我们用 slack 沟通", "我们用 Teams 沟通").Count, 0);
-    Eq("the heard spelling is kept", WordSuggestions.Candidates("用德普西克", "用DeepSeek").FirstOrDefault().Heard, "德普西克");
+    // Detection lives in the service; local merge/ignore is still tested here.
+    using (var fixtures = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "suggestion-responses.json"))))
+    {
+        foreach (var sample in fixtures.RootElement.EnumerateArray())
+        {
+            var response = System.Text.Json.JsonSerializer.Deserialize<DictateResponse>(sample.GetProperty("response").GetRawText(), Json.Options)!;
+            var expected = sample.GetProperty("expectedWords").EnumerateArray().Select(e => e.GetString());
+            Eq("suggestion response: " + sample.GetProperty("id").GetString(), string.Join("|", response.Suggestions.Select(s => s.Word)), string.Join("|", expected));
+            Eq("optional suggestions cannot break text", response.InsertableText, "Result stays usable.");
+        }
+    }
     var seenAt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Utc);
     var none = new HashSet<string>();
     var merged = WordSuggestions.Merge([], "DeepSeek", "德普西克", seenAt, none, none);
+    var originalSuggestion = merged[0];
     merged = WordSuggestions.Merge(merged, "deepseek", "deep seek", seenAt, none, none);
+    Eq("merging a repeat does not mutate stored settings before saving", originalSuggestion.Count, 1);
     Eq("a repeated suggestion is counted once", string.Join(",", merged.Select(m => m.Count)), "2");
     Eq("a word already in the dictionary is not suggested", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, new HashSet<string> { "github" }, none).Count, 0);
     Eq("an ignored word is not suggested again", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, none, new HashSet<string> { "github" }).Count, 0);

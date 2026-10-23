@@ -24,4 +24,4 @@ CMD=("$SWIFTC" -swift-version 5 -O
 echo "compile: ${CMD[*]}"
 "${CMD[@]}"
 echo "run: $BIN"
-"$BIN"
+TYPELEAST_SUGGESTION_RESPONSES="$ROOT/../../service/test/fixtures/suggestion-responses.json" "$BIN"

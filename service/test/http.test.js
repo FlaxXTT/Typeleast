@@ -226,6 +226,24 @@ test("翻译和语言变体：/dictate 读请求头，/polish 读请求体，结
   assert.deepEqual(seen[1].variants, { zh: "hk" });
 });
 
+test('all existing result endpoints carry optional suggestions without another request', async () => {
+  const { Readable } = await import('node:stream');
+  const service = failingService();
+  const result = { text: '用 JSON 传输。', raw: '用杰森传输', fallback: false, ms: {}, suggestions: [{ word: 'JSON', heardAs: '杰森' }] };
+  service.polish = service.transcribeAndPolish = async () => result;
+  const handler = createHandler({ service, currentToken: async () => TOKEN });
+  for (const [path, body] of [['/dictate', Buffer.alloc(64)], ['/polish', Buffer.from('{"text":"用杰森传输"}')], ['/prompts/beta/finish', Buffer.from('{"sessionId":"demo"}')]]) {
+    const req = Readable.from([body]);
+    Object.assign(req, { url: ROUTE_PREFIX + path, method: 'POST', headers: { host: '127.0.0.1', authorization: `Bearer ${TOKEN}` } });
+    const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(body) { this.body = body; } };
+    await handler(req, res);
+    assert.equal(res.status, 200, path);
+    const reply = JSON.parse(res.body);
+    assert.equal(reply.text, result.text, path);
+    assert.deepEqual(reply.suggestions, result.suggestions, path);
+  }
+});
+
 test("身份校验：带启动密钥时 /health 用 HMAC 回答挑战；没有密钥或挑战格式不对时不回答", async () => {
   const { createHmac, randomBytes } = await import("node:crypto");
   const { proofFor } = await import("../lib/http.js");

@@ -37,10 +37,10 @@ final class DictionaryController {
     }
 
     /// Terms the cleanup model corrected become suggestions on the Dictionary page.
-    func cleaned(raw: String, into text: String) {
+    func received(_ candidates: [SuggestionCandidate]) {
         guard settings.autoLearn else { return }
-        for pair in WordSuggestions.candidates(raw: raw, cleaned: text) {
-            settings.suggest(word: pair.word, heardAs: pair.heard)
+        for pair in candidates.prefix(8) where pair.isValid {
+            settings.suggest(word: pair.word, heardAs: pair.heardAs)
         }
     }
 

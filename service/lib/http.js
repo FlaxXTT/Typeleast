@@ -237,6 +237,7 @@ export function createHandler(options) {
           requestId: body.requestId ?? null,
           text: result.text,
           raw: result.raw,
+          suggestions: result.suggestions ?? [],
           fallback: result.fallback,
           fallbackReason: result.reason ?? undefined,
           model: result.model,
@@ -302,6 +303,7 @@ export function createHandler(options) {
         reply(res, 200, {
           requestId: null, text: result.text, raw: result.raw, fallback: result.fallback,
           fallbackReason: result.reason ?? undefined, model: result.model, provider: result.provider,
+          suggestions: result.suggestions ?? [],
           strength: "promptbeta", ms: result.ms, ...(result.beta ? { beta: result.beta } : {}),
         });
         return;

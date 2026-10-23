@@ -104,6 +104,35 @@ public sealed class BetaInfo
     [JsonPropertyName("patched")] public bool? Patched { get; set; }
 }
 
+public sealed record SuggestionCandidate(string Word, string HeardAs);
+
+/// <summary>Bad optional suggestions never prevent decoding the actual dictation.</summary>
+public sealed class SuggestionListConverter : JsonConverter<List<SuggestionCandidate>>
+{
+    public override bool HandleNull => true;
+    public override List<SuggestionCandidate> Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+    {
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var result = new List<SuggestionCandidate>();
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return result;
+        foreach (var item in doc.RootElement.EnumerateArray().Take(8))
+        {
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("word", out var word) ||
+                word.ValueKind != JsonValueKind.String || !item.TryGetProperty("heardAs", out var heard) || heard.ValueKind != JsonValueKind.String) continue;
+            var w = word.GetString()!; var h = heard.GetString()!;
+            if (w.Length is >= 2 and <= 30 && h.Length is >= 1 and <= 30 && !w.Any(char.IsControl) && !h.Any(char.IsControl) && !string.IsNullOrWhiteSpace(w) && !string.IsNullOrWhiteSpace(h))
+                result.Add(new(w, h));
+        }
+        return result;
+    }
+    public override void Write(Utf8JsonWriter writer, List<SuggestionCandidate> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (var item in value.Take(8)) { writer.WriteStartObject(); writer.WriteString("word", item.Word); writer.WriteString("heardAs", item.HeardAs); writer.WriteEndObject(); }
+        writer.WriteEndArray();
+    }
+}
+
 public sealed class DictateResponse
 {
     [JsonPropertyName("requestId")] public string? RequestId { get; set; }
@@ -115,6 +144,8 @@ public sealed class DictateResponse
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
     [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
+    [JsonPropertyName("suggestions"), JsonConverter(typeof(SuggestionListConverter))]
+    public List<SuggestionCandidate> Suggestions { get; set; } = new();
     /// <summary>翻译模式: the language the text was written in.</summary>
     [JsonPropertyName("translated")] public string? Translated { get; set; }
 

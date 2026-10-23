@@ -56,14 +56,14 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
     public void StopWatching() => learner.Stop();
 
     /// <summary>Terms the cleanup model corrected become suggestions on the Dictionary page.</summary>
-    public void Cleaned(string raw, string cleaned)
+    public void Received(System.Collections.Generic.IEnumerable<SuggestionCandidate> candidates)
     {
         if (!settings.LearnCorrections) return;
         var known = settings.DictionaryEntries.Select(e => e.Word.ToLowerInvariant()).ToHashSet();
         var dismissed = settings.DismissedSuggestions.ToHashSet();
         var list = settings.WordSuggestions;
-        foreach (var (heard, word) in WordSuggestions.Candidates(raw, cleaned))
-            list = WordSuggestions.Merge(list, word, heard, DateTime.UtcNow, known, dismissed);
+        foreach (var candidate in candidates.Take(8))
+            list = WordSuggestions.Merge(list, candidate.Word, candidate.HeardAs, DateTime.UtcNow, known, dismissed);
         if (list.Count == settings.WordSuggestions.Count && list.Zip(settings.WordSuggestions).All(p => ReferenceEquals(p.First, p.Second) && p.First.Count == p.Second.Count)) return;
         settings.WordSuggestions = list;
         save();

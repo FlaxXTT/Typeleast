@@ -255,68 +255,9 @@ struct WordSuggestion: Codable, Equatable, Identifiable {
     var id: String { word.lowercased() }
 }
 
-/// Dictionary suggestions from what the cleanup model changed: the recognised words and the
-/// cleaned text are compared word by word; a replaced span that became a latin term and
-/// sounds like what was heard ("德普西克" -> "DeepSeek", "deep seek" -> "DeepSeek") is a
-/// candidate. This works in every app, also where the field itself cannot be read.
+/// Local storage merging for suggestions supplied by the service. Detection lives only in Node.
 enum WordSuggestions {
     static let limit = 30
-
-    /// Latin words (with . + # - _ inside) and single CJK characters; everything else separates.
-    static func tokens(_ text: String) -> [String] {
-        var out: [String] = []
-        var word = ""
-        func flush() { if !word.isEmpty { out.append(word); word = "" } }
-        for c in text {
-            if c.isASCII && (c.isLetter || c.isNumber) { word.append(c) }
-            else if !word.isEmpty, "._+#-".contains(c) { word.append(c) }
-            else if EditLearner.isCJK(c) { flush(); out.append(String(c)) }
-            else { flush() }
-        }
-        flush()
-        return out.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "._+#-")) }.filter { !$0.isEmpty }
-    }
-
-    static func join(_ tokens: [String]) -> String {
-        var out = ""
-        for t in tokens {
-            if let last = out.last, last.isASCII, last.isLetter || last.isNumber, let first = t.first, first.isASCII { out += " " }
-            out += t
-        }
-        return out
-    }
-
-    /// (heard, word) pairs the model corrected into a latin term that sounds alike.
-    static func candidates(raw: String, cleaned: String) -> [(heard: String, word: String)] {
-        let a = Array(tokens(raw).prefix(400)), b = Array(tokens(cleaned).prefix(400))
-        guard !a.isEmpty, !b.isEmpty else { return [] }
-        // Longest common subsequence of tokens, then the replaced runs between matches.
-        var table = Array(repeating: Array(repeating: 0, count: b.count + 1), count: a.count + 1)
-        for i in stride(from: a.count - 1, through: 0, by: -1) {
-            for j in stride(from: b.count - 1, through: 0, by: -1) {
-                table[i][j] = a[i] == b[j] ? table[i + 1][j + 1] + 1 : max(table[i + 1][j], table[i][j + 1])
-            }
-        }
-        var result: [(String, String)] = []
-        var i = 0, j = 0, runA: [String] = [], runB: [String] = []
-        func close() {
-            defer { runA = []; runB = [] }
-            guard !runA.isEmpty, !runB.isEmpty else { return }
-            let heard = join(runA), word = join(runB)
-            guard word.contains(where: { $0.isASCII && $0.isLetter }), (2...30).contains(word.count), heard.count <= 30 else { return }
-            // "python" -> "Python": only the case changed, not a correction worth a word.
-            if runA.count == runB.count, runA.joined().lowercased() == runB.joined().lowercased() { return }
-            guard EditLearner.similarity(heard: heard, corrected: word) >= EditLearner.minSimilarity else { return }
-            result.append((heard, word))
-        }
-        while i < a.count || j < b.count {
-            if i < a.count, j < b.count, a[i] == b[j] { close(); i += 1; j += 1 }
-            else if j < b.count, i == a.count || table[i][j + 1] >= table[i + 1][j] { runB.append(b[j]); j += 1 }
-            else { runA.append(a[i]); i += 1 }
-        }
-        close()
-        return result
-    }
 
     /// Add one sighting: words already in the dictionary or ignored are left out; the newest first.
     static func merge(_ list: [WordSuggestion], word: String, heardAs: String, at now: Date,

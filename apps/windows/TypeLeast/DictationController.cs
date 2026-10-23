@@ -363,7 +363,7 @@ internal sealed class DictationController
                 }
                 History.Add(entry); PruneAudio();
                 // Terms the cleanup model corrected become suggestions on the Dictionary page.
-                if (!result.Fallback && options.TranslateTo is null) Dictionary.Cleaned(result.Raw, text);
+                if (!result.Fallback && options.TranslateTo is null) Dictionary.Received(result.Suggestions);
                 if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && targetField is { } field)
                     Dictionary.Pasted(field, text);
                 if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));

@@ -8,4 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TypeLeast.Core\TypeLeast.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../../../service/test/fixtures/suggestion-responses.json" Link="suggestion-responses.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

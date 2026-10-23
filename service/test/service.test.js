@@ -62,6 +62,48 @@ function wavOfSilence(seconds = 0.2) {
   return buffer;
 }
 
+test('dictation returns local suggestions without an additional model call', async () => {
+  const model = fakeModel('用 JSON 传输。');
+  const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
+  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), strength: 'prompt', llm: ROUTE });
+  assert.equal(result.fallback, false);
+  assert.equal(result.text, '用 JSON 传输。');
+  assert.deepEqual(result.suggestions, [{ word: 'JSON', heardAs: '杰森' }]);
+  assert.equal(model.calls.length, 1);
+});
+
+test('optional suggestion failure preserves dictation, does not retry or log user text', async () => {
+  const model = fakeModel('用 JSON 传输。');
+  const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
+  const logs = [];
+  service.logger = { info: (...args) => logs.push(args), warn: (...args) => logs.push(args), debug: (...args) => logs.push(args) };
+  service.suggestionEngine = async () => { throw new Error('private-demo-text'); };
+  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), strength: 'prompt', llm: ROUTE });
+  assert.equal(result.fallback, false);
+  assert.equal(result.text, '用 JSON 传输。');
+  assert.deepEqual(result.suggestions, []);
+  assert.equal(model.calls.length, 1);
+  assert.ok(!JSON.stringify(logs).includes('private-demo-text'));
+});
+
+test('suggestions are skipped for fallback, raw dictation, translation and pending Beta', async () => {
+  const service = makeService();
+  let calls = 0;
+  service.suggestionEngine = async () => { calls++; return [{ word: 'JSON', heardAs: '杰森' }]; };
+  for (const [request, extra] of [
+    [{}, { fallback: true }], [{ strength: 'off' }, {}],
+    [{ translateTo: 'en' }, {}], [{}, { translated: 'en' }],
+    [{ strength: 'promptbeta' }, { beta: { sessionId: 'waiting' } }],
+  ]) {
+    const result = await service.recordAndReturn(request, { raw: '杰森', text: 'JSON', fallback: false, ...extra });
+    assert.deepEqual(result.suggestions, []);
+  }
+  assert.equal(calls, 0);
+  const final = await service.recordAndReturn({ strength: 'promptbeta' }, { raw: '杰森', text: 'JSON', fallback: false, beta: { reviewed: true } });
+  assert.equal(final.suggestions[0].word, 'JSON');
+  assert.equal(calls, 1);
+});
+
 test("a clean transcript is polished with the user's own route", async () => {
   const model = fakeModel("Send the report on Wednesday.");
   const service = makeService({ model });
