@@ -15,7 +15,7 @@
 
 <p align="center"><a href="https://typeleast.promptking.workers.dev">访问官网 · Website</a> &nbsp;·&nbsp; <a href="https://github.com/FlaxXTT/Typeleast">GitHub 仓库 · Repository</a></p>
 
-<p align="center"><sub>B 站讲解视频 · 即将上线 / Bilibili walkthrough · Coming soon</sub></p>
+<p align="center"><a href="https://www.bilibili.com/video/BV1eQnH6zESN/">B 站讲解视频 · Bilibili walkthrough</a></p>
 
 <br>
 
