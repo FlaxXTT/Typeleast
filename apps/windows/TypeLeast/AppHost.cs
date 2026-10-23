@@ -259,7 +259,7 @@ internal sealed class AppHost
         healthTimer.Tick += async (_, _) => await RefreshHealth();
         healthTimer.Start();
 
-        // The 开机自动启动 switch shows what Windows will do at login, also after a change in Task Manager.
+        // The 登录启动 switch shows what Windows will do at login, also after a change in Task Manager.
         if (Autostart.Check() is bool startsWithWindows && startsWithWindows != Settings.LaunchAtLogin)
         {
             Settings.LaunchAtLogin = startsWithWindows;
