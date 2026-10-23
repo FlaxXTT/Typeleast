@@ -775,7 +775,18 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("an ignored word is not suggested again", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, none, new HashSet<string> { "github" }).Count, 0);
     Eq("download progress is a fraction", UpdateProgressText.Fraction(UpdateStage.Downloading, 25 << 20, 50 << 20), 0.5);
     Eq("an unknown size shows a moving bar", UpdateProgressText.Fraction(UpdateStage.Downloading, 1, null), null);
+    string WriteTemp(string json) { var f = Path.Combine(Path.GetTempPath(), "tl-src-" + Guid.NewGuid().ToString("N") + ".json"); File.WriteAllText(f, json); return f; }
     Check("the download line shows megabytes", UpdateProgressText.Describe(UpdateStage.Downloading, 25 << 20, 50 << 20).Contains("25.0 / 50.0"));
+    var setupUrl = WindowsRelease.DownloadPrefix + "v1.17.8/TypeLeast-1.17.8-Windows-x64-Setup.exe";
+    var auto = UpdateSources.For(setupUrl, "auto");
+    Eq("auto tries GitHub first", auto[0].Source, "GitHub");
+    Eq("…then the mirrors, each with the full GitHub address", auto[1].Url, "https://ghfast.top/" + setupUrl);
+    Eq("…named by host", auto[1].Source, "ghfast.top");
+    Eq("mirrors-first ends with GitHub", UpdateSources.For(setupUrl, "mirror")[^1].Source, "GitHub");
+    Eq("GitHub only means one source", UpdateSources.For(setupUrl, "github").Count, 1);
+    Eq("other addresses are never sent to a mirror", UpdateSources.For("https://example.com/x.exe", "mirror").Count, 1);
+    Check("the line names the source", UpdateProgressText.Describe(UpdateStage.Downloading, 1 << 20, 2 << 20, "ghfast.top").Contains("ghfast.top"));
+    Eq("an unknown source setting falls back to auto", AppSettings.Load(WriteTemp("""{"UpdateSource":"weird"}""")).UpdateSource, "auto");
 
     Check("learning is on for new installs", new AppSettings().LearnCorrections);
     var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");

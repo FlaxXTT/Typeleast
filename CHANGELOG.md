@@ -2,6 +2,11 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.17.8（2026-10-23）
+
+- 软件内更新会自动换线路（Mac 和 Windows）：GitHub 下载 15 秒没有新数据，就依次换到公共 GitHub 加速镜像（ghfast.top、gh-proxy.com、gh-proxy.org、gh.llkk.cc）。校验值始终从 GitHub 官方获取，镜像给的文件对不上就换下一条线路，被改动的文件不会安装。进度窗口显示正在从哪里下载。
+- 设置里新增「更新下载源」：自动（GitHub 慢时换镜像）/ 只用 GitHub / 优先镜像。
+
 ## 1.17.7（2026-10-23）
 
 - 软件内更新显示进度窗口（Mac 和 Windows）：下载时有进度条和已下载 / 总大小，之后依次显示核对校验值、签名（Mac）、交接 Key（Mac）、安装，不会再像卡住了一样。

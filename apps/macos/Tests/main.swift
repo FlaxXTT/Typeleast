@@ -662,10 +662,17 @@ do {
     checkEq("an ignored word is not suggested again", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: [], dismissed: ["github"]), [])
 
     // Update progress text.
-    checkEq("download progress is a fraction", UpdateStage.downloading(received: 25 << 20, total: 50 << 20).fraction, 0.5)
-    checkEq("an unknown size shows a moving bar", UpdateStage.downloading(received: 1, total: nil).fraction, nil)
+    checkEq("download progress is a fraction", UpdateStage.downloading(received: 25 << 20, total: 50 << 20, source: "GitHub").fraction, 0.5)
+    checkEq("an unknown size shows a moving bar", UpdateStage.downloading(received: 1, total: nil, source: "GitHub").fraction, nil)
     checkEq("later stages show a moving bar", UpdateStage.signing.fraction, nil)
-    check("the download line shows megabytes", UpdateStage.downloading(received: 25 << 20, total: 50 << 20).label.contains("25.0 / 50.0"))
+    check("the download line shows megabytes and the source", UpdateStage.downloading(received: 25 << 20, total: 50 << 20, source: "ghfast.top").label.contains("25.0 / 50.0") && UpdateStage.downloading(received: 1, total: 2, source: "ghfast.top").label.contains("ghfast.top"))
+    let official = URL(string: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.17.8/TypeLeast-1.17.8-macOS-AppleSilicon.zip")!
+    let auto = UpdateSources.list(for: official, mode: "auto")
+    checkEq("auto tries GitHub first", auto.first?.1, "GitHub")
+    checkEq("…then mirrors with the full GitHub address", auto.dropFirst().first?.0.absoluteString, "https://ghfast.top/" + official.absoluteString)
+    checkEq("mirrors-first ends with GitHub", UpdateSources.list(for: official, mode: "mirror").last?.1, "GitHub")
+    checkEq("GitHub only means one source", UpdateSources.list(for: official, mode: "github").count, 1)
+    checkEq("other addresses are never sent to a mirror", UpdateSources.list(for: URL(string: "https://example.com/x.zip")!, mode: "mirror").count, 1)
 
     let pair = EditLearner.correction(inserted: "我在用得普西克写代码", edited: "我在用DeepSeek写代码")
     checkEq("correction finds the replaced span (from)", pair?.from, "得普西克")

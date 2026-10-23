@@ -40,45 +40,70 @@ internal static class Updater
         return WindowsRelease.Newest(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
     }
 
-    /// <summary>Download and check the installer; returns its path in a fresh temp folder.</summary>
+    /// <summary>Download and check the installer; returns its path in a fresh temp folder. The checksum
+    /// list comes from GitHub; the installer from GitHub or a public mirror (UpdateSources), moving on to
+    /// the next source when one fails, stalls or delivers a file that does not match the checksum.</summary>
     public static async Task<string> DownloadAsync(WindowsReleaseInfo release, CancellationToken ct = default,
-        Action<UpdateStage, long, long?>? progress = null)
+        Action<UpdateStage, long, long?, string>? progress = null, string mode = "auto")
     {
         if (release.SetupUrl is null || release.SumsUrl is null) throw new InvalidOperationException(L10n.T("这个发布没有可校验的 Windows 安装包。"));
         var folder = Path.Combine(Path.GetTempPath(), "TypeLeast-update-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
-        using var client = MakeClient(TimeSpan.FromMinutes(10));
-        var sums = await client.GetStringAsync(release.SumsUrl, ct).ConfigureAwait(false);
+        using var client = MakeClient(Timeout.InfiniteTimeSpan);
+        string sums;
+        using (var sumsTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        {
+            sumsTimeout.CancelAfter(TimeSpan.FromSeconds(60));
+            sums = await client.GetStringAsync(release.SumsUrl, sumsTimeout.Token).ConfigureAwait(false);
+        }
         var expected = WindowsRelease.Checksum(release.SetupName, sums)
             ?? throw new InvalidOperationException(L10n.T("发布的校验文件里没有这个安装包。"));
         var setup = Path.Combine(folder, release.SetupName);
-        using (var response = await client.GetAsync(release.SetupUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+        foreach (var (url, source) in UpdateSources.For(release.SetupUrl, mode))
         {
-            response.EnsureSuccessStatusCode();
-            var total = response.Content.Headers.ContentLength;
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            await using var file = File.Create(setup);
-            var buffer = new byte[81920];
-            long received = 0;
-            int read;
-            progress?.Invoke(UpdateStage.Downloading, 0, total);
-            while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+            ct.ThrowIfCancellationRequested();
+            try
             {
-                await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
-                received += read;
-                progress?.Invoke(UpdateStage.Downloading, received, total);
+                await DownloadFrom(client, url, setup, (received, total) => progress?.Invoke(UpdateStage.Downloading, received, total, source), ct).ConfigureAwait(false);
             }
+            catch (Exception e) when (!ct.IsCancellationRequested && e is HttpRequestException or OperationCanceledException or IOException)
+            {
+                Log.Write("update.source.fail", source + " " + e.GetType().Name);
+                continue;
+            }
+            progress?.Invoke(UpdateStage.Verifying, 0, null, source);
+            string actual;
+            await using (var file = File.OpenRead(setup))
+                actual = Convert.ToHexString(await SHA256.HashDataAsync(file, ct).ConfigureAwait(false)).ToLowerInvariant();
+            if (actual == expected) return setup;
+            Log.Write("update.source.mismatch", source);
         }
-        progress?.Invoke(UpdateStage.Verifying, 0, null);
-        string actual;
-        await using (var file = File.OpenRead(setup))
-            actual = Convert.ToHexString(await SHA256.HashDataAsync(file, ct).ConfigureAwait(false)).ToLowerInvariant();
-        if (actual != expected)
+        try { Directory.Delete(folder, true); } catch (IOException) { }
+        throw new InvalidOperationException(L10n.T("所有下载线路都失败了，请检查网络后重试。"));
+    }
+
+    /// <summary>One source: no response or no new data for UpdateSources.Stall gives up on it.</summary>
+    private static async Task DownloadFrom(HttpClient client, string url, string path, Action<long, long?> progress, CancellationToken ct)
+    {
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        stall.CancelAfter(UpdateSources.Stall);
+        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, stall.Token).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var total = response.Content.Headers.ContentLength;
+        await using var stream = await response.Content.ReadAsStreamAsync(stall.Token).ConfigureAwait(false);
+        await using var file = File.Create(path);
+        var buffer = new byte[81920];
+        long received = 0;
+        int read;
+        progress(0, total);
+        stall.CancelAfter(UpdateSources.Stall);
+        while ((read = await stream.ReadAsync(buffer, stall.Token).ConfigureAwait(false)) > 0)
         {
-            try { Directory.Delete(folder, true); } catch (IOException) { }
-            throw new InvalidOperationException(L10n.T("下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。"));
+            stall.CancelAfter(UpdateSources.Stall);
+            await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+            received += read;
+            progress(received, total);
         }
-        return setup;
     }
 
     /// <summary>Run the checked installer silently; it closes this app and starts the new one.</summary>

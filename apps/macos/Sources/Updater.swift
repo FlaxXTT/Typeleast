@@ -265,11 +265,21 @@ enum Updater {
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         do {
             let asset = assetName(version: version, arch: machineArch)
-            stage?(.downloading(received: 0, total: nil))
-            let publicCopy = publicDownload(version: version, name: "SHA256SUMS.txt", to: work)
-                && publicDownload(version: version, name: asset, to: work) { received, total in
-                    stage?(.downloading(received: received, total: total))
+            stage?(.downloading(received: 0, total: nil, source: "GitHub"))
+            // The checksum list always comes from GitHub; the app may come from a mirror (checked against it).
+            var publicCopy = publicDownload(version: version, name: "SHA256SUMS.txt", to: work)
+            if publicCopy, let official = URL(string: "https://github.com/" + repo + "/releases/download/v" + version + "/" + asset) {
+                let sums = (try? String(contentsOf: work.appendingPathComponent("SHA256SUMS.txt"), encoding: .utf8)) ?? ""
+                let expected = checksum(for: asset, in: sums)
+                publicCopy = false
+                for (url, source) in UpdateSources.list(for: official, mode: Settings.shared.updateSource) {
+                    let file = work.appendingPathComponent(asset)
+                    guard download(url, to: file, timeout: UpdateSources.stall, progress: { received, total in
+                        stage?(.downloading(received: received, total: total, source: source))
+                    }) else { continue }
+                    if let expected, (try? sha256Hex(of: file)) == expected { publicCopy = true; break }
                 }
+            }
             if !publicCopy {
                 guard let gh = findGH() else { throw UpdateError.unreachable }
                 let dl = run(gh, ["release", "download", "v" + version, "--repo", repo, "--clobber",
@@ -344,7 +354,7 @@ enum Updater {
 /// Where an in-app update is, for the progress window.
 enum UpdateStage: Equatable {
     case preparing
-    case downloading(received: Int64, total: Int64?)
+    case downloading(received: Int64, total: Int64?, source: String)
     case verifying
     case signing
     case handingOver
@@ -353,10 +363,10 @@ enum UpdateStage: Equatable {
     var label: String {
         switch self {
         case .preparing: return L10n.text("正在准备…")
-        case .downloading(let received, let total):
+        case .downloading(let received, let total, let source):
             let mb = { (bytes: Int64) in String(format: "%.1f", Double(bytes) / 1_048_576) }
-            if let total { return L10n.text("正在下载 {0} / {1} MB", mb(received), mb(total)) }
-            return L10n.text("正在下载 {0} MB", mb(received))
+            if let total { return L10n.text("正在从 {0} 下载 {1} / {2} MB", source, mb(received), mb(total)) }
+            return L10n.text("正在从 {0} 下载 {1} MB", source, mb(received))
         case .verifying: return L10n.text("正在核对校验值…")
         case .signing: return L10n.text("正在用本机证书签名…")
         case .handingOver: return L10n.text("正在交接钥匙串里的 Key…")
@@ -366,7 +376,30 @@ enum UpdateStage: Equatable {
 
     /// 0…1 while the size is known; nil shows a moving bar.
     var fraction: Double? {
-        guard case .downloading(let received, let total?) = self, total > 0 else { return nil }
+        guard case .downloading(let received, let total?, _) = self, total > 0 else { return nil }
         return min(1, max(0, Double(received) / Double(total)))
+    }
+}
+
+/// Where an update is downloaded from. GitHub's release files are slow or cut off from some networks
+/// (mainland China), so public GitHub download mirrors are tried too. The checksum list always comes
+/// from GitHub itself and the app is checked against it, so a mirror can only make a download faster,
+/// never change what is installed.
+enum UpdateSources {
+    /// Settings values: auto (GitHub, then mirrors), github (GitHub only), mirror (mirrors first).
+    static let modes = ["auto", "github", "mirror"]
+    /// Public GitHub download mirrors, tried in this order; each takes the full GitHub URL after its address.
+    static let mirrors = ["https://ghfast.top/", "https://gh-proxy.com/", "https://gh-proxy.org/", "https://gh.llkk.cc/"]
+    /// No new data for this long: give up on this source and try the next.
+    static let stall: TimeInterval = 15
+
+    static func list(for official: URL, mode: String) -> [(URL, String)] {
+        let prefix = "https://github.com/" + Updater.repo + "/releases/download/"
+        guard official.absoluteString.hasPrefix(prefix), mode != "github" else { return [(official, "GitHub")] }
+        let viaMirrors = mirrors.compactMap { m -> (URL, String)? in
+            guard let url = URL(string: m + official.absoluteString), let host = URL(string: m)?.host else { return nil }
+            return (url, host)
+        }
+        return mode == "mirror" ? viaMirrors + [(official, "GitHub")] : [(official, "GitHub")] + viaMirrors
     }
 }

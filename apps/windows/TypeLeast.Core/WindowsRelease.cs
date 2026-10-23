@@ -105,10 +105,10 @@ public enum UpdateStage { Downloading, Verifying, Installing }
 
 public static class UpdateProgressText
 {
-    public static string Describe(UpdateStage stage, long received = 0, long? total = null) => stage switch
+    public static string Describe(UpdateStage stage, long received = 0, long? total = null, string source = "GitHub") => stage switch
     {
-        UpdateStage.Downloading when total is > 0 => L10n.T("正在下载 {0} / {1} MB", Mb(received), Mb(total.Value)),
-        UpdateStage.Downloading => L10n.T("正在下载 {0} MB", Mb(received)),
+        UpdateStage.Downloading when total is > 0 => L10n.T("正在从 {0} 下载 {1} / {2} MB", source, Mb(received), Mb(total.Value)),
+        UpdateStage.Downloading => L10n.T("正在从 {0} 下载 {1} MB", source, Mb(received)),
         UpdateStage.Verifying => L10n.T("正在核对校验值…"),
         _ => L10n.T("正在安装，TypeLeast 会自动重新打开…"),
     };
@@ -118,4 +118,31 @@ public static class UpdateProgressText
         stage == UpdateStage.Downloading && total is > 0 ? Math.Clamp((double)received / total.Value, 0, 1) : null;
 
     private static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// Where an update's installer is downloaded from. GitHub's release files are slow or cut off from
+/// some networks (mainland China), so public GitHub download mirrors are tried too. The checksum list
+/// always comes from GitHub itself and every file is checked against it, so a mirror can only make a
+/// download faster, never change what is installed.
+/// </summary>
+public static class UpdateSources
+{
+    /// <summary>Settings values: auto (GitHub, then mirrors), github (GitHub only), mirror (mirrors first).</summary>
+    public static readonly string[] Modes = ["auto", "github", "mirror"];
+
+    /// <summary>Public GitHub download mirrors, tried in this order; each takes the full GitHub URL after its address.</summary>
+    public static readonly string[] Mirrors = ["https://ghfast.top/", "https://gh-proxy.com/", "https://gh-proxy.org/", "https://gh.llkk.cc/"];
+
+    /// <summary>No new data for this long: give up on this source and try the next.</summary>
+    public static readonly TimeSpan Stall = TimeSpan.FromSeconds(15);
+
+    /// <summary>The URLs to try for a release file of this repository, in order, each with a name to show.</summary>
+    public static List<(string Url, string Source)> For(string officialUrl, string mode)
+    {
+        var official = (officialUrl, "GitHub");
+        if (!officialUrl.StartsWith(WindowsRelease.DownloadPrefix, StringComparison.Ordinal) || mode == "github") return [official];
+        var mirrors = Mirrors.Select(m => (m + officialUrl, new Uri(m).Host)).ToList();
+        return mode == "mirror" ? [.. mirrors, official] : [official, .. mirrors];
+    }
 }

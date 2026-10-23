@@ -242,6 +242,14 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("版本与更新"), detail: L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。点「检查更新」，有新版本时一键更新，权限不需要重新授予。")) {
                 Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
             }
+            SettingRow(title: L10n.text("更新下载源"),
+                       detail: L10n.text("下载慢或卡住时，自动换到公共镜像下载；校验值始终从 GitHub 官方获取，被改动的文件不会安装。")) {
+                Picker("", selection: model.setting(\.updateSource)) {
+                    Text(L10n.text("自动（GitHub 慢时换镜像）")).tag("auto")
+                    Text(L10n.text("只用 GitHub")).tag("github")
+                    Text(L10n.text("优先镜像")).tag("mirror")
+                }.labelsHidden().frame(width: 220)
+            }
             if let version = model.health?.version {
                 Text(L10n.text("服务版本 ") + version + " · App " + Updater.currentVersion).font(.system(size: 11)).foregroundColor(Theme.tertiary)
             }

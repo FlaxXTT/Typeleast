@@ -39,6 +39,8 @@ public sealed class AppSettings
     public bool LaunchAtLogin { get; set; }
     public bool RestoreClipboard { get; set; } = true;
     public bool AutoUpdate { get; set; } = true;
+    /// <summary>auto, github or mirror (UpdateSources).</summary>
+    public string UpdateSource { get; set; } = "auto";
     public bool OnboardingDone { get; set; }
     /// <summary>-1 = the system default microphone.</summary>
     public int MicrophoneDevice { get; set; } = -1;
@@ -124,6 +126,7 @@ public sealed class AppSettings
                 if (!new[] { "forever", "year", "month", "week", "day", "never" }.Contains(loaded.HistoryRetention)) loaded.HistoryRetention = "forever";
                 if (!new[] { "autoPaste", "clipboardOnly", "preview" }.Contains(loaded.InsertionMode)) loaded.InsertionMode = "autoPaste";
                 if (!new[] { "system", "light", "dark" }.Contains(loaded.Appearance)) loaded.Appearance = "system";
+                if (!UpdateSources.Modes.Contains(loaded.UpdateSource)) loaded.UpdateSource = "auto";
                 loaded.InterfaceLanguage = L10n.Normalize(loaded.InterfaceLanguage);
                 if (!new[] { "auto", "zh", "en", "yue", "ja", "ko" }.Contains(loaded.Language)) loaded.Language = "auto";
                 if (!TranslateTargets.Contains(loaded.TranslateTarget)) loaded.TranslateTarget = "en";

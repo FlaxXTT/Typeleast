@@ -39,9 +39,9 @@ internal sealed class UpdateProgressWindow : Window
         Show();
     }
 
-    public void Report(UpdateStage stage, long received, long? total)
+    public void Report(UpdateStage stage, long received, long? total, string source = "GitHub")
     {
-        status.Text = UpdateProgressText.Describe(stage, received, total);
+        status.Text = UpdateProgressText.Describe(stage, received, total, source);
         var fraction = UpdateProgressText.Fraction(stage, received, total);
         bar.IsIndeterminate = fraction is null;
         if (fraction is { } f) bar.Value = f;

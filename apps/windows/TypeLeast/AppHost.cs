@@ -213,13 +213,13 @@ internal sealed class AppHost
         var lastReport = DateTime.MinValue;
         try
         {
-            var setup = await Updater.DownloadAsync(release, progress: (stage, received, total) =>
+            var setup = await Updater.DownloadAsync(release, mode: Settings.UpdateSource, progress: (stage, received, total, source) =>
             {
                 // From the download thread; a few updates a second are plenty.
                 var now = DateTime.UtcNow;
                 if (stage == UpdateStage.Downloading && received > 0 && received != total && now - lastReport < TimeSpan.FromMilliseconds(100)) return;
                 lastReport = now;
-                app.Dispatcher.InvokeAsync(() => progress.Report(stage, received, total));
+                app.Dispatcher.InvokeAsync(() => progress.Report(stage, received, total, source));
             });
             // The download takes a while: never quit in the middle of a dictation, or a Prompt Beta
             // clarification, started meanwhile.

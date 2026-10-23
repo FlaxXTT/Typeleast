@@ -337,6 +337,12 @@ final class Settings {
     }
 
     /// A huggingface.co mirror for the one-time model download; empty means huggingface.co.
+    /// Where updates are downloaded from: auto, github or mirror (UpdateSources).
+    var updateSource: String {
+        get { d.string(forKey: "voice.updateSource").flatMap { UpdateSources.modes.contains($0) ? $0 : nil } ?? "auto" }
+        set { d.set(newValue, forKey: "voice.updateSource"); changed() }
+    }
+
     var modelMirror: String {
         get { d.string(forKey: "service.modelMirror") ?? "" }
         set { d.set(newValue.trimmingCharacters(in: .whitespaces), forKey: "service.modelMirror"); changed() }

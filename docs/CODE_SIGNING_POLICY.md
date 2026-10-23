@@ -81,8 +81,11 @@ network only in these cases:
 - **Speech model download.** When the user downloads a speech model, the files are fetched from Hugging Face
   (`huggingface.co`) or the mirror the user selects (`hf-mirror.com`).
 - **Update checks.** The app reads the public release list from the GitHub API (`api.github.com`) and downloads
-  update files from `github.com`. No user data is sent; GitHub receives the usual request information (such as the
-  IP address and a `TypeLeast/<version>` user agent). The Windows installed version installs updates automatically
+  update files from `github.com`. When that download is slow or stalls, it falls back to public GitHub download
+  mirrors (`ghfast.top`, `gh-proxy.com`, `gh-proxy.org`, `gh.llkk.cc`; 设置 → 更新下载源 can turn this off). The
+  checksum list always comes from GitHub and every file is checked against it before it is installed. No user data
+  is sent; GitHub and a mirror receive the usual request information (such as the IP address and a
+  `TypeLeast/<version>` user agent). The Windows installed version installs updates automatically
   unless this is turned off in 设置 → 服务与更新.
 
 Learning corrections (on by default) reads the field the dictation was pasted into for up to two minutes, on the

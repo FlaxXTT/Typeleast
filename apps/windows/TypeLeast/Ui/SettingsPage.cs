@@ -239,6 +239,7 @@ internal sealed class SettingsPage : IPage
                     Theme.Row(8, Theme.Secondary(L10n.T("检查更新"), () => _ = CheckUpdates()), installUpdate)),
                 Theme.SettingRow(L10n.T("自动更新"), Theme.Text(L10n.T("安装版每次启动和打开窗口时检查，下载并核对 SHA-256 后在空闲时静默安装，完成后自动重新打开。"), 12, Theme.Grey),
                     Theme.Toggle(s.AutoUpdate, v => { s.AutoUpdate = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("更新下载源"), Theme.Text(L10n.T("下载慢或卡住时，自动换到公共镜像下载；校验值始终从 GitHub 官方获取，被改动的文件不会安装。"), 12, Theme.Grey), UpdateSourceChoice(s)),
                 Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
                     Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
         DockPanel.SetDock(root, Dock.Top); surface.Children.Add(root);
@@ -247,6 +248,16 @@ internal sealed class SettingsPage : IPage
         ShowTab(Math.Clamp(lastTab, 0, tabs.Count - 1));
         LoadPreset();
     }
+    private ComboBox UpdateSourceChoice(AppSettings s)
+    {
+        var choice = Theme.Choice(220);
+        foreach (var (code, label) in new[] { ("auto", "自动（GitHub 慢时换镜像）"), ("github", "只用 GitHub"), ("mirror", "优先镜像") })
+            choice.Items.Add(new ComboBoxItem { Content = L10n.T(label), Tag = code });
+        choice.SelectedIndex = Math.Max(0, Array.IndexOf(UpdateSources.Modes, s.UpdateSource));
+        choice.SelectionChanged += (_, _) => { if (choice.SelectedItem is ComboBoxItem { Tag: string code }) { s.UpdateSource = code; host.SaveSettings(); } };
+        return choice;
+    }
+
     private async Task CheckUpdates()
     {
         updateStatus.Text = L10n.T("正在检查…");
