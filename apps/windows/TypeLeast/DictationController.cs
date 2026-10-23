@@ -1,0 +1,421 @@
+using System;
+using System.Threading.Tasks;
+using System.Windows;
+using TypeLeast.Core;
+using TypeLeast.Ui;
+
+namespace TypeLeast;
+
+internal enum DictationPhase { Idle, Recording, Thinking }
+
+/// <summary>Application resources used by the recording workflow; contains no workflow state.</summary>
+internal interface IDictationHost
+{
+    AppSettings Settings { get; }
+    DictionaryController Dictionary { get; }
+    LocalHistory History { get; }
+    ActivityLog Activity { get; }
+    ServiceClient Client { get; }
+    bool ServiceUp { get; }
+    SpeechStatus? Speech { get; }
+    string HotkeyLabel { get; }
+    LlmRoute? ActiveRoute { get; }
+    RetainedAudio RetainedAudio { get; }
+    PromptFileSync PromptFile { get; }
+    bool Quitting { get; }
+    bool SaveSettings();
+    bool CanRetry(HistoryEntry entry);
+    void SetHint(string text);
+    void Changed();
+    void PruneAudio();
+}
+
+/// <summary>Owns recording, cancellation, service calls, retry and delivery on the UI thread.</summary>
+internal sealed class DictationController
+{
+    private readonly IDictationHost host;
+    private readonly System.Windows.Threading.Dispatcher dispatcher;
+    private readonly KeyboardHook hook;
+    private readonly RecordingBar bar;
+    private readonly AudioRecorder recorder = new();
+    private readonly AudioDucking ducking = new();
+    private readonly OperationTracker operations = new();
+    private readonly BetaController beta;
+    private IntPtr targetWindow;
+    private string targetApp = "";
+    private string? translating;
+    private DictationOptions? recordingOptions;
+    private FieldTarget? targetField;
+    private byte[]? recordingContext;
+    private Task<FieldTarget>? targetFieldTask;
+    private Task<byte[]?>? recordingContextTask;
+    private readonly System.Diagnostics.Stopwatch micClock = new();
+    public DictationPhase Phase { get; private set; } = DictationPhase.Idle;
+    public bool IsMicrophoneTesting { get; private set; }
+    public bool? MicrophoneReady { get; set; }
+    public long? LastMicrophoneStartMs { get; private set; }
+    public double MicrophoneLevel => recorder.Level;
+    public bool HasBeta => beta.Session is not null;
+    private bool quitting => host.Quitting;
+    private AppSettings Settings => host.Settings;
+    private DictionaryController Dictionary => host.Dictionary;
+    private LocalHistory History => host.History;
+    private ActivityLog Activity => host.Activity;
+    private ServiceClient Client => host.Client;
+    private bool ServiceUp => host.ServiceUp;
+    private SpeechStatus? Speech => host.Speech;
+    private string HotkeyLabel => host.HotkeyLabel;
+    private LlmRoute? ActiveRoute => host.ActiveRoute;
+    private RetainedAudio RetainedAudio => host.RetainedAudio;
+    private PromptFileSync PromptFile => host.PromptFile;
+    private void Raise() => host.Changed();
+    private void SetHint(string text) => host.SetHint(text);
+    private bool SaveSettings() => host.SaveSettings();
+    private void PruneAudio() => host.PruneAudio();
+    private bool CanRetry(HistoryEntry entry) => host.CanRetry(entry);
+
+    public DictationController(IDictationHost host, System.Windows.Threading.Dispatcher dispatcher, KeyboardHook hook, RecordingBar bar)
+    {
+        this.host = host; this.dispatcher = dispatcher; this.hook = hook; this.bar = bar;
+        beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers());
+        recorder.AudioStarted += OnAudioStarted;
+        recorder.LimitReached += () => dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
+        recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风已断开或录音异常，请重新选择设备后重试。")); });
+    }
+    public void Shutdown() { recorder.Cancel(); }
+
+    public bool StartMicrophoneTest()
+    {
+        if (Phase != DictationPhase.Idle || operations.TryBegin() is not { } operation) return false;
+        Dictionary.StopWatching();
+        try { micClock.Restart(); LastMicrophoneStartMs = null; recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
+        catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("无法打开麦克风，请检查设备和 Windows 麦克风权限。")); return false; }
+    }
+
+    public void EndMicrophoneTest() { if (IsMicrophoneTesting) Cancel(); }
+
+    public async Task PasteLast()
+    {
+        if (Phase != DictationPhase.Idle || History.Last is not { } last) return;
+        var field = FieldTarget.Capture();
+        for (var i = 0; i < 40 && (Native.GetAsyncKeyState(0x11) < 0 || Native.GetAsyncKeyState(0x10) < 0 || Native.GetAsyncKeyState(0x12) < 0); i++) await Task.Delay(25);
+        if (quitting || field.Window == IntPtr.Zero || !Paster.SameWindow(field.Window, Native.GetForegroundWindow())) return;
+        var text = TerminalGuard.SafeText(last.Text, Shell.ProcessName(field.Window));
+        var result = await Paster.PasteAsync(text, field.Window, Settings.RestoreClipboard);
+        if (result != Paster.Outcome.Pasted) SetHint(Paster.Message(result));
+    }
+
+    public async Task RetryHistory(HistoryEntry entry)
+    {
+        if (Phase != DictationPhase.Idle || !CanRetry(entry) || entry.Request is not { } request) return;
+        var operation = operations.TryBegin(); if (operation is null) return;
+        Phase = DictationPhase.Thinking; hook.SwallowEscape = true; bar.ShowThinking(); Raise();
+        byte[]? wav = null;
+        try
+        {
+            wav = RetainedAudio.Load(entry.AudioId!);
+            if (request.Strength == "promptify") await PromptFile.PrepareAsync();
+            var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
+                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries);
+            if (!operations.IsCurrent(operation)) return;
+            Paster.SetText(result.InsertableText);
+            History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
+                Fallback = result.Fallback, Reason = result.FallbackReason, Seconds = entry.Seconds,
+                Request = request, AudioId = entry.AudioId });
+            bar.ShowResult(L10n.T("已复制"), result.Fallback);
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (Exception e) when (e is ServiceException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
+        { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("重试失败，原始记录已保留"), true); }
+        finally { if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav); if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; } operations.Complete(operation); Raise(); }
+    }
+
+    public void Toggle() => Toggle(null);
+
+    public void ToggleTranslate() => Toggle(Settings.TranslateTarget);
+
+    public void SetStrength(string code, bool announce = false)
+    {
+        if (!CleanupModes.IsKnown(code) || Phase != DictationPhase.Idle) return;
+        if (beta.Session is not null && code != "promptbeta") {
+            if (MessageBox.Show(L10n.T("切换模式会结束这次 Beta 对话，尚未生成的内容不会插入。"),
+                L10n.T("结束本次信息补充？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            DropBeta();
+        }
+        if (Settings.Strength != code)
+        {
+            Settings.Strength = code;
+            if (!SaveSettings()) return;
+            JumpList.Update(Settings.Strength);
+        }
+        if (announce && Phase == DictationPhase.Idle) bar.ShowResult(L10n.T("整理档位：") + CleanupModes.Title(code), warning: false);
+    }
+
+    private void Toggle(string? translateTo)
+    {
+        if (IsMicrophoneTesting) return;
+        switch (Phase)
+        {
+            case DictationPhase.Idle:
+                translating = translateTo;
+                StartRecording();
+                break;
+            case DictationPhase.Recording: _ = StopAndSend(); break;
+            default: break; // still cleaning up the last one
+        }
+    }
+
+    private void StartRecording()
+    {
+        if (quitting) return;
+        if (!ServiceUp || Speech?.Ready != true)
+        {
+            bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务还没就绪"), warning: true);
+            return;
+        }
+        var operation = operations.TryBegin();
+        if (operation is null) return;
+        // The microphone opens first: anything slow before it (UI Automation, ducking) would cut
+        // the start of what the user says. Only the foreground window, which is instant, is read before.
+        micClock.Restart();
+        targetWindow = Native.GetForegroundWindow();
+        targetField = null; recordingContext = null;
+        try
+        {
+            recorder.Start(Settings.MicrophoneDevice);
+            MicrophoneReady = true;
+        }
+        catch (InvalidOperationException e)
+        {
+            operations.Complete(operation);
+            ducking.Dispose(); MicrophoneReady = false;
+            Log.Write("mic.fail", e.GetType().Name);
+            bar.ShowResult(L10n.T("无法打开麦克风：请在 设置 → 隐私和安全性 → 麦克风 中允许桌面应用访问麦克风"), warning: true);
+            return;
+        }
+        Phase = DictationPhase.Recording;
+        // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
+        if (translating is null && beta.Session is not null) beta.SetBusy(L10n.T("正在听你补充，说完再按 {0}", HotkeyLabel));
+        hook.SwallowEscape = true;
+        bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
+        Raise();
+        Dictionary.DictationStarting();
+        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
+        targetApp = Shell.ProcessName(targetWindow);
+        var window = targetWindow;
+        targetFieldTask = Task.Run(() => FieldTarget.CaptureFor(window));
+        recordingContextTask = Settings.UseFieldContext ? targetFieldTask.ContinueWith(t => FieldContextReader.Read(t.Result), TaskScheduler.Default) : null;
+        if (Settings.MuteOtherAudio) ducking.Start();
+    }
+
+    private void OnAudioStarted()
+    {
+        var ms = micClock.ElapsedMilliseconds;
+        dispatcher.InvokeAsync(() =>
+        {
+            if (Phase != DictationPhase.Recording) return;
+            LastMicrophoneStartMs = ms;
+            Log.Write("mic.ready", ms.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (Settings.PlaySounds && !IsMicrophoneTesting) Sounds.Start();
+            Raise();
+        });
+    }
+
+    private static async Task<T?> Within<T>(Task<T>? task, int ms) where T : class?
+    {
+        if (task is null) return null;
+        if (await Task.WhenAny(task, Task.Delay(ms)) != task || !task.IsCompletedSuccessfully) return null;
+        return task.Result;
+    }
+
+    public void Cancel()
+    {
+        Dictionary.StopWatching();
+        ducking.Dispose(); IsMicrophoneTesting = false;
+        var preserveBeta = Phase == DictationPhase.Recording && beta.Session is not null;
+        var lease = operations.Active;
+        operations.Cancel();
+        recorder.Cancel();
+        if (Phase == DictationPhase.Recording && lease is not null) lease.Dispose();
+        hook.SwallowEscape = false;
+        translating = null;
+        Phase = DictationPhase.Idle;
+        if (preserveBeta) beta.Resume(); else DropBeta();
+        bar.ShowResult(L10n.T("已取消"), warning: false);
+        Raise();
+    }
+
+    private async Task StopAndSend()
+    {
+        if (operations.Active is not { } operation || recordingOptions is not { } options) return;
+        var (wav, seconds) = recorder.Stop();
+        ducking.Dispose();
+        if (Settings.PlaySounds) Sounds.Stop();
+        hook.SwallowEscape = false;
+        var translateTo = options.TranslateTo;
+        translating = null;
+        if (seconds < 0.3)
+        {
+            operations.Complete(operation);
+            Phase = DictationPhase.Idle;
+            bar.ShowResult(L10n.T("录音太短"), warning: true);
+            if (beta.Session is not null) beta.Resume();
+            Raise();
+            return;
+        }
+        // A recording made while Prompt Beta's questions are open is the answer to them;
+        // a translation is not, and leaves the questions waiting.
+        if (translateTo is null && options.Strength != "promptbeta" && beta.Session is not null) DropBeta();
+        var answering = translateTo is null && options.Strength == "promptbeta" ? beta.Session : null;
+        if (answering is not null) beta.SetBusy(L10n.T("正在根据你的补充更新…"));
+        Phase = DictationPhase.Thinking;
+        hook.SwallowEscape = true;
+        bar.ShowThinking(translateTo is null ? null : L10n.T("翻译中…"));
+        Raise();
+        targetField = await Within(targetFieldTask, 300);
+        recordingContext = await Within(recordingContextTask, 300);
+        targetFieldTask = null; recordingContextTask = null;
+        if (!operations.IsCurrent(operation)) return;
+        try
+        {
+            var requestOptions = answering is not null ? beta.Options ?? options : options;
+            if (requestOptions.Strength == "promptify") await PromptFile.PrepareAsync();
+            var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
+                fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
+                dictionary: Dictionary.ServiceEntries);
+            if (!operations.IsCurrent(operation)) return;
+            if (ShowBetaQuestions(result, requestOptions)) return;
+            if (answering is not null)
+            {
+                targetWindow = beta.Window;
+                targetApp = beta.App;
+                targetField = beta.Field;
+                ClearBeta();
+            }
+            await Deliver(result, seconds, operation, requestOptions, answering is null ? wav : null);
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (ServiceException e) when (e.Status == 410 && answering is not null)
+        {
+            if (!operations.IsCurrent(operation)) return;
+            DropBeta();
+            bar.ShowResult(L10n.T("问题已过期，请重新说一遍需求"), warning: true);
+        }
+        catch (ServiceException e)
+        {
+            if (!operations.IsCurrent(operation)) return;
+            Log.Write("operation.failed", new DiagnosticEvent("dictation", "transport", e.Code, HttpStatus: e.Status).Format());
+            bar.ShowResult(e.Code == "speech-not-ready" ? Messages.SpeechProblem(Speech) : L10n.T("听写失败：") + (e.ServiceUnavailable ? L10n.T("本地服务未就绪") : DiagnosticEvent.SafeReason(e.Code)), warning: true);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav);
+            if (operations.IsCurrent(operation)) {
+                Phase = DictationPhase.Idle; hook.SwallowEscape = false;
+                if (beta.Session is not null) beta.Resume();
+                Raise();
+            }
+            operations.Complete(operation);
+        }
+    }
+
+    private async Task Deliver(DictateResponse result, double seconds, OperationTracker.Lease operation, DictationOptions options, byte[]? wav = null)
+    {
+        if (!operations.IsCurrent(operation) || quitting) return;
+        Log.Write("operation.complete", new DiagnosticEvent(result.Translated is null ? "dictation" : "translation", "complete",
+            result.FallbackReason, result.Ms?.Total, Characters: result.Text.Length).Format());
+        {
+            // A terminal gets one line without control characters: this reduces accidental command execution.
+            var text = TerminalGuard.SafeText(result.InsertableText.Trim(), targetApp);
+            if (text.Length == 0)
+            {
+                bar.ShowResult(L10n.T("没有听到内容"), warning: true);
+            }
+            else
+            {
+                if (options.InsertionMode == "preview")
+                {
+                    var preview = await PreviewPanel.Show(text, operation.Token);
+                    if (preview is null || !operations.IsCurrent(operation)) return;
+                    text = TerminalGuard.SafeText(preview, targetApp);
+                    Native.SetForegroundWindow(targetWindow);
+                    await Task.Delay(100, operation.Token);
+                }
+                var outcome = options.InsertionMode == "clipboardOnly" ? (Paster.SetText(text) ? Paster.Outcome.CopiedOnly : Paster.Outcome.Failed)
+                    : await Paster.PasteAsync(text, targetWindow, options.RestoreClipboard, operation.Token, options.FormattedLists && TerminalGuard.SafeText("a\nb", targetApp).Contains('\n'));
+                if (outcome == Paster.Outcome.Failed) { bar.ShowResult(L10n.T("无法写入剪贴板，请重试"), true); return; }
+                if (!operations.IsCurrent(operation)) return;
+                var entry = new HistoryEntry
+                {
+                    Text = text,
+                    Raw = result.Raw,
+                    App = targetApp,
+                    Fallback = result.Fallback,
+                    Reason = result.FallbackReason,
+                    Seconds = seconds,
+                    Inserted = outcome == Paster.Outcome.Pasted,
+                    Request = new HistoryRequest(options.Language, options.Strength, options.TranslateTo, options.Variants),
+                };
+                if (wav is not null && Settings.KeepAudio24h && Settings.HistoryRetention != "never" && options.Strength != "promptbeta")
+                {
+                    try { RetainedAudio.Save(entry.Id, wav); entry.AudioId = entry.Id; }
+                    catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { SetHint(L10n.T("录音未能安全保留，文字结果仍可使用。")); }
+                }
+                History.Add(entry); PruneAudio();
+                // Terms the cleanup model corrected become suggestions on the Dictionary page.
+                if (!result.Fallback && options.TranslateTo is null) Dictionary.Cleaned(result.Raw, text);
+                if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && targetField is { } field)
+                    Dictionary.Pasted(field, text);
+                if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
+                Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
+                var note = Messages.FallbackNote(result.FallbackReason);
+                var done = Paster.Message(outcome);
+                bar.ShowResult(note is null ? done : done + " · " + note, warning: note is not null);
+            }
+        }
+    }
+
+    private bool ShowBetaQuestions(DictateResponse result, DictationOptions options)
+    {
+        if (!beta.Show(result, options, targetWindow, targetApp, targetField, HotkeyLabel)) return false;
+        bar.ShowResult(L10n.T("提示词 Beta：可继续补充或结束生成"), warning: false);
+        return true;
+    }
+
+    private async Task FinishBetaWithoutAnswers()
+    {
+        if (Phase != DictationPhase.Idle || beta.Session is not { } id || beta.Options is not { } options) return;
+        var operation = operations.TryBegin();
+        if (operation is null) return;
+        targetWindow = beta.Window; targetApp = beta.App; targetField = beta.Field;
+        beta.Hide();
+        Phase = DictationPhase.Thinking; hook.SwallowEscape = true;
+        bar.ShowThinking(); Raise();
+        try
+        {
+            var result = await Client.BetaAsync(id, true, targetApp, options.Route, operation.Token, options.Variants);
+            if (operations.IsCurrent(operation)) {
+                if (ShowBetaQuestions(result, options)) return;
+                ClearBeta();
+                await Deliver(result, 0, operation, options);
+            }
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (ServiceException e)
+        {
+            if (operations.IsCurrent(operation)) {
+                if (e.Status == 410) ClearBeta(); else beta.Resume();
+                bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说一遍需求") : L10n.T("生成失败，请重试"), true);
+            }
+        }
+        finally
+        {
+            if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; Raise(); }
+            operations.Complete(operation);
+        }
+    }
+
+    public void DropBeta() => beta.Drop();
+
+    private void ClearBeta() => beta.Clear();
+}

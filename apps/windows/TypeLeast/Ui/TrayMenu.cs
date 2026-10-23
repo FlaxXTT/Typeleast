@@ -58,10 +58,10 @@ internal sealed class TrayMenu : Window
         header.Children.Add(icon); header.Children.Add(titles);
         rows.Children.Add(header);
 
-        var recording = host.Phase == AppHost.DictationPhase.Recording;
-        var busy = host.Phase != AppHost.DictationPhase.Idle;
+        var recording = host.Phase == DictationPhase.Recording;
+        var busy = host.Phase != DictationPhase.Idle;
         Separator();
-        Item("\uE720", recording ? L10n.T("结束听写") : L10n.T("开始听写"), host.HotkeyLabel, host.Phase != AppHost.DictationPhase.Thinking, host.Toggle);
+        Item("\uE720", recording ? L10n.T("结束听写") : L10n.T("开始听写"), host.HotkeyLabel, host.Phase != DictationPhase.Thinking, host.Toggle);
         Item("\uE774", L10n.T("开始翻译"), host.Settings.TranslateHotkey is { } t ? TapDetector.Label(t) : "", !busy, host.ToggleTranslate);
         Item("\uE711", L10n.T("取消"), "Esc", busy, host.Cancel);
         Separator();

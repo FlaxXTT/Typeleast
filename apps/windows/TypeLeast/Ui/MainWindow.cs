@@ -205,8 +205,8 @@ internal sealed class HomePage : IPage
         keycaps.Content = Theme.Keycaps(host.HotkeyLabel);
         engine.Text = (host.Speech?.ModelName ?? "SenseVoice Small") + " · " + host.ServiceSummary + " · " + host.ModelSummary;
         heroTitle.Text = L10n.T("按 ") + host.HotkeyLabel + L10n.T(" 开始听写");
-        tryButton.Content = host.Phase == AppHost.DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("试一下");
-        tryButton.IsEnabled = host.Phase != AppHost.DictationPhase.Thinking;
+        tryButton.Content = host.Phase == DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("试一下");
+        tryButton.IsEnabled = host.Phase != DictationPhase.Thinking;
         hint.Text = host.Hint;
 
         checklist.Children.Clear();

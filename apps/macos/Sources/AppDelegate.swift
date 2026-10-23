@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 import ServiceManagement
 
 // AppDelegate.swift - lifecycle, hotkeys, windows and the actions the UI calls.
-// Dictation itself (record -> local service -> insert) lives in AppDelegate+Dictation.swift.
+// DictationController owns recording, service requests and insertion.
 // The local service is started and watched by ServiceManager.swift.
 // The app never activates itself during dictation; only opening its own windows does.
 
@@ -35,19 +35,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         willQuit: { [weak self] in self?.recorder.cancel() }))
     lazy var hub = HubWindowController(model: model)
     lazy var onboarding = OnboardingWindowController(model: model)
-    var previewPanel: PreviewPanel?
-
-    var phase: AppPhase = .idle {
-        didSet { model.phase = phase }
-    }
-    var recordingStartedAt: Date?
-    var pendingAppBundleId = ""
-    /// The text field captured when the current recording started.
-    var pendingField: FocusedField?
-    /// Prompt Beta questions waiting for a spoken answer, and where the prompt goes.
+    lazy var dictation = DictationController(host: .init(
+        settings: settings, client: client, model: model, dictionary: dictionary, beta: beta,
+        recorder: recorder, recordingBar: recordingBar, idleBar: idleBar,
+        applyState: { [weak self] in self?.applyState() },
+        updateIdleBar: { [weak self] in self?.updateIdleBar() },
+        setHint: { [weak self] in self?.setHint($0, warning: $1) },
+        hint: { [weak self] in self?.hint },
+        registerEscape: { [weak self] in self?.registerEscape() },
+        unregisterEscape: { [weak self] in self?.unregisterEscape() },
+        showSettings: { [weak self] in self?.hub.show(page: .settings) },
+        scheduleHealthRetry: { [weak self] in self?.scheduleHealthRetry() }))
+    var phase: AppPhase { dictation.phase }
     var betaPending: BetaPending? { beta.pending }
-    /// 翻译模式: the target language of the recording in progress (nil: ordinary dictation).
-    var pendingTranslate: String?
     /// A test run beside the real app leaves the global hotkeys and Fn to it.
     var skipGlobalHotkeys = false
     private let instanceLock = InstanceLock()
@@ -66,14 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                 }
             }))
     }()
-    var tickTimer: Timer?
-    /// Last whole second pushed into the menu, so the 20 Hz waveform timer does
-    /// not rebuild the menu on every frame.
-    var lastTickedSecond: Int = -1
     var escRegistered = false
-    var serviceUp = false {
-        didSet { model.serviceUp = serviceUp }
-    }
+    var serviceUp: Bool { get { model.serviceUp } set { model.serviceUp = newValue } }
     var hint: String?
     var hintWarning = false
     var launchedAsLoginItem = false
@@ -433,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         var s = MenuState()
         s.phase = phase
         s.strength = settings.strength
-        s.elapsed = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        s.elapsed = dictation.recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         s.hint = hint
         s.hintWarning = hintWarning
         s.serviceUp = serviceUp
@@ -602,7 +596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
         guard phase == .idle else { return }
         // A retry from the window copies the result rather than pasting into the window.
-        sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
+        dictation.sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
                      strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false,
                      translateTo: e.translated)
     }

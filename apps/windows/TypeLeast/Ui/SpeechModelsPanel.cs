@@ -52,7 +52,7 @@ internal sealed class SpeechModelsPanel
             var op = catalog.Operation?.ModelId == model.Id ? catalog.Operation : null;
             var selected = catalog.ActiveModelId == model.Id && host.Speech?.Ready == true;
             row.action.Content = selected ? L10n.T("正在使用") : !model.Installed || op?.Error == "checksum-mismatch" ? L10n.T("下载并启用") : L10n.T("使用");
-            row.action.IsEnabled = !selected && catalog.Operation?.Running != true && host.Phase == AppHost.DictationPhase.Idle;
+            row.action.IsEnabled = !selected && catalog.Operation?.Running != true && host.Phase == DictationPhase.Idle;
             var status = model.ModelBytes / 1_000_000_000.0;
             row.state.Text = status.ToString("F2", L10n.Culture) + " GB · " + (model.Installed ? L10n.T("已下载") : L10n.T("未下载"));
             if (op?.Running == true) row.state.Text += " · " + (op.Phase == "downloading" ? L10n.T("正在下载…") : L10n.T("等待或加载中…"));

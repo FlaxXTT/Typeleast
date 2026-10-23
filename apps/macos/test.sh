@@ -9,33 +9,15 @@ SWIFTC="/usr/bin/swiftc"
 
 mkdir -p "$BUILD_DIR"
 
+# Compile the production controllers too: a handwritten subset can silently miss a refactor.
+SOURCES=()
+while IFS= read -r source; do SOURCES+=("$source"); done < <(find "$ROOT/Sources" -maxdepth 1 -name '*.swift' ! -name main.swift | sort)
+
 CMD=("$SWIFTC" -swift-version 5 -O
   -target "$(uname -m)-apple-macosx13.0"
-  -framework Foundation -framework Network -framework AVFoundation -framework AppKit -framework Carbon
+  -framework Foundation -framework Network -framework AVFoundation -framework AppKit -framework Carbon -framework SwiftUI -framework CoreAudio -framework ServiceManagement
   -o "$BIN"
-  "$ROOT/Sources/BetaController.swift"
-  "$ROOT/Sources/ServiceClient.swift"
-  "$ROOT/Sources/ServiceManager.swift"
-  "$ROOT/Sources/DiagnosticsLog.swift"
-  "$ROOT/Sources/Wav.swift"
-  "$ROOT/Sources/AudioConvert.swift"
-  "$ROOT/Sources/Recorder.swift"
-  "$ROOT/Sources/RecordingBar.swift"
-  "$ROOT/Sources/FnKey.swift"
-  "$ROOT/Sources/FieldContext.swift"
-  "$ROOT/Sources/EditLearner.swift"
-  "$ROOT/Sources/Inserter.swift"
-  "$ROOT/Sources/L10n.swift"
-  "$ROOT/Sources/MainMenu.swift"
-  "$ROOT/Sources/ActivityLog.swift"
-  "$ROOT/Sources/History.swift"
-  "$ROOT/Sources/TerminalGuard.swift"
-  "$ROOT/Sources/SelfIntegrity.swift"
-  "$ROOT/Sources/InstanceLock.swift"
-  "$ROOT/Sources/Settings.swift"
-  "$ROOT/Sources/LLMSettings.swift"
-  "$ROOT/Sources/StartChime.swift"
-  "$ROOT/Sources/Updater.swift"
+  "${SOURCES[@]}"
   "$ROOT/Tests/StubServer.swift"
   "$ROOT/Tests/main.swift")
 

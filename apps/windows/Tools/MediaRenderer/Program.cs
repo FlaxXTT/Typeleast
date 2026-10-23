@@ -96,13 +96,44 @@ class P
         }
     }
 
+    // Exercise the real controller composition with fake credentials and an isolated profile.
+    static void CheckControllers(AppHost host)
+    {
+        var checks = 0;
+        void Check(bool ok, string name) { if (!ok) throw new InvalidOperationException(name); checks++; }
+        Check(host.Phase == DictationPhase.Idle, "initial recording phase");
+        host.EndMicrophoneTest();
+        Check(!host.IsMicrophoneTesting, "ending an idle microphone test opens no device");
+        host.Cancel();
+        Check(host.Phase == DictationPhase.Idle, "cancel idle remains idle");
+        host.SetStrength("off");
+        Check(host.Settings.Strength == "off", "mode routed through controller");
+        var beta = new BetaController(new ServiceClient(), () => { });
+        var options = new DictationOptions("zh", "promptbeta", null, null, null, true, "clipboardOnly", false, false);
+        var first = new DictateResponse { Beta = new BetaInfo { SessionId = "round1" } };
+        Check(beta.Show(first, options, new IntPtr(123), "original.exe", null, "F8"), "first Beta round");
+        var next = new DictateResponse { Beta = new BetaInfo { SessionId = "round2" } };
+        beta.Show(next, options, new IntPtr(456), "followup.exe", null, "F8");
+        Check(beta.Window == new IntPtr(123) && beta.App == "original.exe", "followup keeps original destination");
+        Check(beta.Session == "round2", "session advances");
+        beta.Clear();
+        Check(beta.Session is null && beta.Options is null && beta.Field is null, "completion clears session");
+        Check(!beta.Show(new DictateResponse(), options, IntPtr.Zero, "", null, "F8"), "ordinary result opens no Beta session");
+        beta.Show(first, options, new IntPtr(789), "new.exe", null, "F8");
+        Check(beta.Window == new IntPtr(789) && beta.App == "new.exe", "new conversation has new destination");
+        beta.Clear();
+        Console.WriteLine($"CONTROLLER CHECKS: {checks} passed");
+    }
+
     [STAThread]
     static int Main(string[] args)
     {
         var dir = args[0];
+        Environment.SetEnvironmentVariable("TYPELEAST_HOME", Path.Combine(dir, "controller-state"));
         var app = new Application();
         var host = new AppHost(app, new FakeKeys());
         L10n.Configure("zh-Hans");
+        CheckControllers(host);
         if (args.Length > 1 && args[1] == "update-only") { RenderUpdateWindow(dir); return 0; }
         Seed(host);
         foreach (var mode in new[] { "light", "dark" })

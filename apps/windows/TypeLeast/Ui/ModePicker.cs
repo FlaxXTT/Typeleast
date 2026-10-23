@@ -30,8 +30,8 @@ internal static class ModePicker
         header.Children.Add(note); header.Children.Add(Theme.Text(L10n.T("整理档位"), 14, bold: true));
         void Update()
         {
-            foreach (var (code, button) in buttons) { Theme.SetPillSelected(button, code == host.Settings.Strength); button.IsEnabled = host.Phase == AppHost.DictationPhase.Idle; }
-            note.Text = host.Phase == AppHost.DictationPhase.Idle ? L10n.T("下一次听写生效") : L10n.T("录音或整理完成后可切换");
+            foreach (var (code, button) in buttons) { Theme.SetPillSelected(button, code == host.Settings.Strength); button.IsEnabled = host.Phase == DictationPhase.Idle; }
+            note.Text = host.Phase == DictationPhase.Idle ? L10n.T("下一次听写生效") : L10n.T("录音或整理完成后可切换");
             detail.Text = CleanupModes.Detail(host.Settings.Strength);
         }
         host.Changed += Update; Update();

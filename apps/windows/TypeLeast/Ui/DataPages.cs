@@ -52,7 +52,7 @@ internal sealed class HistoryPage : IPage
                     Theme.Secondary(L10n.T("复制原话"), () => Paster.SetText(entry.Raw.Length > 0 ? entry.Raw : entry.Text)),
                     Theme.Secondary(L10n.T("删除"), () => host.DeleteHistory(entry.Id)));
                 var retry = Theme.Secondary(L10n.T("同录音重试"), () => _ = host.RetryHistory(entry));
-                retry.IsEnabled = host.Phase == AppHost.DictationPhase.Idle && host.CanRetry(entry);
+                retry.IsEnabled = host.Phase == DictationPhase.Idle && host.CanRetry(entry);
                 retry.ToolTip = L10n.T("需开启保留录音且未超过 24 小时；Beta 多阶段记录不能用单段录音重试。结果会复制到剪贴板。"); actions.Children.Add(retry);
                 var reason = Messages.FallbackNote(entry.Reason);
                 var meta = entry.Time.ToLocalTime().ToString("t", L10n.Culture) + (entry.App.Length > 0 ? " · " + entry.App : "")
