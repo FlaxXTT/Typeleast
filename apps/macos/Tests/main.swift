@@ -1329,6 +1329,34 @@ do {
     KeychainStore.stub = [:]
 }
 
+// Beta controller keeps the initial destination and route across follow-up rounds.
+do {
+    var shown = 0, hidden = 0, cancelled: [String] = []
+    let controller = BetaController(host: .init(show: { _, _ in shown += 1 },
+        hide: { hidden += 1 }, busy: { _ in }, cancel: { cancelled.append($0.sessionId) }))
+    let info = try JSONDecoder().decode(BetaInfo.self, from: Data(#"{"sessionId":"round1","questions":[]}"#.utf8))
+    controller.accept(info: info, sessionId: "round1", llm: nil, language: "zh", variants: nil,
+                      appBundleId: "example.original", field: nil)
+    controller.show(hotkey: "Fn")
+    controller.accept(info: info, sessionId: "round2", llm: nil, language: "en", variants: "changed",
+                      appBundleId: "example.followup", field: nil)
+    checkEq("Beta retains original destination", controller.pending?.appBundleId, "example.original")
+    checkEq("Beta retains original language", controller.pending?.language, "zh")
+    checkEq("Beta preserves an originally absent variant", controller.pending?.variants, nil)
+    checkEq("Beta advances session id", controller.pending?.sessionId, "round2")
+    controller.cancel(); controller.cancel()
+    checkEq("Beta cancels the current conversation once", cancelled, ["round2"])
+    check("Beta clears before presenting a new conversation", controller.pending == nil)
+    controller.show(hotkey: "Fn")
+    checkEq("Beta cannot show a cancelled conversation", shown, 1)
+    checkEq("Beta hides on cancellation", hidden, 1)
+    controller.accept(info: info, sessionId: "new", llm: nil, language: "en", variants: nil,
+                      appBundleId: "example.new", field: nil)
+    checkEq("Beta new conversation has a new destination", controller.pending?.appBundleId, "example.new")
+    controller.clear()
+    checkEq("Beta completion does not send cancellation", cancelled.count, 1)
+}
+
 server.stop()
 print("")
 print("TESTS: " + String(passed) + " passed, " + String(failed) + " failed")

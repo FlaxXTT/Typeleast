@@ -4,15 +4,6 @@ import SwiftUI
 // BetaPanel.swift - Prompt Beta's questions. A non-activating floating panel, so the text
 // field the user dictated into keeps focus and the answer is pasted back there.
 
-struct BetaPending {
-    let sessionId: String
-    let info: BetaInfo
-    let llm: LLMRoute?
-    let language: String
-    let variants: String?
-    let appBundleId: String
-    let field: FocusedField?
-}
 
 final class BetaPanel {
     private var panel: NSPanel?

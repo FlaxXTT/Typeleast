@@ -13,6 +13,7 @@ CMD=("$SWIFTC" -swift-version 5 -O
   -target "$(uname -m)-apple-macosx13.0"
   -framework Foundation -framework Network -framework AVFoundation -framework AppKit -framework Carbon
   -o "$BIN"
+  "$ROOT/Sources/BetaController.swift"
   "$ROOT/Sources/ServiceClient.swift"
   "$ROOT/Sources/ServiceManager.swift"
   "$ROOT/Sources/DiagnosticsLog.swift"

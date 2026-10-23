@@ -65,7 +65,7 @@ extension AppDelegate {
         }
         phase = .recording
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
-        if pendingTranslate == nil && betaPending != nil { betaPanel.setBusy(L10n.text("正在听你补充，说完再按 {0}", model.hotkeyLabel)) }
+        if pendingTranslate == nil && betaPending != nil { beta.setBusy(L10n.text("正在听你补充，说完再按 {0}", model.hotkeyLabel)) }
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
@@ -110,7 +110,7 @@ extension AppDelegate {
         // a translation is not, and leaves the questions waiting.
         if translateTo == nil, strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
         let betaSession = translateTo == nil && strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
-        if betaSession != nil { betaPanel.setBusy(L10n.text("正在根据你的补充更新…")) }
+        if betaSession != nil { beta.setBusy(L10n.text("正在根据你的补充更新…")) }
         do {
             let r = try recorder.finish()
             playSound(start: false)
@@ -221,12 +221,8 @@ extension AppDelegate {
             serviceUp = true
             model.serviceProblem = ""
             if let sessionId = resp.beta?.sessionId, let info = resp.beta {
-                let previous = betaPending
-                betaPending = BetaPending(sessionId: sessionId, info: info,
-                                          llm: previous?.llm ?? llm, language: previous?.language ?? language,
-                                          variants: previous == nil ? variants : previous?.variants,
-                                          appBundleId: previous?.appBundleId ?? appBundleId,
-                                          field: previous == nil ? field : previous?.field)
+                beta.accept(info: info, sessionId: sessionId, llm: llm, language: language,
+                            variants: variants, appBundleId: appBundleId, field: field)
                 recordingBar.hide()
                 showBetaQuestions()
                 setHint(L10n.text("提示词 Beta：可继续补充或结束生成"))
@@ -238,8 +234,7 @@ extension AppDelegate {
             if let pending = betaPending, strength == VoiceStrength.promptbeta.rawValue, resp.translated == nil {
                 appBundleId = pending.appBundleId
                 field = pending.field
-                betaPending = nil
-                betaPanel.hide()
+                beta.clear()
             }
             let text = resp.insertableText
             // A kept recording is sealed before its path goes into the history.
@@ -400,16 +395,13 @@ extension AppDelegate {
     // MARK: Prompt Beta
 
     func showBetaQuestions() {
-        guard let pending = betaPending else { return }
-        betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
-        betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
-        betaPanel.show(info: pending.info, hotkey: model.hotkeyLabel)
+        beta.show(hotkey: model.hotkeyLabel)
     }
 
     /// Explicitly finish clarification; unanswered points stay unconfirmed.
     func finishBetaWithoutAnswers() {
         guard phase == .idle, let pending = betaPending else { return }
-        betaPanel.hide()
+        beta.hide()
         phase = .thinking
         recordingBar.showThinking(detail: "")
         applyState()
@@ -431,13 +423,8 @@ extension AppDelegate {
 
     /// Close the questions; the service forgets the session too.
     func dropBeta(notify: Bool) {
-        guard let pending = betaPending else { return }
-        betaPending = nil
-        betaPanel.hide()
-        let llm = pending.llm
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            _ = try? self?.client.betaSync(sessionId: pending.sessionId, skip: false, appBundleId: pending.appBundleId, llm: llm)
-        }
+        guard betaPending != nil else { return }
+        beta.cancel()
         if notify {
             setHint(L10n.text("已取消"))
             applyState()

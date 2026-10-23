@@ -45,13 +45,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// The text field captured when the current recording started.
     var pendingField: FocusedField?
     /// Prompt Beta questions waiting for a spoken answer, and where the prompt goes.
-    var betaPending: BetaPending?
+    var betaPending: BetaPending? { beta.pending }
     /// 翻译模式: the target language of the recording in progress (nil: ordinary dictation).
     var pendingTranslate: String?
     /// A test run beside the real app leaves the global hotkeys and Fn to it.
     var skipGlobalHotkeys = false
     private let instanceLock = InstanceLock()
-    let betaPanel = BetaPanel()
+    private let betaPanel = BetaPanel()
+    lazy var beta: BetaController = {
+        betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
+        betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
+        return BetaController(host: .init(
+            show: { [weak self] info, key in self?.betaPanel.show(info: info, hotkey: key) },
+            hide: { [weak self] in self?.betaPanel.hide() },
+            busy: { [weak self] in self?.betaPanel.setBusy($0) },
+            cancel: { [client] pending in
+                DispatchQueue.global(qos: .utility).async {
+                    _ = try? client.betaSync(sessionId: pending.sessionId, skip: false,
+                                            appBundleId: pending.appBundleId, llm: pending.llm)
+                }
+            }))
+    }()
     var tickTimer: Timer?
     /// Last whole second pushed into the menu, so the 20 Hz waveform timer does
     /// not rebuild the menu on every frame.
