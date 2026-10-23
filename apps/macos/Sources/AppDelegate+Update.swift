@@ -24,7 +24,12 @@ extension AppDelegate {
                 switch result {
                 case .success(let latest) where Updater.isNewer(latest, than: Updater.currentVersion):
                     self.menuController.setUpdateAvailable(latest)
-                    if interactive { self.offerUpdate(to: latest) }
+                    // A quiet check offers each new version once; the menu keeps showing it after that.
+                    let offered = UserDefaults.standard.string(forKey: "voice.updateOffered")
+                    if interactive || (offered != latest && self.phase == .idle && self.betaPending == nil) {
+                        UserDefaults.standard.set(latest, forKey: "voice.updateOffered")
+                        self.offerUpdate(to: latest)
+                    }
                 case .success:
                     self.menuController.setUpdateAvailable(nil)
                     if interactive { self.updateAlert(L10n.text("已经是最新版本"), L10n.text("当前版本 ") + Updater.currentVersion + "。") }
@@ -61,11 +66,16 @@ extension AppDelegate {
             return
         }
         setHint(L10n.text("正在下载更新 ") + version + "…")
+        updateProgress.show(version: version)
+        let report: (UpdateStage) -> Void = { [weak self] stage in
+            DispatchQueue.main.async { self?.updateProgress.update(stage) }
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { try Updater.prepare(version: version) }
+            let result = Result { try Updater.prepare(version: version, stage: report) }
             // Hand the Keychain items straight to the new copy, so updating asks for no password.
             // Without a code hash to check it against, nothing is handed over and the new copy asks once.
             if case .success(let ready) = result, let cdhash = ready.cdhash {
+                report(.handingOver)
                 KeychainHandoff.transfer(toExecutable: ready.app.appendingPathComponent("Contents/MacOS/TypeLeast"), cdhash: cdhash)
             }
             DispatchQueue.main.async {
@@ -76,25 +86,31 @@ extension AppDelegate {
                         try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
                                                      newApp: ready.app, installed: Bundle.main.bundleURL, work: ready.work)
                         self.setHint(L10n.text("正在安装更新，TypeLeast 会自动重新打开…"))
+                        self.updateProgress.update(.installing)
                         self.recorder.cancel()
                         NSApp.terminate(nil)
                     } catch {
                         self.setHint(nil)
+                        self.updateProgress.close()
                         self.updateAlert(L10n.text("更新失败"), error.localizedDescription)
                     }
                 case .failure(let error):
                     self.setHint(nil)
+                    self.updateProgress.close()
                     self.updateAlert(L10n.text("更新失败"), error.localizedDescription)
                 }
             }
         }
     }
 
-    /// One quiet look a little after launch, so the menu can show "有新版本".
+    /// A look a little after launch (a new version is offered once, then the menu shows it), and every six hours.
     func scheduleLaunchUpdateCheck() {
         // Test and demo runs (a temporary TYPELEAST_HOME) never reach out to GitHub.
         guard ProcessInfo.processInfo.environment["TYPELEAST_HOME"] == nil else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.checkForUpdates(interactive: false) }
+        // And again every six hours for a Mac that stays on.
+        let timer = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.checkForUpdates(interactive: false) }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func updateAlert(_ title: String, _ text: String) {

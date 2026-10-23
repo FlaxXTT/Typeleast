@@ -41,7 +41,8 @@ internal static class Updater
     }
 
     /// <summary>Download and check the installer; returns its path in a fresh temp folder.</summary>
-    public static async Task<string> DownloadAsync(WindowsReleaseInfo release, CancellationToken ct = default)
+    public static async Task<string> DownloadAsync(WindowsReleaseInfo release, CancellationToken ct = default,
+        Action<UpdateStage, long, long?>? progress = null)
     {
         if (release.SetupUrl is null || release.SumsUrl is null) throw new InvalidOperationException(L10n.T("这个发布没有可校验的 Windows 安装包。"));
         var folder = Path.Combine(Path.GetTempPath(), "TypeLeast-update-" + Guid.NewGuid().ToString("N"));
@@ -51,9 +52,24 @@ internal static class Updater
         var expected = WindowsRelease.Checksum(release.SetupName, sums)
             ?? throw new InvalidOperationException(L10n.T("发布的校验文件里没有这个安装包。"));
         var setup = Path.Combine(folder, release.SetupName);
-        await using (var stream = await client.GetStreamAsync(release.SetupUrl, ct).ConfigureAwait(false))
-        await using (var file = File.Create(setup))
-            await stream.CopyToAsync(file, ct).ConfigureAwait(false);
+        using (var response = await client.GetAsync(release.SetupUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+        {
+            response.EnsureSuccessStatusCode();
+            var total = response.Content.Headers.ContentLength;
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await using var file = File.Create(setup);
+            var buffer = new byte[81920];
+            long received = 0;
+            int read;
+            progress?.Invoke(UpdateStage.Downloading, 0, total);
+            while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+            {
+                await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                received += read;
+                progress?.Invoke(UpdateStage.Downloading, received, total);
+            }
+        }
+        progress?.Invoke(UpdateStage.Verifying, 0, null);
         string actual;
         await using (var file = File.OpenRead(setup))
             actual = Convert.ToHexString(await SHA256.HashDataAsync(file, ct).ConfigureAwait(false)).ToLowerInvariant();

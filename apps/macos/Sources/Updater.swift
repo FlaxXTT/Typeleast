@@ -159,11 +159,53 @@ enum Updater {
         return json["tag_name"] as? String
     }
 
-    /// Download a release file from the public release page into `folder`.
-    static func publicDownload(version: String, name: String, to folder: URL) -> Bool {
-        guard let url = URL(string: "https://github.com/" + repo + "/releases/download/v" + version + "/" + name),
-              let data = fetch(url, timeout: 600) else { return false }
-        return (try? data.write(to: folder.appendingPathComponent(name))) != nil
+    /// Download a release file from the public release page into `folder`, reporting bytes
+    /// received and the total (when the server says it) as it goes.
+    static func publicDownload(version: String, name: String, to folder: URL,
+                               progress: ((Int64, Int64?) -> Void)? = nil) -> Bool {
+        guard let url = URL(string: "https://github.com/" + repo + "/releases/download/v" + version + "/" + name) else { return false }
+        return download(url, to: folder.appendingPathComponent(name), timeout: 600, progress: progress)
+    }
+
+    /// GET a file over HTTPS straight to disk, synchronously, with progress; false on any failure.
+    static func download(_ url: URL, to file: URL, timeout: TimeInterval, progress: ((Int64, Int64?) -> Void)?) -> Bool {
+        guard url.scheme == "https" else { return false }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.setValue("TypeLeast/" + currentVersion, forHTTPHeaderField: "User-Agent")
+        let delegate = DownloadDelegate(destination: file, progress: progress)
+        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        session.downloadTask(with: request).resume()
+        delegate.done.wait()
+        session.finishTasksAndInvalidate()
+        return delegate.saved
+    }
+
+    private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
+        let destination: URL
+        let progress: ((Int64, Int64?) -> Void)?
+        let done = DispatchSemaphore(value: 0)
+        var saved = false
+
+        init(destination: URL, progress: ((Int64, Int64?) -> Void)?) {
+            self.destination = destination
+            self.progress = progress
+        }
+
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                        totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+            progress?(totalBytesWritten, totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil)
+        }
+
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+            guard let http = downloadTask.response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            try? FileManager.default.removeItem(at: destination)
+            saved = (try? FileManager.default.moveItem(at: location, to: destination)) != nil
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            if error != nil { saved = false }
+            done.signal()
+        }
     }
 
     /// The newest published version, e.g. "1.4.0".
@@ -215,14 +257,19 @@ enum Updater {
 
     /// Download, verify and re-sign `version`; returns the ready app inside a fresh work folder,
     /// and its code hash as signed (KeychainHandoff hands the Keychain items only to that code).
-    static func prepare(version: String, current: URL = Bundle.main.bundleURL) throws -> (app: URL, work: URL, cdhash: String?) {
+    static func prepare(version: String, current: URL = Bundle.main.bundleURL,
+                        stage: ((UpdateStage) -> Void)? = nil) throws -> (app: URL, work: URL, cdhash: String?) {
+        stage?(.preparing)
         try ensureSigningIdentity()
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-update-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         do {
             let asset = assetName(version: version, arch: machineArch)
+            stage?(.downloading(received: 0, total: nil))
             let publicCopy = publicDownload(version: version, name: "SHA256SUMS.txt", to: work)
-                && publicDownload(version: version, name: asset, to: work)
+                && publicDownload(version: version, name: asset, to: work) { received, total in
+                    stage?(.downloading(received: received, total: total))
+                }
             if !publicCopy {
                 guard let gh = findGH() else { throw UpdateError.unreachable }
                 let dl = run(gh, ["release", "download", "v" + version, "--repo", repo, "--clobber",
@@ -230,6 +277,7 @@ enum Updater {
                 guard dl.status == 0 else { throw UpdateError.gh(dl.err.trimmingCharacters(in: .whitespacesAndNewlines)) }
             }
 
+            stage?(.verifying)
             let zip = work.appendingPathComponent(asset)
             let sums = (try? String(contentsOf: work.appendingPathComponent("SHA256SUMS.txt"), encoding: .utf8)) ?? ""
             guard let expected = checksum(for: asset, in: sums), try sha256Hex(of: zip) == expected else {
@@ -245,6 +293,7 @@ enum Updater {
             guard info?["CFBundleIdentifier"] as? String == bundleID else { throw UpdateError.badBundle(L10n.text("不是 TypeLeast")) }
             guard info?["CFBundleShortVersionString"] as? String == version else { throw UpdateError.badBundle(L10n.text("版本号不是 ") + version) }
 
+            stage?(.signing)
             // Not --deep: the bundled Node.js keeps the signature nodejs.org gave it (as in build.sh / package.sh).
             // Keep the release's Hardened Runtime flag and entitlements; the requirement is this Mac's own.
             let sign = run("/usr/bin/codesign", ["--force", "--sign", signingIdentity, "--timestamp=none",
@@ -289,5 +338,35 @@ enum Updater {
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", script, "typeleast-update", String(pid), newApp.path, installed.path, work.path]
         try p.run()
+    }
+}
+
+/// Where an in-app update is, for the progress window.
+enum UpdateStage: Equatable {
+    case preparing
+    case downloading(received: Int64, total: Int64?)
+    case verifying
+    case signing
+    case handingOver
+    case installing
+
+    var label: String {
+        switch self {
+        case .preparing: return L10n.text("正在准备…")
+        case .downloading(let received, let total):
+            let mb = { (bytes: Int64) in String(format: "%.1f", Double(bytes) / 1_048_576) }
+            if let total { return L10n.text("正在下载 {0} / {1} MB", mb(received), mb(total)) }
+            return L10n.text("正在下载 {0} MB", mb(received))
+        case .verifying: return L10n.text("正在核对校验值…")
+        case .signing: return L10n.text("正在用本机证书签名…")
+        case .handingOver: return L10n.text("正在交接钥匙串里的 Key…")
+        case .installing: return L10n.text("正在安装，TypeLeast 会自动重新打开…")
+        }
+    }
+
+    /// 0…1 while the size is known; nil shows a moving bar.
+    var fraction: Double? {
+        guard case .downloading(let received, let total?) = self, total > 0 else { return nil }
+        return min(1, max(0, Double(received) / Double(total)))
     }
 }

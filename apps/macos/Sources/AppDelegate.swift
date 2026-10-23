@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let model = AppModel.shared
     let editWatcher = EditWatcher()
     let learnedToast = LearnedToast()
+    let updateProgress = UpdateProgressWindow()
     lazy var hub = HubWindowController(model: model)
     lazy var onboarding = OnboardingWindowController(model: model)
     var previewPanel: PreviewPanel?
@@ -589,6 +590,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     // MARK: AppActions (called from the windows)
+
+    func addWordFromHistory(_ word: String) {
+        if settings.addWord(word, source: .manual) {
+            setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
+            syncDictionary()
+        }
+        applyState()
+    }
 
     func copyEntry(id: String, raw: Bool) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }) else { return }

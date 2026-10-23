@@ -758,6 +758,25 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("the next dictation judges an edit at once", new EditPoll(t0, v => v != "x").Final("y"), "y");
     Eq("…but not an untouched paste", new EditPoll(t0, v => v != "x").Final("x"), null);
 
+    // Suggestions from what the cleanup model corrected.
+    List<string> Words(string raw, string cleaned) => WordSuggestions.Candidates(raw, cleaned).Select(c => c.Word).ToList();
+    Eq("a Chinese-heard term becomes a suggestion", string.Join(",", Words("我在用德普西克写代码嗯", "我在用 DeepSeek 写代码。")), "DeepSeek");
+    Eq("a split latin term too", string.Join(",", Words("打开 deep seek 的官网", "打开 DeepSeek 的官网")), "DeepSeek");
+    Eq("only the case changed: nothing", Words("我喜欢 python", "我喜欢 Python。").Count, 0);
+    Eq("rewording into other Chinese words: nothing", Words("就是那个嗯明天开会", "明天开会。").Count, 0);
+    Eq("a different latin word: nothing", Words("我们用 slack 沟通", "我们用 Teams 沟通").Count, 0);
+    Eq("the heard spelling is kept", WordSuggestions.Candidates("用德普西克", "用DeepSeek").FirstOrDefault().Heard, "德普西克");
+    var seenAt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Utc);
+    var none = new HashSet<string>();
+    var merged = WordSuggestions.Merge([], "DeepSeek", "德普西克", seenAt, none, none);
+    merged = WordSuggestions.Merge(merged, "deepseek", "deep seek", seenAt, none, none);
+    Eq("a repeated suggestion is counted once", string.Join(",", merged.Select(m => m.Count)), "2");
+    Eq("a word already in the dictionary is not suggested", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, new HashSet<string> { "github" }, none).Count, 0);
+    Eq("an ignored word is not suggested again", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, none, new HashSet<string> { "github" }).Count, 0);
+    Eq("download progress is a fraction", UpdateProgressText.Fraction(UpdateStage.Downloading, 25 << 20, 50 << 20), 0.5);
+    Eq("an unknown size shows a moving bar", UpdateProgressText.Fraction(UpdateStage.Downloading, 1, null), null);
+    Check("the download line shows megabytes", UpdateProgressText.Describe(UpdateStage.Downloading, 25 << 20, 50 << 20).Contains("25.0 / 50.0"));
+
     Check("learning is on for new installs", new AppSettings().LearnCorrections);
     var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(old, """{"LearnCorrections":false}""");

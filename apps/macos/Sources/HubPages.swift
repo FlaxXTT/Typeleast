@@ -416,12 +416,21 @@ struct HistoryRow: View {
                 .frame(width: 38, alignment: .leading)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
-                Text(entry.displayText.isEmpty ? L10n.text("（没有识别到内容）") : entry.displayText)
-                    .font(.system(size: 13.5))
-                    .foregroundColor(Theme.ink)
-                    .lineLimit(expanded ? nil : (compact ? 2 : 4))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if entry.displayText.isEmpty || compact {
+                    Text(entry.displayText.isEmpty ? L10n.text("（没有识别到内容）") : entry.displayText)
+                        .font(.system(size: 13.5))
+                        .foregroundColor(Theme.ink)
+                        .lineLimit(expanded ? nil : (compact ? 2 : 4))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    // Select a name or term, right-click, 加入词典.
+                    SelectableText(text: entry.displayText, font: .systemFont(ofSize: 13.5), color: NSColor(Theme.ink),
+                                   maxLines: expanded ? 0 : 4,
+                                   onAddWord: { word in model.actions?.addWordFromHistory(word) },
+                                   onPlainClick: { expanded.toggle() })
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if expanded, !entry.raw.isEmpty, entry.raw != entry.displayText {
                     Text(L10n.text("原话：") + entry.raw)
                         .font(.system(size: 12))
@@ -516,6 +525,15 @@ struct DictionaryPage: View {
                     .padding(.bottom, 8)
             }
 
+            if !model.suggestions.isEmpty, query.isEmpty {
+                SuggestionList(suggestions: model.suggestions, onAdd: { suggestion in
+                    Settings.shared.acceptSuggestion(suggestion)
+                    model.actions?.syncDictionary()
+                }, onDismiss: { Settings.shared.dismissSuggestion($0) })
+                .padding(.horizontal, 36)
+                .padding(.bottom, 12)
+            }
+
             if filtered.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
@@ -567,6 +585,37 @@ struct DictionaryPage: View {
         importNote = L10n.text("已导入 {0} 个词", added)
         model.actions?.syncDictionary()
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { importNote = "" }
+    }
+}
+
+/// Terms the cleanup model corrected: added only when the user says so.
+private struct SuggestionList: View {
+    let suggestions: [WordSuggestion]
+    let onAdd: (WordSuggestion) -> Void
+    let onDismiss: (WordSuggestion) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.text("建议加入")).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
+            VStack(spacing: 0) {
+                ForEach(suggestions.prefix(8)) { s in
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(s.word).font(.system(size: 14, weight: .semibold))
+                            Text(L10n.text("整理时从「{0}」改成，出现 {1} 次", s.heardAs, s.count))
+                                .font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                        }
+                        Spacer()
+                        Button(L10n.text("忽略")) { onDismiss(s) }.buttonStyle(SecondaryButtonStyle())
+                        Button(L10n.text("加入")) { onAdd(s) }.buttonStyle(PrimaryButtonStyle())
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    if s.id != suggestions.prefix(8).last?.id { Divider().padding(.leading, 16) }
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+        }
     }
 }
 

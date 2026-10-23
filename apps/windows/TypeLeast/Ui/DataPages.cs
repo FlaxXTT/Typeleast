@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using TypeLeast.Core;
 
 namespace TypeLeast.Ui;
@@ -57,11 +58,29 @@ internal sealed class HistoryPage : IPage
                 var meta = entry.Time.ToLocalTime().ToString("t", L10n.Culture) + (entry.App.Length > 0 ? " · " + entry.App : "")
                     + (reason is not null ? " · " + reason + " (" + DiagnosticEvent.SafeReason(entry.Reason) + ")" : "");
                 list.Children.Add(Theme.Card(Theme.Stack(10, Theme.Text(meta, 12, entry.Fallback ? Theme.Warning : Theme.Grey),
-                    new TextBox { Text = entry.Text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Background = Theme.CardFill,
-                        Foreground = Theme.Ink, BorderThickness = new Thickness(0), FontFamily = Theme.Font, FontSize = 14, MaxHeight = 240,
-                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, actions)));
+                    SelectableEntry(entry.Text), actions)));
             }
         }
+    }
+
+    /// <summary>The entry's text, selectable; right-click a selected name or term to add it to the dictionary.</summary>
+    private TextBox SelectableEntry(string text)
+    {
+        var box = new TextBox { Text = text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Background = Theme.CardFill,
+            Foreground = Theme.Ink, BorderThickness = new Thickness(0), FontFamily = Theme.Font, FontSize = 14, MaxHeight = 240,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var add = new MenuItem();
+        var copy = new MenuItem { Header = L10n.T("复制"), Command = ApplicationCommands.Copy };
+        add.Click += (_, _) => host.AddWordFromHistory(box.SelectedText);
+        box.ContextMenu = new ContextMenu { Items = { add, new Separator(), copy } };
+        box.ContextMenuOpening += (_, _) =>
+        {
+            var word = box.SelectedText.Trim();
+            var usable = word.Length is > 0 and <= 40 && !word.Contains('\n');
+            add.Header = usable ? L10n.T("加入词典「{0}」", word) : L10n.T("选中一个词后可加入词典");
+            add.IsEnabled = usable;
+        };
+        return box;
     }
 }
 
@@ -88,12 +107,23 @@ internal sealed class DictionaryPage : IPage
     public void Refresh()
     {
         status.Text = host.DictionarySynced == false ? L10n.T("词典尚未同步；本地服务就绪后自动重试。") : "";
-        var key = string.Join("\n", host.Settings.DictionaryEntries.Select(e => e.Id + e.ServiceValue + e.Source));
+        var key = string.Join("\n", host.Settings.DictionaryEntries.Select(e => e.Id + e.ServiceValue + e.Source))
+            + "|" + string.Join("\n", host.Settings.WordSuggestions.Select(w => w.Word + w.Count));
         if (key != shown) { shown = key; Render(); }
     }
     private void Render()
     {
         list.Children.Clear();
+        if (search.Text.Length == 0 && host.Settings.WordSuggestions.Count > 0)
+        {
+            list.Children.Add(Theme.SectionTitle(L10n.T("建议加入")));
+            foreach (var suggestion in host.Settings.WordSuggestions.Take(8).ToList())
+                list.Children.Add(Theme.Card(Theme.Stack(8, Theme.Text(suggestion.Word, 16, bold: true),
+                    Theme.Text(L10n.T("整理时从「{0}」改成，出现 {1} 次", suggestion.HeardAs, suggestion.Count), 12, Theme.Grey),
+                    Theme.Row(8, Theme.Primary(L10n.T("加入"), () => host.AcceptSuggestion(suggestion)),
+                        Theme.Secondary(L10n.T("忽略"), () => host.DismissSuggestion(suggestion))))));
+            list.Children.Add(Theme.SectionTitle(L10n.T("词典")));
+        }
         foreach (var entry in host.Settings.DictionaryEntries.Where(e => (filter.SelectedIndex != 1 || e.Source == "auto")
             && (filter.SelectedIndex != 2 || e.Source != "auto") && (e.Word.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase) || e.HeardAs.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase))))
         {

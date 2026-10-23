@@ -646,6 +646,27 @@ do {
     checkEq("leaving the app judges an edit at once", EditPoll(start: t0, edited: edited).final("前文我在用DeepSeek写代码"), "前文我在用DeepSeek写代码")
     checkEq("…but not an untouched paste", EditPoll(start: t0, edited: edited).final("前文" + pasted), nil)
 
+    // Suggestions from what the cleanup model corrected.
+    func words(_ raw: String, _ cleaned: String) -> [String] { WordSuggestions.candidates(raw: raw, cleaned: cleaned).map(\.word) }
+    checkEq("a Chinese-heard term becomes a suggestion", words("我在用德普西克写代码嗯", "我在用 DeepSeek 写代码。"), ["DeepSeek"])
+    checkEq("a split latin term too", words("打开 deep seek 的官网", "打开 DeepSeek 的官网"), ["DeepSeek"])
+    checkEq("only the case changed: nothing", words("我喜欢 python", "我喜欢 Python。"), [])
+    checkEq("rewording into other Chinese words: nothing", words("就是那个嗯明天开会", "明天开会。"), [])
+    checkEq("a latin word that does not sound alike: nothing", words("我们用 slack 沟通", "我们用 Teams 沟通"), [])
+    checkEq("the heard spelling is kept", WordSuggestions.candidates(raw: "用德普西克", cleaned: "用DeepSeek").first?.heard, "德普西克")
+    let now = Date(timeIntervalSince1970: 2_000_000)
+    var list = WordSuggestions.merge([], word: "DeepSeek", heardAs: "德普西克", at: now, known: [], dismissed: [])
+    list = WordSuggestions.merge(list, word: "deepseek", heardAs: "deep seek", at: now, known: [], dismissed: [])
+    checkEq("a repeated suggestion is counted once", list.map(\.count), [2])
+    checkEq("a word already in the dictionary is not suggested", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: ["github"], dismissed: []), [])
+    checkEq("an ignored word is not suggested again", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: [], dismissed: ["github"]), [])
+
+    // Update progress text.
+    checkEq("download progress is a fraction", UpdateStage.downloading(received: 25 << 20, total: 50 << 20).fraction, 0.5)
+    checkEq("an unknown size shows a moving bar", UpdateStage.downloading(received: 1, total: nil).fraction, nil)
+    checkEq("later stages show a moving bar", UpdateStage.signing.fraction, nil)
+    check("the download line shows megabytes", UpdateStage.downloading(received: 25 << 20, total: 50 << 20).label.contains("25.0 / 50.0"))
+
     let pair = EditLearner.correction(inserted: "我在用得普西克写代码", edited: "我在用DeepSeek写代码")
     checkEq("correction finds the replaced span (from)", pair?.from, "得普西克")
     checkEq("correction finds the replaced span (to)", pair?.to, "DeepSeek")

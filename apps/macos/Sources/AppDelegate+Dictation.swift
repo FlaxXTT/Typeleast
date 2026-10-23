@@ -258,6 +258,12 @@ extension AppDelegate {
             entry.model = resp.model ?? resp.provider
             entry.translated = resp.translated
             HistoryStore.shared.add(entry)
+            // Terms the cleanup model corrected become suggestions on the Dictionary page.
+            if settings.autoLearn, !resp.fallback, resp.translated == nil {
+                for pair in WordSuggestions.candidates(raw: resp.raw, cleaned: text) {
+                    settings.suggest(word: pair.word, heardAs: pair.heard)
+                }
+            }
             if text.isEmpty {
                 recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
                 setHint(L10n.text("没有识别到内容"), warning: true)

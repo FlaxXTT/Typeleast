@@ -99,3 +99,23 @@ public static class WindowsRelease
         return s.Length <= 200 ? s : "";
     }
 }
+
+/// <summary>Where an in-app update is, for the progress window.</summary>
+public enum UpdateStage { Downloading, Verifying, Installing }
+
+public static class UpdateProgressText
+{
+    public static string Describe(UpdateStage stage, long received = 0, long? total = null) => stage switch
+    {
+        UpdateStage.Downloading when total is > 0 => L10n.T("正在下载 {0} / {1} MB", Mb(received), Mb(total.Value)),
+        UpdateStage.Downloading => L10n.T("正在下载 {0} MB", Mb(received)),
+        UpdateStage.Verifying => L10n.T("正在核对校验值…"),
+        _ => L10n.T("正在安装，TypeLeast 会自动重新打开…"),
+    };
+
+    /// <summary>0…1 while the size is known; null shows a moving bar.</summary>
+    public static double? Fraction(UpdateStage stage, long received, long? total) =>
+        stage == UpdateStage.Downloading && total is > 0 ? Math.Clamp((double)received / total.Value, 0, 1) : null;
+
+    private static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -431,6 +431,43 @@ final class Settings {
         words = words.filter { $0.id != id }
     }
 
+    // MARK: dictionary suggestions (from what the cleanup model corrected)
+
+    var wordSuggestions: [WordSuggestion] {
+        get {
+            guard let data = d.data(forKey: "voice.wordSuggestions") else { return [] }
+            return (try? JSONDecoder().decode([WordSuggestion].self, from: data)) ?? []
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) { d.set(data, forKey: "voice.wordSuggestions") }
+            NotificationCenter.default.post(name: Settings.wordsDidChange, object: nil)
+        }
+    }
+
+    private var dismissedSuggestions: [String] {
+        get { d.stringArray(forKey: "voice.dismissedSuggestions") ?? [] }
+        set { d.set(Array(newValue.suffix(200)), forKey: "voice.dismissedSuggestions") }
+    }
+
+    func suggest(word: String, heardAs: String) {
+        let known = Set(words.map { $0.word.lowercased() })
+        let next = WordSuggestions.merge(wordSuggestions, word: word, heardAs: heardAs, at: Date(),
+                                         known: known, dismissed: Set(dismissedSuggestions))
+        if next != wordSuggestions { wordSuggestions = next }
+    }
+
+    /// Add a suggestion to the dictionary, with the spelling it was heard as.
+    func acceptSuggestion(_ suggestion: WordSuggestion) {
+        addWord(suggestion.word, heardAs: suggestion.heardAs, source: .auto)
+        wordSuggestions = wordSuggestions.filter { $0.id != suggestion.id }
+    }
+
+    /// Never suggest this word again.
+    func dismissSuggestion(_ suggestion: WordSuggestion) {
+        dismissedSuggestions.append(suggestion.id)
+        wordSuggestions = wordSuggestions.filter { $0.id != suggestion.id }
+    }
+
     /// Import a CSV: one entry per line, "word" or "heard,word".
     func importCSV(_ text: String) -> Int {
         var added = 0

@@ -208,20 +208,32 @@ internal sealed class AppHost
         if (!Updater.IsInstalledCopy) { Shell.Open(release.PageUrl.Length > 0 ? release.PageUrl : "https://github.com/FlaxXTT/Typeleast/releases"); return L10n.T("便携版请在发布页下载新版本。"); }
         Updating = true;
         Raise();
+        var progress = new UpdateProgressWindow();
+        progress.Start(release.Version);
+        var lastReport = DateTime.MinValue;
         try
         {
-            var setup = await Updater.DownloadAsync(release);
+            var setup = await Updater.DownloadAsync(release, progress: (stage, received, total) =>
+            {
+                // From the download thread; a few updates a second are plenty.
+                var now = DateTime.UtcNow;
+                if (stage == UpdateStage.Downloading && received > 0 && received != total && now - lastReport < TimeSpan.FromMilliseconds(100)) return;
+                lastReport = now;
+                app.Dispatcher.InvokeAsync(() => progress.Report(stage, received, total));
+            });
             // The download takes a while: never quit in the middle of a dictation, or a Prompt Beta
             // clarification, started meanwhile.
             while (Phase != DictationPhase.Idle || betaSession is not null) await Task.Delay(1000);
-            if (quitting) return null;
+            if (quitting) { progress.Close(); return null; }
             Log.Write("update.install", release.Version);
+            progress.Report(UpdateStage.Installing, 0, null);
             Updater.RunInstaller(setup);
             Quit();
             return null;
         }
         catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or InvalidOperationException or System.IO.IOException)
         {
+            progress.Close();
             Log.Write("update.fail", e.GetType().Name);
             return e is InvalidOperationException ? e.Message : L10n.T("下载更新失败，请稍后再试。");
         }
@@ -463,6 +475,44 @@ internal sealed class AppHost
             SetHint(L10n.T("已从词典移除「{0}」", word));
         });
     }
+    private void Suggest(string raw, string cleaned)
+    {
+        var known = Settings.DictionaryEntries.Select(e => e.Word.ToLowerInvariant()).ToHashSet();
+        var dismissed = Settings.DismissedSuggestions.ToHashSet();
+        var list = Settings.WordSuggestions;
+        foreach (var (heard, word) in WordSuggestions.Candidates(raw, cleaned))
+            list = WordSuggestions.Merge(list, word, heard, DateTime.UtcNow, known, dismissed);
+        if (list.Count == Settings.WordSuggestions.Count && list.Zip(Settings.WordSuggestions).All(p => ReferenceEquals(p.First, p.Second) && p.First.Count == p.Second.Count)) return;
+        Settings.WordSuggestions = list;
+        SaveSettings();
+    }
+
+    /// <summary>Add a suggestion to the dictionary, with the spelling it was heard as.</summary>
+    public void AcceptSuggestion(WordSuggestion suggestion)
+    {
+        Settings.WordSuggestions = Settings.WordSuggestions.Where(s => s != suggestion).ToList();
+        if (WordEntry.Parse(suggestion.Word, suggestion.HeardAs, "auto") is { } entry
+            && !Settings.DictionaryEntries.Any(e => e.Word.Equals(entry.Word, StringComparison.OrdinalIgnoreCase))) SaveWord(entry);
+        else SaveSettings();
+    }
+
+    /// <summary>Never suggest this word again.</summary>
+    public void DismissSuggestion(WordSuggestion suggestion)
+    {
+        Settings.WordSuggestions = Settings.WordSuggestions.Where(s => s != suggestion).ToList();
+        Settings.DismissedSuggestions = Settings.DismissedSuggestions.Append(suggestion.Word.ToLowerInvariant()).TakeLast(200).ToList();
+        SaveSettings();
+    }
+
+    /// <summary>A word the user selected in History: added to the dictionary by hand.</summary>
+    public void AddWordFromHistory(string word)
+    {
+        word = word.Trim();
+        if (word.Length is 0 or > 40 || word.Contains('\n')) return;
+        if (Settings.DictionaryEntries.Any(e => e.Word.Equals(word, StringComparison.OrdinalIgnoreCase))) { SetHint(L10n.T("「{0}」已在词典里", word)); return; }
+        if (WordEntry.Parse(word) is { } entry && SaveWord(entry)) SetHint(L10n.T("已把「{0}」加入词典", word));
+    }
+
     public void RemoveWord(string entry)
     {
         var previous = Settings.DictionaryEntries.ToList();
@@ -750,6 +800,8 @@ internal sealed class AppHost
                     catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { SetHint(L10n.T("录音未能安全保留，文字结果仍可使用。")); }
                 }
                 History.Add(entry); PruneAudio();
+                // Terms the cleanup model corrected become suggestions on the Dictionary page.
+                if (Settings.LearnCorrections && !result.Fallback && options.TranslateTo is null) Suggest(result.Raw, text);
                 if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && Settings.LearnCorrections && targetField is { } field)
                     learner.Start(field, text, LearnWord);
                 if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
