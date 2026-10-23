@@ -19,7 +19,7 @@ import { promptifySystemPrompt, BRIEF_PROMPT } from "./prompts/promptify.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-23.1-cleanup+promptify+beta+translate";
+export const PROMPT_VERSION = "2026-10-24.1-cleanup+promptify+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];

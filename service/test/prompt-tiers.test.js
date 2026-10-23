@@ -20,6 +20,7 @@ test('plain and legacy standard tiers are distinct and use the existing strength
   assert.match(BRIEF_PROMPT, /否定、例外、数字/);
   assert.match(BRIEF_PROMPT, /用户明确要求表格/);
   assert.match(BRIEF_PROMPT, /不输出角色、背景、任务/);
+  assert.match(BRIEF_PROMPT, /保留请求的语气、对象和用途/);
 });
 
 test('all one-shot modes and translation receive scoped correction and term-restoration rules', () => {
@@ -38,6 +39,8 @@ const samples = [
   ['我不需要表格，不对，我需要表格，但不要图表', '需要表格，不要图表。'],
   ['这个结果不对，需要修复，不要改其他功能', '这个结果不对，需要修复，不要改其他功能。'],
   ['这个函数会调用它自己处理更小的问题，我忘了术语怎么说', '这个函数使用递归处理更小的问题。'],
+  ['帮我给初学者写一段说明，讲那个函数调用它自己处理更小问题的办法，我忘了专业词，不要给代码', '请为初学者写一段递归（函数调用自身）的说明，不要给代码。'],
+  ['先说做移动端页面。上一句不要了，改成只做桌面端设置页，不新增功能', '只做桌面端设置页，不新增功能。'],
   ['那个负责管理容器的工具我忘了名字，部署时需要用它，不确定是哪款', '部署需要容器管理工具，具体名称待确认。'],
 ];
 for (const strength of ['prompt', 'promptbrief', 'promptify']) {
