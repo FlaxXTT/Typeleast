@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
 using TypeLeast.Core;
@@ -52,7 +53,7 @@ internal sealed class BetaPanel : Window
         content.Children.Add(new ScrollViewer { Content = list, MaxHeight = 300, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         content.Children.Add(hint);
         content.Children.Add(buttons);
-        Content = new Border
+        var card = new Border
         {
             Background = Theme.CardFill,
             BorderBrush = Theme.Line,
@@ -61,6 +62,21 @@ internal sealed class BetaPanel : Window
             Padding = new Thickness(18),
             Child = content,
         };
+        // Drag it anywhere but the buttons, out of the way of what it covers. The window never
+        // activates, so the app being dictated into keeps focus and the conversation goes on.
+        card.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.OriginalSource is DependencyObject source && FindButton(source)) return;
+            try { DragMove(); } catch (InvalidOperationException) { }
+        };
+        Content = card;
+    }
+
+    private static bool FindButton(DependencyObject? node)
+    {
+        for (; node is not null; node = node is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node))
+            if (node is ButtonBase) return true;
+        return false;
     }
 
     public void ShowQuestions(BetaInfo info, string hotkey)
@@ -87,7 +103,8 @@ internal sealed class BetaPanel : Window
         SetBusy(null);
         var area = SystemParameters.WorkArea;
         MaxHeight = Math.Max(240, area.Height - 48);
-        Left = area.Right - Width - 24; Top = area.Top + 24;
+        // Placed only when it appears: a new round keeps the place the user dragged it to.
+        if (!IsVisible) { Left = area.Right - Width - 24; Top = area.Top + 24; }
         Show();
     }
 
