@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using TypeLeast.Core;
 using TypeLeast.Ui;
 
@@ -11,9 +12,10 @@ namespace TypeLeast;
 /// (WordSuggestions), a word picked in History, and the "已加入词典 · 撤销" toast. The words live in
 /// the settings and go with every dictation.
 /// </summary>
-internal sealed class DictionaryController(AppSettings settings, Func<bool> save, Action<string> setHint, Func<bool> quitting)
+internal sealed class DictionaryController(AppSettings settings, Func<bool> save, Action<string> setHint, Func<bool> quitting,
+    Func<string, string, Task<string?>> learnedWord)
 {
-    private readonly EditLearner learner = new();
+    private readonly EditLearner learner = new(learnedWord);
     private LearnedToast? toast;
 
     /// <summary>Sent with every dictation: "word" or "heard=word".</summary>

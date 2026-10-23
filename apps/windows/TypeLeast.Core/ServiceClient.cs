@@ -378,6 +378,18 @@ public sealed class ServiceClient
             return Decode<LlmTestResult>(body);
         });
 
+    /// <summary>The word a fix right after a paste teaches, judged by the service (the same rule as on
+    /// macOS); null when it was not a spelling fix. The text is only compared there.</summary>
+    public Task<string?> LearnedWordAsync(string inserted, string edited, CancellationToken ct = default) =>
+        WithPortRetry(async () =>
+        {
+            var json = JsonSerializer.Serialize(new { inserted, edited });
+            var (status, body) = await SendAsync(HttpMethod.Post, "/learned-word", new StringContent(json, Encoding.UTF8, "application/json"),
+                null, ShortTimeout, ct).ConfigureAwait(false);
+            if (status != HttpStatusCode.OK) throw HttpError(status, body);
+            return Decode<LearnedWordResult>(body).Word;
+        });
+
     /// <summary>The provider's model ids, from its OpenAI-compatible GET /models (called directly).</summary>
     public static async Task<List<string>> ListModelsAsync(LlmRoute route, CancellationToken ct = default)
     {

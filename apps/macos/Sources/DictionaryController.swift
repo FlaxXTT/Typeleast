@@ -44,8 +44,14 @@ final class DictionaryController {
         }
     }
 
-    /// A word the user selected in History: added by hand.
+    /// A word the user selected in History: added by hand. One already in the dictionary is
+    /// left as it is, with what it is often heard as.
     func addFromHistory(_ word: String) {
+        let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        if settings.words.contains(where: { $0.word.caseInsensitiveCompare(word) == .orderedSame }) {
+            setHint(L10n.text("「{0}」已在词典里", word))
+            return
+        }
         if settings.addWord(word, source: .manual) { setHint(L10n.text("已把「") + word + L10n.text("」加入词典")) }
         changed()
     }

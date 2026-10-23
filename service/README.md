@@ -65,6 +65,7 @@ npm start
 | POST | `/dictate` | 请求体是词典 JSON（字节数见 `x-voice-dictionary-bytes`，可为 0）加 16 kHz 单声道 16 位 WAV（44 字节头）；请求头 `x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-voice-context`、`x-voice-llm`（base64 JSON：`{baseURL, model, apiKey}`） |
 | POST | `/polish` | JSON `{text, strength?, llm?, dictionary?}`，只整理文字 |
 | POST | `/test-llm` | JSON `{llm}`，测试一次模型连接 |
+| POST | `/learned-word` | JSON `{inserted, edited}`：粘贴的文字和用户改后的样子，返回 `{word}`（要加进词典的词，或 `null`）；只比较，不保存 |
 | POST | `/models/download` | 开始下载语音模型，进度见 `/health` |
 
 ## 测试

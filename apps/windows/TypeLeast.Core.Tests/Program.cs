@@ -204,6 +204,14 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
     Eq("ordinary dictation sends no target", stub.LastHeaders.GetValueOrDefault("x-voice-translate"), null);
 
+    stub.Reply = (200, "{\"word\":\"公司\"}");
+    Eq("the service names the learned word", await client.LearnedWordAsync("这家公式很好", "这家公司很好"), "公司");
+    Eq("learned-word path", stub.LastPath, "/api/voice-polish/learned-word");
+    var edit = JsonSerializer.Deserialize<JsonElement>(stub.LastBody);
+    Check("the pasted and edited text are sent", edit.GetProperty("inserted").GetString() == "这家公式很好" && edit.GetProperty("edited").GetString() == "这家公司很好");
+    stub.Reply = (200, "{\"word\":null}");
+    Eq("no word when it was not a spelling fix", await client.LearnedWordAsync("明天开会", "后天开会"), null);
+
     // The service proves it is ours before anything is sent to it.
     Eq("HMAC proof matches the service's (RFC 4231 case 2 key)",
         ServiceClient.Proof("4a656665", "what do ya want for nothing?"), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
@@ -550,10 +558,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         try { audio.Save("../escape", wav); Check("audio rejects path traversal", false); } catch (InvalidDataException) { Check("audio rejects path traversal", true); }
         Check("format lists produces HTML", FormattedText.HtmlClipboard("1. 第一项\n2. <safe>")?.Contains("&lt;safe&gt;") == true);
         Check("ordinary text stays plain", FormattedText.HtmlClipboard("ordinary paragraph") is null);
-        Check("edit correction extracts bounded term", EditCorrection.Find("Hello DeepSeak.","Hello DeepSeek.") is not null);
-        Check("edit learning rejects credential-like tokens", EditCorrection.Find("key abc123", "key xyz789") is null);
-        Check("edit learning rejects long private content", EditCorrection.Find(new string('a',2001),"b") is null);
-        Check("edit learning keeps a Chinese correction to the changed words", EditCorrection.Find("请把数据图发给张伟", "请把数据图发给章伟") is null && EditCorrection.Find("结果分析的数据图不要给我矢量图", "结果分析的数据图给我矢量图") is null && EditCorrection.Find("打开迪普西克设置", "打开深度求索设置") == ("迪普西克", "深度求索"));
     }
     finally { Directory.Delete(dir, true); }
 }
@@ -741,12 +745,8 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
 }
 
 {
-    // Learning keeps only the corrected word, and only a latin fix that looks like the same word.
-    Eq("a typo fix is learned", EditCorrection.LearnedWord("Hello DeepSeak.", "Hello DeepSeek."), "DeepSeek");
-    Eq("a different English word is not", EditCorrection.LearnedWord("meet on Monday please", "meet on Friday please"), null);
-    Eq("a Chinese correction keeps the corrected word", EditCorrection.LearnedWord("打开迪普西克设置", "打开深度求索设置"), "深度求索");
-    Check("a heard-as-latin fix keeps the latin word", EditCorrection.LearnedWord("我在用德普西克写代码", "我在用DeepSeek写代码") is null or "DeepSeek");
-
+    // Which word an edit teaches is decided by the service (service/test/edit-correction.test.js);
+    // the client test below checks the request.
     var t0 = new DateTime(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
     var poll = new EditPoll(t0, v => v != "hello deepseak");
     Eq("the pasted text alone is not an edit", poll.Feed("hello deepseak", t0.AddSeconds(30)), EditPoll.Step.Wait);

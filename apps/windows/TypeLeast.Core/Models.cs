@@ -167,6 +167,12 @@ public sealed class LlmTestResult
     [JsonPropertyName("sample")] public string? Sample { get; set; }
 }
 
+/// <summary>Answer of POST /learned-word: the word a fix right after a paste teaches, or null.</summary>
+public sealed class LearnedWordResult
+{
+    [JsonPropertyName("word")] public string? Word { get; set; }
+}
+
 /// <summary>Prompt mode (提示词模式): the fixed default, the user's additions and replacement.</summary>
 public sealed class PromptifySettings
 {

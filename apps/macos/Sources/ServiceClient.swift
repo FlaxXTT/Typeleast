@@ -735,6 +735,22 @@ final class ServiceClient {
         }
     }
 
+    /// The word a fix right after a paste teaches, judged by the service (the same rule as
+    /// on Windows); nil when it was not a spelling fix. The text is only compared there.
+    func learnedWordSync(inserted: String, edited: String) throws -> String? {
+        try withPortRetry {
+            try withTokenRetry { token in
+                let body = (try? JSONSerialization.data(withJSONObject: ["inserted": inserted, "edited": edited])) ?? Data()
+                let req = try makeRequest(path: "/api/voice-polish/learned-word", method: "POST", token: token,
+                                          headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)
+                let (data, resp) = try performSync(req, timeout: healthTimeout)
+                guard resp.statusCode == 200 else { throw httpError(resp, data) }
+                do { return try JSONDecoder().decode(LearnedWordResult.self, from: data).word }
+                catch { throw ServiceError.decoding(String(describing: error)) }
+            }
+        }
+    }
+
     /// The provider's model ids, from its OpenAI-compatible `GET /models`. Called
     /// directly (not through the local service), because it needs nothing but the key.
     func listModelsSync(route: LLMRoute) throws -> [String] {
@@ -782,6 +798,11 @@ struct LLMTestResult: Codable, Equatable {
     var code: String?
     var error: String?
     var sample: String?
+}
+
+/// Answer of `POST /learned-word`.
+struct LearnedWordResult: Codable, Equatable {
+    var word: String?
 }
 
 /// Pure config-file preparation. Malformed existing files must never be overwritten.

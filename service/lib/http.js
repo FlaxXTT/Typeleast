@@ -14,6 +14,7 @@ import { authorize } from "./token.js";
 import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
+import { learnedWord } from "./edit-correction.js";
 
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
@@ -245,6 +246,14 @@ export function createHandler(options) {
           ms: result.ms,
           ...(result.translated ? { translated: result.translated } : {}),
         });
+        return;
+      }
+
+      if (route === "/learned-word" && req.method === "POST") {
+        // A fix the user made right after a paste: the word to add to the dictionary, or null.
+        // The field text is only compared here, never stored or logged.
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
+        reply(res, 200, { word: await learnedWord(body?.inserted, body?.edited) });
         return;
       }
 

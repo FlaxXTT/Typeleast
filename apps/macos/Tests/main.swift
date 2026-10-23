@@ -94,6 +94,10 @@ let server = try StubServer { req in
         }
         return .json(healthJSON)
     }
+    if req.path == "/api/voice-polish/learned-word" {
+        let edit = (try? JSONSerialization.jsonObject(with: req.body) as? [String: String]) ?? [:]
+        return .json(edit["edited"] == "这家公司很好" ? #"{"word":"公司"}"# : #"{"word":null}"#)
+    }
     if req.path == "/api/voice-polish/models" { return .json(modelCatalogJSON) }
     if req.path.hasPrefix("/api/voice-polish/models/") { return .json("{\"ok\":true,\"phase\":\"accepted\"}", status: 202) }
     if req.path.hasPrefix("/api/voice-polish/dictate") {
@@ -645,22 +649,12 @@ do {
     checkEq("GitHub only means one source", UpdateSources.list(for: official, mode: "github").count, 1)
     checkEq("other addresses are never sent to a mirror", UpdateSources.list(for: URL(string: "https://example.com/x.zip")!, mode: "mirror").count, 1)
 
-    let pair = EditLearner.correction(inserted: "我在用得普西克写代码", edited: "我在用DeepSeek写代码")
-    checkEq("correction finds the replaced span (from)", pair?.from, "得普西克")
-    checkEq("correction finds the replaced span (to)", pair?.to, "DeepSeek")
-    checkEq("latin fix grows to the whole word", EditLearner.correction(inserted: "use kubernetis now", edited: "use kubernetes now")?.to, "kubernetes")
-    checkEq("a one-character CJK fix learns the word", EditLearner.correction(inserted: "这家公式很好", edited: "这家公司很好")?.to, "公司")
-    checkEq("pure insertion is not a correction", EditLearner.correction(inserted: "开会", edited: "开个会")?.to, nil)
-    checkEq("identical text is not a correction", EditLearner.correction(inserted: "好", edited: "好")?.to, nil)
-
-    checkEq("sound-alike fix is learned", EditLearner.learnedWord(inserted: "我在用得普西克写代码", edited: "我在用DeepSeek写代码"), "DeepSeek")
-    checkEq("homophone fix is learned", EditLearner.learnedWord(inserted: "这家公式很好", edited: "这家公司很好"), "公司")
-    checkEq("content edit is not learned", EditLearner.learnedWord(inserted: "明天开会", edited: "后天开会"), nil)
-    checkEq("typo fix is learned", EditLearner.learnedWord(inserted: "use kubernetis now", edited: "use kubernetes now"), "kubernetes")
-    checkEq("a different English word is not learned", EditLearner.learnedWord(inserted: "meet on Monday please", edited: "meet on Friday please"), nil)
-    checkEq("rewriting a whole sentence is not learned",
-            EditLearner.learnedWord(inserted: "我们下周把报告发出去", edited: "请在周五之前提交季度预算"), nil)
-    check("acronym initials count as sound-alike", EditLearner.similarity(heard: "第四批", corrected: "DSH") >= EditLearner.minSimilarity)
+    // Which word an edit teaches is decided by the service (service/test/edit-correction.test.js).
+    checkEq("the service names the learned word", try? client.learnedWordSync(inserted: "这家公式很好", edited: "这家公司很好"), "公司")
+    checkEq("learned-word path", state.lastRequest?.path, "/api/voice-polish/learned-word")
+    let sentEdit = state.lastRequest.flatMap { try? JSONSerialization.jsonObject(with: $0.body) as? [String: String] }
+    checkEq("the pasted and edited text are sent", sentEdit, ["inserted": "这家公式很好", "edited": "这家公司很好"])
+    checkEq("no word when it was not a spelling fix", try? client.learnedWordSync(inserted: "明天开会", edited: "后天开会"), String?.none)
 
     checkEq("edited region between the anchors", EditLearner.editedRegion(before: "Hi Emma, ", after: " Thanks", now: "Hi Emma, see you Friday. Thanks"), "see you Friday.")
     checkEq("edited region without anchors is the whole field", EditLearner.editedRegion(before: "", after: "", now: "全文"), "全文")
@@ -1379,6 +1373,22 @@ do {
     checkEq("plain tier persists", Settings().strength, "promptbrief")
     settings.strength = "promptify"
     checkEq("standard tier stays compatible", Settings().strength, "promptify")
+}
+
+// MARK: dictionary: a word picked in History never replaces its entry
+do {
+    let saved = UserDefaults.standard.data(forKey: "voice.words.v2")
+    defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.words.v2") } else { UserDefaults.standard.removeObject(forKey: "voice.words.v2") } }
+    let settings = Settings()
+    settings.words = [LocalWord(id: "w1", word: "DeepSeek", heardAs: "德普西克", source: .manual, addedAt: Date())]
+    var hints: [String] = []
+    let dictionary = DictionaryController(settings: settings, setHint: { hints.append($0) }, changed: {})
+    dictionary.addFromHistory("deepseek")
+    checkEq("a word already there keeps what it is heard as", settings.words.first?.heardAs, "德普西克")
+    checkEq("…and is not added twice", settings.words.count, 1)
+    checkEq("…and the hint says so", hints.last, L10n.text("「{0}」已在词典里", "deepseek"))
+    dictionary.addFromHistory(" 飞书 ")
+    checkEq("a new word from History is added", settings.words.map(\.word), ["飞书", "DeepSeek"])
 }
 
 server.stop()

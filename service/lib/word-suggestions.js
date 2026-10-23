@@ -1,7 +1,7 @@
 /** Local, bounded suggestions from ASR corrections. No I/O except a lazy local library import. */
 import { redactSecrets } from './context.js';
 let phonetics;
-const CJK = /[\u3400-\u9fff\uf900-\ufaff]/u;
+export const CJK = /[\u3400-\u9fff\uf900-\ufaff]/u;
 const LIMIT = 8;
 
 function tokens(text) {
@@ -26,7 +26,7 @@ function join(parts) {
   }
   return result;
 }
-function ratio(a, b) {
+export function ratio(a, b) {
   if (!a.length && !b.length) return 0;
   let previous = Array.from({length: b.length + 1}, (_, i) => i);
   let current = [...previous];
@@ -37,11 +37,16 @@ function ratio(a, b) {
   }
   return 1 - previous[b.length] / Math.max(a.length, b.length);
 }
-function reading(text, convert) {
+/** Lowercase latin rendering (pinyin for Chinese) and the first letter of each syllable or word. */
+export function reading(text, convert) {
   const words = (CJK.test(text) ? convert(text, { type: 'array', toneType: 'none', nonZh: 'consecutive' }) : [text])
     .flatMap(s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').match(/[a-z0-9]+/gu) ?? []);
   const full = words.join('');
   return { full, initials: CJK.test(text) || words.length > 1 ? words.map(s => s[0]).join('') : full };
+}
+/** pinyin-pro's converter, imported once on first use. */
+export async function pinyinConverter() {
+  return (await (phonetics ??= import('pinyin-pro'))).pinyin;
 }
 function soundScore(heard, word, convert) {
   const a = reading(heard, convert), b = reading(word, convert);
@@ -81,7 +86,7 @@ export async function wordSuggestions(raw, cleaned) {
     if (heardParts.length === wordParts.length && heardParts.join('').toLowerCase() === wordParts.join('').toLowerCase()) continue;
     const cjk = [...heard].filter(c => CJK.test(c)).length;
     if (cjk > 8 || heardParts.filter(s => /^[\x00-\x7f]/u.test(s)).length > 2) continue;
-    const convert = cjk ? (await (phonetics ??= import('pinyin-pro'))).pinyin : null;
+    const convert = cjk ? await pinyinConverter() : null;
     if (soundScore(heard, word, convert) < (cjk ? 0.5 : 0.6)) continue;
     const key = word.toLowerCase();
     if (!seen.has(key)) { result.push({ word, heardAs: heard }); seen.add(key); }

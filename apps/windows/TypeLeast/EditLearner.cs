@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using TypeLeast.Core;
 
@@ -8,10 +9,12 @@ namespace TypeLeast;
 /// Watches one field for up to two minutes after an insertion and learns the word the user
 /// corrected; no keyboard input is collected. The field is observed only when it held exactly
 /// the inserted text (never surrounding private text). It is judged once the edit has settled,
-/// when the user leaves the field, or when the next dictation starts.
+/// when the user leaves the field, or when the next dictation starts. Which word an edit teaches is
+/// decided by the local service, so both apps share one rule.
 /// </summary>
 internal sealed class EditLearner
 {
+    private readonly Func<string, string, Task<string?>> learnedWord;
     /// <summary>The paste may land a moment after the insertion is reported.</summary>
     private static readonly TimeSpan BaselineWait = TimeSpan.FromSeconds(5);
 
@@ -24,7 +27,11 @@ internal sealed class EditLearner
     private bool baselineSeen;
     private string? lastRead;
 
-    public EditLearner() => timer.Tick += (_, _) => Tick();
+    public EditLearner(Func<string, string, Task<string?>> learnedWord)
+    {
+        this.learnedWord = learnedWord;
+        timer.Tick += (_, _) => Tick();
+    }
 
     public void Start(FieldTarget field, string text, Action<string> onLearn)
     {
@@ -67,9 +74,19 @@ internal sealed class EditLearner
 
     private void Judge(string value)
     {
-        var word = EditCorrection.LearnedWord(inserted, value);
+        var text = inserted;
         var callback = learned;
         Stop();
+        _ = Ask(text, value, callback);
+    }
+
+    /// <summary>The local service decides which word the edit teaches (the same rule as on macOS);
+    /// no answer means none. Resumes on the UI thread.</summary>
+    private async Task Ask(string text, string value, Action<string>? callback)
+    {
+        string? word;
+        try { word = await learnedWord(text, value); }
+        catch (ServiceException) { word = null; }
         if (word is not null) callback?.Invoke(word);
     }
 }

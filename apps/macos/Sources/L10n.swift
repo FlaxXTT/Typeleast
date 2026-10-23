@@ -149,6 +149,7 @@ enum L10n {
         "更新 TypeLeast": "Update TypeLeast",
         "正在更新到 {0}": "Updating to {0}",
         "已从词典移除「{0}」": "Removed “{0}” from the dictionary",
+        "「{0}」已在词典里": "“{0}” is already in the dictionary",
         "重做": "Redo",
         "剪切": "Cut",
         "拷贝": "Copy",
