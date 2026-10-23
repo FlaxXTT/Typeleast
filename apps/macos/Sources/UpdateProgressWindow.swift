@@ -8,6 +8,7 @@ import SwiftUI
 
 final class UpdateProgressModel: ObservableObject {
     @Published var version = ""
+    @Published var summary = ""
     @Published var stage: UpdateStage = .preparing
 }
 
@@ -15,8 +16,9 @@ final class UpdateProgressWindow {
     private var window: NSWindow?
     private let model = UpdateProgressModel()
 
-    func show(version: String) {
+    func show(version: String, summary: String = "") {
         model.version = version
+        model.summary = summary
         model.stage = .preparing
         let w: NSWindow
         if let existing = window {
@@ -62,6 +64,13 @@ struct UpdateProgressView: View {
                     .truncationMode(.middle)
             }
             UpdateStepTrail(current: model.stage.step)
+            if !model.summary.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.text("本次更新")).font(.system(size: 12, weight: .semibold))
+                    Text(model.summary).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(EdgeInsets(top: 28, leading: 28, bottom: 24, trailing: 28))
         .frame(width: 360)
@@ -135,6 +144,7 @@ struct UpdateStepTrail: View {
                     .frame(width: 16, height: 16)
                     Text(L10n.text(name))
                         .font(.system(size: 11, weight: index == current ? .semibold : .regular))
+                        .lineLimit(1).minimumScaleFactor(0.75)
                         .foregroundColor(index <= current ? Theme.ink : Theme.tertiary)
                 }
                 .frame(width: 44)

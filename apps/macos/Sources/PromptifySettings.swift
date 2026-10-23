@@ -16,6 +16,8 @@ struct PromptifySection: View {
             Text(L10n.text("默认提示词不建议修改。需要调整时，在配置文件中编辑；保存后下一次整理生效。"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text(L10n.text("配置文件仅影响标准格式档；普通档使用内置规则。"))
+                .font(.system(size: 12)).foregroundColor(Theme.secondary)
             HStack {
                 Button(L10n.text("打开配置文件…")) { openConfiguration() }.buttonStyle(SecondaryButtonStyle())
                     .disabled(settings == nil)

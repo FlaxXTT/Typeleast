@@ -19,6 +19,7 @@ final class UpdateController {
     private let host: Host
     private let progress = UpdateProgressWindow()
     private let offeredKey = "voice.updateOffered"
+    private var summary = ""
 
     init(host: Host) {
         self.host = host
@@ -35,12 +36,14 @@ final class UpdateController {
         }
         if interactive { host.setHint(L10n.text("正在检查更新…")) }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { try Updater.latestVersion() }
+            let result = Result { try Updater.latestRelease() }
             DispatchQueue.main.async {
                 guard let self else { return }
                 if interactive { self.host.setHint(nil) }
                 switch result {
-                case .success(let latest) where Updater.isNewer(latest, than: Updater.currentVersion):
+                case .success(let release) where Updater.isNewer(release.version, than: Updater.currentVersion):
+                    let latest = release.version
+                    self.summary = release.summary
                     self.host.showAvailable(latest)
                     let offered = UserDefaults.standard.string(forKey: self.offeredKey)
                     if Updater.shouldOffer(latest: latest, offered: offered, interactive: interactive,
@@ -72,6 +75,7 @@ final class UpdateController {
         let alert = NSAlert()
         alert.messageText = L10n.text("有新版本 ") + version
         var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新会下载新版本、核对校验值、用本机证书签名，然后自动重启 TypeLeast。权限和钥匙串里的 Key 都会保留，不需要输入密码。")
+        if !summary.isEmpty { detail = L10n.text("本次更新") + "\n" + summary + "\n\n" + detail }
         if !Updater.hasSigningIdentity() {
             detail += "\n\n" + L10n.text("这是第一次在这台 Mac 上更新：会先生成一个只给这台 Mac 用的签名证书。macOS 会请你输入一次登录密码，好让签名工具使用它，请选「始终允许」；也可能需要在「隐私与安全性」里重新允许一次麦克风和辅助功能。以后的更新都不会再问。")
         }
@@ -89,7 +93,7 @@ final class UpdateController {
             return
         }
         host.setHint(L10n.text("正在下载更新 ") + version + "…")
-        progress.show(version: version)
+        progress.show(version: version, summary: summary)
         let report: (UpdateStage) -> Void = { [weak self] stage in
             DispatchQueue.main.async { self?.progress.update(stage) }
         }

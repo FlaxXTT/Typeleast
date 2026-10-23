@@ -18,7 +18,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const STRENGTHS = ["off", "conservative", "prompt", "maximal", "promptify", "promptbeta"];
+export const STRENGTHS = ["off", "conservative", "prompt", "maximal", "promptify", "promptbrief", "promptbeta"];
 export const LANGUAGES = ["auto", "zh", "en", "yue", "ja", "ko"];
 export const CONFIG_FILE = "config.json";
 

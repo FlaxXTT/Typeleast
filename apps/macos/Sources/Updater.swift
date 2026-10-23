@@ -139,10 +139,23 @@ enum Updater {
     }
 
     /// The tag of the newest release as GitHub's public API reports it.
-    static func publicLatestTag() -> String? {
+    struct Release {
+        let version: String
+        let summary: String
+    }
+    static func release(from data: Data) -> Release? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tag = json["tag_name"] as? String, !tag.isEmpty,
+              json["draft"] as? Bool != true, json["prerelease"] as? Bool != true else { return nil }
+        return Release(version: version(fromTag: tag), summary: ReleaseSummary.text(json["body"] as? String ?? ""))
+    }
+    static func latestRelease() throws -> Release {
         guard let data = fetch(URL(string: "https://api.github.com/repos/" + repo + "/releases/latest")!, timeout: 15),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return json["tag_name"] as? String
+              let release = release(from: data) else { throw UpdateError.unreachable }
+        return release
+    }
+    static func publicLatestTag() -> String? {
+        (try? latestRelease()).map { "v" + $0.version }
     }
 
     /// Download a release file from the public release page into `folder`, reporting bytes
@@ -196,8 +209,7 @@ enum Updater {
 
     /// The newest published version, e.g. "1.4.0".
     static func latestVersion() throws -> String {
-        guard let tag = publicLatestTag() else { throw UpdateError.unreachable }
-        return version(fromTag: tag)
+        try latestRelease().version
     }
 
     // MARK: this Mac's signing certificate

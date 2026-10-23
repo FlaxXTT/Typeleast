@@ -111,7 +111,7 @@ public sealed class AppSettings
             var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Json.Options);
             if (loaded is not null)
             {
-                if (loaded.Strength is not ("prompt" or "promptify" or "promptbeta" or "off")) loaded.Strength = "prompt";
+                if (loaded.Strength is not ("prompt" or "promptify" or "promptbrief" or "promptbeta" or "off")) loaded.Strength = "prompt";
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();

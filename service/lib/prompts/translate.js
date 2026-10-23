@@ -5,6 +5,7 @@
  */
 
 /** Target languages the apps offer, with the name the prompt uses. */
+import { UTTERANCE_RULES } from "../utterance-rules.js";
 export const TRANSLATE_LANGUAGES = {
   en: "English",
   zh: "中文",
@@ -34,5 +35,5 @@ export function translatePrompt(target) {
 6. 原话已经是${name}时，只做整理，不改变意思。
 
 # 输出
-只输出译文本身：不要引号、不要解释、不要前言。`;
+只输出译文本身：不要引号、不要解释、不要前言。` + UTTERANCE_RULES;
 }

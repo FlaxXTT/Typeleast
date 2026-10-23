@@ -848,6 +848,23 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     }
 }
 
+using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "release-notes.json"))))
+{
+    foreach (var sample in notes.RootElement.EnumerateArray())
+        Eq("release summary: " + sample.GetProperty("id").GetString(), ReleaseSummary.Text(sample.GetProperty("markdown").GetString()!, sample.GetProperty("language").GetString()), sample.GetProperty("expected").GetString());
+    Eq("release summary line is bounded", ReleaseSummary.Text("- " + new string('x', 1000)).Length, 142);
+    var path = Path.Combine(Path.GetTempPath(), "tl-tiers-" + Guid.NewGuid().ToString("N") + ".json");
+    try
+    {
+        var settings = new AppSettings { Strength = "promptbrief" };
+        settings.Save(path);
+        Eq("plain tier persists", AppSettings.Load(path).Strength, "promptbrief");
+        settings.Strength = "promptify"; settings.Save(path);
+        Eq("legacy standard tier persists", AppSettings.Load(path).Strength, "promptify");
+    }
+    finally { File.Delete(path); }
+}
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

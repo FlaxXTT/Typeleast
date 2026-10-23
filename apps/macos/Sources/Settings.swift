@@ -74,11 +74,12 @@ enum EnglishVariant: String, CaseIterable {
 /// (conservative, maximal) only change validation strictness, so the app no longer
 /// offers them; a value saved by an older build reads as `.prompt`.
 enum VoiceStrength: String, CaseIterable {
-    case prompt, promptify, promptbeta, off
+    case prompt, promptbrief, promptify, promptbeta, off
     var label: String {
         switch self {
         case .prompt: return L10n.text("自然整理")
-        case .promptify: return L10n.text("提示词模式")
+        case .promptbrief: return L10n.text("提示词 · 普通")
+        case .promptify: return L10n.text("提示词 · 标准格式")
         case .promptbeta: return L10n.text("提示词 Beta")
         case .off: return L10n.text("原话转写")
         }
@@ -87,6 +88,7 @@ enum VoiceStrength: String, CaseIterable {
     var shortDetail: String {
         switch self {
         case .prompt: return L10n.text("去掉口水词、改通顺，适合日常输入。")
+        case .promptbrief: return L10n.text("积极压缩口语，保留核心意图和约束，简洁、直白、易读。")
         case .promptify: return L10n.text("一次整理核心意图，用自然段和编号表达，不套角色等模板。")
         case .promptbeta: return L10n.text("多轮补充背景、目标和期望，由你决定何时生成；用量随轮次增加。")
         case .off: return L10n.text("不调用整理模型，只去掉口水词。")
@@ -96,6 +98,7 @@ enum VoiceStrength: String, CaseIterable {
     var detail: String {
         switch self {
         case .prompt: return L10n.text("自然整理：去掉口头禅和重复，自我更正只留最后的说法，补标点，中英文之间加空格，把发音相近的词改成正确的英文术语。")
+        case .promptbrief: return L10n.text("积极压缩口语，保留核心意图和约束，简洁、直白、易读。")
         case .promptify: return L10n.text("一次整理核心意图，用自然段和编号表达，语言简洁、严谨，不套角色等模板；有把握才还原名称。")
         case .promptbeta: return L10n.text("通过多轮补充说清背景、目标和期望；每次回答后重新检查遗漏与矛盾，由你决定何时生成。只整理你的意思，不扩展目标；轮次越多，用量越高。")
         case .off: return L10n.text("不调用大模型，只在本机去掉口头禅。速度最快。")

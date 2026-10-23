@@ -87,11 +87,12 @@ class P
             })
             {
                 var window = new UpdateProgressWindow();
-                window.SetVersion("1.18.0");
+                window.SetVersion("1.18.0", L10n.T("本次更新") + "\n• " + L10n.T("提示词 · 普通") + " / " + L10n.T("提示词 · 标准格式") + "\n• " + L10n.T("积极压缩口语，保留核心意图和约束，简洁、直白、易读。"));
                 window.Report(stage, received, total, source);
                 var content = (FrameworkElement)window.Content; window.Content = null;
                 var card = new Border { Background = Theme.CardFill, Child = content };
-                Save(card, Path.Combine(dir, $"update-{name}-{mode}.png"), 360, 330);
+                card.Measure(new Size(360, double.PositiveInfinity));
+                Save(card, Path.Combine(dir, $"update-{name}-{mode}-{L10n.Language}.png"), 360, card.DesiredSize.Height);
             }
         }
     }
@@ -134,7 +135,23 @@ class P
         var host = new AppHost(app, new FakeKeys());
         L10n.Configure("zh-Hans");
         CheckControllers(host);
-        if (args.Length > 1 && args[1] == "update-only") { RenderUpdateWindow(dir); return 0; }
+        if (args.Length > 1 && args[1] == "update-only")
+        {
+            foreach (var language in new[] { "zh-Hans", "en" })
+            {
+                L10n.Configure(language);
+                RenderUpdateWindow(dir);
+                foreach (var mode in new[] { "light", "dark" })
+                foreach (var strength in new[] { "promptbrief", "promptify" })
+                {
+                    Theme.Apply(mode); host.SetStrength(strength);
+                    var picker = ModePicker.Pills(host);
+                    picker.Measure(new Size(680, double.PositiveInfinity));
+                    Save(picker, Path.Combine(dir, $"modes-{strength}-{mode}-{language}.png"), 680, picker.DesiredSize.Height);
+                }
+            }
+            return 0;
+        }
         Seed(host);
         foreach (var mode in new[] { "light", "dark" })
         {

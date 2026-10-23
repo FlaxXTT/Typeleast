@@ -486,7 +486,7 @@ export function validateOutput(input) {
     return metrics.inventedFacts.length > 0 ? { ok: false, reason: "invented-fact", text, metrics } : { ok: true, text, metrics };
   }
 
-  if (strength !== "promptify" && languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
+  if (strength !== "promptify" && strength !== "promptbrief" && languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
 
   const ratio = metrics.outputLength / Math.max(1, rawContent);
   metrics.ratio = ratio;
@@ -523,7 +523,7 @@ export function validateOutput(input) {
   // (language, invented facts) apply to it. Counting the user's own items in
   // words ("这两项工作") is summary, not invention, so there a number counts as
   // invented only when it is written in digits ("300 字", "5 点").
-  if (strength === "promptify") {
+  if (strength === "promptify" || strength === "promptbrief") {
     const digits = factTokens(text.replace(/[零一二三四五六七八九十百千万亿两]/g, ""));
     const decisive = invented.filter((token) => !token.startsWith("N:") || digits.has(token));
     if (decisive.length > authorised) return { ok: false, reason: "invented-fact", text, metrics };

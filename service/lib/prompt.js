@@ -15,10 +15,11 @@
  */
 
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
-import { promptifySystemPrompt } from "./prompts/promptify.js";
+import { promptifySystemPrompt, BRIEF_PROMPT } from "./prompts/promptify.js";
+import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-21.3-cleanup+promptify+beta+translate";
+export const PROMPT_VERSION = "2026-10-23.1-cleanup+promptify+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -82,8 +83,8 @@ export function harnessAddendum({ dictionary, fieldContext }) {
  * @returns {string} the system prompt.
  */
 export function systemPromptFor({ dictionary, fieldContext, strength, promptify } = {}) {
-  const base = strength === "promptify" ? promptifySystemPrompt(promptify) : cleanupSystemPrompt();
-  return base + harnessAddendum({ dictionary, fieldContext });
+  const base = strength === "promptbrief" ? BRIEF_PROMPT : strength === "promptify" ? promptifySystemPrompt(promptify) : cleanupSystemPrompt();
+  return base + UTTERANCE_RULES + harnessAddendum({ dictionary, fieldContext });
 }
 
 /**

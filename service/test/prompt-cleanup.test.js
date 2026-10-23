@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { UTTERANCE_RULES } from "../lib/utterance-rules.js";
 import { CLEANUP_PROMPT, cleanupSystemPrompt } from "../lib/prompts/cleanup.js";
 import { HARNESS_ADDENDUM_MARKER, promptVersionFor, systemPromptFor } from "../lib/prompt.js";
 import { parsePolishOutput } from "../lib/parse-output.js";
@@ -17,7 +18,7 @@ test("the cleanup prompt keeps its rules, output format and examples", () => {
 
 test("natural cleanup carries no addendum when there is nothing to add", () => {
   const prompt = systemPromptFor({ strength: "prompt", dictionary: [], fieldContext: null });
-  assert.equal(prompt, cleanupSystemPrompt());
+  assert.equal(prompt, cleanupSystemPrompt() + UTTERANCE_RULES);
   assert.ok(!prompt.includes(HARNESS_ADDENDUM_MARKER));
 });
 
@@ -28,7 +29,7 @@ test("dictionary and field context ride in a delimited addendum", () => {
     fieldContext: { before: "Hi Emma,", after: "" },
   });
   const [base, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
-  assert.equal(base.trimEnd(), cleanupSystemPrompt().trimEnd(), "the prompt itself stays byte-identical");
+  assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd(), "the owner prompt and separate rules remain intact");
   assert.match(addendum, /第四批=TypeLeast/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);
 });

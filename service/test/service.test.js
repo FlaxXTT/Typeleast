@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
+import { UTTERANCE_RULES } from "../lib/utterance-rules.js";
 import { CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
 import { readdirSync } from "node:fs";
 
@@ -129,7 +130,7 @@ test("legacy cleanup selections send only the owner's prompt and cannot restore 
     assert.equal(result.fallback, false, strength);
     assert.equal(model.calls.length, 1, strength);
     assert.deepEqual(model.calls[0].body.messages, [
-      { role: "system", content: CLEANUP_PROMPT },
+      { role: "system", content: CLEANUP_PROMPT + UTTERANCE_RULES },
       { role: "user", content: "我们周三开会。" },
     ], strength);
     assert.equal(service.snapshot().promptSource, "typeleast");

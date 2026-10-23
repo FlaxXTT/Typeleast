@@ -66,7 +66,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
             Available = newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion) ? newest : null;
             changed();
             return newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
-                : Available is not null ? L10n.T("有新版本 {0}。", newest.Version)
+                : Available is not null ? L10n.T("有新版本 {0}。", newest.Version) + (newest.Summary.Length > 0 ? "\n" + L10n.T("本次更新") + "\n" + newest.Summary : "")
                 : L10n.T("已是最新的 Windows 版本（{0}）。", Updater.CurrentVersion);
         }
         catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
@@ -84,7 +84,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
         Updating = true;
         changed();
         var progress = new UpdateProgressWindow();
-        progress.Start(release.Version);
+        progress.Start(release.Version, release.Summary);
         var lastReport = DateTime.MinValue;
         try
         {

@@ -25,6 +25,7 @@ internal sealed class UpdateProgressWindow : Window
     private readonly Path spinner = new() { StrokeThickness = Thickness, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
     private readonly RotateTransform spin = new(0, Size / 2, Size / 2);
     private readonly StackPanel steps = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly TextBlock summary = Theme.Text("", 12, Theme.Grey);
 
     public UpdateProgressWindow()
     {
@@ -69,17 +70,25 @@ internal sealed class UpdateProgressWindow : Window
         content.Children.Add(title);
         content.Children.Add(status);
         content.Children.Add(steps);
+        summary.Margin = new Thickness(0, 16, 0, 0);
+        summary.Visibility = Visibility.Collapsed;
+        content.Children.Add(summary);
         Content = content;
     }
 
-    public void Start(string version)
+    public void Start(string version, string notes = "")
     {
-        SetVersion(version);
+        SetVersion(version, notes);
         Report(UpdateStage.Downloading, 0, null);
         Show();
     }
 
-    public void SetVersion(string version) => title.Text = L10n.T("正在更新到 {0}", version);
+    public void SetVersion(string version, string notes = "")
+    {
+        title.Text = L10n.T("正在更新到 {0}", version);
+        summary.Text = notes.Length > 0 ? L10n.T("本次更新") + "\n" + notes : "";
+        summary.Visibility = notes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public void Report(UpdateStage stage, long received, long? total, string source = "GitHub")
     {

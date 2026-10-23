@@ -22,6 +22,7 @@ internal sealed class PromptifyPanel
         var open = Theme.Secondary(L10n.T("打开配置文件…"), () => _ = OpenConfiguration());
         Rows = new UIElement[] { state,
             Theme.Text(L10n.T("默认提示词不建议修改。需要调整时，在配置文件中编辑；保存后下一次整理生效。"), 12, Theme.Grey),
+            Theme.Text(L10n.T("配置文件仅影响标准格式档；普通档使用内置规则。"), 12, Theme.Grey),
             Theme.Row(8, open, restore, Theme.Secondary(L10n.T("重新读取"), () => _ = Load())), status };
         host.PromptFile.Status += (text, ok) => { status.Text = text; status.Foreground = ok ? Theme.Success : Theme.Warning; _ = Load(); };
         _ = Load();

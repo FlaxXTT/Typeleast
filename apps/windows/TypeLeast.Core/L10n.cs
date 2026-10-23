@@ -37,6 +37,13 @@ public static class L10n
     }
     public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
+        ["提示词 · 普通"] = "Prompt · Plain",
+        ["提示词 · 标准格式"] = "Prompt · Standard",
+        ["普通档"] = "Plain",
+        ["标准格式档"] = "Standard format",
+        ["积极压缩口语，保留核心意图和约束，简洁、直白、易读。"] = "Shorten spoken wording. Keep the intent and constraints clear and easy to read.",
+        ["配置文件仅影响标准格式档；普通档使用内置规则。"] = "The configuration file applies to the standard tier only. The plain tier uses built-in rules.",
+        ["本次更新"] = "What is new",
         ["这个发布没有可校验的 Windows 安装包。"] = "This release has no Windows installer that can be checked.",
         ["发布的校验文件里没有这个安装包。"] = "The release's checksum list does not include this installer.",
         ["下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。"] = "The downloaded installer does not match the SHA-256 on the release page; the update was stopped.",

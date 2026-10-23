@@ -41,6 +41,13 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "提示词 · 普通": "Prompt · Plain",
+        "提示词 · 标准格式": "Prompt · Standard",
+        "普通档": "Plain",
+        "标准格式档": "Standard format",
+        "积极压缩口语，保留核心意图和约束，简洁、直白、易读。": "Shorten spoken wording. Keep the intent and constraints clear and easy to read.",
+        "配置文件仅影响标准格式档；普通档使用内置规则。": "The configuration file applies to the standard tier only. The plain tier uses built-in rules.",
+        "本次更新": "What is new",
         "无法在这台 Mac 上生成「": "Could not create the “",
         "」签名证书，已放弃更新。": "” signing certificate on this Mac; the update was stopped.",
         "。更新会下载新版本、核对校验值、用本机证书签名，然后自动重启 TypeLeast。权限和钥匙串里的 Key 都会保留，不需要输入密码。": ". The update downloads the new version, checks its checksum, signs it with this Mac's certificate and restarts TypeLeast. Permissions and the key in the Keychain are kept; no password is needed.",

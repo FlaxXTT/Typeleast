@@ -8,7 +8,7 @@ namespace TypeLeast.Core;
 // Mac releases (the Mac updater reads it), so Windows reads the release list and
 // takes the version from its own asset name, not from the tag.
 public sealed record WindowsReleaseInfo(string Version, string Tag, string PageUrl,
-    string SetupName = "", string? SetupUrl = null, string? SumsUrl = null);
+    string SetupName = "", string? SetupUrl = null, string? SumsUrl = null, string Summary = "");
 
 public static class WindowsRelease
 {
@@ -42,7 +42,7 @@ public static class WindowsRelease
                 if (!match.Success) continue;
                 var version = match.Groups[1].Value;
                 if (best is null || IsNewer(version, best.Version))
-                    best = new WindowsReleaseInfo(version, Text(release, "tag_name"), Text(release, "html_url"), name, DownloadUrl(asset), sums);
+                    best = new WindowsReleaseInfo(version, Text(release, "tag_name"), Text(release, "html_url"), name, DownloadUrl(asset), sums, ReleaseSummary.Text(Text(release, "body")));
             }
         }
         return best;

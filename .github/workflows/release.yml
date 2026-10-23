@@ -94,7 +94,18 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
           DRAFT: ${{ inputs.draft && '--draft' || '' }}
         run: |
-          gh release create "$TAG" dist/* \
-            --title "TypeLeast ${TAG#v}" \
-            --notes-file .github/release-notes.md \
-            --target "$GITHUB_SHA" $DRAFT
+          if existing_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            # A draft can be rebuilt before its first publication. Published releases are immutable.
+            if [ "$existing_draft" != true ] || [ -z "$DRAFT" ]; then
+              echo "Refusing to replace a published release or publish an existing draft without review." >&2
+              exit 1
+            fi
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --draft --title "TypeLeast ${TAG#v}" \
+              --notes-file .github/release-notes.md --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" dist/* \
+              --title "TypeLeast ${TAG#v}" \
+              --notes-file .github/release-notes.md \
+              --target "$GITHUB_SHA" $DRAFT
+          fi

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { UTTERANCE_RULES } from "../lib/utterance-rules.js";
 import { cleanupSystemPrompt } from "../lib/prompts/cleanup.js";
 import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSION, systemPromptFor } from "../lib/prompt.js";
 
@@ -14,8 +15,8 @@ test("the user message is the recognised text and nothing else", () => {
 });
 
 test("without a dictionary or field context the system prompt is exactly the owner's text", () => {
-  assert.equal(systemPromptFor({ dictionary: [], fieldContext: null }), cleanupSystemPrompt());
-  assert.equal(systemPromptFor(), cleanupSystemPrompt());
+  assert.equal(systemPromptFor({ dictionary: [], fieldContext: null }), cleanupSystemPrompt() + UTTERANCE_RULES);
+  assert.equal(systemPromptFor(), cleanupSystemPrompt() + UTTERANCE_RULES);
 });
 
 test("the addendum carries only the dictionary and the non-empty parts of the field", () => {
@@ -24,7 +25,7 @@ test("the addendum carries only the dictionary and the non-empty parts of the fi
     fieldContext: { before: "Hi Emma,", selected: "", after: "  ", windowTitle: "New Message" },
   });
   const [upstream, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
-  assert.equal(upstream.trimEnd(), cleanupSystemPrompt().trimEnd());
+  assert.equal(upstream.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd());
   assert.match(addendum, /Entries: DeepSeek \| 得普=DeepSeek/);
   assert.match(addendum, /Window title: "New Message"/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);

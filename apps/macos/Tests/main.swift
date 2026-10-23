@@ -738,7 +738,7 @@ do {
     UserDefaults.standard.set("maximal", forKey: "voice.strength")
     checkEq("a strength saved by an older build reads as natural cleanup", s.strength, "prompt")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
-    checkEq("natural cleanup, prompt mode, Prompt Beta and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "promptify", "promptbeta", "off"])
+    checkEq("natural cleanup, prompt mode, Prompt Beta and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "promptbrief", "promptify", "promptbeta", "off"])
     UserDefaults.standard.set("promptify", forKey: "voice.strength")
     checkEq("prompt mode is remembered", s.strength, "promptify")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
@@ -1359,6 +1359,26 @@ do {
         checkEq("suggestion response: " + sample.id, sample.response.suggestions.map(\.word), sample.expectedWords)
         checkEq("optional suggestions cannot break text: " + sample.id, sample.response.insertableText, "Result stays usable.")
     }
+}
+
+do {
+    struct NotesCase: Decodable { let id: String; let language: String; let markdown: String; let expected: String }
+    let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TYPELEAST_SUGGESTION_RESPONSES"]!).deletingLastPathComponent()
+    let cases = try JSONDecoder().decode([NotesCase].self, from: Data(contentsOf: root.appendingPathComponent("release-notes.json")))
+    for sample in cases { checkEq("release summary: " + sample.id, ReleaseSummary.text(sample.markdown, language: sample.language), sample.expected) }
+    checkEq("release summary line is bounded", ReleaseSummary.text("- " + String(repeating: "x", count: 1000)).count, 142)
+    let data = Data(#"{"tag_name":"v1.18.0","body":"- Clearer modes","draft":false}"#.utf8)
+    checkEq("release parser keeps version", Updater.release(from: data)?.version, "1.18.0")
+    checkEq("release parser keeps bounded notes", Updater.release(from: data)?.summary, "• Clearer modes")
+    check("draft is never offered", Updater.release(from: Data(#"{"tag_name":"v1.18.0","draft":true}"#.utf8)) == nil)
+    checkEq("missing notes keep update usable", Updater.release(from: Data(#"{"tag_name":"v1.18.0"}"#.utf8))?.summary, "")
+    let saved = UserDefaults.standard.string(forKey: "voice.strength")
+    defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.strength") } else { UserDefaults.standard.removeObject(forKey: "voice.strength") } }
+    let settings = Settings()
+    settings.strength = "promptbrief"
+    checkEq("plain tier persists", Settings().strength, "promptbrief")
+    settings.strength = "promptify"
+    checkEq("standard tier stays compatible", Settings().strength, "promptify")
 }
 
 server.stop()

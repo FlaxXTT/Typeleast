@@ -217,13 +217,23 @@ struct CleanupModeBar: View {
                     .font(.system(size: 11)).foregroundColor(Theme.secondary)
             }
             HStack(spacing: 2) {
-                ForEach(VoiceStrength.allCases, id: \.self) { strength in
-                    FlexibleSegment(label: strength.label, selected: model.settings.strength == strength.rawValue) {
-                        model.selectStrength(strength.rawValue)
+                ForEach([VoiceStrength.prompt, .promptbrief, .promptbeta, .off], id: \.self) { strength in
+                    FlexibleSegment(label: strength == .promptbrief ? L10n.text("提示词模式") : strength.label,
+                                    selected: model.settings.strength == strength.rawValue || (strength == .promptbrief && model.settings.strength == "promptify")) {
+                        if strength != .promptbrief || model.settings.strength != "promptify" { model.selectStrength(strength.rawValue) }
                     }
                 }
             }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.card))
                 .disabled(model.phase != .idle)
+            if ["promptbrief", "promptify"].contains(model.settings.strength) {
+                HStack(spacing: 8) {
+                    ForEach([VoiceStrength.promptbrief, .promptify], id: \.self) { tier in
+                        FlexibleSegment(label: tier == .promptbrief ? L10n.text("普通档") : L10n.text("标准格式档"), selected: model.settings.strength == tier.rawValue) {
+                            model.selectStrength(tier.rawValue)
+                        }
+                    }
+                }.disabled(model.phase != .idle)
+            }
             Text((VoiceStrength(rawValue: model.settings.strength) ?? .prompt).shortDetail)
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)

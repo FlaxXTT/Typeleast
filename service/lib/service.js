@@ -271,9 +271,9 @@ export class VoicePolishService {
         system,
         user,
         // Prompt mode writes a whole structured prompt: more room and more time.
-        maxTokens: strength === "promptify" ? Math.max(this.config.maxOutputTokens, 1600) : this.config.maxOutputTokens,
+        maxTokens: (strength === "promptify" || strength === "promptbrief") ? Math.max(this.config.maxOutputTokens, 1600) : this.config.maxOutputTokens,
         temperature: this.config.temperature ?? 0.8,
-        timeoutMs: strength === "promptify" ? Math.max(this.config.timeoutMs, 25000) : this.config.timeoutMs,
+        timeoutMs: (strength === "promptify" || strength === "promptbrief") ? Math.max(this.config.timeoutMs, 25000) : this.config.timeoutMs,
         signal: request.signal,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });

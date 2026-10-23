@@ -1,0 +1,10 @@
+[
+  {"id":"zh","language":"zh-Hans","markdown":"<!-- typeleast-update:zh -->\n- 两档提示词\n- 改口处理\n<!-- /typeleast-update -->\n<!-- typeleast-update:en -->\n- Two prompt tiers\n- Spoken corrections\n<!-- /typeleast-update -->","expected":"• 两档提示词\n• 改口处理"},
+  {"id":"en","language":"en","markdown":"<!-- typeleast-update:zh -->\n- 两档提示词\n<!-- /typeleast-update -->\n<!-- typeleast-update:en -->\n- Two prompt tiers\n<!-- /typeleast-update -->","expected":"• Two prompt tiers"},
+  {"id":"fallback","language":"en","markdown":"## Changes\n- **Clearer** [modes](https://example.invalid)\n- Keep `settings`\n## Downloads","expected":"• Clearer modes\n• Keep settings"},
+  {"id":"empty","language":"en","markdown":"","expected":""},
+  {"id":"limit","language":"en","markdown":"- A\n- B\n- C\n- D\n- E","expected":"• A\n• B\n• C\n• D"},
+  {"id":"plain","language":"zh-Hans","markdown":"## Changes\nSimpler modes.","expected":"• Simpler modes."},
+  {"id":"missing-language","language":"en","markdown":"<!-- typeleast-update:zh -->\n- 中文说明\n<!-- /typeleast-update -->","expected":"• 中文说明"},
+  {"id":"markup-control","language":"en","markdown":"- <b>Plain</b> text\u0001","expected":"• Plain text"}
+]
