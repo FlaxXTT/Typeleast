@@ -657,6 +657,88 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("never the installed program", folders.All(f => !f.Contains("Programs")));
 }
 
+{
+    // Clipboard snapshot: order, synthesized formats, budget, time.
+    const uint excel = 0xC100, html = 0xC101, png = 0xC102, ole = 0xC103;
+    string? Name(uint f) => f switch { excel => "Biff12", html => "HTML Format", png => "PNG", ole => "Ole Private Data", _ => null };
+    var order = ClipboardSnapshotPlan.Order([excel, ClipboardFormats.Text, html, ClipboardFormats.UnicodeText, ClipboardFormats.Locale, ole, 2, ClipboardFormats.Dib, ClipboardFormats.DibV5, png], Name);
+    Eq("common formats first, then the rest in clipboard order", string.Join(",", order),
+        string.Join(",", new uint[] { ClipboardFormats.UnicodeText, ClipboardFormats.Locale, ClipboardFormats.DibV5, html, png, excel }));
+    Check("ANSI text is left to Windows when Unicode text is saved", !order.Contains(ClipboardFormats.Text));
+    Check("the plain bitmap is left to Windows when the V5 bitmap is saved", !order.Contains(ClipboardFormats.Dib));
+    Check("ANSI text is kept when it is the only text", ClipboardSnapshotPlan.Order([ClipboardFormats.Text], Name).Contains(ClipboardFormats.Text));
+    Check("handles and OLE objects are not copied", !order.Contains(2u) && !order.Contains(ole));
+
+    var budget = new ClipboardBudget();
+    Check("a huge image is skipped", !budget.TryTake(ClipboardSnapshotPlan.FormatLimit + 1));
+    Check("…without using the budget, so the text after it is still saved", budget.TryTake(100) && budget.Used == 100);
+    var full = new ClipboardBudget();
+    Check("formats fill the budget up to the limit", full.TryTake(ClipboardSnapshotPlan.FormatLimit) && full.TryTake(ClipboardSnapshotPlan.TotalLimit - ClipboardSnapshotPlan.FormatLimit));
+    Check("one byte more does not fit", !full.TryTake(1));
+    Check("an empty format is not saved", !new ClipboardBudget().TryTake(0));
+
+    var late = TimeSpan.FromSeconds(1);
+    Check("common formats are read however long it takes", ClipboardSnapshotPlan.InTime(ClipboardFormats.UnicodeText, null, late) && ClipboardSnapshotPlan.InTime(html, "HTML Format", late));
+    Check("other formats only while the snapshot is quick", ClipboardSnapshotPlan.InTime(excel, "Biff12", TimeSpan.FromMilliseconds(100)) && !ClipboardSnapshotPlan.InTime(excel, "Biff12", late));
+}
+
+{
+    // Handover: every block is taken by the clipboard or freed, once.
+    var blocks = new List<(uint, IntPtr)> { (13, 1), (16, 2), (17, 3) };
+    var ok = new FakeSink();
+    Check("all blocks handed over", ClipboardHandover.Commit(blocks, ok) && ok.Taken.Count == 3 && ok.Freed.Count == 0 && ok.Emptied);
+    var failing = new FakeSink { RefuseAt = 16 };
+    Check("a refused block fails the handover", !ClipboardHandover.Commit(blocks, failing));
+    Eq("blocks before it belong to the clipboard", string.Join(",", failing.Taken), "1");
+    Eq("it and the ones after it are freed", string.Join(",", failing.Freed), "2,3");
+    var locked = new FakeSink { CannotEmpty = true };
+    Check("a clipboard that cannot be emptied is left as it is", !ClipboardHandover.Commit(blocks, locked) && locked.Taken.Count == 0);
+    Eq("…and every block is freed", string.Join(",", locked.Freed), "1,2,3");
+    var unused = new FakeSink();
+    ClipboardHandover.Discard(blocks, unused);
+    Eq("a snapshot that is not restored is freed", string.Join(",", unused.Freed), "1,2,3");
+}
+
+{
+    // When to restore after Ctrl+V.
+    var t0 = new DateTime(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
+    DateTime At(int ms) => t0.AddMilliseconds(ms);
+    const uint target = 100, history = 200, other = 300;
+
+    var p = new PasteRestorePolicy(target);
+    p.Read(At(5), history);
+    Eq("nothing before Ctrl+V", p.Decide(At(10)), RestoreDecision.Wait);
+    p.KeysSent(At(30));
+    p.Read(At(40), history);
+    Eq("clipboard history reading again is not the paste", p.Decide(At(2000)), RestoreDecision.Wait);
+    p.Read(At(3000), target);
+    Eq("a slow target: wait while it may read more", p.Decide(At(3100)), RestoreDecision.Wait);
+    p.Read(At(3150), target);
+    Eq("still reading (HTML, then text)", p.Decide(At(3300)), RestoreDecision.Wait);
+    Eq("restored once reads are quiet", p.Decide(At(3350)), RestoreDecision.Restore);
+
+    var never = new PasteRestorePolicy(target);
+    never.KeysSent(At(0));
+    Eq("still waiting before the limit", never.Decide(At(4999)), RestoreDecision.Wait);
+    Eq("nobody read it: keep the dictation on the clipboard", never.Decide(At(5000)), RestoreDecision.Keep);
+
+    var unknown = new PasteRestorePolicy(target);
+    unknown.KeysSent(At(0));
+    unknown.Read(At(50), 0);
+    Eq("a reader without a window counts", unknown.Decide(At(300)), RestoreDecision.Restore);
+
+    var hosted = new PasteRestorePolicy(target);
+    hosted.KeysSent(At(0));
+    hosted.Read(At(80), other);
+    Eq("a new reader after Ctrl+V counts (apps hosted in another process)", hosted.Decide(At(300)), RestoreDecision.Restore);
+
+    var replaced = new PasteRestorePolicy(target);
+    replaced.KeysSent(At(0));
+    replaced.Read(At(50), target);
+    replaced.Replaced();
+    Eq("another program replaced the clipboard: leave it", replaced.Decide(At(1000)), RestoreDecision.Keep);
+}
+
 
 {
     var waiting = JsonSerializer.Deserialize<DictateResponse>("""{"text":"","raw":"latest answer","beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}""")!;
@@ -790,4 +872,19 @@ sealed class TestHistoryProtection : IHistoryProtection
         aes.Decrypt(data.AsSpan(0,12),data.AsSpan(28),data.AsSpan(12,16),result);
         return result;
     }
+}
+
+sealed class FakeSink : IClipboardSink
+{
+    public uint? RefuseAt;
+    public bool CannotEmpty, Emptied;
+    public List<IntPtr> Taken = [], Freed = [];
+    public bool Empty() => Emptied = !CannotEmpty;
+    public bool Put(uint format, IntPtr block)
+    {
+        if (format == RefuseAt) return false;
+        Taken.Add(block);
+        return true;
+    }
+    public void Free(IntPtr block) => Freed.Add(block);
 }

@@ -23,6 +23,9 @@ internal static class Native
     [DllImport("kernel32.dll")] public static extern bool GlobalUnlock(IntPtr memory);
     [DllImport("kernel32.dll")] public static extern UIntPtr GlobalSize(IntPtr memory);
     [DllImport("kernel32.dll")] public static extern IntPtr GlobalFree(IntPtr memory);
+    [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")] public static extern void CopyMemory(IntPtr destination, IntPtr source, UIntPtr length);
+    [DllImport("user32.dll")] public static extern IntPtr GetOpenClipboardWindow();
+    [DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner();
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
