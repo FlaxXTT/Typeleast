@@ -1,6 +1,6 @@
 # Windows parity: evidence and delivery
 
-Baseline: `e2fccb98aee1bfa0ed4c0f5747bc13cacde8e594`, inspected on 2026-10-20 UTC.
+Baseline: `76c88f9be06d6e559180dec0afe7ea7714ba048f` (准备 1.16.0 发布并支持独立本地打包目录; its id since the history rewrite of 2026-10-23), inspected on 2026-10-20 UTC.
 The current Windows machine has no TypeLeast installation (confirmed by the maintainer).
 The reported older Windows 1.15.0 is not an inspected installation. Source version 1.16.0
 does not imply a Windows release: v1.16.0 has Mac artifacts only. PR #20 remains open.
