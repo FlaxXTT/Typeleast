@@ -169,6 +169,10 @@ internal static class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool CredDeleteW(string target, uint type, uint flags);
 
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CredEnumerateW(string filter, uint flags, out uint count, out IntPtr credentials);
+
     [DllImport("advapi32.dll")]
     public static extern void CredFree(IntPtr buffer);
 

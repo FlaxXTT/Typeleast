@@ -649,6 +649,14 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("no mark means on", !AutostartEntry.SwitchedOff(null) && !AutostartEntry.SwitchedOff([]));
 }
 
+{
+    var folders = UserData.Folders(Path.Combine("U", "Roaming"), Path.Combine("U", "Local"));
+    Eq("remove-data deletes two folders", folders.Length, 2);
+    Eq("settings, history and service state", folders[0], Path.Combine("U", "Roaming", "TypeLeast"));
+    Eq("speech models", folders[1], Path.Combine("U", "Local", "TypeLeast"));
+    Check("never the installed program", folders.All(f => !f.Contains("Programs")));
+}
+
 
 {
     var waiting = JsonSerializer.Deserialize<DictateResponse>("""{"text":"","raw":"latest answer","beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}""")!;

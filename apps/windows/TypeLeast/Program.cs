@@ -20,6 +20,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // The uninstaller asks whether to remove the user's data and runs this with the app closed.
+        if (args.Contains(TypeLeast.Core.UserData.RemoveArgument)) return RemoveUserData();
         var mode = JumpList.ModeFrom(args);
         using var mutex = new Mutex(true, MutexName, out var first);
         if (!first)
@@ -62,5 +64,22 @@ internal static class Program
             thread.Start();
         };
         return app.Run();
+    }
+
+    /// <summary>Delete the saved API keys, the start-with-Windows entry and TypeLeast's data
+    /// folders (settings, history, recordings, speech models). 0 when everything is gone.</summary>
+    private static int RemoveUserData()
+    {
+        var failed = 0;
+        try { CredentialStore.DeleteAll(); } catch (Exception) { failed++; }
+        Autostart.Apply(false);
+        foreach (var folder in TypeLeast.Core.UserData.Folders(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)))
+        {
+            try { if (System.IO.Directory.Exists(folder)) System.IO.Directory.Delete(folder, recursive: true); }
+            catch (Exception) { failed++; }
+        }
+        return failed == 0 ? 0 : 1;
     }
 }

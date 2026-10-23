@@ -201,7 +201,15 @@ Mac 和 Windows 的最新版都是 [**v1.17.3**](https://github.com/FlaxXTT/Type
    - **麦克风**：如果录不到声音，打开「设置 → 隐私和安全性 → 麦克风」，打开「允许桌面应用访问麦克风」。
 4. 在「设置 → 整理模型」里填 API Key，点「测试连接」。
 
+**卸载**：Windows「设置 → 应用 → 已安装的应用」里找到 TypeLeast，点「卸载」（或在开始菜单里右键 TypeLeast →「卸载」）。卸载程序会删除程序、快捷方式和登录启动项，并询问是否同时删除设置、历史、录音、语音模型和保存的 API Key；选「否」则保留。免安装版直接删除它的文件夹即可，数据位置见下方「隐私：数据去了哪里」。
+
 </details>
+
+## Code signing policy
+
+See our [Code signing policy](docs/CODE_SIGNING_POLICY.md).
+
+Windows code signing via SignPath Foundation is currently pending approval.
 
 ## 更多
 

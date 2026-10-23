@@ -2,6 +2,11 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 未发布
+
+- Windows 卸载时询问是否同时删除设置、听写历史、保存的录音、下载的语音模型和凭据管理器里的 API Key（默认保留；静默卸载不删）。卸载会先关掉 TypeLeast 和它的本地服务，并清除任务管理器里的启动项记录。
+- 新增 [代码签名政策](docs/CODE_SIGNING_POLICY.md)：Windows 安装包只由 GitHub 托管机器上的 Release 工作流构建，正在向 SignPath Foundation 申请免费代码签名（尚未通过），并说明软件的网络访问、系统改动和卸载方式。
+
 ## 1.17.3（2026-10-23）
 
 - Mac「开机时启动」：在「系统设置 → 通用 → 登录项」里关掉过 TypeLeast 时，打开开关会直接打开那里请你允许，并说明原因（原来只显示「无法修改」）。

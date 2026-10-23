@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -36,6 +37,26 @@ internal static class CredentialStore
         {
             Native.CredFree(ptr);
         }
+    }
+
+    /// <summary>Delete every key TypeLeast stored (uninstall with "remove my data").</summary>
+    public static void DeleteAll()
+    {
+        if (!Native.CredEnumerateW(Prefix + "*", 0, out var count, out var list)) return;
+        var targets = new List<string>();
+        try
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var cred = Marshal.PtrToStructure<Native.CREDENTIAL>(Marshal.ReadIntPtr(list, i * IntPtr.Size));
+                if (cred.TargetName.StartsWith(Prefix, StringComparison.Ordinal)) targets.Add(cred.TargetName);
+            }
+        }
+        finally
+        {
+            Native.CredFree(list);
+        }
+        foreach (var target in targets) Native.CredDeleteW(target, Native.CRED_TYPE_GENERIC, 0);
     }
 
     /// <summary>Store the key; an empty value deletes it.</summary>
