@@ -10,12 +10,11 @@
  * @module typeleast-service/server
  */
 import { createServer } from "node:http";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { format } from "node:util";
 import { SpeechModels } from "./speech-models.js";
 import { loadConfig } from "./config.js";
-import { History } from "./history.js";
 import { createHandler } from "./http.js";
 import { defaultModelsDir, defaultStateDir } from "./paths.js";
 import { publishRuntime, withdrawRuntime } from "./runtime.js";
@@ -46,16 +45,13 @@ export async function startService(options = {}) {
   const { value: config, issues } = await loadConfig(stateDir);
   for (const issue of issues) logger.warn?.("config.json: %s", issue.message);
 
-  const history = new History({ filePath: join(stateDir, "history.jsonl"), retentionDays: config.historyDays });
-  await history.load();
-  // Older versions kept the words here in plain text; digests are enough.
-  if (config.logRaw !== true) await history.scrubText();
+  // Versions up to 1.17.8 kept a history of digests and a copy of the dictionary here;
+  // the apps own both now, so the leftovers are removed.
+  for (const leftover of ["history.jsonl", "dictionary.json"]) await rm(join(stateDir, leftover), { force: true }).catch(() => {});
   const recognizer = options.recognizer ?? new SpeechModels({ modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads, language: config.language, logger });
   const service = new VoicePolishService({
     recognizer,
     config,
-    history,
-    dictionaryPath: join(stateDir, "dictionary.json"),
     promptifyPath: join(stateDir, "promptify.json"),
     logger,
     version: VERSION,
@@ -63,7 +59,6 @@ export async function startService(options = {}) {
   if (recognizer instanceof SpeechModels) recognizer.beforeActivate = async signal => {
     while (service.pending > 0 || service.queue > 0) { signal?.throwIfAborted(); await new Promise(resolve => setTimeout(resolve, 50)); }
   };
-  await service.loadDictionary();
   await service.loadPromptify();
   const token = await ensureToken(join(stateDir, "api-token"));
 

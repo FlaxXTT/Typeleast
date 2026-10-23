@@ -303,86 +303,6 @@ struct DictateResponse: Codable, Equatable {
     }
 }
 
-struct HistoryItem: Codable, Equatable, Identifiable {
-    var id: String
-    var ts: String?
-    var tsNumber: Double?
-    var app: String?
-    var language: String?
-    var raw: String?
-    var text: String?
-    var fallback: Bool
-    var reason: String?
-    var model: String?
-    var ms: MSBreakdown?
-    var strength: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, ts, app, language, raw, text, fallback, reason, model, ms, strength
-    }
-    init() { id = UUID().uuidString; fallback = false }
-    init(id: String, text: String?, raw: String?, fallback: Bool, app: String?, ts: String?) {
-        self.id = id
-        self.text = text
-        self.raw = raw
-        self.fallback = fallback
-        self.app = app
-        self.ts = ts
-    }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = lenient(c, String.self, .id) ?? UUID().uuidString
-        if let s = lenient(c, String.self, .ts) {
-            ts = s
-        } else if let n = lenient(c, Double.self, .ts) {
-            tsNumber = n
-            ts = String(format: "%.0f", n)
-        }
-        app = lenient(c, String.self, .app)
-        language = lenient(c, String.self, .language)
-        raw = lenient(c, String.self, .raw)
-        text = lenient(c, String.self, .text)
-        fallback = lenient(c, Bool.self, .fallback) ?? false
-        reason = lenient(c, String.self, .reason)
-        model = lenient(c, String.self, .model)
-        ms = lenient(c, MSBreakdown.self, .ms)
-        strength = lenient(c, String.self, .strength)
-    }
-}
-
-struct HistoryResponse: Codable, Equatable {
-    var items: [HistoryItem] = []
-    enum CodingKeys: String, CodingKey { case items }
-    init() {}
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        items = lenient(c, [HistoryItem].self, .items) ?? []
-    }
-}
-
-struct DictEntry: Codable, Equatable, Identifiable {
-    var from: String
-    var to: String
-    var id: String { from + "\u{1}" + to }
-    init(from: String, to: String) { self.from = from; self.to = to }
-}
-
-struct LearnResponse: Codable, Equatable {
-    var ok: Bool = false
-    var dictionary: [DictEntry] = []
-    enum CodingKeys: String, CodingKey { case ok, dictionary }
-    init() {}
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        ok = lenient(c, Bool.self, .ok) ?? false
-        if let entries = lenient(c, [DictEntry].self, .dictionary) {
-            dictionary = entries
-        } else if let strings = lenient(c, [String].self, .dictionary) {
-            dictionary = strings.map { DictEntry(from: $0, to: $0) }
-        }
-    }
-}
-
 struct ApiErrorBody: Codable, Equatable {
     var error: String?
     var code: String?
@@ -644,13 +564,21 @@ final class ServiceClient {
         return json.base64EncodedString()
     }
 
+    /// `dictionary`: the Dictionary page's entries ("word" or "heard=word"), sent with every
+    /// dictation; the service keeps no copy, so there is nothing to keep in sync.
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
-                     translateTo: String? = nil, variants: String? = nil) throws -> DictateResponse {
+                     translateTo: String? = nil, variants: String? = nil, dictionary: [String] = []) throws -> DictateResponse {
         try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
-                                            translateTo: translateTo, variants: variants) }
+                                            translateTo: translateTo, variants: variants, dictionary: dictionary) }
+    }
+
+    /// The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
+    static func dictateBody(wav: Data, dictionary: [String]) -> (body: Data, dictionaryBytes: Int) {
+        guard !dictionary.isEmpty, let json = try? JSONSerialization.data(withJSONObject: dictionary) else { return (wav, 0) }
+        return (json + wav, json.count)
     }
 
     /// Prompt Beta: write the prompt without answering the questions (skip), or forget them (cancel).
@@ -674,7 +602,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, dictionary: [String]) throws -> DictateResponse {
         try withTokenRetry { token in
             var headers: [String: String] = [
                 "content-type": "audio/wav",
@@ -693,60 +621,14 @@ final class ServiceClient {
             if let variants { headers["x-voice-variants"] = variants }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
+            let payload = ServiceClient.dictateBody(wav: wav, dictionary: dictionary)
+            headers["x-voice-dictionary-bytes"] = String(payload.dictionaryBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
-                                      token: token, headers: headers, body: wav, timeout: timeout)
+                                      token: token, headers: headers, body: payload.body, timeout: timeout)
             let (data, resp) = try performSync(req, timeout: timeout)
             guard resp.statusCode == 200 else { throw httpError(resp, data) }
             do { return try JSONDecoder().decode(DictateResponse.self, from: data) }
             catch { throw ServiceError.decoding(String(describing: error)) }
-        }
-    }
-
-    func historySync(limit: Int = 20) throws -> [HistoryItem] {
-        try withPortRetry { try historyOnce(limit: limit) }
-    }
-
-    private func historyOnce(limit: Int) throws -> [HistoryItem] {
-        try withTokenRetry { token in
-            let req = try makeRequest(path: "/api/voice-polish/history?limit=" + String(limit), method: "GET",
-                                      token: token, timeout: healthTimeout)
-            let (data, resp) = try performSync(req, timeout: healthTimeout)
-            guard resp.statusCode == 200 else { throw httpError(resp, data) }
-            do { return try JSONDecoder().decode(HistoryResponse.self, from: data).items }
-            catch { throw ServiceError.decoding(String(describing: error)) }
-        }
-    }
-
-    func learnSync(from: String, to: String) throws -> LearnResponse {
-        try withTokenRetry { token in
-            let obj: [String: String] = ["from": from, "to": to]
-            let body = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
-            let req = try makeRequest(path: "/api/voice-polish/learn", method: "POST", token: token,
-                                      headers: ["content-type": "application/json"], body: body,
-                                      timeout: healthTimeout)
-            let (data, resp) = try performSync(req, timeout: healthTimeout)
-            guard resp.statusCode == 200 else { throw httpError(resp, data) }
-            do { return try JSONDecoder().decode(LearnResponse.self, from: data) }
-            catch { throw ServiceError.decoding(String(describing: error)) }
-        }
-    }
-
-    /// Replace the service's learned dictionary with exactly these entries ("word" or "heard=word").
-    /// A service that predates this endpoint answers 404; callers treat that as "not supported".
-    func putDictionarySync(entries: [String]) throws -> [String] {
-        try withPortRetry { try putDictionaryOnce(entries: entries) }
-    }
-
-    private func putDictionaryOnce(entries: [String]) throws -> [String] {
-        try withTokenRetry { token in
-            let body = (try? JSONSerialization.data(withJSONObject: ["entries": entries])) ?? Data()
-            let req = try makeRequest(path: "/api/voice-polish/dictionary", method: "PUT", token: token,
-                                      headers: ["content-type": "application/json"], body: body,
-                                      timeout: healthTimeout)
-            let (data, resp) = try performSync(req, timeout: healthTimeout)
-            guard resp.statusCode == 200 else { throw httpError(resp, data) }
-            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            return (object?["dictionary"] as? [String]) ?? []
         }
     }
 

@@ -57,7 +57,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var healthRetryTimer: Timer?
     /// Polls quickly while the speech model loads or downloads, for the progress bar.
     var progressPollScheduled = false
-    private var dictionaryNeedsSync = true
 
     // MARK: lifecycle
 
@@ -444,7 +443,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                     self.model.speechCatalog = catalog
                     self.model.serviceProblem = AppDelegate.speechProblem(h.speech)
                     if h.ok, let hint = self.hint, hint.contains(L10n.text("语音模型")) { self.setHint(nil) }
-                    if self.dictionaryNeedsSync { self.syncDictionary() }
                     self.applyState()
                     // While the model loads or downloads, follow its progress.
                     let phase = h.speech?.phase ?? ""
@@ -559,20 +557,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func menuOpened() { refreshHealth() }
 
-    // MARK: dictionary
-
-    /// Push the whole word list to the service (it is the source of truth for the model).
-    func syncDictionary() {
-        let entries = settings.hostDictionary
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            let ok = (try? self.client.putDictionarySync(entries: entries)) != nil
-            DispatchQueue.main.async {
-                self.model.dictionarySynced = ok
-                self.dictionaryNeedsSync = !ok
-            }
-        }
-    }
+    // MARK: dictionary (sent with every dictation; nothing to sync)
 
     func learned(_ word: String) {
         guard settings.autoLearn, settings.addWord(word, source: .auto),
@@ -582,10 +567,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             guard let self else { return }
             self.settings.removeWord(id: id)
             self.setHint(L10n.text("已从词典移除「{0}」", word))
-            self.syncDictionary()
             self.applyState()
         }
-        syncDictionary()
         applyState()
     }
 
@@ -594,7 +577,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func addWordFromHistory(_ word: String) {
         if settings.addWord(word, source: .manual) {
             setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
-            syncDictionary()
         }
         applyState()
     }

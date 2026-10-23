@@ -78,8 +78,19 @@ test("the service listens on loopback, publishes its port, and serves the contra
       assert.equal(dictated.json.fallback, true);
       assert.equal(dictated.json.fallbackReason, "no-api-key");
       assert.equal(dictated.json.text, "我们周三把报告发出去。");
-      const history = await raw(handle.port, { path: "/api/voice-polish/history?limit=5", headers: auth });
-      assert.equal(history.json.items.length, 1);
+      // The app's dictionary rides ahead of the audio.
+      const dictionary = Buffer.from(JSON.stringify(["TypeLeast"]));
+      const withDictionary = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
+        headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": String(dictionary.length) }, body: Buffer.concat([dictionary, wav(0.5)]) });
+      assert.equal(withDictionary.status, 200);
+      assert.equal(withDictionary.json.text, "我们周三把报告发出去。");
+      const badLength = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
+        headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": "-1" }, body: wav(0.5) });
+      assert.equal(badLength.status, 400);
+      // Removed endpoints are gone.
+      for (const path of ["/api/voice-polish/history", "/api/voice-polish/dictionary"]) {
+        assert.equal((await raw(handle.port, { path, headers: auth })).status, 404, path);
+      }
     } finally {
       await handle.close();
     }

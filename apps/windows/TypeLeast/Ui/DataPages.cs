@@ -106,7 +106,6 @@ internal sealed class DictionaryPage : IPage
     }
     public void Refresh()
     {
-        status.Text = host.DictionarySynced == false ? L10n.T("词典尚未同步；本地服务就绪后自动重试。") : "";
         var key = string.Join("\n", host.Settings.DictionaryEntries.Select(e => e.Id + e.ServiceValue + e.Source))
             + "|" + string.Join("\n", host.Settings.WordSuggestions.Select(w => w.Word + w.Count));
         if (key != shown) { shown = key; Render(); }
@@ -160,7 +159,7 @@ internal sealed class DictionaryPage : IPage
             var message = L10n.T("有效 {0} 条，重复 {1} 条，无效行：{2}。导入有效词条？", preview.Valid.Count, preview.Duplicates, string.Join(", ", preview.InvalidLines.Take(20)));
             if (preview.Valid.Count == 0 || MessageBox.Show(message, L10n.T("CSV 导入预览"), MessageBoxButton.OKCancel) != MessageBoxResult.OK) { status.Text = message; return; }
             var previous = host.Settings.DictionaryEntries.ToList(); host.Settings.DictionaryEntries.AddRange(preview.Valid);
-            if (!host.SaveSettings()) host.Settings.DictionaryEntries = previous; else _ = host.SyncDictionary();
+            if (!host.SaveSettings()) host.Settings.DictionaryEntries = previous;
             Render();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { status.Text = L10n.T("导入失败，请检查文件格式、大小和读取权限。"); }

@@ -70,11 +70,9 @@ test("failures are classified, retried only when it can help, and never mention 
 });
 
 test("the service uses the user's route for that request and records no key", async () => {
-  const stored = [];
   const service = new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: "" }) },
-    config: { maxOutputTokens: 400, timeoutMs: 3000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-    history: { append: async (entry) => { stored.push(entry); return entry; }, recent: async () => [] },
+    config: { maxOutputTokens: 400, timeoutMs: 3000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
     version: "test",
   });
@@ -89,7 +87,7 @@ test("the service uses the user's route for that request and records no key", as
   } finally {
     globalThis.fetch = realFetch;
   }
-  assert.doesNotMatch(JSON.stringify(stored), /sk-test/, "history never contains the key");
+  assert.doesNotMatch(JSON.stringify(service.snapshot()), /sk-test/, "/health never contains the key");
 });
 
 test("thinking is switched off where the provider has a switch, and dropped if refused", async () => {

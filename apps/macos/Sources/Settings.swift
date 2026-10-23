@@ -406,7 +406,7 @@ final class Settings {
         }
     }
 
-    /// Entries in the service's format, for PUT /dictionary.
+    /// Entries in the service's format ("word" or "heard=word"), sent with every dictation.
     var hostDictionary: [String] { words.map(\.hostEntry) }
 
     @discardableResult
@@ -486,6 +486,9 @@ final class Settings {
         }
         return added
     }
+
+    /// Words saved by older builds as from/to pairs.
+    private struct DictEntry: Codable { var from: String; var to: String }
 
     /// Words saved by older builds as [DictEntry] (from/to pairs).
     private func migratedWords() -> [LocalWord] {

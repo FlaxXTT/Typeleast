@@ -54,8 +54,7 @@ test("提示词模式给模型更多输出空间和时间", async () => {
       calls.push(JSON.parse(init.body));
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: GOOD }, finish_reason: "stop" }] }) };
     },
-    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-    history: { append: async (e) => e, recent: async () => [] },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
   });
   const route = { baseURL: "https://api.example.com/v1", model: "m", apiKey: "sk-test-123456789012" };
@@ -84,8 +83,7 @@ test("提示词模式的设置：默认锁定、结尾追加、可替换、可�
   const dir = await mkdtemp(join(tmpdir(), "typeleast-promptify-"));
   const make = () => new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: "" }) },
-    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-    history: { append: async (e) => e, recent: async () => [] },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
     promptifyPath: join(dir, "promptify.json"),
   });
@@ -149,8 +147,7 @@ test("手动编辑 promptify.json 后不用重启，下一次整理就把新内�
       calls.push(JSON.parse(init.body));
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: GOOD }, finish_reason: "stop" }] }) };
     },
-    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-    history: { append: async (e) => e, recent: async () => [] },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
     promptifyPath: file,
   });
@@ -202,24 +199,20 @@ test("配置文件中原样保留的默认提示词仍算默认，追加内容�
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test("词典和提示词文件只有本人可读", { skip: process.platform === "win32" }, async () => {
+test("提示词文件只有本人可读", { skip: process.platform === "win32" }, async () => {
   const { mkdtemp, rm, stat, writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const dir = await mkdtemp(join(tmpdir(), "typeleast-private-"));
   try {
     // A file left by an older version, readable by others, is tightened on the next write.
-    await writeFile(join(dir, "dictionary.json"), "[]\n", { mode: 0o644 });
+    await writeFile(join(dir, "promptify.json"), "{}\n", { mode: 0o644 });
     const service = new VoicePolishService({
       config: { dictionary: [] },
-      dictionaryPath: join(dir, "dictionary.json"),
       promptifyPath: join(dir, "promptify.json"),
       logger: { info: () => {}, warn: () => {}, debug: () => {} },
     });
-    await service.setDictionary(["TypeLeast"]);
     await service.setPromptify({ appendix: "用英文写。" });
-    for (const name of ["dictionary.json", "promptify.json"]) {
-      assert.equal((await stat(join(dir, name))).mode & 0o777, 0o600, name);
-    }
+    assert.equal((await stat(join(dir, "promptify.json"))).mode & 0o777, 0o600);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

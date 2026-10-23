@@ -41,7 +41,6 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
-        "无法访问 TypeLeast 的发布页。请检查网络；如果发布页还没公开，安装并登录 GitHub 命令行工具（brew install gh，然后 gh auth login）后再试。": "Cannot reach TypeLeast's release page. Check the network; if the releases are not public yet, install and sign in to the GitHub CLI (brew install gh, then gh auth login) and try again.",
         "无法在这台 Mac 上生成「": "Could not create the “",
         "」签名证书，已放弃更新。": "” signing certificate on this Mac; the update was stopped.",
         "。更新会下载新版本、核对校验值、用本机证书签名，然后自动重启 TypeLeast。权限和钥匙串里的 Key 都会保留，不需要输入密码。": ". The update downloads the new version, checks its checksum, signs it with this Mac's certificate and restarts TypeLeast. Permissions and the key in the Keychain are kept; no password is needed.",
@@ -118,6 +117,7 @@ enum L10n {
         "隐藏其他": "Hide Others",
         "全部显示": "Show All",
         "撤销": "Undo",
+        "无法访问 TypeLeast 的发布页，所有下载线路也都失败了。请检查网络后再试。": "Cannot reach TypeLeast's release page, and every download source failed. Check the network and try again.",
         "正在从 {0} 下载 {1} / {2} MB": "Downloading from {0}: {1} / {2} MB",
         "正在从 {0} 下载 {1} MB": "Downloading from {0}: {1} MB",
         "更新下载源": "Update download source",
@@ -181,7 +181,6 @@ enum L10n {
         "下载已取消，已校验的文件可复用。": "Download cancelled. Verified files can be reused.",
         "读取模型目录": "Load model catalog",
         "当前模型自动检测语言，不能强制指定。": "This model detects language automatically; a language cannot be forced.",
-        "\n如果还没登录，在终端运行 gh auth login。": "\nRun gh auth login in Terminal if you have not signed in.",
         " · 点此更新": " · Click to update",
         " 可以贴到当前位置，历史里也有。": " to paste here, or find the text in History.",
         " 听写": " to dictate",
@@ -234,7 +233,6 @@ enum L10n {
         "人名、项目代号、专业术语。你在听写后改过的词会自动加进来。": "Names, project codes and technical terms. Corrections you make after dictation can be added automatically.",
         "仅复制到剪贴板": "Copy to clipboard only",
         "今天": "Today",
-        "从 GitHub 获取更新失败：": "Cannot get the update from GitHub: ",
         "以后": "Later",
         "企业微信": "WeCom",
         "你修改过的版本会被丢弃，追加内容保留。": "Your modified version will be discarded. The appendix will be kept.",
@@ -438,7 +436,6 @@ enum L10n {
         "本地服务反复退出：": "Local service keeps exiting: ",
         "本地服务启动中…": "Local service starting…",
         "本地服务已就绪": "Local service ready",
-        "本地服务暂时没有收到最新词典，服务就绪后会自动同步。": "The local service has not received the latest dictionary. It will sync when ready.",
         "本地服务未启动": "Local service stopped",
         "本地服务未就绪": "Local service not ready",
         "本地服务运行中": "Local service running",
@@ -475,7 +472,6 @@ enum L10n {
         "永久": "Forever",
         "没有匹配的记录": "No matching entries",
         "没有匹配的词": "No matching words",
-        "没有找到 GitHub 命令行工具 gh。用 Homebrew 安装（brew install gh）并运行 gh auth login 登录后再试。": "GitHub CLI (gh) was not found. Install it with brew install gh, then run gh auth login.",
         "没有找到 Node.js（需要 22 或更新）": "Node.js not found (version 22 or later required)",
         "没有识别到内容": "No speech recognized",
         "注册失败 (OSStatus ": "Registration failed (OSStatus ",

@@ -32,7 +32,7 @@ npm start
 
 环境变量 `TYPELEAST_HOME` 覆盖状态目录（模型放在它下面的 `models`），`TYPELEAST_MODELS` 单独覆盖模型目录。
 
-状态目录里有：`api-token`（访问令牌）、`runtime.json`（当前端口）、`history.jsonl`（历史，默认保留 14 天）、`dictionary.json`（词典），以及可选的 `config.json`。默认启动前会把旧历史的原话和结果替换为摘要；迁移失败则停止启动。显式开启 `logRaw` 时不做此迁移。
+状态目录里有：`api-token`（访问令牌）、`runtime.json`（当前端口）、`promptify.json`（提示词模式设置），以及可选的 `config.json`。服务不保存听写历史和词典：历史在 App 里加密保存，词典随每次请求发送。旧版本留下的 `history.jsonl`、`dictionary.json` 会在启动时删除。
 
 ## config.json（可选）
 
@@ -50,10 +50,8 @@ npm start
 | `strength` | `prompt` | `off` 不调模型；`conservative` / `prompt` / `maximal` 只影响校验的严格程度 |
 | `language` | `auto` | 识别语言：`auto`、`zh`、`en`、`yue`、`ja`、`ko` |
 | `numThreads` | 2 | 识别用的 CPU 线程数 |
-| `historyDays` | 14 | 历史保留天数 |
 | `dictionary` | `[]` | 一定要这样写的词，或 `听成=正确写法` |
 | `redactSecrets` | `true` | 发给模型前抹掉看起来像密钥、密码的内容 |
-| `logRaw` | `false` | 默认只保存文字摘要；`true` 会保存明文，需自行评估风险 |
 
 模型、接口地址和 API Key **不在**这里配置：App 每次请求时带过来，服务不保存。
 
@@ -64,13 +62,10 @@ npm start
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/health` | 状态：`ok`（识别就绪）、`service`、`version`、`speech`（`phase`、下载进度）、统计 |
-| POST | `/dictate` | 请求体是 16 kHz 单声道 16 位 WAV（44 字节头）；请求头 `x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-voice-context`、`x-voice-llm`（base64 JSON：`{baseURL, model, apiKey}`） |
-| POST | `/polish` | JSON `{text, strength?, llm?}`，只整理文字 |
-| POST | `/test-llm` | JSON `{llm}`，测试一次模型连接，不记历史 |
+| POST | `/dictate` | 请求体是词典 JSON（字节数见 `x-voice-dictionary-bytes`，可为 0）加 16 kHz 单声道 16 位 WAV（44 字节头）；请求头 `x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-voice-context`、`x-voice-llm`（base64 JSON：`{baseURL, model, apiKey}`） |
+| POST | `/polish` | JSON `{text, strength?, llm?, dictionary?}`，只整理文字 |
+| POST | `/test-llm` | JSON `{llm}`，测试一次模型连接 |
 | POST | `/models/download` | 开始下载语音模型，进度见 `/health` |
-| GET / PUT | `/dictionary` | 读取 / 整体替换词典 |
-| GET | `/history?limit=N` | 最近的记录 |
-| POST | `/learn` | JSON `{from, to}`，加一条纠错 |
 
 ## 测试
 

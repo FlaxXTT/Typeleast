@@ -517,18 +517,9 @@ struct DictionaryPage: View {
             .padding(.horizontal, 36)
             .padding(.bottom, 12)
 
-            if model.dictionarySynced == false {
-                Text(L10n.text("本地服务暂时没有收到最新词典，服务就绪后会自动同步。"))
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.warning)
-                    .padding(.horizontal, 36)
-                    .padding(.bottom, 8)
-            }
-
             if !model.suggestions.isEmpty, query.isEmpty {
                 SuggestionList(suggestions: model.suggestions, onAdd: { suggestion in
                     Settings.shared.acceptSuggestion(suggestion)
-                    model.actions?.syncDictionary()
                 }, onDismiss: { Settings.shared.dismissSuggestion($0) })
                 .padding(.horizontal, 36)
                 .padding(.bottom, 12)
@@ -549,7 +540,6 @@ struct DictionaryPage: View {
                         ForEach(filtered) { word in
                             WordRow(word: word, onEdit: { editing = word }, onDelete: {
                                 Settings.shared.removeWord(id: word.id)
-                                model.actions?.syncDictionary()
                             })
                             if word.id != filtered.last?.id { Divider().padding(.leading, 16) }
                         }
@@ -563,13 +553,11 @@ struct DictionaryPage: View {
         .sheet(isPresented: $adding) {
             WordEditor(title: L10n.text("新词"), word: "", heardAs: "") { word, heard in
                 Settings.shared.addWord(word, heardAs: heard, source: .manual)
-                model.actions?.syncDictionary()
             }
         }
         .sheet(item: $editing) { word in
             WordEditor(title: L10n.text("编辑"), word: word.word, heardAs: word.heardAs ?? "") { newWord, heard in
                 Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard)
-                model.actions?.syncDictionary()
             }
         }
     }
@@ -583,7 +571,6 @@ struct DictionaryPage: View {
               let text = try? String(contentsOf: url, encoding: .utf8) else { return }
         let added = Settings.shared.importCSV(text)
         importNote = L10n.text("已导入 {0} 个词", added)
-        model.actions?.syncDictionary()
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { importNote = "" }
     }
 }

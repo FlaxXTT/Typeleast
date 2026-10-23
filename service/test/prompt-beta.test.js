@@ -25,8 +25,7 @@ function provider(script = {}) {
 function serviceFor(p, history = []) {
   return new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl: p.fetchImpl,
-    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt', redactSecrets: true, logRaw: false, dictionary: [], maxAudioBytes: 4194304, maxDurationSeconds: 120 },
-    history: { append: async e => { history.push(e); return e; }, recent: async () => [] },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt', redactSecrets: true, dictionary: [], maxAudioBytes: 4194304, maxDurationSeconds: 120 },
     logger: { warn() {}, info() {} },
   });
 }
@@ -44,7 +43,7 @@ test('clear information waits for explicit generate and still accepts more conte
   const p = provider({ interview: calls => interview(calls.length === 1 ? [] : ['客户是哪个群体？']) });
   const history = [], s = serviceFor(p, history);
   const a = await send(s);
-  assert.equal(a.text, ''); assert.equal(a.beta.ready, true); assert.equal(history.length, 0);
+  assert.equal(a.text, ''); assert.equal(a.beta.ready, true);
   const b = await send(s, '还想发给客户', { betaSession: a.beta.sessionId });
   assert.equal(b.beta.sessionId, a.beta.sessionId); assert.equal(b.beta.ready, false); assert.equal(b.beta.round, 2);
   assert.deepEqual(p.calls.map(c => c.stage), ['interview', 'interview']);
@@ -56,12 +55,12 @@ test('multiple rounds retain all answers and recheck newly introduced ambiguity'
   const first = await send(s);
   for (const answer of ['团队内部阅读', '也给客户看', '客户是售后团队']) {
     const r = await send(s, answer, { betaSession: first.beta.sessionId });
-    assert.equal(r.text, ''); assert.equal(history.length, 0);
+    assert.equal(r.text, '');
   }
   const analysis = JSON.parse(p.calls[3].user);
   assert.deepEqual(analysis.turns.map(t => t.answer), ['团队内部阅读', '也给客户看', '客户是售后团队']);
   const done = await finish(s, first.beta.sessionId);
-  assert.equal(done.text, DRAFT); assert.equal(history.length, 1);
+  assert.equal(done.text, DRAFT);
   assert.deepEqual(JSON.parse(p.calls[4].user).turns, analysis.turns);
   assert.equal(s.betaSessions.has(first.beta.sessionId), false);
   await assert.rejects(send(s, '继续', { betaSession: first.beta.sessionId }), { code: 'beta-expired' });
@@ -78,7 +77,7 @@ test('silence never generates a draft or silently ends clarification', async () 
     const r = await send(s, raw, { betaSession: first.beta.sessionId });
     assert.equal(r.beta.notice, 'empty-transcript'); assert.equal(r.beta.sessionId, first.beta.sessionId);
   }
-  assert.equal(p.calls.length, 1); assert.equal(history.length, 0);
+  assert.equal(p.calls.length, 1);
 });
 
 test('explicit generate can finish with unanswered questions without inventing answers', async () => {
@@ -92,7 +91,7 @@ test('malformed interview retains the conversation and does not generate', async
   const p = provider({ interview: 'not JSON' }), history = [], s = serviceFor(p, history);
   const r = await send(s);
   assert.equal(r.beta.notice, 'output-format'); assert.equal(r.text, '');
-  assert.equal(history.length, 0); assert.equal(p.calls.length, 1);
+  assert.equal(p.calls.length, 1);
 });
 
 test('failed follow-up does not commit an unaccepted answer; earlier accepted answers survive', async () => {
@@ -107,7 +106,7 @@ test('failed follow-up does not commit an unaccepted answer; earlier accepted an
 test('malformed review is not treated as approval; user can retry without losing context', async () => {
   const p = provider({ review: 'looks good' }), history = [], s = serviceFor(p, history);
   const a = await send(s); const r = await finish(s, a.beta.sessionId);
-  assert.equal(r.text, ''); assert.equal(r.beta.notice, 'output-format'); assert.equal(history.length, 0);
+  assert.equal(r.text, ''); assert.equal(r.beta.notice, 'output-format');
   assert.ok(s.betaSessions.has(a.beta.sessionId));
 });
 
@@ -122,13 +121,13 @@ test('a patch is reviewed again before it can be inserted', async () => {
 test('remaining unsupported goals or facts block insertion and retain the session', async () => {
   const p = provider({ review: '{"issues":[{"type":"invented","quote":"详细纪要","fix":"remove new feature"}]}' });
   const history = [], s = serviceFor(p, history), a = await send(s), r = await finish(s, a.beta.sessionId);
-  assert.equal(r.text, ''); assert.equal(r.beta.notice, 'beta-validation'); assert.equal(history.length, 0);
+  assert.equal(r.text, ''); assert.equal(r.beta.notice, 'beta-validation');
 });
 
 test('new numbers are blocked even if the reviewer misses them', async () => {
   const p = provider({ draft: DRAFT + '\n限 512 字。' }), history = [], s = serviceFor(p, history);
   const a = await send(s), r = await finish(s, a.beta.sessionId);
-  assert.equal(r.beta.notice, 'beta-validation'); assert.equal(history.length, 0);
+  assert.equal(r.beta.notice, 'beta-validation');
 });
 
 test('session input has a hard bound and never silently truncates user information', async () => {
@@ -202,7 +201,7 @@ test('the WAV pipeline preserves clarification metadata and suppresses silent ra
   const first = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE });
   assert.ok(first.beta.sessionId); assert.equal(first.text, ''); assert.equal(first.beta.ready, true);
   const silent = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE, betaSession: first.beta.sessionId });
-  assert.equal(silent.beta.notice, 'empty-transcript'); assert.equal(history.length, 0);
+  assert.equal(silent.beta.notice, 'empty-transcript');
   // A new empty Beta request has no raw ASR token to fall through into a client paste.
   s.recognizer.transcribe = async () => ({ text: '<sil>' });
   const empty = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE });
@@ -218,6 +217,6 @@ test('review must cite the current draft, not an old user statement', async () =
   assert.equal(result.text, '');
   assert.equal(result.beta.notice, 'output-format');
   assert.equal(result.beta.sessionId, first.beta.sessionId);
-  assert.equal(history.length, 0);
+ 
   assert.equal(p.calls.some(c => c.stage === 'patch'), false, 'do not patch from invalid review evidence');
 });

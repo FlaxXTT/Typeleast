@@ -205,7 +205,6 @@ public static class L10n
         ["已整理"] = "Cleaned up",
         ["用了原文"] = "Used transcript",
         ["自然整理、提示词、提示词 Beta 或原话转写；Beta 分阶段处理，耗时更长。"] = "Natural cleanup, Prompt, Prompt Beta or raw transcription. Beta runs multiple stages and takes longer.",
-        ["词典尚未同步；本地服务就绪后自动重试。"] = "Dictionary not synced. Retrying when the local service is ready.",
         ["词条已存在或输入无效"] = "Word already exists or input is invalid",
         ["输入无效：两项合计最多 120 字，不能包含换行或等号。"] = "Invalid input: at most 120 characters combined, with no newlines or equals signs.",
         ["通用"] = "General",

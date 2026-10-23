@@ -175,6 +175,7 @@ extension AppDelegate {
         let llm = previousBeta?.llm ?? settings.activeLLMRoute
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
+        let dictionary = settings.hostDictionary
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
@@ -187,7 +188,8 @@ extension AppDelegate {
                                                               appBundleId: appBundleId, strength: strength,
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
-                                                              translateTo: translateTo, variants: variants))
+                                                              translateTo: translateTo, variants: variants,
+                                                              dictionary: dictionary))
             } catch {
                 outcome = .failure(error)
             }

@@ -68,10 +68,6 @@ let fallbackJSON = """
 {"requestId":"req-2","text":"raw fallback text","raw":"raw fallback text","fallback":true,"fallbackReason":"polish_timeout","model":"gpt-4o-mini","provider":"openai","ms":{"transcribe":90,"polish":0,"total":90}}
 """
 
-let historyJSON = """
-{"items":[{"id":"h1","ts":1700000000000,"app":"com.apple.TextEdit","language":"zh","raw":"ni hao","text":"你好","fallback":false,"reason":null,"model":"gpt-4o-mini","ms":210,"strength":"prompt"}]}
-"""
-
 let modelCatalogJSON = #"{"activeModelId":"sensevoice-small","models":[{"id":"fun-asr-nano","name":"Fun-ASR-Nano","modelBytes":1009605061,"sourceUrl":"https://huggingface.co/example/model","licenseUrl":"https://huggingface.co/example/source","canSetLanguage":true,"installed":true}],"operation":{"modelId":"fun-asr-nano","phase":"waiting","received":100,"total":100,"error":null},"notice":null}"#
 
 let state = StubState()
@@ -106,17 +102,6 @@ let server = try StubServer { req in
         }
         if state.mode == "fallback" { return .json(fallbackJSON) }
         return .json(dictateJSON)
-    }
-    if req.path.hasPrefix("/api/voice-polish/history") { return .json(historyJSON) }
-    if req.path.hasPrefix("/api/voice-polish/learn") {
-        var from = "?"
-        var to = "?"
-        if let obj = try? JSONSerialization.jsonObject(with: req.body) as? [String: String] {
-            from = obj["from"] ?? "?"
-            to = obj["to"] ?? "?"
-        }
-        let body = "{\"ok\":true,\"dictionary\":[{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}]}"
-        return .json(body)
     }
     return .json("{\"error\":\"not found\",\"code\":\"not_found\"}", status: 404)
 }
@@ -319,38 +304,21 @@ do {
 }
 state.mode = "health"
 
-// MARK: 7. history
+// MARK: 7. the dictionary rides with each dictation
 
 do {
-    let items = try client.historySync(limit: 20)
-    checkEq("history count", items.count, 1)
-    let i = items.first
-    checkEq("history id", i?.id, "h1")
-    checkEq("history app", i?.app, "com.apple.TextEdit")
-    checkEq("history language", i?.language, "zh")
-    checkEq("history raw", i?.raw, "ni hao")
-    checkEq("history text", i?.text, "你好")
-    checkEq("history fallback", i?.fallback, false)
-    checkEq("history model", i?.model, "gpt-4o-mini")
-    checkEq("history strength", i?.strength, "prompt")
-    checkEq("history ms (bare number)", i?.ms?.total, 210)
-    checkEq("history ts (epoch number)", i?.ts, "1700000000000")
-    checkEq("history limit query", state.lastRequest?.path, "/api/voice-polish/history?limit=20")
+    let wav = Data(repeating: 1, count: 64)
+    let none = ServiceClient.dictateBody(wav: wav, dictionary: [])
+    checkEq("no dictionary: the body is the WAV", none.body, wav)
+    checkEq("no dictionary: zero bytes", none.dictionaryBytes, 0)
+    let some = ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek", "得普=DeepSeek"])
+    let json = some.body.prefix(some.dictionaryBytes)
+    checkEq("the dictionary comes first, as JSON", (try? JSONSerialization.jsonObject(with: json)) as? [String], ["DeepSeek", "得普=DeepSeek"])
+    checkEq("then the WAV", some.body.suffix(from: some.body.startIndex + some.dictionaryBytes), wav)
+    _ = try client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt", dictionary: ["DeepSeek"])
+    checkEq("its length is in the header", state.lastRequest?.header("x-voice-dictionary-bytes"), String(ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek"]).dictionaryBytes))
 } catch {
-    check("history path", false, String(describing: error))
-}
-
-// MARK: 8. learn
-
-do {
-    let r = try client.learnSync(from: "张三", to: "张三丰")
-    checkEq("learn ok", r.ok, true)
-    checkEq("learn dictionary count", r.dictionary.count, 1)
-    checkEq("learn dictionary from (utf8)", r.dictionary.first?.from, "张三")
-    checkEq("learn dictionary to (utf8)", r.dictionary.first?.to, "张三丰")
-    checkEq("learn content-type", state.lastRequest?.header("content-type"), "application/json")
-} catch {
-    check("learn path", false, String(describing: error))
+    check("dictionary with dictation", false, String(describing: error))
 }
 
 // MARK: 9. missing token
@@ -893,10 +861,6 @@ do {
     try? Data("abc".utf8).write(to: tmp)
     checkEq("SHA-256 of a file", try? Updater.sha256Hex(of: tmp), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     try? FileManager.default.removeItem(at: tmp)
-    checkEq("gh is found where Homebrew puts it", Updater.findGH(home: "/Users/someone", exists: { $0 == "/usr/local/bin/gh" }, shellLookup: { nil }), "/usr/local/bin/gh")
-    checkEq("gh in the user's ~/.local/bin is found", Updater.findGH(home: "/Users/someone", exists: { $0 == "/Users/someone/.local/bin/gh" }, shellLookup: { nil }), "/Users/someone/.local/bin/gh")
-    checkEq("otherwise the login shell is asked", Updater.findGH(home: "/Users/someone", exists: { $0 == "/opt/tools/gh" }, shellLookup: { "/opt/tools/gh" }), "/opt/tools/gh")
-    checkEq("no gh, no update source", Updater.findGH(home: "/Users/someone", exists: { _ in false }, shellLookup: { nil }), nil)
 }
 
 // UI language and privacy regressions.

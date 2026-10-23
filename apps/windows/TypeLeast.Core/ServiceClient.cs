@@ -267,9 +267,19 @@ public sealed class ServiceClient
         return Encoding.ASCII.GetByteCount(encoded) <= MaxContextHeaderBytes ? encoded : null;
     }
 
+    /// <summary>The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.</summary>
+    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary)
+    {
+        if (dictionary is not { Count: > 0 }) return (wav, 0);
+        var json = JsonSerializer.SerializeToUtf8Bytes(dictionary);
+        return ([.. json, .. wav], json.Length);
+    }
+
+    /// <param name="dictionary">The Dictionary page's entries ("word" or "heard=word"), sent with every
+    /// dictation; the service keeps no copy, so there is nothing to keep in sync.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null) =>
+        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null) =>
         Once(async () =>
         {
             var headers = new Dictionary<string, string>
@@ -283,7 +293,9 @@ public sealed class ServiceClient
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
-            var content = new ByteArrayContent(wav);
+            var (payload, dictionaryBytes) = DictateBody(wav, dictionary);
+            headers["x-voice-dictionary-bytes"] = dictionaryBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var content = new ByteArrayContent(payload);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             // Prompt Beta makes up to four model calls in one request.
             var timeout = strength == "promptbeta" && DictateTimeout < BetaTimeout ? BetaTimeout : DictateTimeout;
@@ -306,26 +318,6 @@ public sealed class ServiceClient
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
             return skip ? Decode<DictateResponse>(body) : new DictateResponse();
         });
-
-    public Task<List<string>> PutDictionaryAsync(IEnumerable<string> entries, CancellationToken ct = default) =>
-        WithPortRetry(async () =>
-        {
-            var json = JsonSerializer.Serialize(new { entries = entries.ToArray() });
-            var (status, body) = await SendAsync(HttpMethod.Put, "/dictionary", new StringContent(json, Encoding.UTF8, "application/json"),
-                null, ShortTimeout, ct).ConfigureAwait(false);
-            if (status != HttpStatusCode.OK) throw HttpError(status, body);
-            using var doc = JsonDocument.Parse(body);
-            return doc.RootElement.TryGetProperty("dictionary", out var d) && d.ValueKind == JsonValueKind.Array
-                ? d.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!).ToList()
-                : new List<string>();
-        });
-
-    public async Task LearnCorrectionAsync(string from, string to, CancellationToken ct = default)
-    {
-        var json = JsonSerializer.Serialize(new { from, to });
-        var (status, body) = await SendAsync(HttpMethod.Post, "/learn", new StringContent(json, Encoding.UTF8, "application/json"), null, ShortTimeout, ct);
-        if (status != HttpStatusCode.OK) throw HttpError(status, body);
-    }
 
     /// <summary>Start the one-time model download (about 241 MB); progress shows in /health.</summary>
     public Task<bool> DownloadModelsAsync(string? endpoint, CancellationToken ct = default) =>

@@ -1,7 +1,6 @@
 name: CI
 
-# Manual only: hosted Actions have no quota for this project, and releases are
-# built and verified locally (apps/windows/package-wine.sh, apps/macos/package.sh).
+# Manual only: run it on a branch before merging. Releases are built by release.yml.
 # Automatic runs would also need "[skip ci]" in commits, which Cloudflare honours
 # too and would then skip deploying the site.
 on:

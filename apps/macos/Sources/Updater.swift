@@ -2,8 +2,8 @@ import Foundation
 import CryptoKit
 
 // Updater.swift - in-app update for this Mac. The release is fetched from GitHub's public
-// release page (no account needed); while the repository is private it falls back to the
-// GitHub CLI's own login (`gh release download`). Its SHA-256 is checked against the
+// release page (no account needed), or from a public mirror when GitHub is slow
+// (UpdateSources). Its SHA-256 is checked against the
 // release's SHA256SUMS.txt, and the app is re-signed with this Mac's own "TypeLeast Local
 // Signing" certificate (made on the first update if there is none) before it replaces the
 // installed copy. Same certificate + same bundle id = same designated requirement, so macOS
@@ -12,8 +12,6 @@ import CryptoKit
 
 enum UpdateError: LocalizedError {
     case unreachable
-    case noGitHubCLI
-    case gh(String)
     case checksum
     case badBundle(String)
     case noSigningCertificate
@@ -22,9 +20,7 @@ enum UpdateError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreachable: return L10n.text("无法访问 TypeLeast 的发布页。请检查网络；如果发布页还没公开，安装并登录 GitHub 命令行工具（brew install gh，然后 gh auth login）后再试。")
-        case .noGitHubCLI: return L10n.text("没有找到 GitHub 命令行工具 gh。用 Homebrew 安装（brew install gh）并运行 gh auth login 登录后再试。")
-        case .gh(let detail): return L10n.text("从 GitHub 获取更新失败：") + detail + L10n.text("\n如果还没登录，在终端运行 gh auth login。")
+        case .unreachable: return L10n.text("无法访问 TypeLeast 的发布页，所有下载线路也都失败了。请检查网络后再试。")
         case .checksum: return L10n.text("下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。")
         case .badBundle(let detail): return L10n.text("下载的安装包不对：") + detail
         case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书，已放弃更新。")
@@ -102,22 +98,6 @@ enum Updater {
     }
 
     // MARK: steps
-
-    /// The GitHub CLI: an app started from Finder has no shell PATH, so look where Homebrew
-    /// and user installs put it, then ask the user's login shell.
-    static func findGH(home: String = NSHomeDirectory(),
-                       exists: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
-                       shellLookup: () -> String? = Updater.ghFromLoginShell) -> String? {
-        let known = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", home + "/.local/bin/gh", home + "/bin/gh", "/usr/bin/gh"]
-        if let found = known.first(where: exists) { return found }
-        return shellLookup().flatMap { exists($0) ? $0 : nil }
-    }
-
-    static func ghFromLoginShell() -> String? {
-        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let path = run(shell, ["-lc", "command -v gh"]).out.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path.hasPrefix("/") ? path : nil
-    }
 
     @discardableResult
     static func run(_ exe: String, _ args: [String]) -> (status: Int32, out: String, err: String) {
@@ -210,11 +190,8 @@ enum Updater {
 
     /// The newest published version, e.g. "1.4.0".
     static func latestVersion() throws -> String {
-        if let tag = publicLatestTag() { return version(fromTag: tag) }
-        guard let gh = findGH() else { throw UpdateError.unreachable }
-        let r = run(gh, ["release", "view", "--repo", repo, "--json", "tagName", "--jq", ".tagName"])
-        guard r.status == 0 else { throw UpdateError.gh(r.err.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        return version(fromTag: r.out)
+        guard let tag = publicLatestTag() else { throw UpdateError.unreachable }
+        return version(fromTag: tag)
     }
 
     // MARK: this Mac's signing certificate
@@ -280,12 +257,7 @@ enum Updater {
                     if let expected, (try? sha256Hex(of: file)) == expected { publicCopy = true; break }
                 }
             }
-            if !publicCopy {
-                guard let gh = findGH() else { throw UpdateError.unreachable }
-                let dl = run(gh, ["release", "download", "v" + version, "--repo", repo, "--clobber",
-                                  "--pattern", asset, "--pattern", "SHA256SUMS.txt", "--dir", work.path])
-                guard dl.status == 0 else { throw UpdateError.gh(dl.err.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            }
+            guard publicCopy else { throw UpdateError.unreachable }
 
             stage?(.verifying)
             let zip = work.appendingPathComponent(asset)

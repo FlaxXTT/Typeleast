@@ -42,21 +42,14 @@ function fakeRecognizer(text = "we should send the report on tuesday, no wait, w
   };
 }
 
-function makeService({ model, recognizer, config = {}, history } = {}) {
-  const stored = [];
+function makeService({ model, recognizer, config = {} } = {}) {
   return new VoicePolishService({
     recognizer: recognizer ?? fakeRecognizer(),
     fetchImpl: (model ?? fakeModel("Send the report on Wednesday.")).fetchImpl,
-    config: { maxOutputTokens: 400, timeoutMs: 5000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [], ...config },
-    history: history ?? { append: async (entry) => { stored.push(entry); return entry; }, recent: async () => stored },
+    config: { maxOutputTokens: 400, timeoutMs: 5000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [], ...config },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
     version: "test",
   });
-}
-
-function recorder() {
-  const stored = [];
-  return { stored, history: { append: async (entry) => { stored.push(entry); return entry; }, recent: async () => stored } };
 }
 
 function wavOfSilence(seconds = 0.2) {
@@ -103,14 +96,13 @@ test("legacy cleanup selections send only the owner's prompt and cannot restore 
 
 test("without an API key the tidied transcript is returned and nothing is called", async () => {
   const model = fakeModel("should not be used");
-  const { stored, history } = recorder();
-  const service = makeService({ model, history });
+  const service = makeService({ model });
   const result = await service.polish({ rawText: "呃，我们周三把报告发出去吧。", strength: "prompt" });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "no-api-key");
   assert.equal(result.text, "我们周三把报告发出去。");
   assert.equal(model.calls.length, 0);
-  assert.equal(stored[0].reason, "no-api-key");
+  assert.equal(result.reason, "no-api-key");
   // A malformed route counts as no route: it is never half-used.
   const insecure = await service.polish({ rawText: RAW, llm: { ...ROUTE, baseURL: "http://api.example.com/v1" } });
   assert.equal(insecure.reason, "no-api-key");
@@ -155,15 +147,14 @@ test("a malformed JSON reply still yields its text field", async () => {
   assert.equal(result.outputMode, "regex");
 });
 
-test("a status the model made up stays out of history, /health and the log", async () => {
-  const { stored, history } = recorder();
+test("a status the model made up stays out of /health and the log", async () => {
   const warnings = [];
-  const service = makeService({ history, config: { logRaw: false }, model: fakeModel(JSON.stringify({ status: "send the wednesday report", text: "x" })) });
+  const service = makeService({ model: fakeModel(JSON.stringify({ status: "send the wednesday report", text: "x" })) });
   service.logger = { info: () => {}, warn: (...args) => warnings.push(args.join(" ")), debug: () => {} };
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.detail, "output-format:unexpected-status");
-  const everywhere = JSON.stringify([stored, service.snapshot(), warnings]);
+  const everywhere = JSON.stringify([service.snapshot(), warnings]);
   assert.ok(!everywhere.includes("wednesday report"), everywhere);
 });
 
@@ -177,16 +168,15 @@ test("an unusable reply falls back to the transcript and is counted", async () =
 });
 
 test("an unreachable model falls back to the raw transcript, retried once, and says why", async () => {
-  const { stored, history } = recorder();
   const refused = new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
-  const service = makeService({ history, model: fakeModel("", { fail: refused }) });
+  const service = makeService({ model: fakeModel("", { fail: refused }) });
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "model-error:NETWORK");
   assert.equal(result.text, RAW);
   assert.equal(result.attempts, 2);
-  assert.match(stored[0].detail, /^api\.example\.com unreachable: fetch failed \(2 attempts, \d+ ms\)$/);
-  assert.ok(!stored[0].detail.includes(ROUTE.apiKey));
+  assert.match(result.detail, /^api\.example\.com unreachable: fetch failed \(2 attempts, \d+ ms\)$/);
+  assert.ok(!result.detail.includes(ROUTE.apiKey));
 });
 
 test("model failures are named by what actually went wrong", async () => {
@@ -197,23 +187,21 @@ test("model failures are named by what actually went wrong", async () => {
     [fakeModel("", { status: 503 }), "model-error:HTTP_503", /HTTP 503 \(2 attempts/],
   ];
   for (const [model, reason, detail] of cases) {
-    const { stored, history } = recorder();
-    const service = makeService({ history, model });
+      const service = makeService({ model });
     const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
     assert.equal(result.fallback, true, reason);
     assert.equal(result.reason, reason);
-    assert.match(stored[0].detail, detail, reason);
+    assert.match(result.detail, detail, reason);
     assert.equal(service.snapshot().stats.lastError.startsWith(`${reason}: `), true, reason);
   }
 });
 
 test("a model that outlives the deadline is reported as a timeout and not retried", async () => {
-  const { stored, history } = recorder();
-  const service = makeService({ model: fakeModel("", { hang: true }), history, config: { timeoutMs: 30 } });
+  const service = makeService({ model: fakeModel("", { hang: true }), config: { timeoutMs: 30 } });
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.reason, "model-timeout");
   assert.equal(result.attempts, 1, "a timeout is never retried");
-  assert.match(stored[0].detail, /^no answer from api\.example\.com within 30 ms \(\d+ ms\)$/);
+  assert.match(result.detail, /^no answer from api\.example\.com within 30 ms \(\d+ ms\)$/);
 });
 
 test("a caller that goes away is reported as cancelled", async () => {
@@ -226,15 +214,14 @@ test("a caller that goes away is reported as cancelled", async () => {
 });
 
 test("an answer that invents content is rejected and the raw transcript is used", async () => {
-  const { stored, history } = recorder();
-  const service = makeService({ history, model: fakeModel("We should send the report on Tuesday, then follow up in 3 days.") });
+  const service = makeService({ model: fakeModel("We should send the report on Tuesday, then follow up in 3 days.") });
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
   assert.equal(result.text, RAW, "the raw transcript is what the user gets");
   // The detail carries measurements only, never the invented tokens themselves.
-  assert.match(stored[0].detail, /inventedFacts=1/);
-  assert.ok(!stored[0].detail.includes("3 days"));
+  assert.match(result.detail, /inventedFacts=1/);
+  assert.ok(!result.detail.includes("3 days"));
 });
 
 test("a rejected answer falls back to the TIDIED transcript, like a model failure does", async () => {
@@ -269,11 +256,10 @@ test("recent fallbacks are kept for /health, newest first and capped at five", a
 });
 
 test("a successful polish records no failure detail", async () => {
-  const { stored, history } = recorder();
-  const service = makeService({ history });
-  await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
-  assert.equal(stored[0].fallback, false);
-  assert.equal(stored[0].detail, null);
+  const service = makeService({});
+  const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
+  assert.equal(result.fallback, false);
+  assert.equal(result.detail ?? null, null);
   assert.equal(service.snapshot().stats.modelCalls, 1);
   assert.equal(service.snapshot().stats.modelFallbacks, 0);
   assert.deepEqual(service.snapshot().recentFailures, []);
@@ -324,36 +310,23 @@ test("malformed audio never reaches the recogniser", async () => {
   await assert.rejects(() => service.transcribeAndPolish({ audio: Buffer.from("garbage that is definitely not audio") }), (error) => error.code === "invalid-audio");
 });
 
-test("every attempt is recorded before the caller sees the result", async () => {
-  const { stored, history } = recorder();
-  const service = makeService({ history });
-  await service.transcribeAndPolish({ audio: wavOfSilence(), appHint: "com.apple.mail", language: "en", llm: ROUTE });
-  assert.equal(stored.length, 1);
-  assert.equal(stored[0].fallback, false);
-  assert.equal(stored[0].app, "com.apple.mail");
-  assert.equal(stored[0].text, "Send the report on Wednesday.");
-  assert.equal(stored[0].provider, "custom:api.example.com");
+test("the app's dictionary comes with each request and joins config.json's", async () => {
+  const model = fakeModel("Send the report on Wednesday.");
+  const service = makeService({ model, config: { dictionary: ["TypeLeast"] } });
+  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["DeepSeek", "得普=DeepSeek", "TypeLeast", "  ", 42] });
+  const system = model.calls[0].body.messages[0].content;
+  for (const entry of ["TypeLeast", "DeepSeek", "得普=DeepSeek"]) assert.ok(system.includes(entry), entry);
+  // Nothing is kept between requests.
+  assert.deepEqual(service.dictionary, ["TypeLeast"]);
+  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE });
+  assert.ok(!model.calls[1].body.messages[0].content.includes("DeepSeek"));
 });
 
-test("logRaw=false stores only digests, never the spoken text", async () => {
-  const { stored, history } = recorder();
-  const service = makeService({ history, config: { logRaw: false } });
-  // No route here, which also proves an attempt that never reached a model is recorded.
-  const result = await service.polish({ rawText: RAW, strength: "prompt" });
-  assert.equal(typeof result.text, "string");
-  assert.equal(stored.length, 1, "one attempt must be recorded whether or not the model answered");
-  assert.match(stored[0].raw, /^sha256:[0-9a-f]{16}$/);
-  assert.match(stored[0].text, /^sha256:[0-9a-f]{16}$/);
-  assert.ok(!JSON.stringify(stored[0]).includes("wednesday"));
-});
-
-test("learned corrections are persisted and de-duplicated", async () => {
-  const service = makeService({});
-  const first = await service.learn({ from: "第四批", to: "TypeLeast" });
-  assert.deepEqual(first.dictionary, ["第四批=TypeLeast"]);
-  const second = await service.learn({ from: "第四批", to: "TypeLeast Pro" });
-  assert.deepEqual(second.dictionary, ["第四批=TypeLeast Pro"]);
-  await assert.rejects(() => service.learn({ from: "", to: "x" }), /non-empty/);
+test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {
+  const { dictionaryFrom, DICTIONARY_LIMITS } = await import("../lib/service.js");
+  assert.deepEqual(dictionaryFrom(["A"], [" B ", "B", "A", "", null, "x".repeat(200)]), ["A", "B", "x".repeat(DICTIONARY_LIMITS.entryLength)]);
+  assert.equal(dictionaryFrom([], Array.from({ length: 3000 }, (_, i) => `w${i}`)).length, DICTIONARY_LIMITS.entries);
+  assert.deepEqual(dictionaryFrom(["A"], "not a list"), ["A"]);
 });
 
 test("snapshot reports readiness, dictionary size and counters", async () => {
@@ -391,16 +364,6 @@ test("a dictated secret is redacted before it reaches the model", async () => {
   await service.polish({ rawText: "my api key is sk-abcdefghijklmnopqrstuvwxyz", llm: ROUTE });
   assert.doesNotMatch(JSON.stringify(model.calls[0].body), /sk-abcdefghijklmnop/);
 });
-
-test("setDictionary replaces learned words, keeps configured ones, and accepts plain words", async () => {
-  const service = makeService({ config: { dictionary: ["TypeLeast"] } });
-  const result = await service.setDictionary(["DeepSeek", "得普=DeepSeek", "DeepSeek", "  ", 42]);
-  assert.deepEqual(result.dictionary, ["TypeLeast", "DeepSeek", "得普=DeepSeek"]);
-  await service.setDictionary([]);
-  assert.deepEqual(service.dictionary, ["TypeLeast"]);
-  await assert.rejects(() => service.setDictionary("nope"));
-});
-
 
 test("dictation language reaches recognition and invalid languages do not run recognition", async () => {
   const languages = [];

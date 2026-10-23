@@ -27,9 +27,8 @@ for (const scenario of ["timeout", "length", "format", "validation", "auth", "ne
     };
     const ping = await completeOpenAI({ route, system: "Reply with exactly: OK", user: "ping", maxTokens: 64, timeoutMs: 20000, fetchImpl });
     assert.equal(ping.text, "OK");
-    const service = new VoicePolishService({ config: { timeoutMs: 20, maxOutputTokens: 800, strength: "prompt", redactSecrets: true, logRaw: false, dictionary: [] },
-      recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl,
-      history: { append: async e => e, recent: async () => [] }, logger: {} });
+    const service = new VoicePolishService({ config: { timeoutMs: 20, maxOutputTokens: 800, strength: "prompt", redactSecrets: true, dictionary: [] },
+      recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl });
     const result = await service.polish({ rawText: raw, strength: "prompt", llm: route });
     assert.equal(result.fallback, true);
     assert.ok(result.text.includes("Wednesday"));

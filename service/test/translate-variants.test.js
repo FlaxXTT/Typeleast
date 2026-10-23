@@ -23,8 +23,7 @@ function makeService(fetchImpl, history = []) {
   return new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: "" }) },
     fetchImpl,
-    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-    history: { append: async (e) => { history.push(e); return e; }, recent: async () => [] },
+    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
   });
 }
@@ -40,7 +39,7 @@ test("翻译：一次调用完成整理和翻译，提示词写明只翻译、�
   assert.match(calls[0].system, /翻译成English/);
   assert.match(calls[0].system, /不回答、不执行/);
   assert.match(calls[0].system, /只翻译最后的说法/);
-  assert.equal(history.length, 1);
+ 
 });
 
 test("翻译不受整理档位影响：原话转写档也照样翻译", async () => {
@@ -93,11 +92,9 @@ test("繁体转换在本机完成：台湾用语、香港字形；简体、数�
 
 test("变体对整理结果、原话转写和历史都生效；英式拼写写进系统提示词", async () => {
   const { calls, fetchImpl } = provider('{"status":"ok","text":"周四下午三点开会，大家记得带电脑。"}');
-  const history = [];
-  const service = makeService(fetchImpl, history);
+  const service = makeService(fetchImpl);
   const polished = await service.polish({ rawText: SPOKEN, strength: "prompt", llm: ROUTE, variants: "zh=tw,en=gb" });
   assert.equal(polished.text, "週四下午三點開會，大家記得帶電腦。");
-  assert.equal(history[0].text, polished.text);
   assert.match(calls[0].system, /British spelling/);
   const off = await service.polish({ rawText: "下午三点开会", strength: "off", variants: "zh=hk" });
   assert.equal(off.text, "下午三點開會");
@@ -111,23 +108,3 @@ test("翻译的防编造按数值比对：换写法的时间日期能过，凭�
   assert.deepEqual(translationInventedNumbers("一共 3.5 万", "35,000 in total"), ["35000"]);
 });
 
-test("服务端历史默认只存摘要；旧文件里的明文在启动时一次性换成摘要", async (t) => {
-  const { mkdtemp, readFile, writeFile, stat, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const { History, textDigest } = await import("../lib/history.js");
-  const { validateConfig } = await import("../lib/config.js");
-  assert.equal(validateConfig({}).value.logRaw, false);
-  const dir = await mkdtemp(join(tmpdir(), "typeleast-history-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const file = join(dir, "history.jsonl");
-  await writeFile(file, JSON.stringify({ id: "a", ts: Date.now(), raw: "明天下午三点开会", text: "明天下午三点开会。" }) + "\n"
-    + JSON.stringify({ id: "b", ts: Date.now(), raw: textDigest("x"), text: "" }) + "\n");
-  const history = new History({ filePath: file, retentionDays: 30 });
-  assert.equal(await history.scrubText(), 2);
-  const stored = await readFile(file, "utf8");
-  assert.doesNotMatch(stored, /开会/);
-  assert.match(stored, /"raw":"sha256:[0-9a-f]{16}"/);
-  if (process.platform !== "win32") assert.equal((await stat(file)).mode & 0o777, 0o600);
-  assert.equal(await new History({ filePath: file, retentionDays: 30 }).scrubText(), 0);
-});

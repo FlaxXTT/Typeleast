@@ -12,8 +12,7 @@ const service = new VoicePolishService({
     outbound = init.body;
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"status":"ok","text":"My API key is [redacted-key] and the password is [redacted].","reason":"redacted"}' }, finish_reason: 'stop' }] }) };
   },
-  config: { maxOutputTokens: 400, timeoutMs: 5000, strength: 'prompt', redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-  history: { append: async (entry) => entry, recent: async () => [] },
+  config: { maxOutputTokens: 400, timeoutMs: 5000, strength: 'prompt', redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
   logger: { info: () => {}, warn: () => {}, debug: () => {} },
   version: 'probe',
 });

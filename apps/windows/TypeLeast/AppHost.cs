@@ -26,7 +26,6 @@ internal sealed class AppHost
     public HealthResponse? Health { get; private set; }
     public DictationPhase Phase { get; private set; } = DictationPhase.Idle;
     public string Hint { get; private set; } = "";
-    public bool? DictionarySynced { get; private set; }
     public string? SettingsSaveError { get; private set; }
 
     /// <summary>Something the windows show changed (raised on the UI thread).</summary>
@@ -41,6 +40,7 @@ internal sealed class AppHost
     private MainWindow? window;
     private Tray? tray;
     private DispatcherTimer? healthTimer;
+    private DateTime lastHousekeeping = DateTime.MinValue;
     private IntPtr targetWindow;
     private string targetApp = "";
     // Prompt Beta questions waiting for a spoken answer, and where the prompt goes.
@@ -51,12 +51,10 @@ internal sealed class AppHost
     private LearnedToast? learnedToast;
     // 翻译模式: the target language of the recording in progress (null: ordinary dictation).
     private string? translating;
-    private bool dictionaryNeedsSync = true;
     private readonly OperationTracker operations = new();
     private DictationOptions? recordingOptions;
     private bool quitting;
     private bool refreshing;
-    private bool syncing;
     private DictationOptions? betaOptions;
     public RetainedAudio RetainedAudio { get; }
     private FieldTarget? targetField;
@@ -268,7 +266,7 @@ internal sealed class AppHost
 
         tray = new Tray(this);
         JumpList.Update(Settings.Strength);
-        healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        healthTimer = new DispatcherTimer { Interval = HealthPolling.Busy };
         healthTimer.Tick += async (_, _) => await RefreshHealth();
         healthTimer.Start();
 
@@ -303,6 +301,7 @@ internal sealed class AppHost
     public void ShowWindow(MainWindow.Page page)
     {
         window ??= new MainWindow(this);
+        _ = RefreshHealth();
         window.ShowPage(page);
         window.Show();
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
@@ -347,7 +346,6 @@ internal sealed class AppHost
     public bool SaveSettings()
     {
         if (!Settings.LearnCorrections) learner.Stop();
-        Settings.Words = Settings.DictionaryEntries.Select(e => e.ServiceValue).ToList();
         try { Settings.Save(settingsPath); savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options); }
         catch (Exception e) {
             var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(savedSettingsJson, Json.Options)!;
@@ -378,19 +376,24 @@ internal sealed class AppHost
     public async Task RefreshHealth()
     {
         if (refreshing || quitting) return;
-        History.ApplyRetention(Settings.HistoryRetention); PruneAudio();
+        if (DateTime.UtcNow - lastHousekeeping >= HealthPolling.Housekeeping)
+        {
+            lastHousekeeping = DateTime.UtcNow;
+            History.ApplyRetention(Settings.HistoryRetention); PruneAudio();
+        }
         refreshing = true;
         try
         {
             Health = await Client.HealthAsync();
             try { SpeechCatalog = await Client.GetSpeechModelsAsync(); } catch (ServiceException) { SpeechCatalog = null; }
-            if (dictionaryNeedsSync && Health.Service == "typeleast") _ = SyncDictionary();
         }
         catch (ServiceException)
         {
             Health = null;
         }
         finally { refreshing = false; }
+        if (healthTimer is not null)
+            healthTimer.Interval = HealthPolling.Interval(Health is not null, Health?.Speech?.Phase, SpeechCatalog?.Operation?.Phase);
         Raise();
     }
 
@@ -425,31 +428,14 @@ internal sealed class AppHost
         catch (ServiceException) { SetHint(L10n.T("模型操作失败，请重试。当前模型保留。")); }
     }
 
-    public async Task SyncDictionary()
-    {
-        if (syncing || quitting) return;
-        syncing = true;
-        var snapshot = Settings.Words.ToArray();
-        try
-        {
-            await Client.PutDictionaryAsync(snapshot);
-            DictionarySynced = true;
-            dictionaryNeedsSync = !snapshot.SequenceEqual(Settings.Words);
-        }
-        catch (ServiceException)
-        {
-            DictionarySynced = false;
-            dictionaryNeedsSync = true;
-        }
-        finally { syncing = false; }
-        Raise();
-    }
+    /// <summary>Sent with every dictation: "word" or "heard=word".</summary>
+    private string[] DictionaryForService() => Settings.DictionaryEntries.Select(e => e.ServiceValue).ToArray();
 
     public void AddWord(string entry)
     {
         if (WordEntry.FromLegacy(entry) is { } word) SaveWord(word);
     }
-    public bool SaveWord(WordEntry entry, bool synchronize = true)
+    public bool SaveWord(WordEntry entry)
     {
         if (WordEntry.Parse(entry.Word, entry.HeardAs, entry.Source) is null) return false;
         if (Settings.DictionaryEntries.Any(e => e.Id != entry.Id && string.Equals(e.ServiceValue, entry.ServiceValue, StringComparison.OrdinalIgnoreCase)))
@@ -458,7 +444,7 @@ internal sealed class AppHost
         var index = Settings.DictionaryEntries.FindIndex(e => e.Id == entry.Id);
         if (index < 0) Settings.DictionaryEntries.Add(entry); else Settings.DictionaryEntries[index] = entry;
         if (!SaveSettings()) { Settings.DictionaryEntries = previous; return false; }
-        dictionaryNeedsSync = true; if (synchronize) _ = SyncDictionary(); return true;
+        return true;
     }
     /// <summary>A word the user corrected after a dictation: added as a spelling to prefer (never a
     /// replacement rule), unless it is already there; the toast can take it back.</summary>
@@ -517,8 +503,7 @@ internal sealed class AppHost
     {
         var previous = Settings.DictionaryEntries.ToList();
         Settings.DictionaryEntries.RemoveAll(e => e.Id == entry || e.ServiceValue == entry);
-        if (!SaveSettings()) { Settings.DictionaryEntries = previous; return; }
-        dictionaryNeedsSync = true; _ = SyncDictionary();
+        if (!SaveSettings()) Settings.DictionaryEntries = previous;
     }
     private void PruneAudio()
     {
@@ -542,7 +527,7 @@ internal sealed class AppHost
             wav = RetainedAudio.Load(entry.AudioId!);
             if (request.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
-                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants);
+                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: DictionaryForService());
             if (!operations.IsCurrent(operation)) return;
             Paster.SetText(result.InsertableText);
             History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
@@ -715,7 +700,8 @@ internal sealed class AppHost
             var requestOptions = answering is not null ? betaOptions ?? options : options;
             if (requestOptions.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
-                fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants);
+                fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
+                dictionary: DictionaryForService());
             if (!operations.IsCurrent(operation)) return;
             if (ShowBetaQuestions(result))
             {

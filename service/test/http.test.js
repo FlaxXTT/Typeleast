@@ -16,8 +16,7 @@ function failingService() {
       transcribe: async () => ({ text: "x" }),
     },
     fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Send the" }, finish_reason: "length" }] }) }),
-    config: { maxOutputTokens: 400, timeoutMs: 5000, strength: "prompt", redactSecrets: true, logRaw: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
-    history: { append: async (entry) => { stored.push(entry); return entry; }, recent: async () => stored },
+    config: { maxOutputTokens: 400, timeoutMs: 5000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
     version: "test",
   });

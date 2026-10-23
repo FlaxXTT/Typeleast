@@ -2,6 +2,13 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.17.9（2026-10-23）
+
+- 词典随每次听写发送：词典只保存在 App 里，每次听写时一起发给本地服务，服务不再另存一份。刚改的词立刻生效，也不再出现「词典尚未同步」。
+- 本地服务不再记录听写历史（`history.jsonl`）：没有任何地方读取它，历史只在两端 App 里加密保存。旧版本留下的 `history.jsonl` 和 `dictionary.json` 在服务启动时删除。
+- 删除不再使用的部分：服务的 `/learn`（会写强制替换规则，1.17.6 起已不调用）、`/history`、`/dictionary` 接口；Mac 更新时借用 GitHub 命令行工具（gh）的兜底（仓库公开后已不需要，下载慢时有镜像）；`package-wine.sh` 和 `publish-release.ps1` 两个本地发版脚本（已由 Release 工作流取代）。
+- Windows 不再每 3 秒检查一次本地服务：服务启动、模型加载或下载时每 2 秒，平时每 30 秒，打开窗口时立刻检查；整理历史和清理过期录音改为每次听写后和每小时一次。服务意外退出仍会立刻发现。
+
 ## 1.17.8（2026-10-23）
 
 - 软件内更新会自动换线路（Mac 和 Windows）：GitHub 下载 15 秒没有新数据，就依次换到公共 GitHub 加速镜像（ghfast.top、gh-proxy.com、gh-proxy.org、gh.llkk.cc）。校验值始终从 GitHub 官方获取，镜像给的文件对不上就换下一条线路，被改动的文件不会安装。进度窗口显示正在从哪里下载。

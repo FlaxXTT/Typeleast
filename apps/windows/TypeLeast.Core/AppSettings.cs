@@ -121,8 +121,10 @@ public sealed class AppSettings
                 if (loaded.DictionaryEntries.Any(e => e is null || e.Word is null || e.HeardAs is null || WordEntry.Parse(e.Word, e.HeardAs, e.Source) is null)) throw new JsonException("Invalid dictionary entries");
                 if (!Enum.IsDefined(loaded.Hotkey)) loaded.Hotkey = DictationKey.RightAlt;
                 if (loaded.TranslateHotkey is { } key && !Enum.IsDefined(key)) loaded.TranslateHotkey = null;
+                // Settings from before structured entries kept plain strings here; read once, no longer written.
                 if (loaded.DictionaryEntries.Count == 0)
                     loaded.DictionaryEntries = loaded.Words.Select(WordEntry.FromLegacy).OfType<WordEntry>().ToList();
+                loaded.Words = new();
                 if (!new[] { "forever", "year", "month", "week", "day", "never" }.Contains(loaded.HistoryRetention)) loaded.HistoryRetention = "forever";
                 if (!new[] { "autoPaste", "clipboardOnly", "preview" }.Contains(loaded.InsertionMode)) loaded.InsertionMode = "autoPaste";
                 if (!new[] { "system", "light", "dark" }.Contains(loaded.Appearance)) loaded.Appearance = "system";

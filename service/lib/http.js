@@ -17,6 +17,8 @@ import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compa
 
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
+/** The app's dictionary, sent with each dictation ahead of the audio (2000 entries of up to 120 characters). */
+export const MAX_DICTIONARY_BYTES = 1024 * 1024;
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
@@ -154,19 +156,6 @@ export function createHandler(options) {
         return;
       }
 
-      if (route === "/history" && req.method === "GET") {
-        const limit = Number(url.searchParams.get("limit") ?? "20");
-        const items = await service.readHistory({ limit: Number.isFinite(limit) ? limit : 20 });
-        reply(res, 200, { items });
-        return;
-      }
-
-      if (route === "/learn" && req.method === "POST") {
-        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
-        reply(res, 200, await service.learn({ from: body.from, to: body.to }));
-        return;
-      }
-
       if (route === "/test-llm" && req.method === "POST") {
         // One tiny call to check a user-supplied route. Nothing is recorded in
         // history, and the key is never echoed back.
@@ -230,17 +219,6 @@ export function createHandler(options) {
         return;
       }
 
-      if (route === "/dictionary" && req.method === "GET") {
-        reply(res, 200, { dictionary: [...service.dictionary] });
-        return;
-      }
-
-      if (route === "/dictionary" && req.method === "PUT") {
-        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
-        reply(res, 200, await service.setDictionary(body.entries));
-        return;
-      }
-
       if (route === "/polish" && req.method === "POST") {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const result = await service.polish({
@@ -251,6 +229,7 @@ export function createHandler(options) {
           llm: normalizeRoute(body.llm),
           translateTo: typeof body.translateTo === "string" ? body.translateTo : null,
           variants: body.variants ?? null,
+          dictionary: Array.isArray(body.dictionary) ? body.dictionary : null,
           signal: undefined,
         });
         // service.polish() records the attempt itself.
@@ -269,8 +248,24 @@ export function createHandler(options) {
       }
 
       if (route === "/dictate" && req.method === "POST") {
-        const audio = await readBody(req, service.config.maxAudioBytes + 46);
+        // The body is the app's dictionary (x-voice-dictionary-bytes of JSON, may be 0) then the WAV.
+        const dictionaryBytes = Number(req.headers["x-voice-dictionary-bytes"] ?? "0");
+        if (!Number.isInteger(dictionaryBytes) || dictionaryBytes < 0 || dictionaryBytes > MAX_DICTIONARY_BYTES) {
+          reply(res, 400, { error: "invalid-dictionary" });
+          return;
+        }
+        const body = await readBody(req, service.config.maxAudioBytes + 46 + dictionaryBytes);
+        let dictionary = null;
+        if (dictionaryBytes > 0) {
+          try { dictionary = JSON.parse(body.subarray(0, dictionaryBytes).toString("utf8")); } catch { dictionary = null; }
+          if (!Array.isArray(dictionary)) {
+            reply(res, 400, { error: "invalid-dictionary" });
+            return;
+          }
+        }
+        const audio = body.subarray(dictionaryBytes);
         const result = await service.transcribeAndPolish({
+          dictionary,
           requestId: req.headers["x-request-id"] ?? undefined,
           audio,
           language: req.headers["x-voice-language"] ?? undefined,

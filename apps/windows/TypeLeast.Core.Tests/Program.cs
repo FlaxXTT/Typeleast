@@ -131,7 +131,8 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     s.Save(file);
     var back = AppSettings.Load(file);
     Eq("settings round-trip", back.Hotkey, DictationKey.F8);
-    Eq("words round-trip", back.Words.FirstOrDefault(), "TypeLeast");
+    Eq("old plain words become dictionary entries", back.DictionaryEntries.FirstOrDefault()?.Word, "TypeLeast");
+    Eq("…and are not written back", back.Words.Count, 0);
     Check("the key is never written to the settings file", !File.ReadAllText(file).Contains("sk-test"));
     File.WriteAllText(file, "{ broken");
     Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
@@ -788,6 +789,15 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("the line names the source", UpdateProgressText.Describe(UpdateStage.Downloading, 1 << 20, 2 << 20, "ghfast.top").Contains("ghfast.top"));
     Eq("an unknown source setting falls back to auto", AppSettings.Load(WriteTemp("""{"UpdateSource":"weird"}""")).UpdateSource, "auto");
 
+    Eq("the service starting: ask often", HealthPolling.Interval(false, null, null), HealthPolling.Busy);
+    Eq("a speech model loading: ask often", HealthPolling.Interval(true, "loading", null), HealthPolling.Busy);
+    Eq("a model downloading: ask often", HealthPolling.Interval(true, "ready", "downloading"), HealthPolling.Busy);
+    Eq("all ready and idle: ask rarely", HealthPolling.Interval(true, "ready", null), HealthPolling.Idle);
+    Eq("no model yet, nothing happening: rarely", HealthPolling.Interval(true, "missing-model", null), HealthPolling.Idle);
+    var (body, length) = ServiceClient.DictateBody([1, 2, 3], ["DeepSeek", "得普=DeepSeek"]);
+    Eq("the dictionary rides first, as JSON", System.Text.Json.JsonSerializer.Deserialize<string[]>(body.AsSpan(0, length))?.Length, 2);
+    Eq("then the WAV", string.Join(",", body[length..]), "1,2,3");
+    Eq("no dictionary: just the WAV", ServiceClient.DictateBody([1, 2, 3], []).DictionaryBytes, 0);
     Check("learning is on for new installs", new AppSettings().LearnCorrections);
     var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(old, """{"LearnCorrections":false}""");

@@ -5,8 +5,7 @@ name: Release
 #   TypeLeast-<v>-Windows-x64-Setup.exe
 #   TypeLeast-<v>-Windows-x64-Portable.zip
 #   SHA256SUMS.txt
-# Manual only. Releases can also be published locally with
-# apps/windows/publish-release.ps1 or gh. With "draft" the release stays a draft
+# Manual only. With "draft" the release stays a draft
 # (the updaters do not see it) until it is published by hand after checking the files.
 on:
   workflow_dispatch:

@@ -30,12 +30,10 @@ const FIELDS = {
   temperature: { kind: "number", default: 0.8, help: "Sampling temperature. Keeps the existing default; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
-  historyDays: { kind: "integer", default: 14, help: "Retention for the dictation history file." },
   dictionary: { kind: "stringArray", default: [], help: "Words whose spelling must be preserved verbatim." },
   maxAudioBytes: { kind: "integer", default: 4194304, help: "Largest accepted WAV body." },
   maxDurationSeconds: { kind: "integer", default: 120, help: "Longest accepted recording." },
   redactSecrets: { kind: "boolean", default: true, help: "Strip key-shaped strings from model context." },
-  logRaw: { kind: "boolean", default: false, help: "Store the words of each dictation in the service's history.jsonl; off by default (only digests), since the apps keep their own encrypted history." },
 };
 
 /** JSON Schema view of the fields, for documentation and tests. */

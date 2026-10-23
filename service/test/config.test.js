@@ -9,7 +9,7 @@ test("an empty configuration is valid and returns the documented key set", () =>
   const result = validateConfig({});
   assert.deepEqual(result.issues, []);
   assert.deepEqual(Object.keys(result.value).sort(), [
-    "dictionary", "historyDays", "language", "logRaw", "maxAudioBytes", "maxDurationSeconds",
+    "dictionary", "language", "maxAudioBytes", "maxDurationSeconds",
     "maxOutputTokens", "numThreads", "redactSecrets", "strength", "temperature", "timeoutMs",
   ]);
   assert.equal(result.value.temperature, 0.8, "keeps the existing sampling temperature default");
@@ -43,7 +43,7 @@ test("bad values are reported and keep their defaults, never fatal", () => {
   const cases = [
     [{ nope: 1 }, /unknown configuration key/, null],
     [{ strength: "aggressive" }, /must be one of off, conservative, prompt/, ["strength", "prompt"]],
-    [{ logRaw: "yes" }, /must be a boolean/, ["logRaw", false]],
+    [{ redactSecrets: "yes" }, /must be a boolean/, ["redactSecrets", true]],
     [{ dictionary: [1, 2] }, /array of strings/, ["dictionary", []]],
     [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 12000]],
     [{ timeoutMs: 100 }, /at least 1000/, ["timeoutMs", 12000]],

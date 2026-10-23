@@ -49,7 +49,6 @@ protocol AppActions: AnyObject {
     func downloadModels()
     func chooseNode()
     func recheckHealth()
-    func syncDictionary()
     func showOnboarding()
     func finishOnboarding()
     func applyGeneralSettings()
@@ -80,8 +79,6 @@ final class AppModel: ObservableObject {
     @Published var serviceProblem = ""
     @Published var accessibilityTrusted = false
     @Published var micStatus: AVAuthorizationStatus = .notDetermined
-    /// Whether the host accepted the last dictionary sync (nil = not tried yet).
-    @Published var dictionarySynced: Bool?
     /// Short status line for the hub ("已粘贴", "听写失败：…").
     @Published var hint = ""
 

@@ -7,8 +7,11 @@
  *
  * Both share one rule: the raw transcript is never lost. Any failure, timeout,
  * rejection, missing key or missing model returns the raw text (deterministically
- * tidied) with a reason and a short detail, and the attempt is recorded in
- * history first.
+ * tidied) with a reason and a short detail.
+ *
+ * The service keeps no dictation history and no dictionary of its own: each app
+ * keeps both (encrypted history, its Dictionary page) and sends the dictionary
+ * with every request, so there is nothing to keep in sync.
  *
  * Recognition is local (asr.js). Cleanup uses the model and API key the app
  * sends with each request (openai-compat.js); the service stores no key.
@@ -26,7 +29,6 @@ import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { validateOutput } from "./validate.js";
 import { tidy } from "./tidy.js";
-import { textDigest } from "./history.js";
 import { validateWav } from "./wav.js";
 import { PROMPTIFY_LIMITS, PROMPTIFY_PROMPT, promptifySystemPrompt } from "./prompts/promptify.js";
 import {
@@ -51,17 +53,16 @@ class BackpressureError extends Error {
   }
 }
 
-/** Recognition, cleanup, validation and history for one user. */
+/** Recognition, cleanup and validation for one user. */
 export class VoicePolishService {
   /**
-   * @param {object} options - recognizer, history, configuration and logger.
+   * @param {object} options - recognizer, configuration and logger.
    */
   constructor(options) {
     this.recognizer = options.recognizer;
     this.config = options.config;
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
-    this.history = options.history;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
     this.pending = 0;
     this.queue = 0;
@@ -69,11 +70,11 @@ export class VoicePolishService {
     /** The route of the most recent cleanup, for /health: "custom:<host>" and model id. */
     this.lastRoute = { provider: null, model: null };
     this.startedAt = Date.now();
-    this.dictionaryPath = options.dictionaryPath ?? null;
     /** Prompt mode (提示词模式): the user's additions and, if they replaced it, their default. */
     this.promptifyPath = options.promptifyPath ?? null;
     this.promptify = { appendix: "", override: null };
     this.promptifyMtime = null;
+    /** Entries from config.json; each request adds the app's own dictionary (dictionaryFrom). */
     this.dictionary = [...(this.config.dictionary ?? [])];
     // dictations/polished/fallback/lastMs count /dictate; modelCalls and
     // modelFallbacks count every polish() that reached the model, /polish included.
@@ -118,72 +119,6 @@ export class VoicePolishService {
       return this.recognizer.snapshot();
     } catch (error) {
       return { providerId: null, phase: "unavailable", ready: false, error: message(error) };
-    }
-  }
-
-  /** Recent dictation history, newest first. */
-  async readHistory({ limit = 20 } = {}) {
-    return this.history.recent({ limit: Math.max(1, Math.min(200, limit)) });
-  }
-
-  /**
-   * Add a spelling correction learned from a user edit.
-   * @param {{from: string, to: string}} pair - the wrong and preferred spellings.
-   * @returns {Promise<{ok: boolean, dictionary: string[]}>} the updated dictionary.
-   */
-  async learn(pair) {
-    const from = String(pair.from ?? "").trim();
-    const to = String(pair.to ?? "").trim();
-    if (from.length === 0 || to.length === 0) throw new Error("learn requires non-empty from and to");
-    const existing = this.dictionary.findIndex((item) => item.startsWith(`${from}=`));
-    const entry = `${from}=${to}`;
-    if (existing >= 0) this.dictionary[existing] = entry;
-    else this.dictionary.push(entry);
-    await this.persistDictionary();
-    return { ok: true, dictionary: [...this.dictionary] };
-  }
-
-  /**
-   * Replace the learned dictionary with the app's list (the native Dictionary page
-   * owns it: add, edit, delete, CSV import, auto-added words). Entries are either a
-   * plain word ("DeepSeek", a spelling to prefer) or "heard=word" (a hard rule).
-   * Entries from config.json are always kept.
-   * @param {unknown} entries - candidate list.
-   * @returns {Promise<{ok: boolean, dictionary: string[]}>} the dictionary now in use.
-   */
-  async setDictionary(entries) {
-    if (!Array.isArray(entries)) throw new Error("dictionary must be an array of strings");
-    const cleaned = [];
-    for (const entry of entries.slice(0, 2000)) {
-      if (typeof entry !== "string") continue;
-      const trimmed = entry.trim().slice(0, 120);
-      if (trimmed.length > 0 && !cleaned.includes(trimmed)) cleaned.push(trimmed);
-    }
-    const configured = (this.config.dictionary ?? []).filter((entry) => typeof entry === "string");
-    this.dictionary = [...configured, ...cleaned.filter((entry) => !configured.includes(entry))];
-    await this.persistDictionary();
-    return { ok: true, dictionary: [...this.dictionary] };
-  }
-
-  /**
-   * Merge the user's learned dictionary into memory.
-   *
-   * Learned entries live in dictionary.json, apart from config.json, so the
-   * service never rewrites a file the user edits by hand.
-   */
-  async loadDictionary() {
-    if (this.dictionaryPath === null) return;
-    try {
-      const parsed = JSON.parse(await readFile(this.dictionaryPath, "utf8"));
-      if (Array.isArray(parsed)) {
-        for (const entry of parsed) {
-          if (typeof entry === "string" && entry.trim().length > 0 && !this.dictionary.includes(entry)) {
-            this.dictionary.push(entry);
-          }
-        }
-      }
-    } catch {
-      // Absent or malformed: the configured dictionary is still valid.
     }
   }
 
@@ -249,17 +184,6 @@ export class VoicePolishService {
   async refreshPromptify() {
     if (this.promptifyPath === null) return;
     if ((await mtimeOf(this.promptifyPath)) !== this.promptifyMtime) await this.loadPromptify();
-  }
-
-  /** Persist learned entries. */
-  async persistDictionary() {
-    if (this.dictionaryPath === null) return;
-    try {
-      await mkdir(dirname(this.dictionaryPath), { recursive: true });
-      await writePrivate(this.dictionaryPath, JSON.stringify(this.dictionary, null, 2) + "\n");
-    } catch (error) {
-      this.logger.warn?.("typeleast: could not persist the dictionary: %s", message(error));
-    }
   }
 
   /**
@@ -621,29 +545,14 @@ export class VoicePolishService {
   }
 
   /**
-   * Record one polish attempt, then return it.
-   *
-   * Every exit path of polish() goes through here, so history never misses an
-   * attempt — including the short-circuits that never reach the model. Callers
-   * therefore must NOT record a polish result a second time.
-   *
-   * @param {object} request - the original request (for app, language, strength).
+   * Finish one polish attempt: every exit path of polish() goes through here.
+   * @param {object} request - the original request (for the written variant).
    * @param {object} result - the result about to be returned.
    * @returns {Promise<object>} the same result.
    */
   async recordAndReturn(request, result) {
-    // The written variant (繁體) is the last step, so history and the inserted text agree.
+    // The written variant (繁體) is the last step, so the history and the inserted text agree.
     if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants));
-    await this.record(request, {
-      raw: result.raw,
-      text: result.text,
-      fallback: result.fallback,
-      fallbackReason: result.reason,
-      detail: result.detail,
-      model: result.model,
-      provider: result.provider,
-      ms: result.ms,
-    });
     return result;
   }
 
@@ -690,6 +599,7 @@ export class VoicePolishService {
         betaSession: request.betaSession ?? null,
         translateTo: request.translateTo ?? null,
         variants: request.variants ?? null,
+        dictionary: request.dictionary ?? null,
       });
       const result = {
         requestId: request.requestId,
@@ -733,7 +643,7 @@ export class VoicePolishService {
   async buildContext(request) {
     const redact = this.config.redactSecrets !== false;
     return {
-      dictionary: this.dictionary.map(entry => redact ? redactSecrets(entry) : entry),
+      dictionary: dictionaryFrom(this.dictionary, request.dictionary).map(entry => redact ? redactSecrets(entry) : entry),
       // The text box being dictated into is the most relevant context there is.
       fieldContext: redactFieldContext(request.fieldContext ?? null, redact),
     };
@@ -746,33 +656,6 @@ export class VoicePolishService {
       if (signal?.aborted) throw signal.reason ?? new Error("aborted");
       if (Date.now() > deadlineAt) throw new BackpressureError();
       await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-
-  /** Store one attempt, before the caller ever sees the result. */
-  async record(request, result) {
-    try {
-      const redact = this.config.redactSecrets !== false;
-      const logRaw = this.config.logRaw !== false;
-      // Redaction happens before hashing: a digest of an unredacted secret is
-      // still derived from the secret, and this file is meant to be safe to read.
-      const rawText = redact ? redactSecrets(result.raw ?? "") : (result.raw ?? "");
-      const cleanText = redact ? redactSecrets(result.text ?? "") : (result.text ?? "");
-      await this.history.append({
-        app: request.appHint ?? null,
-        language: request.language ?? this.config.language ?? "auto",
-        strength: request.strength ?? this.strength,
-        raw: logRaw ? rawText : hash(rawText),
-        text: logRaw ? cleanText : hash(cleanText),
-        fallback: result.fallback,
-        reason: result.fallbackReason ?? null,
-        detail: result.detail ?? null,
-        model: result.model ?? null,
-        provider: result.provider ?? null,
-        ms: result.ms ?? null,
-      });
-    } catch (error) {
-      this.logger.warn?.("typeleast: could not record history: %s", message(error));
     }
   }
 }
@@ -798,8 +681,25 @@ function describeVerdict(metrics) {
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
-/** Short stable digest for privacy-preserving history. */
-const hash = textDigest;
+/** Longest dictionary a request may carry, and longest entry. */
+export const DICTIONARY_LIMITS = { entries: 2000, entryLength: 120 };
+
+/**
+ * The dictionary for one call: config.json's entries, then the app's (each a word to
+ * spell exactly, or "heard=word"), trimmed, bounded and without duplicates.
+ * @param {string[]} configured - entries from config.json.
+ * @param {unknown} sent - the app's list from the request.
+ * @returns {string[]} entries to use.
+ */
+export function dictionaryFrom(configured, sent) {
+  const entries = [...configured];
+  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim().slice(0, DICTIONARY_LIMITS.entryLength);
+    if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
+  }
+  return entries;
+}
 
 /** Narrow an unknown throwable to a printable message. */
 function message(error) {
@@ -807,8 +707,8 @@ function message(error) {
 }
 
 /**
- * Write a file only this user can read, like the token and the history: the dictionary
- * holds names and terms the user dictates, the prompt file their own instructions.
+ * Write a file only this user can read, like the token: the prompt file holds the
+ * user's own instructions.
  * The mode applies when the file is created; chmod covers files from older versions.
  */
 async function writePrivate(path, text) {
