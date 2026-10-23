@@ -589,7 +589,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     double shown = 0; for (var i = 0; i < 30; i++) shown = level.Next(quiet);
     Check("quiet speech fills most of the bar", shown > 0.8, $"shown={shown}");
     Check("loud speech is clamped", new AudioLevel().Next(6) <= 1);
-    Eq("four cleanup modes", CleanupModes.Codes.Length, 4);
+    Eq("four mode families with two prompt tiers", CleanupModes.Codes.Length, 5);
     Check("natural cleanup keeps its stored id", CleanupModes.IsKnown("prompt") && !CleanupModes.IsKnown("maximal"));
 }
 

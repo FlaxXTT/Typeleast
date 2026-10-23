@@ -133,7 +133,8 @@ internal sealed class UpdateProgressWindow : Window
             var label = Theme.Text(L10n.T(UpdatePolicy.Steps[i]), 11.5, i <= current ? Theme.Ink : Theme.Grey, bold: i == current);
             label.HorizontalAlignment = HorizontalAlignment.Center;
             label.Margin = new Thickness(0, 6, 0, 0);
-            var column = new StackPanel { Width = 52 };
+            label.TextWrapping = TextWrapping.NoWrap;
+            var column = new StackPanel { Width = 64 };
             dot.HorizontalAlignment = HorizontalAlignment.Center;
             column.Children.Add(dot);
             column.Children.Add(label);

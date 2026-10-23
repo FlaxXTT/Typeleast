@@ -87,7 +87,7 @@ class P
             })
             {
                 var window = new UpdateProgressWindow();
-                window.SetVersion("1.18.0", L10n.T("本次更新") + "\n• " + L10n.T("提示词 · 普通") + " / " + L10n.T("提示词 · 标准格式") + "\n• " + L10n.T("积极压缩口语，保留核心意图和约束，简洁、直白、易读。"));
+                window.SetVersion("1.18.0", "• " + L10n.T("提示词 · 普通") + " / " + L10n.T("提示词 · 标准格式") + "\n• " + L10n.T("积极压缩口语，保留核心意图和约束，简洁、直白、易读。"));
                 window.Report(stage, received, total, source);
                 var content = (FrameworkElement)window.Content; window.Content = null;
                 var card = new Border { Background = Theme.CardFill, Child = content };
