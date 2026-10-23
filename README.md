@@ -147,7 +147,7 @@
 
 ## 下载
 
-Mac 和 Windows 的最新版都是 [**v1.17.7**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.7)：
+Mac 和 Windows 的最新版都是 [**v1.17.8**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.8)：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
