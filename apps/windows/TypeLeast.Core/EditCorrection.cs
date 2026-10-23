@@ -71,6 +71,7 @@ public sealed class EditPoll(DateTime start, Func<string, bool> edited)
 
     public enum Step { Wait, Judge, Stop }
 
+    private readonly DateTime started = start;
     private string? last;
     private DateTime lastChange = start;
 
@@ -80,7 +81,7 @@ public sealed class EditPoll(DateTime start, Func<string, bool> edited)
         if (value is null) return Step.Stop;
         if (value != last) { last = value; lastChange = at; }
         if (at - lastChange >= Settle && edited(value)) return Step.Judge;
-        return at - start >= Window ? Step.Stop : Step.Wait;
+        return at - started >= Window ? Step.Stop : Step.Wait;
     }
 
     /// <summary>Judge now (the next dictation started, or the user left the field): the value if it was edited.</summary>

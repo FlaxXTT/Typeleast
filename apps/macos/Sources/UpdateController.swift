@@ -24,12 +24,6 @@ final class UpdateController {
         self.host = host
     }
 
-    /// A quiet check offers each new version once, and only while nothing is in the way;
-    /// asking by hand always offers it.
-    static func shouldOffer(latest: String, offered: String?, interactive: Bool, busy: Bool) -> Bool {
-        interactive || (offered != latest && !busy)
-    }
-
     /// `interactive`: the user asked, so say "already up to date" and show errors.
     func check(interactive: Bool) {
         guard !Updater.intelDiscontinued() else {
@@ -49,7 +43,7 @@ final class UpdateController {
                 case .success(let latest) where Updater.isNewer(latest, than: Updater.currentVersion):
                     self.host.showAvailable(latest)
                     let offered = UserDefaults.standard.string(forKey: self.offeredKey)
-                    if UpdateController.shouldOffer(latest: latest, offered: offered, interactive: interactive,
+                    if Updater.shouldOffer(latest: latest, offered: offered, interactive: interactive,
                                                     busy: self.host.busyReason() != nil) {
                         UserDefaults.standard.set(latest, forKey: self.offeredKey)
                         self.offer(latest)

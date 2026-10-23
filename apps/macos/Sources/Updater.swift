@@ -90,6 +90,12 @@ enum Updater {
         return withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
     }
 
+    /// A quiet check offers each new version once, and only while nothing is in the way
+    /// (dictating, Prompt Beta open); asking by hand always offers it.
+    static func shouldOffer(latest: String, offered: String?, interactive: Bool, busy: Bool) -> Bool {
+        interactive || (offered != latest && !busy)
+    }
+
     /// Intel Macs get no new versions after 1.17.1.
     static func intelDiscontinued(arch: String = machineArch) -> Bool { arch != "arm64" }
 
