@@ -567,7 +567,8 @@ internal sealed class AppHost
             return;
         }
         Phase = DictationPhase.Recording;
-        if (translating is null && betaSession is not null) betaPanel?.Hide();
+        // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
+        if (translating is null && betaSession is not null) betaPanel?.SetBusy(L10n.T("正在听你补充，说完再按 {0}", HotkeyLabel));
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
         Raise();
@@ -614,7 +615,7 @@ internal sealed class AppHost
         hook.SwallowEscape = false;
         translating = null;
         Phase = DictationPhase.Idle;
-        if (preserveBeta) betaPanel?.Show(); else DropBeta();
+        if (preserveBeta) betaPanel?.Resume(); else DropBeta();
         bar.ShowResult(L10n.T("已取消"), warning: false);
         Raise();
     }
@@ -633,7 +634,7 @@ internal sealed class AppHost
             operations.Complete(operation);
             Phase = DictationPhase.Idle;
             bar.ShowResult(L10n.T("录音太短"), warning: true);
-            if (betaSession is not null) betaPanel?.Show();
+            if (betaSession is not null) betaPanel?.Resume();
             Raise();
             return;
         }
@@ -641,6 +642,7 @@ internal sealed class AppHost
         // a translation is not, and leaves the questions waiting.
         if (translateTo is null && options.Strength != "promptbeta" && betaSession is not null) DropBeta();
         var answering = translateTo is null && options.Strength == "promptbeta" ? betaSession : null;
+        if (answering is not null) betaPanel?.SetBusy(L10n.T("正在根据你的补充更新…"));
         Phase = DictationPhase.Thinking;
         hook.SwallowEscape = true;
         bar.ShowThinking(translateTo is null ? null : L10n.T("翻译中…"));
@@ -688,7 +690,7 @@ internal sealed class AppHost
             System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav);
             if (operations.IsCurrent(operation)) {
                 Phase = DictationPhase.Idle; hook.SwallowEscape = false;
-                if (betaSession is not null) betaPanel?.Show();
+                if (betaSession is not null) betaPanel?.Resume();
                 Raise();
             }
             operations.Complete(operation);
@@ -785,7 +787,7 @@ internal sealed class AppHost
         catch (ServiceException e)
         {
             if (operations.IsCurrent(operation)) {
-                if (e.Status == 410) ClearBeta(); else betaPanel?.Show();
+                if (e.Status == 410) ClearBeta(); else betaPanel?.Resume();
                 bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说一遍需求") : L10n.T("生成失败，请重试"), true);
             }
         }

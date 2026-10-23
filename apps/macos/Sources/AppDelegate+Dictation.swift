@@ -64,7 +64,8 @@ extension AppDelegate {
             return
         }
         phase = .recording
-        if pendingTranslate == nil && betaPending != nil { betaPanel.hide() }
+        // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
+        if pendingTranslate == nil && betaPending != nil { betaPanel.setBusy(L10n.text("正在听你补充，说完再按 {0}", model.hotkeyLabel)) }
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
@@ -107,6 +108,7 @@ extension AppDelegate {
         // a translation is not, and leaves the questions waiting.
         if translateTo == nil, strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
         let betaSession = translateTo == nil && strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
+        if betaSession != nil { betaPanel.setBusy(L10n.text("正在根据你的补充更新…")) }
         do {
             let r = try recorder.finish()
             playSound(start: false)

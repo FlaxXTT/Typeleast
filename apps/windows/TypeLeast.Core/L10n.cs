@@ -66,6 +66,8 @@ public static class L10n
         ["当前理解，请核对"] = "Current understanding — please check",
         ["待补充的信息"] = "Information to clarify",
         ["打开配置文件…"] = "Open configuration file…",
+        ["正在听你补充，说完再按 {0}"] = "Listening to your answer; press {0} when you are done",
+        ["正在根据你的补充更新…"] = "Updating with your answer…",
         ["按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。"] = "Press {0} to add details. Each answer is checked again. The conversation ends only when you choose Generate.",
         ["提示词配置未能读取，原文件已保留。"] = "Could not read the prompt configuration. The existing file is retained.",
         ["提示词配置（高级）"] = "Prompt configuration (advanced)",

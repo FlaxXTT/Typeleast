@@ -76,6 +76,8 @@ enum L10n {
         "先把信息说清楚": "Clarify your information first",
         "当前理解，请核对": "Current understanding — please check",
         "待补充的信息": "Information to clarify",
+        "正在听你补充，说完再按 {0}": "Listening to your answer; press {0} when you are done",
+        "正在根据你的补充更新…": "Updating with your answer…",
         "按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。": "Press {0} to add details. Each answer is checked again. The conversation ends only when you choose Generate.",
         "结束补充并生成": "Finish and generate",
         "没有听到有效补充，请再说一次；已有信息保留。": "No clear addition was heard. Try again; earlier information is retained.",

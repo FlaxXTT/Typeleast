@@ -17,6 +17,8 @@ internal sealed class BetaPanel : Window
     private readonly StackPanel list = new();
     private readonly TextBlock hint;
     private readonly TextBlock roundLabel = Theme.Text("", 12, Theme.Grey);
+    private readonly UIElement cancelButton, skipButton;
+    private string hintText = "";
 
     public BetaPanel(Action skip, Action cancel)
     {
@@ -38,8 +40,8 @@ internal sealed class BetaPanel : Window
         hint = Theme.Text("", 11.5, Theme.Grey);
         hint.Margin = new Thickness(0, 10, 0, 12);
         var buttons = new DockPanel { LastChildFill = false };
-        var cancelButton = Theme.Secondary(L10n.T("取消"), cancel);
-        var skipButton = Theme.Primary(L10n.T("结束补充并生成"), skip);
+        cancelButton = Theme.Secondary(L10n.T("取消"), cancel);
+        skipButton = Theme.Primary(L10n.T("结束补充并生成"), skip);
         DockPanel.SetDock(cancelButton, Dock.Left);
         DockPanel.SetDock(skipButton, Dock.Right);
         buttons.Children.Add(cancelButton);
@@ -81,10 +83,27 @@ internal sealed class BetaPanel : Window
             }
         }
         if (info.Notice is { } notice) list.Children.Add(Theme.Text(Messages.BetaNotice(notice), 12, Theme.Warning));
-        hint.Text = L10n.T("按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。", hotkey);
+        hintText = L10n.T("按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。", hotkey);
+        SetBusy(null);
         var area = SystemParameters.WorkArea;
         MaxHeight = Math.Max(240, area.Height - 48);
         Left = area.Right - Width - 24; Top = area.Top + 24;
+        Show();
+    }
+
+    /// <summary>While an answer is being recorded or checked the questions stay on screen (the user reads
+    /// them while speaking); the status replaces the hint and the buttons wait.</summary>
+    public void SetBusy(string? status)
+    {
+        hint.Text = status ?? hintText;
+        hint.Foreground = status is null ? Theme.Grey : Theme.Accent;
+        cancelButton.IsEnabled = skipButton.IsEnabled = status is null;
+    }
+
+    /// <summary>Back to waiting for the next answer, with the same questions.</summary>
+    public void Resume()
+    {
+        SetBusy(null);
         Show();
     }
 }
