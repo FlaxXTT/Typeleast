@@ -74,6 +74,8 @@ internal static class CredentialStore
 internal static class Autostart
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    // Where Windows records that the user switched a startup app off (Task Manager, Settings → Startup).
+    private const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
     private const string Name = "TypeLeast";
 
     public static void Apply(bool on)
@@ -81,12 +83,39 @@ internal static class Autostart
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-            if (on && Environment.ProcessPath is { } exe) key.SetValue(Name, "\"" + exe + "\" --autostart");
+            if (on && Environment.ProcessPath is { } exe)
+            {
+                key.SetValue(Name, AutostartEntry.Command(exe));
+                // Turned on here after being switched off in Windows: without this Windows keeps skipping it.
+                using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true);
+                approved?.DeleteValue(Name, throwOnMissingValue: false);
+            }
             else key.DeleteValue(Name, throwOnMissingValue: false);
         }
         catch (Exception e)
         {
             Log.Write("autostart.fail", e.GetType().Name);
+        }
+    }
+
+    /// <summary>Whether Windows will start TypeLeast at login: the Run value exists and the user has
+    /// not switched it off in Windows. A value whose program is gone (a moved portable copy) is
+    /// pointed at this copy. Null when the registry cannot be read.</summary>
+    public static bool? Check()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+            if (key?.GetValue(Name) is not string value) return false;
+            using (var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey))
+                if (AutostartEntry.SwitchedOff(approved?.GetValue(Name) as byte[])) return false;
+            if (AutostartEntry.ExePath(value) is not { } exe || !File.Exists(exe)) Apply(true);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Log.Write("autostart.fail", e.GetType().Name);
+            return null;
         }
     }
 }

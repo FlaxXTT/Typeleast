@@ -636,6 +636,19 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("a portable copy cannot", !WindowsRelease.IsInstalledCopy(Path.Combine("D", "Tools", "TypeLeast"), "L", _ => true));
 }
 
+{
+    var exe = @"C:\Users\u\AppData\Local\Programs\TypeLeast\TypeLeast.exe";
+    Eq("the Run value starts this copy quietly", AutostartEntry.Command(exe), "\"" + exe + "\" --autostart");
+    Eq("the program is read back from the Run value", AutostartEntry.ExePath(AutostartEntry.Command(exe)), exe);
+    Eq("an unquoted value is not trusted", AutostartEntry.ExePath(exe + " --autostart"), null);
+    Eq("an empty or broken value has no program", AutostartEntry.ExePath("\"\""), null);
+    Eq("a missing value has no program", AutostartEntry.ExePath(null), null);
+    Check("switched off in Task Manager", AutostartEntry.SwitchedOff([3, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8]));
+    Check("switched off (other form)", AutostartEntry.SwitchedOff([7, 0, 0, 0]));
+    Check("switched on again", !AutostartEntry.SwitchedOff([2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+    Check("no mark means on", !AutostartEntry.SwitchedOff(null) && !AutostartEntry.SwitchedOff([]));
+}
+
 
 {
     var waiting = JsonSerializer.Deserialize<DictateResponse>("""{"text":"","raw":"latest answer","beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}""")!;

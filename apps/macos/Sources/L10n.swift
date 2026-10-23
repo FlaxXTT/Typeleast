@@ -479,6 +479,7 @@ enum L10n {
         "用来把文字粘贴到光标处，并识别 Fn 键。": "Paste text at the cursor and detect the Fn key.",
         "界面语言": "Interface language",
         "登录后自动在后台运行": "Run in the background when you log in",
+        "需要在「系统设置 → 通用 → 登录项」里允许 TypeLeast": "Allow TypeLeast in System Settings → General → Login Items",
         "确定修改": "Confirm edit",
         "秒": "seconds",
         "立即更新": "Update now",

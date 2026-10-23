@@ -147,7 +147,7 @@
 
 ## 下载
 
-Mac 最新版是 [**v1.17.2**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.2)。Windows 安装包待补，目前可下载 [**v1.17.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)：
+Mac 最新版是 [**v1.17.3**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.3)。Windows 安装包待补，目前可下载 [**v1.17.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.0)：
 
 | 你的电脑 | 下载这个文件 |
 |---|---|
@@ -193,7 +193,7 @@ Mac 最新版是 [**v1.17.2**](https://github.com/FlaxXTT/Typeleast/releases/tag
 <details>
 <summary><b>Windows 安装步骤</b></summary>
 
-1. 双击 `TypeLeast-<版本>-Windows-x64-Setup.exe`。安装包没有代码签名，SmartScreen 可能提示「Windows 已保护你的电脑」：点 **「更多信息」→「仍要运行」**。
+1. 双击 `TypeLeast-<版本>-Windows-x64-Setup.exe`。安装包没有代码签名，每个新版本刚发布时都没有下载信誉：浏览器可能提示「不常下载」，选「保留」；SmartScreen 可能提示「Windows 已保护你的电脑」：点 **「更多信息」→「仍要运行」**。装好以后新版本在软件内更新，不经过浏览器，不会再有这些提示（免安装版仍要手动下载）。
 2. 按向导安装（装在你自己的用户目录，不需要管理员权限），最后勾选「运行 TypeLeast」。
    - 不想安装：解压 `…-Portable.zip`，双击里面的 `TypeLeast.exe`。
 3. TypeLeast 出现在任务栏右下角的托盘区（可能在「^」里）。主窗口首页会列出要完成的设置：
@@ -371,7 +371,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 - Windows 安装包可以在 Linux 上构建：`apps/windows/package-wine.sh`（需要 Microsoft .NET 8 SDK、Node.js 和 wine 中的 Inno Setup，用法见文件开头）；在 Windows 上用 `apps\windows\package.ps1`。
 - Windows 独立发布脚本为 `apps\windows\publish-release.ps1`，默认会复制旧 Mac 包；运行前检查版本和参数。双端同步发布时，使用统一 `v<版本>` 标签和同版本的 6 个安装包，手动创建 Release 并提供更新程序需要的校验清单，不把旧 Mac 包当成新版。
-- 当前 CI 与 Release 工作流只支持手动触发；推送标签不会自动打包。手动运行 Release 时指定标签，例如 `v1.17.2`（需要 Actions 额度）。
+- 当前 CI 与 Release 工作流只支持手动触发；推送标签不会自动打包。手动运行 Release 时指定标签，例如 `v1.17.3`；勾选 `draft` 会先建草稿，核对安装包后再手动发布。仓库公开后托管机器不占额度。
 
 ### 目录结构
 

@@ -5,14 +5,19 @@ name: Release
 #   TypeLeast-<v>-Windows-x64-Setup.exe
 #   TypeLeast-<v>-Windows-x64-Portable.zip
 #   SHA256SUMS.txt
-# Manual only (no Actions quota; releases are published locally with
-# apps/windows/publish-release.ps1 or gh). Run it by hand when quota is available.
+# Manual only. Releases can also be published locally with
+# apps/windows/publish-release.ps1 or gh. With "draft" the release stays a draft
+# (the updaters do not see it) until it is published by hand after checking the files.
 on:
   workflow_dispatch:
     inputs:
       tag:
         description: "Tag to publish, e.g. v1.2.0 (created on the current commit if missing)"
         required: true
+      draft:
+        description: "Create the release as a draft"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -88,8 +93,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          DRAFT: ${{ inputs.draft && '--draft' || '' }}
         run: |
           gh release create "$TAG" dist/* \
             --title "TypeLeast ${TAG#v}" \
             --notes-file .github/release-notes.md \
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" $DRAFT

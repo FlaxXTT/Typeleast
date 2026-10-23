@@ -178,7 +178,7 @@ struct SettingsPage: View {
                 }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.window))
                     .frame(width: 220)
             }
-            ToggleRow(title: L10n.text("开机时启动"), detail: loginError.isEmpty ? L10n.text("登录后自动在后台运行") : loginError,
+            ToggleRow(title: L10n.text("开机时启动"), detail: loginDetail,
                       isOn: Binding(get: { SMAppService.mainApp.status == .enabled }, set: { setLogin($0) }))
             ToggleRow(title: L10n.text("在 Dock 中显示"), detail: L10n.text("关闭后只在菜单栏显示图标"),
                       isOn: model.setting(\.showInDock, then: { model.actions?.applyGeneralSettings() }))
@@ -253,6 +253,13 @@ struct SettingsPage: View {
         return problem.isEmpty ? L10n.text("已就绪，识别完全在本机进行，音频不出这台 Mac") : problem
     }
 
+    private var loginDetail: String {
+        if !loginError.isEmpty { return loginError }
+        // Switched off under System Settings → Login Items: only the user can allow it again there.
+        if SMAppService.mainApp.status == .requiresApproval { return L10n.text("需要在「系统设置 → 通用 → 登录项」里允许 TypeLeast") }
+        return L10n.text("登录后自动在后台运行")
+    }
+
     private func setLogin(_ on: Bool) {
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
@@ -260,6 +267,11 @@ struct SettingsPage: View {
             loginError = ""
         } catch {
             loginError = L10n.text("无法修改：") + error.localizedDescription
+        }
+        // Registering again does not undo the user's switch in System Settings: send them there.
+        if on, SMAppService.mainApp.status == .requiresApproval {
+            loginError = ""
+            SMAppService.openSystemSettingsLoginItems()
         }
         model.objectWillChange.send()
     }
