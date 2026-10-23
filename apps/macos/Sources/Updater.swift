@@ -346,6 +346,38 @@ enum UpdateStage: Equatable {
         }
     }
 
+    /// The steps the progress window shows, in order.
+    static let steps = ["下载", "核对", "签名", "交接", "安装"]
+
+    /// Which of `steps` this stage is.
+    var step: Int {
+        switch self {
+        case .preparing, .downloading: return 0
+        case .verifying: return 1
+        case .signing: return 2
+        case .handingOver: return 3
+        case .installing: return 4
+        }
+    }
+
+    /// The symbol in the middle of the ring when there is no percentage to show.
+    var symbol: String {
+        switch self {
+        case .preparing, .downloading: return "arrow.down"
+        case .verifying: return "checkmark.shield"
+        case .signing: return "signature"
+        case .handingOver: return "key"
+        case .installing: return "sparkles"
+        }
+    }
+
+    /// Below the percentage while downloading: "12.3 / 50.4 MB".
+    var amount: String? {
+        guard case .downloading(let received, let total, _) = self else { return nil }
+        let mb = { (bytes: Int64) in String(format: "%.1f", Double(bytes) / 1_048_576) }
+        return total.map { mb(received) + " / " + mb($0) + " MB" } ?? mb(received) + " MB"
+    }
+
     /// 0…1 while the size is known; nil shows a moving bar.
     var fraction: Double? {
         guard case .downloading(let received, let total?, _) = self, total > 0 else { return nil }

@@ -47,7 +47,7 @@ extension AppDelegate {
 
     func beginCapture() {
         // The previous dictation's field is checked for corrections before a new one starts.
-        editWatcher.check()
+        dictionary.dictationStarting()
         // Contract: frontmost bundle id is captured BEFORE recording starts.
         pendingAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         pendingField = nil
@@ -175,7 +175,7 @@ extension AppDelegate {
         let llm = previousBeta?.llm ?? settings.activeLLMRoute
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
-        let dictionary = settings.hostDictionary
+        let dictionary = self.dictionary.serviceEntries
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
@@ -260,12 +260,7 @@ extension AppDelegate {
             entry.model = resp.model ?? resp.provider
             entry.translated = resp.translated
             HistoryStore.shared.add(entry)
-            // Terms the cleanup model corrected become suggestions on the Dictionary page.
-            if settings.autoLearn, !resp.fallback, resp.translated == nil {
-                for pair in WordSuggestions.candidates(raw: resp.raw, cleaned: text) {
-                    settings.suggest(word: pair.word, heardAs: pair.heard)
-                }
-            }
+            if !resp.fallback, resp.translated == nil { dictionary.cleaned(raw: resp.raw, into: text) }
             if text.isEmpty {
                 recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
                 setHint(L10n.text("没有识别到内容"), warning: true)
@@ -338,8 +333,8 @@ extension AppDelegate {
                 self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message, warning: !result.ok)
                 self.recordingBar.showResult(text, warning: !result.ok || fallback)
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
-                if result == .pasted, self.settings.autoLearn, let field = field, field.bundleId == appBundleId {
-                    self.editWatcher.watch(field: field, inserted: text)
+                if result == .pasted, let field = field, field.bundleId == appBundleId {
+                    self.dictionary.pasted(text, into: field)
                 }
                 self.applyState()
             }

@@ -162,3 +162,21 @@ for (name, configure) in [
     backdrop.addSubview(pill)
     snapshot(backdrop, size: backdrop.frame.size, name: name, dark: false)
 }
+
+// The update window in each step (light and dark).
+for dark in [false, true] {
+    for (name, stage) in [
+        ("update-download-start", UpdateStage.downloading(received: 3 << 20, total: 52 << 20, source: "GitHub")),
+        ("update-download-mirror", UpdateStage.downloading(received: 33 << 20, total: 52 << 20, source: "ghfast.top")),
+        ("update-verifying", UpdateStage.verifying),
+        ("update-signing", UpdateStage.signing),
+        ("update-handover", UpdateStage.handingOver),
+        ("update-installing", UpdateStage.installing),
+    ] {
+        let progress = UpdateProgressModel()
+        progress.version = "1.18.0"
+        progress.stage = stage
+        let host = NSHostingView(rootView: UpdateProgressView(model: progress))
+        snapshot(host, size: host.fittingSize, name: name, dark: dark)
+    }
+}

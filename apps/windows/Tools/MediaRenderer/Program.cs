@@ -72,6 +72,30 @@ class P
         return content;
     }
 
+    /// <summary>The update window in each step, light and dark (design review).</summary>
+    static void RenderUpdateWindow(string dir)
+    {
+        foreach (var mode in new[] { "light", "dark" })
+        {
+            Theme.Apply(mode);
+            foreach (var (name, stage, received, total, source) in new (string, UpdateStage, long, long?, string)[]
+            {
+                ("download-start", UpdateStage.Downloading, 3L << 20, 78L << 20, "GitHub"),
+                ("download-mirror", UpdateStage.Downloading, 49L << 20, 78L << 20, "ghfast.top"),
+                ("verifying", UpdateStage.Verifying, 0, null, "ghfast.top"),
+                ("installing", UpdateStage.Installing, 0, null, "GitHub"),
+            })
+            {
+                var window = new UpdateProgressWindow();
+                window.SetVersion("1.18.0");
+                window.Report(stage, received, total, source);
+                var content = (FrameworkElement)window.Content; window.Content = null;
+                var card = new Border { Background = Theme.CardFill, Child = content };
+                Save(card, Path.Combine(dir, $"update-{name}-{mode}.png"), 360, 330);
+            }
+        }
+    }
+
     [STAThread]
     static int Main(string[] args)
     {
@@ -79,6 +103,7 @@ class P
         var app = new Application();
         var host = new AppHost(app, new FakeKeys());
         L10n.Configure("zh-Hans");
+        if (args.Length > 1 && args[1] == "update-only") { RenderUpdateWindow(dir); return 0; }
         Seed(host);
         foreach (var mode in new[] { "light", "dark" })
         {

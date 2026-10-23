@@ -186,7 +186,7 @@ internal sealed class SettingsPage : IPage
         var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
         installUpdate = Theme.Primary(L10n.T("立即更新"), () => _ = RunUpdate());
         RefreshUpdateButton();
-        if (host.AvailableUpdate is { } pending) updateStatus.Text = L10n.T("有新版本 {0}。", pending.Version);
+        if (host.Updates.Available is { } pending) updateStatus.Text = L10n.T("有新版本 {0}。", pending.Version);
 
         // Five tabs, each a few cards that put related settings together.
         AddTab(L10n.T("听写"),
@@ -261,25 +261,25 @@ internal sealed class SettingsPage : IPage
     private async Task CheckUpdates()
     {
         updateStatus.Text = L10n.T("正在检查…");
-        updateStatus.Text = await host.CheckForUpdate();
+        updateStatus.Text = await host.Updates.Check();
         RefreshUpdateButton();
         // Same as at launch: with 自动更新 on, a found update installs right away.
-        if (host.AvailableUpdate is not null && host.Settings.AutoUpdate && Updater.IsInstalledCopy) await RunUpdate();
+        if (host.Updates.Available is not null && host.Settings.AutoUpdate && Updater.IsInstalledCopy) await RunUpdate();
     }
 
     private async Task RunUpdate()
     {
         updateStatus.Text = L10n.T("正在下载并校验更新…");
-        var error = await host.InstallUpdate();
+        var error = await host.Updates.Install();
         if (error is not null) updateStatus.Text = error;
     }
 
     /// <summary>"立即更新" for the installed copy, "下载新版本" for a portable one; hidden when up to date.</summary>
     private void RefreshUpdateButton()
     {
-        installUpdate.Visibility = host.AvailableUpdate is null ? Visibility.Collapsed : Visibility.Visible;
+        installUpdate.Visibility = host.Updates.Available is null ? Visibility.Collapsed : Visibility.Visible;
         installUpdate.Content = Updater.IsInstalledCopy ? L10n.T("立即更新") : L10n.T("下载新版本");
-        installUpdate.IsEnabled = !host.Updating;
+        installUpdate.IsEnabled = !host.Updates.Updating;
     }
 
     private readonly WrapPanel tabBar = new() { Margin = new Thickness(0, 14, 0, 0) };

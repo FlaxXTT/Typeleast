@@ -629,6 +629,16 @@ do {
     checkEq("a word already in the dictionary is not suggested", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: ["github"], dismissed: []), [])
     checkEq("an ignored word is not suggested again", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: [], dismissed: ["github"]), [])
 
+    // The update controller's offer rule and the ring's steps.
+    check("a quiet check offers a new version once", UpdateController.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: false))
+    check("…not again", !UpdateController.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
+    check("…nor while dictating or Prompt Beta is open", !UpdateController.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: true))
+    check("asking by hand always offers", UpdateController.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: true, busy: true))
+    checkEq("five steps", UpdateStage.steps, ["下载", "核对", "签名", "交接", "安装"])
+    checkEq("each stage has its step", [UpdateStage.preparing, .downloading(received: 1, total: 2, source: "GitHub"), .verifying, .signing, .handingOver, .installing].map(\.step), [0, 0, 1, 2, 3, 4])
+    checkEq("the amount under the percentage", UpdateStage.downloading(received: 33 << 20, total: 52 << 20, source: "GitHub").amount, "33.0 / 52.0 MB")
+    checkEq("no amount outside the download", UpdateStage.signing.amount, nil)
+
     // Update progress text.
     checkEq("download progress is a fraction", UpdateStage.downloading(received: 25 << 20, total: 50 << 20, source: "GitHub").fraction, 0.5)
     checkEq("an unknown size shows a moving bar", UpdateStage.downloading(received: 1, total: nil, source: "GitHub").fraction, nil)

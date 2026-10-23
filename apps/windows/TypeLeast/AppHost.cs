@@ -19,6 +19,16 @@ internal sealed class AppHost
     public enum DictationPhase { Idle, Recording, Thinking }
 
     public AppSettings Settings { get; }
+    /// <summary>The dictionary: editing, learning, suggestions (DictionaryController).</summary>
+    public DictionaryController Dictionary { get; }
+    /// <summary>In-app updates (UpdateController).</summary>
+    public UpdateController Updates { get; }
+
+    /// <summary>Why an update must wait (a dictation, Prompt Beta's questions), or null.</summary>
+    private string? UpdateBlocker() =>
+        Phase != DictationPhase.Idle ? L10n.T("听写结束后再更新。")
+        // Quitting would drop the questions and the answers given so far.
+        : betaSession is not null ? L10n.T("生成或取消这次提示词 Beta 后再更新。") : null;
     public LocalHistory History { get; }
     public ActivityLog Activity { get; }
     public ServiceClient Client { get; } = new();
@@ -48,7 +58,6 @@ internal sealed class AppHost
     private IntPtr betaWindow;
     private string betaApp = "";
     private BetaPanel? betaPanel;
-    private LearnedToast? learnedToast;
     // 翻译模式: the target language of the recording in progress (null: ordinary dictation).
     private string? translating;
     private readonly OperationTracker operations = new();
@@ -65,7 +74,6 @@ internal sealed class AppHost
     private readonly System.Diagnostics.Stopwatch micClock = new();
     /// <summary>Milliseconds from the hotkey to the first audio of the last recording (null before any).</summary>
     public long? LastMicrophoneStartMs { get; private set; }
-    private readonly EditLearner learner = new();
     private FieldTarget? betaField;
     private readonly AudioDucking ducking = new();
     public PromptFileSync PromptFile { get; }
@@ -85,6 +93,8 @@ internal sealed class AppHost
         PrivateStorage.EnsureDirectory(AppPaths.StateDirectory());
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
+        Dictionary = new DictionaryController(Settings, SaveSettings, SetHint, () => quitting);
+        Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);
         Theme.Apply(Settings.Appearance);
@@ -133,116 +143,11 @@ internal sealed class AppHost
 
     // ---- lifecycle
 
-    // ---- updates
-
-    /// <summary>A newer Windows release found by the last check, or null.</summary>
-    public WindowsReleaseInfo? AvailableUpdate { get; private set; }
-    public bool Updating { get; private set; }
-
-    private bool checkingUpdate;
-    /// <summary>A version whose automatic download or install failed in this run: it is not
-    /// downloaded again on every window open (检查更新 in settings still can).</summary>
-    private string? autoUpdateFailed;
-
-    /// <summary>On every launch and every time the window is opened. With 自动更新 on, the installed
-    /// copy installs a new version by itself; otherwise only the hint changes.</summary>
-    private async Task AutoUpdateCheck()
-    {
-        if (checkingUpdate || Updating || quitting || Environment.GetEnvironmentVariable("TYPELEAST_HOME") is not null) return;
-        checkingUpdate = true;
-        try
-        {
-            try
-            {
-                var newest = await Updater.NewestAsync();
-                if (newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion) && AvailableUpdate?.Version != newest.Version)
-                {
-                    AvailableUpdate = newest;
-                    Raise();
-                    if (!(Settings.AutoUpdate && Updater.IsInstalledCopy)) SetHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
-                }
-            }
-            catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
-            // Not while Prompt Beta's questions are open: the next window open tries again.
-            if (AvailableUpdate is { } update && Settings.AutoUpdate && Updater.IsInstalledCopy
-                && autoUpdateFailed != update.Version && betaSession is null && Phase == DictationPhase.Idle)
-            {
-                Log.Write("update.auto", update.Version);
-                SetHint(L10n.T("正在自动更新到 {0}，完成后会自动重新打开。", update.Version));
-                if (await InstallUpdate() is { } error)
-                {
-                    autoUpdateFailed = update.Version;
-                    SetHint(error);
-                }
-            }
-        }
-        finally { checkingUpdate = false; }
-    }
-
-    public async Task<string> CheckForUpdate()
-    {
-        try
-        {
-            var newest = await Updater.NewestAsync();
-            AvailableUpdate = newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion) ? newest : null;
-            Raise();
-            return newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
-                : AvailableUpdate is not null ? L10n.T("有新版本 {0}。", newest.Version)
-                : L10n.T("已是最新的 Windows 版本（{0}）。", Updater.CurrentVersion);
-        }
-        catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
-        {
-            return L10n.T("无法访问发布页。请检查网络；如果发布页还没公开，请在浏览器中登录后下载。");
-        }
-    }
-
-    /// <summary>Download, check and install the available update; returns an error message, or null when the installer started.</summary>
-    public async Task<string?> InstallUpdate()
-    {
-        if (AvailableUpdate is not { } release || Updating) return null;
-        if (Phase != DictationPhase.Idle) return L10n.T("听写结束后再更新。");
-        // Quitting would drop the questions and the answers given so far.
-        if (betaSession is not null) return L10n.T("生成或取消这次提示词 Beta 后再更新。");
-        if (!Updater.IsInstalledCopy) { Shell.Open(release.PageUrl.Length > 0 ? release.PageUrl : "https://github.com/FlaxXTT/Typeleast/releases"); return L10n.T("便携版请在发布页下载新版本。"); }
-        Updating = true;
-        Raise();
-        var progress = new UpdateProgressWindow();
-        progress.Start(release.Version);
-        var lastReport = DateTime.MinValue;
-        try
-        {
-            var setup = await Updater.DownloadAsync(release, mode: Settings.UpdateSource, progress: (stage, received, total, source) =>
-            {
-                // From the download thread; a few updates a second are plenty.
-                var now = DateTime.UtcNow;
-                if (stage == UpdateStage.Downloading && received > 0 && received != total && now - lastReport < TimeSpan.FromMilliseconds(100)) return;
-                lastReport = now;
-                app.Dispatcher.InvokeAsync(() => progress.Report(stage, received, total, source));
-            });
-            // The download takes a while: never quit in the middle of a dictation, or a Prompt Beta
-            // clarification, started meanwhile.
-            while (Phase != DictationPhase.Idle || betaSession is not null) await Task.Delay(1000);
-            if (quitting) { progress.Close(); return null; }
-            Log.Write("update.install", release.Version);
-            progress.Report(UpdateStage.Installing, 0, null);
-            Updater.RunInstaller(setup);
-            Quit();
-            return null;
-        }
-        catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or InvalidOperationException or System.IO.IOException)
-        {
-            progress.Close();
-            Log.Write("update.fail", e.GetType().Name);
-            return e is InvalidOperationException ? e.Message : L10n.T("下载更新失败，请稍后再试。");
-        }
-        finally { Updating = false; Raise(); }
-    }
-
     public void Start(bool autostart)
     {
         if (started) return;
         started = true;
-        _ = AutoUpdateCheck();
+        _ = Updates.AutoCheck();
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
@@ -306,7 +211,7 @@ internal sealed class AppHost
         window.Show();
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         window.Activate();
-        _ = AutoUpdateCheck();
+        _ = Updates.AutoCheck();
     }
 
     private void Raise() { UpdateIdleBar(); Changed?.Invoke(); }
@@ -327,7 +232,7 @@ internal sealed class AppHost
     public bool StartMicrophoneTest()
     {
         if (Phase != DictationPhase.Idle || operations.TryBegin() is not { } operation) return false;
-        learner.Stop();
+        Dictionary.StopWatching();
         try { micClock.Restart(); LastMicrophoneStartMs = null; recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
         catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("无法打开麦克风，请检查设备和 Windows 麦克风权限。")); return false; }
     }
@@ -345,7 +250,7 @@ internal sealed class AppHost
 
     public bool SaveSettings()
     {
-        if (!Settings.LearnCorrections) learner.Stop();
+        if (!Settings.LearnCorrections) Dictionary.StopWatching();
         try { Settings.Save(settingsPath); savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options); }
         catch (Exception e) {
             var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(savedSettingsJson, Json.Options)!;
@@ -428,83 +333,6 @@ internal sealed class AppHost
         catch (ServiceException) { SetHint(L10n.T("模型操作失败，请重试。当前模型保留。")); }
     }
 
-    /// <summary>Sent with every dictation: "word" or "heard=word".</summary>
-    private string[] DictionaryForService() => Settings.DictionaryEntries.Select(e => e.ServiceValue).ToArray();
-
-    public void AddWord(string entry)
-    {
-        if (WordEntry.FromLegacy(entry) is { } word) SaveWord(word);
-    }
-    public bool SaveWord(WordEntry entry)
-    {
-        if (WordEntry.Parse(entry.Word, entry.HeardAs, entry.Source) is null) return false;
-        if (Settings.DictionaryEntries.Any(e => e.Id != entry.Id && string.Equals(e.ServiceValue, entry.ServiceValue, StringComparison.OrdinalIgnoreCase)))
-        { SetHint(L10n.T("词条已存在或输入无效")); return false; }
-        var previous = Settings.DictionaryEntries.ToList();
-        var index = Settings.DictionaryEntries.FindIndex(e => e.Id == entry.Id);
-        if (index < 0) Settings.DictionaryEntries.Add(entry); else Settings.DictionaryEntries[index] = entry;
-        if (!SaveSettings()) { Settings.DictionaryEntries = previous; return false; }
-        return true;
-    }
-    /// <summary>A word the user corrected after a dictation: added as a spelling to prefer (never a
-    /// replacement rule), unless it is already there; the toast can take it back.</summary>
-    private void LearnWord(string word)
-    {
-        if (!Settings.LearnCorrections || quitting) return;
-        if (Settings.DictionaryEntries.Any(e => string.Equals(e.Word, word, StringComparison.OrdinalIgnoreCase))) return;
-        if (WordEntry.Parse(word, "", "auto") is not { } entry || !SaveWord(entry)) return;
-        SetHint(L10n.T("已把「{0}」加入词典", word));
-        learnedToast ??= new LearnedToast();
-        learnedToast.Show(L10n.T("已把「{0}」加入词典", word), () =>
-        {
-            RemoveWord(entry.Id);
-            SetHint(L10n.T("已从词典移除「{0}」", word));
-        });
-    }
-    private void Suggest(string raw, string cleaned)
-    {
-        var known = Settings.DictionaryEntries.Select(e => e.Word.ToLowerInvariant()).ToHashSet();
-        var dismissed = Settings.DismissedSuggestions.ToHashSet();
-        var list = Settings.WordSuggestions;
-        foreach (var (heard, word) in WordSuggestions.Candidates(raw, cleaned))
-            list = WordSuggestions.Merge(list, word, heard, DateTime.UtcNow, known, dismissed);
-        if (list.Count == Settings.WordSuggestions.Count && list.Zip(Settings.WordSuggestions).All(p => ReferenceEquals(p.First, p.Second) && p.First.Count == p.Second.Count)) return;
-        Settings.WordSuggestions = list;
-        SaveSettings();
-    }
-
-    /// <summary>Add a suggestion to the dictionary, with the spelling it was heard as.</summary>
-    public void AcceptSuggestion(WordSuggestion suggestion)
-    {
-        Settings.WordSuggestions = Settings.WordSuggestions.Where(s => s != suggestion).ToList();
-        if (WordEntry.Parse(suggestion.Word, suggestion.HeardAs, "auto") is { } entry
-            && !Settings.DictionaryEntries.Any(e => e.Word.Equals(entry.Word, StringComparison.OrdinalIgnoreCase))) SaveWord(entry);
-        else SaveSettings();
-    }
-
-    /// <summary>Never suggest this word again.</summary>
-    public void DismissSuggestion(WordSuggestion suggestion)
-    {
-        Settings.WordSuggestions = Settings.WordSuggestions.Where(s => s != suggestion).ToList();
-        Settings.DismissedSuggestions = Settings.DismissedSuggestions.Append(suggestion.Word.ToLowerInvariant()).TakeLast(200).ToList();
-        SaveSettings();
-    }
-
-    /// <summary>A word the user selected in History: added to the dictionary by hand.</summary>
-    public void AddWordFromHistory(string word)
-    {
-        word = word.Trim();
-        if (word.Length is 0 or > 40 || word.Contains('\n')) return;
-        if (Settings.DictionaryEntries.Any(e => e.Word.Equals(word, StringComparison.OrdinalIgnoreCase))) { SetHint(L10n.T("「{0}」已在词典里", word)); return; }
-        if (WordEntry.Parse(word) is { } entry && SaveWord(entry)) SetHint(L10n.T("已把「{0}」加入词典", word));
-    }
-
-    public void RemoveWord(string entry)
-    {
-        var previous = Settings.DictionaryEntries.ToList();
-        Settings.DictionaryEntries.RemoveAll(e => e.Id == entry || e.ServiceValue == entry);
-        if (!SaveSettings()) Settings.DictionaryEntries = previous;
-    }
     private void PruneAudio()
     {
         try { RetainedAudio.Prune(Settings.KeepAudio24h && Settings.HistoryRetention != "never" ? History.Entries.Select(e => e.AudioId).OfType<string>() : Array.Empty<string>()); }
@@ -527,7 +355,7 @@ internal sealed class AppHost
             wav = RetainedAudio.Load(entry.AudioId!);
             if (request.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
-                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: DictionaryForService());
+                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries);
             if (!operations.IsCurrent(operation)) return;
             Paster.SetText(result.InsertableText);
             History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
@@ -616,7 +444,7 @@ internal sealed class AppHost
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
         Raise();
-        learner.Finish();
+        Dictionary.DictationStarting();
         recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
         targetApp = Shell.ProcessName(targetWindow);
         var window = targetWindow;
@@ -649,7 +477,7 @@ internal sealed class AppHost
 
     public void Cancel()
     {
-        learner.Stop();
+        Dictionary.StopWatching();
         ducking.Dispose(); IsMicrophoneTesting = false;
         var preserveBeta = Phase == DictationPhase.Recording && betaSession is not null;
         var lease = operations.Active;
@@ -701,7 +529,7 @@ internal sealed class AppHost
             if (requestOptions.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
-                dictionary: DictionaryForService());
+                dictionary: Dictionary.ServiceEntries);
             if (!operations.IsCurrent(operation)) return;
             if (ShowBetaQuestions(result))
             {
@@ -787,9 +615,9 @@ internal sealed class AppHost
                 }
                 History.Add(entry); PruneAudio();
                 // Terms the cleanup model corrected become suggestions on the Dictionary page.
-                if (Settings.LearnCorrections && !result.Fallback && options.TranslateTo is null) Suggest(result.Raw, text);
-                if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && Settings.LearnCorrections && targetField is { } field)
-                    learner.Start(field, text, LearnWord);
+                if (!result.Fallback && options.TranslateTo is null) Dictionary.Cleaned(result.Raw, text);
+                if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && targetField is { } field)
+                    Dictionary.Pasted(field, text);
                 if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);

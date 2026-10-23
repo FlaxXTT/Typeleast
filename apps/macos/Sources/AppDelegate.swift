@@ -19,9 +19,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let settings = Settings.shared
     let client = ServiceClient.shared
     let model = AppModel.shared
-    let editWatcher = EditWatcher()
-    let learnedToast = LearnedToast()
-    let updateProgress = UpdateProgressWindow()
+    lazy var dictionary = DictionaryController(settings: settings,
+                                               setHint: { [weak self] in self?.setHint($0) },
+                                               changed: { [weak self] in self?.applyState() })
+    lazy var updates = UpdateController(host: .init(
+        busyReason: { [weak self] in
+            guard let self else { return nil }
+            if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
+            // Restarting would drop the questions and the answers given so far.
+            if self.betaPending != nil { return (L10n.text("提示词 Beta 还没结束"), L10n.text("生成或取消这次提示词 Beta 后再更新。")) }
+            return nil
+        },
+        setHint: { [weak self] in self?.setHint($0) },
+        showAvailable: { [weak self] in self?.menuController.setUpdateAvailable($0) },
+        willQuit: { [weak self] in self?.recorder.cancel() }))
     lazy var hub = HubWindowController(model: model)
     lazy var onboarding = OnboardingWindowController(model: model)
     var previewPanel: PreviewPanel?
@@ -101,13 +112,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         })
         applyGeneralSettings()
         registerHotKeys()
-        scheduleLaunchUpdateCheck()
+        updates.scheduleChecks()
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
         recordingBar.onCancel = { [weak self] in self?.cancelDictation() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
         idleBar.onClick = { [weak self] in self?.toggleDictation() }
-        editWatcher.onLearn = { [weak self] word in self?.learned(word) }
 
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(onSettingsChanged), name: Settings.didChange, object: nil)
@@ -394,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     @objc func onAppActivated(_ note: Notification) {
         // Leaving the app a dictation went into: the user is usually done fixing it.
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-        if let watched = editWatcher.watchedBundleId, app?.bundleIdentifier != watched { editWatcher.check() }
+        dictionary.appActivated(app?.bundleIdentifier)
         let trusted = AXIsProcessTrusted()
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
@@ -557,29 +567,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func menuOpened() { refreshHealth() }
 
-    // MARK: dictionary (sent with every dictation; nothing to sync)
-
-    func learned(_ word: String) {
-        guard settings.autoLearn, settings.addWord(word, source: .auto),
-              let id = settings.words.first(where: { $0.word == word })?.id else { return }
-        setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
-        learnedToast.show(word: word) { [weak self] in
-            guard let self else { return }
-            self.settings.removeWord(id: id)
-            self.setHint(L10n.text("已从词典移除「{0}」", word))
-            self.applyState()
-        }
-        applyState()
-    }
-
     // MARK: AppActions (called from the windows)
 
-    func addWordFromHistory(_ word: String) {
-        if settings.addWord(word, source: .manual) {
-            setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
-        }
-        applyState()
-    }
+    func addWordFromHistory(_ word: String) { dictionary.addFromHistory(word) }
+
+    func checkForUpdates(interactive: Bool) { updates.check(interactive: interactive) }
 
     func copyEntry(id: String, raw: Bool) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }) else { return }

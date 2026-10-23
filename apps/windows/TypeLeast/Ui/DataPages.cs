@@ -71,7 +71,7 @@ internal sealed class HistoryPage : IPage
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var add = new MenuItem();
         var copy = new MenuItem { Header = L10n.T("复制"), Command = ApplicationCommands.Copy };
-        add.Click += (_, _) => host.AddWordFromHistory(box.SelectedText);
+        add.Click += (_, _) => host.Dictionary.AddFromHistory(box.SelectedText);
         box.ContextMenu = new ContextMenu { Items = { add, new Separator(), copy } };
         box.ContextMenuOpening += (_, _) =>
         {
@@ -119,8 +119,8 @@ internal sealed class DictionaryPage : IPage
             foreach (var suggestion in host.Settings.WordSuggestions.Take(8).ToList())
                 list.Children.Add(Theme.Card(Theme.Stack(8, Theme.Text(suggestion.Word, 16, bold: true),
                     Theme.Text(L10n.T("整理时从「{0}」改成，出现 {1} 次", suggestion.HeardAs, suggestion.Count), 12, Theme.Grey),
-                    Theme.Row(8, Theme.Primary(L10n.T("加入"), () => host.AcceptSuggestion(suggestion)),
-                        Theme.Secondary(L10n.T("忽略"), () => host.DismissSuggestion(suggestion))))));
+                    Theme.Row(8, Theme.Primary(L10n.T("加入"), () => host.Dictionary.AcceptSuggestion(suggestion)),
+                        Theme.Secondary(L10n.T("忽略"), () => host.Dictionary.DismissSuggestion(suggestion))))));
             list.Children.Add(Theme.SectionTitle(L10n.T("词典")));
         }
         foreach (var entry in host.Settings.DictionaryEntries.Where(e => (filter.SelectedIndex != 1 || e.Source == "auto")
@@ -128,7 +128,7 @@ internal sealed class DictionaryPage : IPage
         {
             list.Children.Add(Theme.Card(Theme.Stack(8, Theme.Text(entry.Word, 16, bold: true),
                 Theme.Text((entry.Source == "auto" ? L10n.T("自动添加") : L10n.T("手动添加")) + (entry.HeardAs.Length > 0 ? " · " + L10n.T("听成") + ": " + entry.HeardAs : ""), 12, Theme.Grey),
-                Theme.Row(8, Theme.Secondary(L10n.T("编辑"), () => Edit(entry)), Theme.Secondary(L10n.T("删除"), () => host.RemoveWord(entry.Id))))));
+                Theme.Row(8, Theme.Secondary(L10n.T("编辑"), () => Edit(entry)), Theme.Secondary(L10n.T("删除"), () => host.Dictionary.RemoveWord(entry.Id))))));
         }
         if (list.Children.Count == 0) list.Children.Add(Theme.Text(L10n.T("没有匹配的词条。"), 14, Theme.Grey));
     }
@@ -144,7 +144,7 @@ internal sealed class DictionaryPage : IPage
                 var entry = WordEntry.Parse(word.Text, heard.Text, original?.Source ?? "manual");
                 if (entry is null) { error.Text = L10n.T("输入无效：两项合计最多 120 字，不能包含换行或等号。"); return; }
                 if (original is not null) entry.Id = original.Id;
-                if (host.SaveWord(entry)) dialog.Close(); else error.Text = host.Hint;
+                if (host.Dictionary.SaveWord(entry)) dialog.Close(); else error.Text = host.Hint;
             }), Theme.Secondary(L10n.T("取消"), () => dialog.Close())));
         form.Margin = new Thickness(24); dialog.Content = form; dialog.Show(); word.Focus();
     }

@@ -79,3 +79,23 @@ jobs:
           dotnet-version: 8.0.x
       - run: dotnet run --project TypeLeast.Core.Tests -c Release
       - run: dotnet build TypeLeast/TypeLeast.csproj -c Release
+
+  windows-render:
+    name: Windows UI renders (design review)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Render
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "render"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          dotnet run --project apps/windows/Tools/MediaRenderer -c Release -- $out update-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-render
+          path: ${{ runner.temp }}/render/*.png
+          if-no-files-found: error

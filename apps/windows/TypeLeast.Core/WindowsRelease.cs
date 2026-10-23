@@ -146,3 +146,30 @@ public static class UpdateSources
         return mode == "mirror" ? [.. mirrors, official] : [official, .. mirrors];
     }
 }
+
+/// <summary>When an update installs by itself: the installed copy, 自动更新 on, not a version that
+/// already failed in this run, and nothing in the way (a dictation, Prompt Beta's questions).</summary>
+public static class UpdatePolicy
+{
+    public static bool AutoInstall(WindowsReleaseInfo? available, bool autoUpdate, bool installedCopy, string? failedVersion, bool busy) =>
+        available is not null && autoUpdate && installedCopy && failedVersion != available.Version && !busy;
+
+    /// <summary>The ring's three steps (下载 · 核对 · 安装), and which one a stage is.</summary>
+    public static readonly string[] Steps = ["下载", "核对", "安装"];
+
+    public static int Step(UpdateStage stage) => stage switch { UpdateStage.Downloading => 0, UpdateStage.Verifying => 1, _ => 2 };
+}
+
+/// <summary>The progress ring's arc: from 12 o'clock clockwise to <c>fraction</c> of the circle.</summary>
+public static class RingGeometry
+{
+    /// <summary>The end point of the arc on a circle of <paramref name="radius"/> around (cx, cy).</summary>
+    public static (double X, double Y) ArcEnd(double fraction, double radius, double cx, double cy)
+    {
+        var angle = Math.Clamp(fraction, 0, 0.9999) * 2 * Math.PI;
+        return (cx + radius * Math.Sin(angle), cy - radius * Math.Cos(angle));
+    }
+
+    /// <summary>More than half the circle needs the large arc.</summary>
+    public static bool IsLargeArc(double fraction) => fraction > 0.5;
+}
