@@ -208,18 +208,6 @@ export function createHandler(options) {
         return;
       }
 
-      if (route === "/prompts/promptify" && req.method === "GET") {
-        await service.refreshPromptify();
-        reply(res, 200, service.promptifySettings());
-        return;
-      }
-
-      if (route === "/prompts/promptify" && req.method === "PUT") {
-        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
-        reply(res, 200, await service.setPromptify(body));
-        return;
-      }
-
       if (route === "/polish" && req.method === "POST") {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const result = await service.polish({

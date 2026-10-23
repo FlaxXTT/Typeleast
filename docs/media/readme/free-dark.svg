@@ -18,7 +18,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <text x="162.66666666666666" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >不花钱，</text>
 <text x="162.66666666666666" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >模型下载一次后离线可用。</text>
 <rect x="309" y="198" width="261" height="104" rx="20" fill="#2c2c2e"/>
-<text x="440.0" y="234" font-size="17" font-weight="600" text-anchor="middle" class="ink" >自然整理</text>
+<text x="440.0" y="234" font-size="17" font-weight="600" text-anchor="middle" class="ink" >文字整理</text>
 <text x="440.0" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >用你自己的 Key，</text>
 <text x="440.0" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >按服务商用量计费。</text>
 <rect x="587" y="198" width="261" height="104" rx="20" fill="#2c2c2e"/>

@@ -83,7 +83,7 @@ internal sealed class BetaPanel : Window
     {
         list.Children.Clear();
         roundLabel.Text = "  " + L10n.T("第 {0} 轮", info.Round ?? 1);
-        list.Children.Add(Theme.Text(info.Ready == true ? L10n.T("目前信息已清楚，可以继续补充，也可以生成。") : L10n.T("先把信息说清楚"), 12, Theme.Grey));
+        list.Children.Add(Theme.Text(info.Ready == true ? L10n.T("信息已清楚，可继续补充或生成。") : L10n.T("先把信息说清楚"), 12, Theme.Grey));
         if (info.Confirmed is { Count: > 0 })
         {
             list.Children.Add(Theme.Text(L10n.T("当前理解，请核对"), 12, bold: true));
@@ -99,7 +99,7 @@ internal sealed class BetaPanel : Window
             }
         }
         if (info.Notice is { } notice) list.Children.Add(Theme.Text(Messages.BetaNotice(notice), 12, Theme.Warning));
-        hintText = L10n.T("按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。", hotkey);
+        hintText = L10n.T("按 {0} 继续补充，点「生成」结束。", hotkey);
         SetBusy(null);
         var area = SystemParameters.WorkArea;
         MaxHeight = Math.Max(240, area.Height - 48);

@@ -344,29 +344,6 @@ public sealed class ServiceClient
         return true;
     });
 
-    public Task<PromptifySettings> GetPromptifyAsync(CancellationToken ct = default) =>
-        WithPortRetry(async () =>
-        {
-            var (status, body) = await SendAsync(HttpMethod.Get, "/prompts/promptify", null, null, ShortTimeout, ct).ConfigureAwait(false);
-            if (status != HttpStatusCode.OK) throw HttpError(status, body);
-            return Decode<PromptifySettings>(body);
-        });
-
-    /// <summary>Change the prompt-mode settings: a new appendix, a replacement default, or (restoreDefault) the default back.</summary>
-    public Task<PromptifySettings> SetPromptifyAsync(string? appendix = null, string? overrideText = null, bool restoreDefault = false, CancellationToken ct = default) =>
-        WithPortRetry(async () =>
-        {
-            var body = new Dictionary<string, object?>();
-            if (appendix is not null) body["appendix"] = appendix;
-            if (restoreDefault) body["override"] = null;
-            else if (overrideText is not null) body["override"] = overrideText;
-            var json = JsonSerializer.Serialize(body);
-            var (status, text) = await SendAsync(HttpMethod.Put, "/prompts/promptify", new StringContent(json, Encoding.UTF8, "application/json"),
-                null, ShortTimeout, ct).ConfigureAwait(false);
-            if (status != HttpStatusCode.OK) throw HttpError(status, text);
-            return Decode<PromptifySettings>(text);
-        });
-
     /// <summary>Ask the service to make one tiny call with this route (nothing is recorded).</summary>
     public Task<LlmTestResult> TestLlmAsync(LlmRoute route, CancellationToken ct = default) =>
         WithPortRetry(async () =>

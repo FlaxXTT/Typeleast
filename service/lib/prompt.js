@@ -15,11 +15,11 @@
  */
 
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
-import { promptifySystemPrompt, BRIEF_PROMPT } from "./prompts/promptify.js";
+import { CONCISE_PROMPT } from "./prompts/concise.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-24.1-cleanup+promptify+beta+translate";
+export const PROMPT_VERSION = "2026-10-25.1-cleanup+concise+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -76,14 +76,14 @@ export function harnessAddendum({ dictionary, fieldContext }) {
 }
 
 /**
- * The system prompt for one request: the cleanup prompt, or for the
- * "promptify" strength (提示词模式) the structured-prompt rewriter. Both get the
- * same addendum (dictionary and field context).
- * @param {object} input - strength, the user's prompt-mode settings, and the dictionary and field context the addendum needs.
+ * The system prompt for one request: the cleanup prompt, or for the "concise"
+ * strength (精简整理) the concise rewriter. Both get the same addendum
+ * (dictionary and field context).
+ * @param {object} input - strength, and the dictionary and field context the addendum needs.
  * @returns {string} the system prompt.
  */
-export function systemPromptFor({ dictionary, fieldContext, strength, promptify } = {}) {
-  const base = strength === "promptbrief" ? BRIEF_PROMPT : strength === "promptify" ? promptifySystemPrompt(promptify) : cleanupSystemPrompt();
+export function systemPromptFor({ dictionary, fieldContext, strength } = {}) {
+  const base = strength === "concise" ? CONCISE_PROMPT : cleanupSystemPrompt();
   return base + UTTERANCE_RULES + harnessAddendum({ dictionary, fieldContext });
 }
 

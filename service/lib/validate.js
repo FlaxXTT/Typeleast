@@ -478,15 +478,15 @@ export function validateOutput(input) {
 
   // Language is checked before length: a translated answer also breaks the
   // length ratio, and the reason reported must name the real fault.
-  // Prompt mode may legitimately be asked (in the user's own additions) to write
-  // the prompt in another language, so only its fact check applies.
+  // A Prompt Beta draft may be asked to write the prompt in another language, so
+  // only its fact check applies.
   // 翻译模式 changes the language and every word on purpose: only invented numbers count.
   if (strength === "translate") {
     metrics.inventedFacts = translationInventedNumbers(raw, text);
     return metrics.inventedFacts.length > 0 ? { ok: false, reason: "invented-fact", text, metrics } : { ok: true, text, metrics };
   }
 
-  if (strength !== "promptify" && strength !== "promptbrief" && languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
+  if (strength !== "promptbeta" && languageChanged(raw, text)) return { ok: false, reason: "language-changed", text, metrics };
 
   const ratio = metrics.outputLength / Math.max(1, rawContent);
   metrics.ratio = ratio;
@@ -518,12 +518,12 @@ export function validateOutput(input) {
   // read off the structure the rewrite created, not invented.
   const items = listItemCount(text);
   const structural = items >= 2 ? invented.filter((token) => token === "N:" + items).length : 0;
-  // Prompt mode (提示词模式) adds a role, tone and output format on purpose, so
-  // it is always much longer and mostly new wording; only the decisive checks
-  // (language, invented facts) apply to it. Counting the user's own items in
+  // 精简整理 and Prompt Beta drafts compress and restructure on purpose, so their
+  // length and wording say nothing; only the decisive checks (language, invented
+  // facts) apply to them. Counting the user's own items in
   // words ("这两项工作") is summary, not invention, so there a number counts as
   // invented only when it is written in digits ("300 字", "5 点").
-  if (strength === "promptify" || strength === "promptbrief") {
+  if (strength === "concise" || strength === "promptbeta") {
     const digits = factTokens(text.replace(/[零一二三四五六七八九十百千万亿两]/g, ""));
     const decisive = invented.filter((token) => !token.startsWith("N:") || digits.has(token));
     if (decisive.length > authorised) return { ok: false, reason: "invented-fact", text, metrics };

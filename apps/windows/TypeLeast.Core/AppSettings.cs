@@ -26,7 +26,7 @@ public sealed class AppSettings
     /// <summary>语言变体: Chinese "hans" / "tw" / "hk", English "us" / "gb".</summary>
     public string ZhVariant { get; set; } = "hans";
     public string EnVariant { get; set; } = "us";
-    /// <summary>"prompt" (Natural cleanup), "promptify" (提示词模式) or "off" (raw transcription).</summary>
+    /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (标准整理), "concise" (精简整理), "promptbeta" or "off".</summary>
     public string Strength { get; set; } = "prompt";
     public string InterfaceLanguage { get; set; } = "system";
     public string Language { get; set; } = "auto";
@@ -42,6 +42,8 @@ public sealed class AppSettings
     /// <summary>auto, github or mirror (UpdateSources).</summary>
     public string UpdateSource { get; set; } = "auto";
     public bool OnboardingDone { get; set; }
+    /// <summary>The home page's 「设置在哪」 card was dismissed with 知道了.</summary>
+    public bool GuideDismissed { get; set; }
     /// <summary>-1 = the system default microphone.</summary>
     public int MicrophoneDevice { get; set; } = -1;
     public List<string> Words { get; set; } = new();
@@ -111,7 +113,7 @@ public sealed class AppSettings
             var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Json.Options);
             if (loaded is not null)
             {
-                if (loaded.Strength is not ("prompt" or "promptify" or "promptbrief" or "promptbeta" or "off")) loaded.Strength = "prompt";
+                loaded.Strength = CleanupModes.Stored(loaded.Strength);
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();

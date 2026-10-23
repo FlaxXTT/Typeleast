@@ -8,7 +8,7 @@ struct SpeechModelOptions: View {
         case "fireredasr2-ctc": return L10n.text("偏向中文与方言，也支持英文；自动检测语言。")
         case "fun-asr-nano": return L10n.text("适合中英混合听写，也支持日语。")
         case "qwen3-asr-0.6b": return L10n.text("多语言识别；体积和资源需求高于默认模型。")
-        default: return L10n.text("默认模型；体积小、响应快，支持中文、英文、粤语、日语和韩语。")
+        default: return L10n.text("默认模型，小而快，支持中、英、粤、日、韩。")
         }
     }
     var body: some View {
@@ -53,6 +53,9 @@ struct SpeechModelOptions: View {
                             } else if operation.phase == "error" {
                                 Text(operation.problem)
                                     .font(.caption).foregroundColor(Theme.warning)
+                                if operation.error == "download-failed" {
+                                    MirrorHint { model.actions?.manageSpeechModel(id: entry.id, download: true, cancel: false) }
+                                }
                             } else if operation.phase == "cancelled" {
                                 Text(L10n.text("下载已取消，已校验的文件可复用。"))
                                     .font(.caption).foregroundColor(Theme.secondary)

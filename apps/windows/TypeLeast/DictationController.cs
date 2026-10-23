@@ -21,7 +21,6 @@ internal interface IDictationHost
     string HotkeyLabel { get; }
     LlmRoute? ActiveRoute { get; }
     RetainedAudio RetainedAudio { get; }
-    PromptFileSync PromptFile { get; }
     bool Quitting { get; }
     bool SaveSettings();
     bool CanRetry(HistoryEntry entry);
@@ -67,7 +66,6 @@ internal sealed class DictationController
     private string HotkeyLabel => host.HotkeyLabel;
     private LlmRoute? ActiveRoute => host.ActiveRoute;
     private RetainedAudio RetainedAudio => host.RetainedAudio;
-    private PromptFileSync PromptFile => host.PromptFile;
     private void Raise() => host.Changed();
     private void SetHint(string text) => host.SetHint(text);
     private bool SaveSettings() => host.SaveSettings();
@@ -80,7 +78,7 @@ internal sealed class DictationController
         beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers());
         recorder.AudioStarted += OnAudioStarted;
         recorder.LimitReached += () => dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
-        recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风已断开或录音异常，请重新选择设备后重试。")); });
+        recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风断开或录音出错，请重选设备再试。")); });
     }
     public void Shutdown() { recorder.Cancel(); }
 
@@ -89,7 +87,7 @@ internal sealed class DictationController
         if (Phase != DictationPhase.Idle || operations.TryBegin() is not { } operation) return false;
         Dictionary.StopWatching();
         try { micClock.Restart(); LastMicrophoneStartMs = null; recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
-        catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("无法打开麦克风，请检查设备和 Windows 麦克风权限。")); return false; }
+        catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("打不开麦克风，请检查设备和麦克风权限。")); return false; }
     }
 
     public void EndMicrophoneTest() { if (IsMicrophoneTesting) Cancel(); }
@@ -114,7 +112,6 @@ internal sealed class DictationController
         try
         {
             wav = RetainedAudio.Load(entry.AudioId!);
-            if (request.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
                 ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries);
             if (!operations.IsCurrent(operation)) return;
@@ -138,7 +135,7 @@ internal sealed class DictationController
     {
         if (!CleanupModes.IsKnown(code) || Phase != DictationPhase.Idle) return;
         if (beta.Session is not null && code != "promptbeta") {
-            if (MessageBox.Show(L10n.T("切换模式会结束这次 Beta 对话，尚未生成的内容不会插入。"),
+            if (MessageBox.Show(L10n.T("切换会结束这次 Beta，未生成的内容不会插入。"),
                 L10n.T("结束本次信息补充？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
             DropBeta();
         }
@@ -190,7 +187,7 @@ internal sealed class DictationController
             operations.Complete(operation);
             ducking.Dispose(); MicrophoneReady = false;
             Log.Write("mic.fail", e.GetType().Name);
-            bar.ShowResult(L10n.T("无法打开麦克风：请在 设置 → 隐私和安全性 → 麦克风 中允许桌面应用访问麦克风"), warning: true);
+            bar.ShowResult(L10n.T("打不开麦克风：请在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"), warning: true);
             return;
         }
         Phase = DictationPhase.Recording;
@@ -279,7 +276,6 @@ internal sealed class DictationController
         try
         {
             var requestOptions = answering is not null ? beta.Options ?? options : options;
-            if (requestOptions.Strength == "promptify") await PromptFile.PrepareAsync();
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
                 dictionary: Dictionary.ServiceEntries);
@@ -366,7 +362,7 @@ internal sealed class DictationController
                 if (!result.Fallback && options.TranslateTo is null) Dictionary.Received(result.Suggestions);
                 if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && targetField is { } field)
                     Dictionary.Pasted(field, text);
-                if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
+                if (History.LastError is not null) SetHint(L10n.T("历史记录读写失败，原文件已保留。请检查文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);
                 var done = Paster.Message(outcome);

@@ -5,7 +5,7 @@ import Combine
 
 // Onboarding.swift - first-run setup, in this order:
 // welcome, the local service and speech model, microphone, accessibility, the Globe
-// key, a microphone test, a first try.
+// key, a microphone test, a first try, and where the settings are.
 
 final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
@@ -49,7 +49,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 }
 
 private enum OnboardingStep: Int, CaseIterable {
-    case welcome, localService, microphone, accessibility, globeKey, micTest, tryIt, done
+    case welcome, localService, microphone, accessibility, globeKey, micTest, tryIt, guide, done
 }
 
 struct OnboardingView: View {
@@ -92,12 +92,12 @@ struct OnboardingView: View {
         switch step {
         case .welcome:
             StepView(symbol: nil, title: L10n.text("说话，不用打字"),
-                     text: L10n.text("在任何 App 里按一下 Fn 开始说话，再按一下结束。TypeLeast 会把你说的话转成文字、去掉口头禅、理清顺序，粘贴到光标处。")) {
+                     text: L10n.text("在任何 App 里按 Fn 开始说话，再按一下结束。整理好的文字会出现在光标处。")) {
                 AppMarkView(size: 72)
             }
         case .localService:
             StepView(symbol: "cpu", title: L10n.text("本地识别"),
-                     text: L10n.text("语音在这台 Mac 上识别，不上传音频。第一次需要 Node.js 22 或更新版本，并下载一次语音模型（约 241 MB）。")) {
+                     text: L10n.text("语音在本机识别，不上传。首次要下载语音模型（约 241 MB）。")) {
                 VStack(alignment: .leading, spacing: 12) {
                     OnboardingCheck(done: model.serviceState.isRunning, title: L10n.text("本地服务"),
                                     detail: model.serviceState.isRunning ? L10n.text("已启动") : model.serviceSummary) {
@@ -115,8 +115,9 @@ struct OnboardingView: View {
                             ProgressView(value: fraction).frame(width: 140)
                         }
                     }
+                    if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
                     OnboardingCheck(done: model.llmConfigured, title: L10n.text("整理模型（可稍后设置）"),
-                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("在主窗口「设置 → 整理模型」里填自己的 API Key；不填也能听写，只是不改写。")) {
+                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("在「设置 → 整理」填 API Key。不填也能听写，只是不整理。")) {
                         EmptyView()
                     }
                 }
@@ -132,13 +133,13 @@ struct OnboardingView: View {
             }
         case .accessibility:
             StepView(symbol: "accessibility", title: L10n.text("允许辅助功能"),
-                     text: L10n.text("用来把整理好的文字粘贴到光标处、识别 Fn 键，并参考输入框里已有的文字来纠错。在弹出的系统设置里打开 TypeLeast 的开关。")) {
+                     text: L10n.text("用来粘贴文字和识别 Fn 键。在系统设置里打开 TypeLeast。")) {
                 permissionState(granted: model.accessibilityTrusted, denied: false,
                                 ask: { model.actions?.requestAccessibility() }, open: nil)
             }
         case .globeKey:
             StepView(symbol: "globe", title: L10n.text("把 🌐 键设为「无操作」"),
-                     text: L10n.text("打开「系统设置 › 键盘」，把「按下 🌐 键时」改为「无操作」。不然按 Fn 时会同时弹出表情面板或切换输入法。")) {
+                     text: L10n.text("在「系统设置 › 键盘」把「按下 🌐 键时」改为「无操作」，否则 Fn 会弹出表情或切换输入法。")) {
                 VStack(spacing: 12) {
                     Button(L10n.text("打开键盘设置")) { model.actions?.openKeyboardSettings() }.buttonStyle(SecondaryButtonStyle())
                     Toggle(L10n.text("我已经改好了"), isOn: $globeConfirmed).toggleStyle(.checkbox)
@@ -146,7 +147,7 @@ struct OnboardingView: View {
             }
         case .micTest:
             StepView(symbol: "waveform", title: L10n.text("试试麦克风"),
-                     text: L10n.text("点「开始测试」再随便说句话，条变蓝就说明能听到你。麦克风只在测试时打开，{0} 秒后自动关闭。", Int(MicMeter.maxSeconds))) {
+                     text: L10n.text("点「开始测试」说句话，条变蓝就是听到了。{0} 秒后自动关闭。", Int(MicMeter.maxSeconds))) {
                 VStack(spacing: 14) {
                     LevelBars(level: meter.level, count: 18).scaleEffect(1.3)
                     Text(meter.heardVoice ? L10n.text("听到你了 ✓") : (meter.running ? L10n.text("等你说话…") : L10n.text("麦克风未打开")))
@@ -161,7 +162,7 @@ struct OnboardingView: View {
             }
         case .tryIt:
             StepView(symbol: "keyboard", title: L10n.text("说一句试试"),
-                     text: L10n.text("点一下下面的输入框，按 {0} 说一句话，比如「我想说三点，第一要快，第二要准，第三要便宜」，再按 {1} 结束。", model.hotkeyLabel, model.hotkeyLabel)) {
+                     text: L10n.text("点下面的输入框，按 {0} 说一句话（比如「第一要快，第二要准」），再按 {1} 结束。", model.hotkeyLabel, model.hotkeyLabel)) {
                 VStack(spacing: 10) {
                     TextEditor(text: $tryText)
                         .font(.system(size: 14))
@@ -179,9 +180,14 @@ struct OnboardingView: View {
                     }
                 }
             }
+        case .guide:
+            StepView(symbol: "map", title: L10n.text("设置在哪"),
+                     text: L10n.text("首页也有这张表，点一下就能过去。")) {
+                GuideList().frame(width: 400)
+            }
         case .done:
             StepView(symbol: "checkmark.circle", title: L10n.text("准备好了"),
-                     text: L10n.text("在任何 App 里按 {0} 开始听写。主窗口里可以看历史、管理词典、调整整理强度。", model.hotkeyLabel)) {
+                     text: L10n.text("在任何 App 里按 {0} 开始听写。左侧栏可切换整理档位、看历史、改词典。", model.hotkeyLabel)) {
                 Keycap(label: model.hotkeyLabel, large: true)
             }
         }
@@ -195,7 +201,7 @@ struct OnboardingView: View {
                 .foregroundColor(Theme.success)
         } else if denied, let open = open {
             VStack(spacing: 8) {
-                Text(L10n.text("之前被拒绝了，需要在系统设置里手动打开。")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(L10n.text("之前拒绝过，请在系统设置里打开。")).font(.system(size: 12)).foregroundColor(Theme.secondary)
                 Button(L10n.text("打开系统设置"), action: open).buttonStyle(PrimaryButtonStyle())
             }
         } else {

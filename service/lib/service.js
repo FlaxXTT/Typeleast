@@ -19,10 +19,8 @@
  * @module typeleast-service/service
  */
 import { wordSuggestions } from "./word-suggestions.js";
-import { LANGUAGES } from "./config.js";
+import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { redactFieldContext, redactSecrets } from "./context.js";
 import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
@@ -31,7 +29,6 @@ import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { validateOutput } from "./validate.js";
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
-import { PROMPTIFY_LIMITS, PROMPTIFY_PROMPT, promptifySystemPrompt } from "./prompts/promptify.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
   cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
@@ -72,10 +69,6 @@ export class VoicePolishService {
     /** The route of the most recent cleanup, for /health: "custom:<host>" and model id. */
     this.lastRoute = { provider: null, model: null };
     this.startedAt = Date.now();
-    /** Prompt mode (提示词模式): the user's additions and, if they replaced it, their default. */
-    this.promptifyPath = options.promptifyPath ?? null;
-    this.promptify = { appendix: "", override: null };
-    this.promptifyMtime = null;
     /** Entries from config.json; each request adds the app's own dictionary (dictionaryFrom). */
     this.dictionary = [...(this.config.dictionary ?? [])];
     // dictations/polished/fallback/lastMs count /dictate; modelCalls and
@@ -124,70 +117,6 @@ export class VoicePolishService {
     }
   }
 
-  /** The prompt-mode prompt: the fixed default, the user's settings, and what is in effect. */
-  promptifySettings() {
-    return {
-      default: PROMPTIFY_PROMPT,
-      appendix: this.promptify.appendix,
-      override: this.promptify.override,
-      modified: this.promptify.override !== null,
-      effective: promptifySystemPrompt(this.promptify),
-    };
-  }
-
-  /**
-   * Change the prompt-mode settings. `appendix` replaces the additions;
-   * `override` replaces the default (a string) or restores it (null). Keys that
-   * are absent are left as they are.
-   * @param {{appendix?: string, override?: string|null}} input - the change.
-   * @returns {Promise<object>} the settings now in effect.
-   */
-  async setPromptify(input) {
-    const next = { ...this.promptify };
-    if (input && Object.prototype.hasOwnProperty.call(input, "appendix")) {
-      if (typeof input.appendix !== "string") throw Object.assign(new Error("appendix must be a string"), { code: "invalid-prompt" });
-      next.appendix = input.appendix.trim().slice(0, PROMPTIFY_LIMITS.appendix);
-    }
-    if (input && Object.prototype.hasOwnProperty.call(input, "override")) {
-      if (input.override === null) next.override = null;
-      else if (typeof input.override === "string" && input.override.trim().length > 0) next.override = input.override.trim().slice(0, PROMPTIFY_LIMITS.override);
-      else throw Object.assign(new Error("override must be a non-empty string, or null to restore the default"), { code: "invalid-prompt" });
-      // Saving the default unchanged is not a modification.
-      if (next.override === PROMPTIFY_PROMPT) next.override = null;
-    }
-    this.promptify = next;
-    if (this.promptifyPath !== null) {
-      await mkdir(dirname(this.promptifyPath), { recursive: true });
-      await writePrivate(this.promptifyPath, JSON.stringify(this.promptify, null, 2) + "\n");
-      this.promptifyMtime = await mtimeOf(this.promptifyPath);
-    }
-    return this.promptifySettings();
-  }
-
-  /** Load the prompt-mode settings; absent or malformed means the default. */
-  async loadPromptify() {
-    if (this.promptifyPath === null) return;
-    this.promptifyMtime = await mtimeOf(this.promptifyPath);
-    try {
-      const parsed = JSON.parse(await readFile(this.promptifyPath, "utf8"));
-      this.promptify = {
-        appendix: typeof parsed?.appendix === "string" ? parsed.appendix.slice(0, PROMPTIFY_LIMITS.appendix) : "",
-        override: typeof parsed?.override === "string" && parsed.override.trim().length > 0 && parsed.override.trim() !== PROMPTIFY_PROMPT ? parsed.override.slice(0, PROMPTIFY_LIMITS.override) : null,
-      };
-    } catch {
-      this.promptify = { appendix: "", override: null };
-    }
-  }
-
-  /**
-   * Pick up edits made to promptify.json by hand (in a text editor) since it was
-   * last read, so the next request sends what the file says without a restart.
-   */
-  async refreshPromptify() {
-    if (this.promptifyPath === null) return;
-    if ((await mtimeOf(this.promptifyPath)) !== this.promptifyMtime) await this.loadPromptify();
-  }
-
   /**
    * Clean up one transcript.
    * @param {object} request - raw text, app hint, strength, session and signal.
@@ -196,7 +125,8 @@ export class VoicePolishService {
   async polish(request) {
     const started = Date.now();
     const rawText = String(request.rawText ?? "").trim();
-    const strength = request.strength ?? this.strength;
+    // The retired prompt-mode tiers (promptbrief, promptify) are read as 精简整理.
+    const strength = canonicalStrength(request.strength ?? this.strength);
     const base = {
       raw: rawText,
       text: rawText,
@@ -247,14 +177,12 @@ export class VoicePolishService {
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
     const context = await this.buildContext(request);
-    if (strength === "promptify") await this.refreshPromptify();
     // The cleanup prompt and its examples, plus an addendum with only the dictionary
     // and the text around the cursor (already redacted by buildContext).
     const system = systemPromptFor({
       dictionary: context.dictionary,
       fieldContext: context.fieldContext ?? null,
       strength,
-      promptify: this.promptify,
     }) + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
@@ -270,10 +198,10 @@ export class VoicePolishService {
         route: custom,
         system,
         user,
-        // Prompt mode writes a whole structured prompt: more room and more time.
-        maxTokens: (strength === "promptify" || strength === "promptbrief") ? Math.max(this.config.maxOutputTokens, 1600) : this.config.maxOutputTokens,
+        // 精简整理 may restructure a long dictation: more room and more time.
+        maxTokens: strength === "concise" ? Math.max(this.config.maxOutputTokens, 1600) : this.config.maxOutputTokens,
         temperature: this.config.temperature ?? 0.8,
-        timeoutMs: (strength === "promptify" || strength === "promptbrief") ? Math.max(this.config.timeoutMs, 25000) : this.config.timeoutMs,
+        timeoutMs: strength === "concise" ? Math.max(this.config.timeoutMs, 25000) : this.config.timeoutMs,
         signal: request.signal,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });
@@ -483,7 +411,7 @@ export class VoicePolishService {
         final = cleanPromptReply(await call(BETA_PATCH_PROMPT, reviewMessage({ ...material, draft, issues }), 3200));
         if (!final || (await reviewDraft(final)).length) throw Object.assign(new Error('intent review failed'), { code: 'beta-validation' });
       }
-      const verdict = validateOutput({ rawText: source, output: final, strength: 'promptify' });
+      const verdict = validateOutput({ rawText: source, output: final, strength: 'promptbeta' });
       if (!verdict.ok) throw Object.assign(new Error('fact check failed'), { code: 'beta-validation' });
       if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
       request.signal?.throwIfAborted();
@@ -715,21 +643,3 @@ function message(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Write a file only this user can read, like the token: the prompt file holds the
- * user's own instructions.
- * The mode applies when the file is created; chmod covers files from older versions.
- */
-async function writePrivate(path, text) {
-  await writeFile(path, text, { encoding: "utf8", mode: 0o600 });
-  await chmod(path, 0o600).catch(() => {});
-}
-
-/** Modification time of a file in ms, or null when it does not exist. */
-async function mtimeOf(path) {
-  try {
-    return (await stat(path)).mtimeMs;
-  } catch {
-    return null;
-  }
-}

@@ -122,7 +122,7 @@ test("a clean transcript is polished with the user's own route", async () => {
 
 test("legacy cleanup selections send only the owner's prompt and cannot restore the removed prompt", async () => {
   assert.deepEqual(readdirSync(new URL("../lib/prompts/", import.meta.url)).sort(),
-    ["cleanup.js", "prompt-beta.js", "promptify.js", "translate.js"], "only the project's own prompts ship");
+    ["cleanup.js", "concise.js", "prompt-beta.js", "translate.js"], "only the project's own prompts ship");
   for (const strength of ["prompt", "conservative", "maximal"]) {
     const model = fakeModel("我们周三开会。");
     const service = makeService({ model, config: { strength, promptSource: "legacy-article" } });

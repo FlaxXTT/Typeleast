@@ -732,9 +732,11 @@ do {
     UserDefaults.standard.set("maximal", forKey: "voice.strength")
     checkEq("a strength saved by an older build reads as natural cleanup", s.strength, "prompt")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
-    checkEq("natural cleanup, prompt mode, Prompt Beta and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "promptbrief", "promptify", "promptbeta", "off"])
-    UserDefaults.standard.set("promptify", forKey: "voice.strength")
-    checkEq("prompt mode is remembered", s.strength, "promptify")
+    checkEq("two natural tiers, Prompt Beta and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "concise", "promptbeta", "off"])
+    for retired in ["promptbrief", "promptify"] {
+        UserDefaults.standard.set(retired, forKey: "voice.strength")
+        checkEq("the retired prompt-mode tier " + retired + " reads as concise", s.strength, "concise")
+    }
     UserDefaults.standard.removeObject(forKey: "voice.strength")
 }
 
@@ -803,20 +805,6 @@ do {
     check("the state folder is TypeLeast's own",
           ServiceClient.stateDirectory.hasSuffix("/TypeLeast") || ProcessInfo.processInfo.environment["TYPELEAST_HOME"] != nil)
     check("the token lives in the state folder", ServiceClient().tokenPath.hasSuffix("TypeLeast/api-token") || ProcessInfo.processInfo.environment["TYPELEAST_HOME"] != nil)
-}
-
-// MARK: 20. prompt mode settings
-
-do {
-    let code = PromptifyGuard.makeCode()
-    check("the unlock code has six digits", code.count == 6 && code.allSatisfy(\.isNumber))
-    check("the right code unlocks", PromptifyGuard.matches(typed: " " + code + "\n", code: code))
-    check("a wrong code does not", !PromptifyGuard.matches(typed: "000000" == code ? "111111" : "000000", code: code))
-    check("an empty answer does not", !PromptifyGuard.matches(typed: "", code: code))
-    let body = Data(#"{"default":"默认","appendix":"追加","override":null,"modified":false,"effective":"默认\n\n# 补充要求\n追加"}"#.utf8)
-    let s = try? JSONDecoder().decode(PromptifySettings.self, from: body)
-    checkEq("prompt settings decode", s?.appendix, "追加")
-    checkEq("no override means the default is in use", s?.override, nil)
 }
 
 // MARK: 21. the recording-start chime is short, bright and starts at once
@@ -901,7 +889,7 @@ do {
     let status = try JSONDecoder().decode(SpeechStatus.self, from: Data(#"{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}"#.utf8))
     checkEq("health identifies actual recognizer", status.modelName, "Fun-ASR-Nano")
     checkEq("health exposes language capabilities", status.languages, ["auto", "zh", "en", "ja"])
-    checkEq("natural cleanup English label", L10n.render("自然整理", arguments: [], language: "en"), "Natural cleanup")
+    checkEq("standard cleanup English label", L10n.render("标准整理", arguments: [], language: "en"), "Standard")
 } catch { check("speech model client contract", false, String(describing: error)) }
 
 // MARK: 23. Prompt Beta: questions come back with a session; the answer carries it
@@ -1167,21 +1155,6 @@ do {
     checkEq("round metadata decodes", waiting.beta?.round, 3)
     checkEq("confirmed metadata decodes", waiting.beta?.confirmed, ["confirmed"])
     checkEq("notice metadata decodes", waiting.beta?.notice, "beta-validation")
-    let settings = PromptifySettings(default: "Default body", appendix: "Keep appendix", override: nil, modified: false, effective: "Default body")
-    let data = try PromptifyConfigFile.editableData(existing: nil, settings: settings)
-    let object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-    checkEq("editor contains the current default", object["override"] as? String, "Default body")
-    checkEq("editor retains appendix", object["appendix"] as? String, "Keep appendix")
-    let existing = Data(#"{"override":"My version","appendix":"Mine","extra":true}"#.utf8)
-    let custom = try JSONSerialization.jsonObject(with: PromptifyConfigFile.editableData(existing: existing, settings: settings)) as! [String: Any]
-    checkEq("editor keeps an existing replacement", custom["override"] as? String, "My version")
-    checkEq("editor keeps existing additions", custom["appendix"] as? String, "Mine")
-    checkEq("editor preserves unrelated fields", custom["extra"] as? Bool, true)
-    for invalid in [Data("broken".utf8), Data(#"{"appendix":42}"#.utf8), Data(#"{"override":false}"#.utf8), Data(repeating: 65, count: 100_001)] {
-        var rejected = false
-        do { _ = try PromptifyConfigFile.editableData(existing: invalid, settings: settings) } catch { rejected = true }
-        check("malformed config is not overwritten", rejected)
-    }
 } catch { check("new Beta/config decoding", false) }
 
 // MARK: 28. the service proves it is ours before anything is sent to it
@@ -1369,10 +1342,28 @@ do {
     let saved = UserDefaults.standard.string(forKey: "voice.strength")
     defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.strength") } else { UserDefaults.standard.removeObject(forKey: "voice.strength") } }
     let settings = Settings()
-    settings.strength = "promptbrief"
-    checkEq("plain tier persists", Settings().strength, "promptbrief")
-    settings.strength = "promptify"
-    checkEq("standard tier stays compatible", Settings().strength, "promptify")
+    settings.strength = "concise"
+    checkEq("the concise tier persists", Settings().strength, "concise")
+}
+
+// MARK: new-user guide: every entry names a place; a failed model download offers a mirror
+do {
+    let entries = SettingsGuide.entries
+    checkEq("the guide lists six places", entries.count, 6)
+    check("every guide entry says where it is", entries.allSatisfy { !$0.place.isEmpty })
+    checkEq("the API key lives under Settings › Cleanup", entries.first { $0.title == L10n.text("API Key") }?.category, 1)
+    checkEq("the mirror lives under Settings › Service and updates", entries.first { $0.title == L10n.text("语音模型和下载镜像") }?.category, 4)
+    let model = AppModel.shared
+    let before = (model.page, model.settingsCategory)
+    SettingsGuide.open(entries[1], in: model)
+    check("opening an entry goes to its Settings tab", model.page == .settings && model.settingsCategory == 1)
+    model.page = before.0; model.settingsCategory = before.1
+    func speech(_ json: String) -> SpeechStatus { try! JSONDecoder().decode(SpeechStatus.self, from: Data(json.utf8)) }
+    check("an unreachable host is a network failure", speech(#"{"phase":"error","error":"could not reach huggingface.co: fetch failed"}"#).networkFailure)
+    check("a failed catalog download is a network failure", speech(#"{"phase":"ready","operation":{"modelId":"x","phase":"error","received":0,"total":0,"error":"download-failed"}}"#).networkFailure)
+    check("a checksum failure is not", !speech(#"{"phase":"ready","operation":{"modelId":"x","phase":"error","received":0,"total":0,"error":"checksum-mismatch"}}"#).networkFailure)
+    check("a load failure is not", !speech(#"{"phase":"error","error":"model load failed"}"#).networkFailure)
+    checkEq("the suggested mirror", ModelMirror.suggested, "https://hf-mirror.com")
 }
 
 // MARK: dictionary: a word picked in History never replaces its entry

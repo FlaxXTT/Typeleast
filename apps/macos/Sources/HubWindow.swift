@@ -56,17 +56,13 @@ struct HubRootView: View {
                 .frame(width: 214)
                 .background(Theme.sidebar)
             Divider().opacity(0.6)
-            VStack(spacing: 0) {
-                CleanupModeBar()
-                Divider().opacity(0.5)
-                ZStack {
-                    Theme.window
-                    switch model.page {
-                    case .home: HomePage()
-                    case .history: HistoryPage()
-                    case .dictionary: DictionaryPage()
-                    case .settings: SettingsPage()
-                    }
+            ZStack {
+                Theme.window
+                switch model.page {
+                case .home: HomePage()
+                case .history: HistoryPage()
+                case .dictionary: DictionaryPage()
+                case .settings: SettingsPage()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -95,6 +91,8 @@ private struct Sidebar: View {
 
             Spacer()
 
+            SidebarModes()
+                .padding(.bottom, 10)
             ServiceBadge()
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
@@ -205,41 +203,57 @@ extension PageHeader where Trailing == EmptyView {
     }
 }
 
-/// Always visible while browsing any main-window page.
-struct CleanupModeBar: View {
+/// The cleanup modes, in the sidebar so they are one click away on every page and apart
+/// from Settings. The chosen one shows what it does in a few words.
+struct SidebarModes: View {
     @EnvironmentObject var model: AppModel
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(L10n.text("整理档位")).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
-                Spacer()
-                Text(model.phase == .idle ? L10n.text("下一次听写生效") : L10n.text("录音或整理完成后可切换"))
-                    .font(.system(size: 11)).foregroundColor(Theme.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(L10n.text("整理档位"))
+                .font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 4)
+            ForEach(VoiceStrength.allCases, id: \.self) { strength in
+                ModeRow(strength: strength, selected: model.settings.strength == strength.rawValue) {
+                    model.selectStrength(strength.rawValue)
+                }
             }
-            HStack(spacing: 2) {
-                ForEach([VoiceStrength.prompt, .promptbrief, .promptbeta, .off], id: \.self) { strength in
-                    FlexibleSegment(label: strength == .promptbrief ? L10n.text("提示词模式") : strength.label,
-                                    selected: model.settings.strength == strength.rawValue || (strength == .promptbrief && model.settings.strength == "promptify")) {
-                        if strength != .promptbrief || model.settings.strength != "promptify" { model.selectStrength(strength.rawValue) }
+        }
+        .disabled(model.phase != .idle)
+        .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
+    }
+}
+
+private struct ModeRow: View {
+    let strength: VoiceStrength
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 12)).foregroundColor(selected ? Theme.ink : Theme.secondary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(strength.label).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                        .foregroundColor(selected ? Theme.ink : Theme.secondary)
+                    if selected {
+                        Text(strength.shortDetail).font(.system(size: 11)).foregroundColor(Theme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-            }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.card))
-                .disabled(model.phase != .idle)
-            if ["promptbrief", "promptify"].contains(model.settings.strength) {
-                HStack(spacing: 8) {
-                    ForEach([VoiceStrength.promptbrief, .promptify], id: \.self) { tier in
-                        FlexibleSegment(label: tier == .promptbrief ? L10n.text("普通档") : L10n.text("标准格式档"), selected: model.settings.strength == tier.rawValue) {
-                            model.selectStrength(tier.rawValue)
-                        }
-                    }
-                }.disabled(model.phase != .idle)
+                Spacer(minLength: 0)
             }
-            Text((VoiceStrength(rawValue: model.settings.strength) ?? .prompt).shortDetail)
-                .font(.system(size: 12)).foregroundColor(Theme.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(selected ? Theme.selection : (hovering ? Theme.selection.opacity(0.5) : Color.clear)))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 24).padding(.top, 34).padding(.bottom, 12)
-        .frame(maxWidth: .infinity, alignment: .leading).background(Theme.window)
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

@@ -46,7 +46,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
             {
                 var update = Available!;
                 Log.Write("update.auto", update.Version);
-                setHint(L10n.T("正在自动更新到 {0}，完成后会自动重新打开。", update.Version));
+                setHint(L10n.T("正在更新到 {0}，完成后自动重开。", update.Version));
                 if (await Install() is { } error)
                 {
                     autoFailed = update.Version;
@@ -71,7 +71,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
         }
         catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
-            return L10n.T("无法访问发布页。请检查网络；如果发布页还没公开，请在浏览器中登录后下载。");
+            return L10n.T("连不上发布页，请检查网络。");
         }
     }
 

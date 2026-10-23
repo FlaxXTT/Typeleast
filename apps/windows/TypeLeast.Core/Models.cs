@@ -173,23 +173,6 @@ public sealed class LearnedWordResult
     [JsonPropertyName("word")] public string? Word { get; set; }
 }
 
-/// <summary>Prompt mode (提示词模式): the fixed default, the user's additions and replacement.</summary>
-public sealed class PromptifySettings
-{
-    [JsonPropertyName("default")] public string Default { get; set; } = "";
-    [JsonPropertyName("appendix")] public string Appendix { get; set; } = "";
-    [JsonPropertyName("override")] public string? Override { get; set; }
-    [JsonPropertyName("modified")] public bool Modified { get; set; }
-    [JsonPropertyName("effective")] public string Effective { get; set; } = "";
-}
-
-/// <summary>The one-time code the user must type before the default prompt can be replaced.</summary>
-public static class PromptifyGuard
-{
-    public static string MakeCode() => System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
-    public static bool Matches(string? typed, string code) => (typed ?? "").Trim() == code;
-}
-
 public sealed class ApiErrorBody
 {
     [JsonPropertyName("error")] public string? Error { get; set; }

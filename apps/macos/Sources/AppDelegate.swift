@@ -350,7 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             if FnTapGate.shouldStart(sourceAtPress: sourceAtPress, sourceAfter: InputSourceProbe.currentID()) {
                 self.hotkeyPressed()
             } else {
-                self.setHint(L10n.text("按 🌐 切换了输入法，没有开始听写（可在系统设置里把「按下 🌐 键时」改为「无操作」）"))
+                self.setHint(L10n.text("按 🌐 切换了输入法，没有听写。可在系统设置把「按下 🌐 键时」改为「无操作」"))
                 self.applyState()
             }
         }
@@ -441,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func setHint(_ text: String?, warning: Bool = false) {
-        let text = text ?? (HistoryStore.shared.persistenceProblem == nil ? nil : L10n.text("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"))
+        let text = text ?? (HistoryStore.shared.persistenceProblem == nil ? nil : L10n.text("历史记录读写失败，原文件已保留。请检查文件权限。"))
         hint = text
         hintWarning = warning
         model.hint = text ?? ""
@@ -661,7 +661,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         if betaPending != nil && code != "promptbeta" {
             let alert = NSAlert()
             alert.messageText = L10n.text("结束本次信息补充？")
-            alert.informativeText = L10n.text("切换模式会结束这次 Beta 对话，尚未生成的内容不会插入。")
+            alert.informativeText = L10n.text("切换会结束这次 Beta，未生成的内容不会插入。")
             alert.addButton(withTitle: L10n.text("取消"))
             alert.addButton(withTitle: L10n.text("切换模式"))
             guard alert.runModal() == .alertSecondButtonReturn else { return }

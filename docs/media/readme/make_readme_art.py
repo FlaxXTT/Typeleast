@@ -185,8 +185,8 @@ def features(t):
     half = (W - G) / 2
     body = []
 
-    # 1. Natural cleanup (full width).
-    inner = [text(36, 58, "自然整理", 15, "blue", 600),
+    # 1. Standard cleanup (full width).
+    inner = [text(36, 58, "标准整理", 15, "blue", 600),
              text(36, 98, "随口说，它来整理。", 32, "ink", 700),
              text(36, 132, "口头禅去掉，改口照办，标点补好。不编造你没说的内容。", 16, "gray")]
     by, x0, size = 196, 36, 18
@@ -225,13 +225,13 @@ def features(t):
                 row, row2]
     body.append(tile(half + G, y2, half, ROW, t, "\n".join(anywhere)))
 
-    # 4. Prompt mode.
+    # 4. Concise cleanup.
     y3 = y2 + ROW + G
-    lines = ["一、请帮我写一份本周周报，发给老板。", "二、本周完成了登录页改版，修复了几个 bug。", "三、篇幅简短。"]
-    prompt = [text(32, 52, "提示词模式", 15, "blue", 600),
-              text(32, 88, "说需求，得到提示词。", 26, "ink", 700),
-              text(32, 118, "一次说完，整理成简洁的编号段落，", 15, "gray"),
-              text(32, 140, "不套模板，不加你没提的要求。", 15, "gray")]
+    lines = ["请写本周周报，发给老板，篇幅简短。", "1. 完成登录页改版。", "2. 修复了几个 bug。"]
+    prompt = [text(32, 52, "精简整理", 15, "blue", 600),
+              text(32, 88, "说得多，留得少。", 26, "ink", 700),
+              text(32, 118, "一次说完，只留要点和条件，", 15, "gray"),
+              text(32, 140, "不加你没提的要求。", 15, "gray")]
     prompt.append(f'<rect x="24" y="160" width="{half - 48}" height="106" rx="16" fill="{t["card2"]}"/>')
     for i, line in enumerate(lines):
         prompt.append(f'<g class="pl p{i}">{text(44, 190 + i * 30, line, 14, "ink", 500)}</g>')
@@ -273,7 +273,7 @@ def features(t):
 @keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
 """
     return svg(W, H, "\n".join(body), css, t,
-               "亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。")
+               "亮点：标准整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。")
 
 
 # ---------------------------------------------------------------- prompt Beta
@@ -357,7 +357,7 @@ def free(t):
             f'</linearGradient></defs>',
             f'<text x="{W / 2}" y="132" font-size="72" font-weight="700" text-anchor="middle" fill="url(#g)" letter-spacing="-1">¥0</text>',
             text(W / 2, 166, "整套框架免费使用：没有订阅，不用注册，不限次数。", 17, "gray", 400, "middle")]
-    cols = [("本机识别", "不花钱，", "模型下载一次后离线可用。"), ("自然整理", "用你自己的 Key，", "按服务商用量计费。"),
+    cols = [("本机识别", "不花钱，", "模型下载一次后离线可用。"), ("文字整理", "用你自己的 Key，", "按服务商用量计费。"),
             ("本机 Ollama", "整理也在本机，", "一分钱都不花。")]
     cw = (W - 64 - 2 * 16) / 3
     for i, (title, a, b) in enumerate(cols):

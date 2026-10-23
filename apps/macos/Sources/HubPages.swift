@@ -89,6 +89,7 @@ struct HomePage: View {
                     if !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceUp || !model.llmConfigured {
                         SetupCard()
                     }
+                    if !model.settings.guideDismissed { GuideCard() }
                     StatsRow(stats: model.stats)
                     ActivityCard()
                     RecentCard()
@@ -113,7 +114,7 @@ private struct HeroCard: View {
                         Keycap(label: model.hotkeyLabel, large: true)
                         Text(L10n.text("开始听写，再按一次结束")).font(.system(size: 17, weight: .semibold))
                     }
-                    Text(L10n.text("说完后，整理好的文字会出现在你开始听写时光标所在的位置。按 Esc 取消。"))
+                    Text(L10n.text("文字会出现在光标处。按 Esc 取消。"))
                         .font(.system(size: 12.5))
                         .foregroundColor(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -157,9 +158,11 @@ private struct SetupCard: View {
                          action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("下载") : "") {
                     model.actions?.downloadModels()
                 }
+                if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
                 SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（自己的 API Key）"),
-                         detail: model.llmConfigured ? model.modelSummary : L10n.text("填上 Key 才会整理成通顺的书面语；不填也能用，只去口水词。"),
+                         detail: model.llmConfigured ? model.modelSummary : L10n.text("填了 Key 才会整理；不填只去口头禅。"),
                          action: L10n.text("去设置")) {
+                    model.settingsCategory = 1
                     model.page = .settings
                 }
             }
@@ -390,7 +393,7 @@ struct HistoryPage: View {
             Button(L10n.text("删除"), role: .destructive) { model.actions?.clearHistory() }
             Button(L10n.text("取消"), role: .cancel) {}
         } message: {
-            Text(L10n.text("这会删除这台电脑上的全部听写记录和保留的录音，无法恢复。"))
+            Text(L10n.text("将删除全部听写记录和录音，无法恢复。"))
         }
     }
 }
@@ -497,7 +500,7 @@ struct DictionaryPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("人名、项目代号、专业术语。你在听写后改过的词会自动加进来。")) {
+            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("人名、项目代号、术语。你改过的词会自动加进来。")) {
                 HStack(spacing: 8) {
                     Button(L10n.text("导入 CSV")) { importCSV() }.buttonStyle(SecondaryButtonStyle())
                     Button {
@@ -528,7 +531,7 @@ struct DictionaryPage: View {
             if filtered.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(query.isEmpty ? L10n.text("词典还是空的。添加常被识别错的名字和术语，整理时会优先用这些写法。") : L10n.text("没有匹配的词"))
+                    Text(query.isEmpty ? L10n.text("词典是空的。加入常被认错的名字和术语。") : L10n.text("没有匹配的词"))
                         .multilineTextAlignment(.center)
                         .foregroundColor(Theme.secondary)
                         .frame(maxWidth: 360)
@@ -655,7 +658,7 @@ private struct WordEditor: View {
                 Text(L10n.text("常被识别成（可选）")).font(.system(size: 12, weight: .medium)).foregroundColor(Theme.secondary)
                 TextField(L10n.text("例如 得普西克"), text: $heardAs)
                     .textFieldStyle(.roundedBorder)
-                Text(L10n.text("填了以后，凡是识别成这个写法的地方都会改成上面的词。"))
+                Text(L10n.text("识别成这个写法时，会改成上面的词。"))
                     .font(.system(size: 11)).foregroundColor(Theme.tertiary)
             }
             HStack {

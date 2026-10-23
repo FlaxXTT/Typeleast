@@ -54,7 +54,6 @@ internal sealed class AppHost : IDictationHost
     private bool refreshing;
     public RetainedAudio RetainedAudio { get; }
     public long? LastMicrophoneStartMs => dictation.LastMicrophoneStartMs;
-    public PromptFileSync PromptFile { get; }
     private IdleBar? idleBar;
     private Onboarding? onboarding;
     private bool started;
@@ -89,11 +88,10 @@ internal sealed class AppHost : IDictationHost
         hook = new KeyboardHook(Settings.Hotkey, Settings.TranslateHotkey);
         bar = new RecordingBar(this);
         dictation = new DictationController(this, app.Dispatcher, hook, bar);
-        PromptFile = new PromptFileSync(Client, AppPaths.StateDirectory());
         bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
-        if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件无法读取，原文件已保留，已阻止覆盖保存。");
-        if (Activity.LastError is not null) Hint = L10n.T("活动计数文件损坏或无法读取，原文件已保留。");
-        if (History.LastError is not null) Hint = L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。");
+        if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件读不了，原文件已保留，暂不保存。");
+        if (Activity.LastError is not null) Hint = L10n.T("活动统计文件读不了，原文件已保留。");
+        if (History.LastError is not null) Hint = L10n.T("历史记录读写失败，原文件已保留。请检查文件权限。");
     }
 
     public bool ServiceUp => Health?.Ok == true && Health.Service == "typeleast";
@@ -107,7 +105,7 @@ internal sealed class AppHost : IDictationHost
     {
         get
         {
-            if (!LlmConfigured) return L10n.T("整理模型未设置（只去口水词，不改写）");
+            if (!LlmConfigured) return L10n.T("未设置整理模型（只去口头禅）");
             var preset = Settings.Preset;
             return preset.Name + " · " + Settings.LlmModel + (preset.Id == "ollama" ? L10n.T("（本机）") : L10n.T("（自己的 Key）"));
         }
@@ -132,11 +130,10 @@ internal sealed class AppHost : IDictationHost
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
         {
-            if (Service.State == ServiceManager.Phase.Running) { _ = RefreshHealth(); PromptFile.ServiceReady(); }
+            if (Service.State == ServiceManager.Phase.Running) _ = RefreshHealth();
             Raise();
         });
         Service.Start();
-        PromptFile.Start();
 
         hook.Tapped += () => app.Dispatcher.InvokeAsync(() => Toggle());
         hook.PasteLast += () => app.Dispatcher.InvokeAsync(() => _ = PasteLast());
@@ -172,7 +169,6 @@ internal sealed class AppHost : IDictationHost
         Cancel();
         dictation.DropBeta();
         healthTimer?.Stop();
-        PromptFile.Dispose();
         dictation.Shutdown();
         hook.Dispose();
         Service.Stop();
@@ -285,6 +281,10 @@ internal sealed class AppHost : IDictationHost
         }
     }
 
+    /// <summary>Download again after a failure: the model whose download failed, else the default one.</summary>
+    public Task RetryModelDownload() =>
+        (Speech?.Operation ?? SpeechCatalog?.Operation) is { Phase: "error" } op ? ManageSpeechModel(op.ModelId, download: true) : DownloadModels();
+
     public async Task ManageSpeechModel(string id, bool download = false, bool cancel = false)
     {
         if (!cancel && Phase != DictationPhase.Idle) return;
@@ -320,7 +320,7 @@ internal sealed class AppHost : IDictationHost
     public void ClearHistory()
     {
         History.Clear();
-        if (History.LastError is not null) { SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。")); return; }
+        if (History.LastError is not null) { SetHint(L10n.T("历史记录读写失败，原文件已保留。请检查文件权限。")); return; }
         Activity.Clear();
         PruneAudio();
         Raise();

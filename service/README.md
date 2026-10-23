@@ -32,7 +32,7 @@ npm start
 
 环境变量 `TYPELEAST_HOME` 覆盖状态目录（模型放在它下面的 `models`），`TYPELEAST_MODELS` 单独覆盖模型目录。
 
-状态目录里有：`api-token`（访问令牌）、`runtime.json`（当前端口）、`promptify.json`（提示词模式设置），以及可选的 `config.json`。服务不保存听写历史和词典：历史在 App 里加密保存，词典随每次请求发送。旧版本留下的 `history.jsonl`、`dictionary.json` 会在启动时删除。
+状态目录里有：`api-token`（访问令牌）、`runtime.json`（当前端口），以及可选的 `config.json`。服务不保存听写历史和词典：历史在 App 里加密保存，词典随每次请求发送。旧版本留下的 `history.jsonl`、`dictionary.json` 会在启动时删除。
 
 ## config.json（可选）
 

@@ -70,7 +70,7 @@ struct BetaQuestionsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("提示词 Beta · 第 {0} 轮", info.round ?? 1))
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
-            Text(info.ready == true ? L10n.text("目前信息已清楚，可以继续补充，也可以生成。") : L10n.text("先把信息说清楚"))
+            Text(info.ready == true ? L10n.text("信息已清楚，可继续补充或生成。") : L10n.text("先把信息说清楚"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
@@ -92,7 +92,7 @@ struct BetaQuestionsView: View {
                 Text(BetaMessages.notice(notice)).font(.system(size: 12)).foregroundColor(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(busy ?? L10n.text("按 {0} 继续补充。每次回答后都会重新检查；只有点击生成才结束。", hotkey))
+            Text(busy ?? L10n.text("按 {0} 继续补充，点「生成」结束。", hotkey))
                 .font(.system(size: 11.5)).foregroundColor(busy == nil ? Theme.secondary : Theme.accent)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

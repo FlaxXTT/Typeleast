@@ -30,7 +30,6 @@ struct SettingsPage: View {
                     case 0: shortcuts; language; audio
                     case 1:
                         ModelSection(); cleanup
-                        DisclosureGroup(L10n.text("提示词配置（高级）")) { PromptifySection() }
                     case 2: insertion; general
                     case 3: privacy; permissions
                     default: service
@@ -58,7 +57,7 @@ struct SettingsPage: View {
                     HotkeyField(slot: .alt)
                 }
             }
-            SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始说话，再按一下结束，插入翻译成 {0} 的文字", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
+            SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
                 HotkeyField(slot: .translate)
             }
             SettingRow(title: L10n.text("粘贴上一条转写"), detail: L10n.text("文字没粘进去时，用它再贴一次")) {
@@ -69,7 +68,7 @@ struct SettingsPage: View {
             }
             if model.settings.hotkeyMain.isFn || model.settings.hotkeyAlt.isFn {
                 NoteRow(symbol: "globe",
-                        text: L10n.text("使用 Fn 需要辅助功能权限；并在「系统设置 › 键盘」里把「按下 🌐 键时」设为「无操作」，否则按 Fn 会同时弹出表情或切换输入法。"),
+                        text: L10n.text("Fn 需要辅助功能权限，并把「系统设置 › 键盘 › 按下 🌐 键时」设为「无操作」。"),
                         action: L10n.text("打开键盘设置")) { model.actions?.openKeyboardSettings() }
             }
         }
@@ -77,11 +76,11 @@ struct SettingsPage: View {
 
     private var cleanup: some View {
         SettingsSection(title: L10n.text("整理选项")) {
-            ToggleRow(title: L10n.text("参考输入框里的内容"), detail: L10n.text("默认关闭。打开后，听写开始时读取光标附近的文字和窗口标题，和识别结果一起（脱敏后）发给整理模型，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。"),
+            ToggleRow(title: L10n.text("参考输入框里的内容"), detail: L10n.text("开启后，把光标附近的文字和窗口标题（去掉密钥后）发给整理模型，帮它认对人名和术语。不读密码框。"),
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("自动学习我的更正"), detail: L10n.text("听写后你改过的词，会作为「自动添加」放进词典。只在本机比对，不会发给模型。"),
+            ToggleRow(title: L10n.text("自动学习我的更正"), detail: L10n.text("你在听写后改对的词会自动加进词典，可撤销。只在本机比对。"),
                       isOn: model.setting(\.autoLearn))
-            ToggleRow(title: L10n.text("列表粘贴为真正的列表"), detail: L10n.text("整理结果里有 1. 2. 3. 编号时，在备忘录、邮件、Pages、Word 里粘贴成带格式的列表。"),
+            ToggleRow(title: L10n.text("列表粘贴为真正的列表"), detail: L10n.text("带 1. 2. 3. 编号的结果，在备忘录、邮件、Word 里粘贴成列表。"),
                       isOn: model.setting(\.richTextLists))
         }
     }
@@ -94,7 +93,7 @@ struct SettingsPage: View {
     }
     private var language: some View {
         SettingsSection(title: L10n.text("语言")) {
-            SettingRow(title: L10n.text("听写语言"), detail: model.speech?.canSetLanguage == false ? L10n.text("当前模型自动检测语言，不能强制指定。") : L10n.text("可选择当前模型支持的语言；不支持的语言设置使用自动识别。")) {
+            SettingRow(title: L10n.text("听写语言"), detail: model.speech?.canSetLanguage == false ? L10n.text("当前模型自动检测语言，不能强制指定。") : L10n.text("只能选当前模型支持的语言，其余自动识别。")) {
                 Picker("", selection: dictationLanguage) {
                     ForEach(VoiceLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue).disabled(model.speech?.languages?.contains($0.rawValue) == false) }
                 }
@@ -102,12 +101,12 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 150)
             }
-            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("按翻译快捷键说的话，会整理后翻译成这种语言再插入。需要填好整理模型。")) {
+            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("用翻译快捷键说的话会译成这种语言。需要先设置整理模型。")) {
                 Picker("", selection: model.setting(\.translateTarget)) {
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)
             }
-            SettingRow(title: L10n.text("中文写法"), detail: L10n.text("输出的中文用简体还是繁体；繁体在本机转换，并换成当地用语（软件 → 軟體）。")) {
+            SettingRow(title: L10n.text("中文写法"), detail: L10n.text("中文输出用简体还是繁体（繁体会换成当地用语）。")) {
                 Picker("", selection: model.setting(\.zhVariant)) {
                     ForEach(ChineseVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)
@@ -123,7 +122,7 @@ struct SettingsPage: View {
     private var audio: some View {
         SettingsSection(title: L10n.text("音频")) {
             SettingRow(title: L10n.text("麦克风"), detail: meter.running
-                       ? (meter.heardVoice ? L10n.text("听到你了（{0} 秒后自动关闭麦克风）", Int(MicMeter.maxSeconds)) : L10n.text("正在听…说句话，条变蓝就说明能收到声音"))
+                       ? (meter.heardVoice ? L10n.text("听到你了（{0} 秒后自动关闭麦克风）", Int(MicMeter.maxSeconds)) : L10n.text("正在听…说句话，条变蓝就是听到了"))
                        : L10n.text("点「测试麦克风」才会打开麦克风")) {
                 HStack(spacing: 12) {
                     LevelBars(level: meter.level)
@@ -142,7 +141,7 @@ struct SettingsPage: View {
                 }
             }
             ToggleRow(title: L10n.text("提示音"), detail: L10n.text("开始和结束听写时播放提示音"), isOn: model.setting(\.soundEnabled))
-            ToggleRow(title: L10n.text("听写时静音其他声音"), detail: L10n.text("录音期间把正在播放的声音静音，结束后恢复"), isOn: model.setting(\.muteWhileDictating))
+            ToggleRow(title: L10n.text("听写时静音其他声音"), detail: L10n.text("录音时静音正在播放的声音，结束后恢复"), isOn: model.setting(\.muteWhileDictating))
         }
     }
 
@@ -161,7 +160,7 @@ struct SettingsPage: View {
 
     private var general: some View {
         SettingsSection(title: L10n.text("通用")) {
-            SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启应用后生效；不会改变听写或输出语言。")) {
+            SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启后生效，不影响听写语言。")) {
                 Picker("", selection: model.setting(\.interfaceLanguage)) {
                     Text(L10n.text("跟随系统")).tag("system")
                     Text("简体中文").tag("zh-Hans")
@@ -182,7 +181,7 @@ struct SettingsPage: View {
                       isOn: Binding(get: { SMAppService.mainApp.status == .enabled }, set: { setLogin($0) }))
             ToggleRow(title: L10n.text("在 Dock 中显示"), detail: L10n.text("关闭后只在菜单栏显示图标"),
                       isOn: model.setting(\.showInDock, then: { model.actions?.applyGeneralSettings() }))
-            ToggleRow(title: L10n.text("在桌面显示语音条"), detail: L10n.text("屏幕底部常驻一个小语音条，点它也能开始听写"),
+            ToggleRow(title: L10n.text("在桌面显示语音条"), detail: L10n.text("屏幕底部显示语音条，点它也能听写"),
                       isOn: model.setting(\.showIdleBar, then: { model.actions?.applyGeneralSettings() }))
             SettingRow(title: L10n.text("新手引导"), detail: L10n.text("重新走一遍权限和麦克风设置")) {
                 Button(L10n.text("打开")) { model.actions?.showOnboarding() }.buttonStyle(SecondaryButtonStyle())
@@ -201,9 +200,9 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 130)
             }
-            ToggleRow(title: L10n.text("保留录音 24 小时"), detail: L10n.text("可以在历史里用同一段录音重试；24 小时后自动删除。不保存历史时不保留录音"),
+            ToggleRow(title: L10n.text("保留录音 24 小时"), detail: L10n.text("录音保留 24 小时，可在历史里重试"),
                       isOn: model.setting(\.keepAudio24h))
-            NoteRow(symbol: "lock", text: L10n.text("录音只在本机转写，不会上传。发给整理模型服务商的只有文字，并且会先抹掉密码和密钥。"), action: nil, perform: nil)
+            NoteRow(symbol: "lock", text: L10n.text("录音在本机转写，不上传。只把文字发给整理模型，密码和密钥会先去掉。"), action: nil, perform: nil)
         }
     }
 
@@ -222,7 +221,7 @@ struct SettingsPage: View {
     private var service: some View {
         SettingsSection(title: L10n.text("本地服务")) {
             SettingRow(title: model.serviceSummary,
-                       detail: model.nodeDescription.isEmpty ? L10n.text("识别和整理都由本机的 TypeLeast 服务完成，它需要 Node.js 22 或更新版本") : "Node.js " + model.nodeDescription) {
+                       detail: model.nodeDescription.isEmpty ? L10n.text("识别和整理由本机服务完成，需要 Node.js 22+") : "Node.js " + model.nodeDescription) {
                 HStack(spacing: 8) {
                     if model.serviceState.needsNode {
                         Button(L10n.text("下载 Node.js")) { NSWorkspace.shared.open(URL(string: "https://nodejs.org/zh-cn/download")!) }
@@ -234,16 +233,22 @@ struct SettingsPage: View {
             }
             SpeechModelOptions()
             SettingRow(title: L10n.text("模型下载镜像（可选）"),
-                       detail: L10n.text("huggingface.co 下载慢或打不开时，填一个镜像地址，例如 https://hf-mirror.com。每个文件都会校验 SHA-256，镜像改不了内容。")) {
-                TextField("https://huggingface.co", text: model.setting(\.modelMirror))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
+                       detail: L10n.text("下载慢或失败时填镜像地址。文件都会校验，镜像改不了内容。")) {
+                HStack(spacing: 8) {
+                    TextField("https://huggingface.co", text: model.setting(\.modelMirror))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 220)
+                    if model.settings.modelMirror != ModelMirror.suggested {
+                        Button(L10n.text("填入 hf-mirror.com")) { model.setting(\.modelMirror).wrappedValue = ModelMirror.suggested }
+                            .buttonStyle(SecondaryButtonStyle())
+                    }
+                }
             }
-            SettingRow(title: L10n.text("版本与更新"), detail: L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。点「检查更新」，有新版本时一键更新，权限不需要重新授予。")) {
+            SettingRow(title: L10n.text("版本与更新"), detail: L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。有新版本时一键更新，权限保留。")) {
                 Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
             }
             SettingRow(title: L10n.text("更新下载源"),
-                       detail: L10n.text("下载慢或卡住时，自动换到公共镜像下载；校验值始终从 GitHub 官方获取，被改动的文件不会安装。")) {
+                       detail: L10n.text("GitHub 慢时自动换镜像。安装包都会校验，改过的不会安装。")) {
                 Picker("", selection: model.setting(\.updateSource)) {
                     Text(L10n.text("自动（GitHub 慢时换镜像）")).tag("auto")
                     Text(L10n.text("只用 GitHub")).tag("github")
@@ -258,7 +263,7 @@ struct SettingsPage: View {
 
     private var speechDetail: String {
         let problem = AppDelegate.speechProblem(model.speech)
-        return problem.isEmpty ? L10n.text("已就绪，识别完全在本机进行，音频不出这台 Mac") : problem
+        return problem.isEmpty ? L10n.text("已就绪，音频不出本机") : problem
     }
 
     private var loginDetail: String {
@@ -539,7 +544,7 @@ struct ModelSection: View {
 
     var body: some View {
         SettingsSection(title: L10n.text("整理模型")) {
-            Text(L10n.text("用你自己的 API Key 调用大模型，把识别出的话整理成通顺的书面语。Key 只存在这台 Mac 的钥匙串里，只发给本机的 TypeLeast 服务。"))
+            Text(L10n.text("用你自己的 API Key 整理文字。Key 只存在本机钥匙串。"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 SettingRow(title: L10n.text("服务商"), detail: preset.keyPage.isEmpty ? nil : L10n.text("Key 在这里创建：") + preset.keyPage) {
@@ -552,13 +557,13 @@ struct ModelSection: View {
                     .labelsHidden()
                     .frame(width: 220)
                 }
-                SettingRow(title: L10n.text("接口地址"), detail: LLMPreset.isAllowedBaseURL(settings.llmBaseURL) ? nil : L10n.text("需要 https 地址（本机服务可以用 http://127.0.0.1）")) {
+                SettingRow(title: L10n.text("接口地址"), detail: LLMPreset.isAllowedBaseURL(settings.llmBaseURL) ? nil : L10n.text("需要 https 地址（本机可用 http://127.0.0.1）")) {
                     TextField("https://…/v1", text: model.setting(\.llmBaseURL))
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 300)
                 }
                 if preset.needsKey {
-                    SettingRow(title: "API Key", detail: keySaved ? L10n.text("已保存在钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再点保存或测试连接") : L10n.text("还没保存：点保存，或测试连接成功后自动保存"))) {
+                    SettingRow(title: "API Key", detail: keySaved ? L10n.text("已保存在钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再点保存或测试连接") : L10n.text("未保存：点保存，或测试成功后自动保存"))) {
                         HStack(spacing: 8) {
                             SecureField("sk-…", text: $keyDraft)
                                 .textFieldStyle(.roundedBorder)
@@ -598,7 +603,7 @@ struct ModelSection: View {
                     Spacer()
                 }
                 if !settings.llmRouteReady {
-                    Text(missingParts() + L10n.text("。在此之前听写照常可用：只去掉口水词，不改写。"))
+                    Text(missingParts() + L10n.text("。现在也能听写，只是不整理。"))
                         .font(.system(size: 11.5)).foregroundColor(Theme.warning)
                 }
         }
@@ -695,7 +700,7 @@ struct ModelSection: View {
                     let saved = keyDraft.isEmpty || keyDraft == settings.llmAPIKey || saveKey(quiet: true)
                     let thinks = answer.code == "thinking"
                     status = L10n.text("连接成功，用时 ") + String(Int(answer.ms ?? 0)) + L10n.text(" 毫秒") + (saved ? L10n.text("，Key 已保存") : L10n.text("，但 Key 没能存进钥匙串"))
-                        + (thinks ? L10n.text("。这个模型会先思考再回答，整理会慢一些") : "")
+                        + (thinks ? L10n.text("。这个模型会先思考，整理会慢一些") : "")
                     statusOK = saved
                     DiagnosticsLog.write("llm.test.ok", ["host": URL(string: route.baseURL)?.host ?? "?", "model": route.model])
                 case .success(let answer):
@@ -706,7 +711,7 @@ struct ModelSection: View {
                 case .failure(let error):
                     let d = error as? ServiceError
                     status = d?.serviceUnavailable == true
-                        ? L10n.text("本地服务还没就绪（测试要经过它）。等首页显示就绪后再点一次")
+                        ? L10n.text("本地服务还没就绪，稍后再试")
                         : Self.describe(error)
                     statusOK = false
                     DiagnosticsLog.write("llm.test.error", ["error": d?.description ?? error.localizedDescription])
@@ -718,7 +723,7 @@ struct ModelSection: View {
     private static func explain(code: String?, message: String?) -> String {
         switch code ?? "" {
         case "HTTP_401", "HTTP_403": return L10n.text("Key 无效或没有权限（{0}）", code ?? "")
-        case "HTTP_400": return L10n.text("服务商拒绝了请求：多半是模型 ID 不对（HTTP 400）。点「获取列表」选一个")
+        case "HTTP_400": return L10n.text("模型 ID 可能不对（HTTP 400），点「获取列表」选一个")
         case "HTTP_404": return L10n.text("地址或模型 ID 不对（HTTP 404）")
         case "NETWORK": return L10n.text("连不上服务商：") + (message ?? "") + L10n.text("。请检查网络或代理")
         case "HTTP_500", "HTTP_502", "HTTP_503", "HTTP_504": return L10n.text("服务商那边暂时出错（{0}），稍后再试", code ?? "")

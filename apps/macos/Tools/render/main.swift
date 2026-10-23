@@ -98,17 +98,16 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODES_ONLY"] == "1" {
     for language in ["zh-Hans", "en"] {
         L10n.language = language
         for dark in [false, true] {
-            for strength in ["promptbrief", "promptify"] {
+            for strength in ["prompt", "concise"] {
                 model.settings.strength = strength
-                let bar = NSHostingView(rootView: CleanupModeBar().environmentObject(model)
-                    .frame(width: 680, height: 205, alignment: .top).background(Theme.window)
-                    .environment(\.colorScheme, dark ? .dark : .light))
-                snapshot(bar, size: NSSize(width: 680, height: 205), name: "modes-" + strength + "-" + language, dark: dark)
+                model.page = .home
+                snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)),
+                         size: NSSize(width: 820, height: 560), name: "modes-" + strength + "-" + language, dark: dark)
             }
             let progress = UpdateProgressModel()
             progress.version = "1.18.0"
             progress.stage = .downloading(received: 33 << 20, total: 52 << 20, source: "GitHub")
-            progress.summary = "• " + L10n.text("提示词 · 普通") + " / " + L10n.text("提示词 · 标准格式") + "\n• " + L10n.text("积极压缩口语，保留核心意图和约束，简洁、直白、易读。")
+            progress.summary = "• " + L10n.text("标准整理") + " / " + L10n.text("精简整理") + "\n• " + L10n.text("更短，只留要点")
             let view = NSHostingView(rootView: UpdateProgressView(model: progress).environment(\.colorScheme, dark ? .dark : .light))
             snapshot(view, size: view.fittingSize, name: "summary-" + language, dark: dark)
         }

@@ -135,6 +135,20 @@ final class AppModel: ObservableObject {
         )
     }
 
+    func dismissGuide() {
+        settings.guideDismissed = true
+        objectWillChange.send()
+    }
+
+    /// Download again after a failure: the model whose download failed, else the default one.
+    func retryModelDownload() {
+        if let operation = speech?.operation ?? speechCatalog?.operation, operation.phase == "error" {
+            actions?.manageSpeechModel(id: operation.modelId, download: true, cancel: false)
+        } else {
+            actions?.downloadModels()
+        }
+    }
+
     func selectStrength(_ code: String) {
         guard phase == .idle else { return }
         if let actions = actions { actions.setCleanupMode(code) }
@@ -149,7 +163,7 @@ final class AppModel: ObservableObject {
 
     var modelSummary: String {
         let preset = LLMPreset.find(settings.llmPresetID)
-        guard settings.llmRouteReady else { return L10n.text("整理模型未配置（只去口水词，不改写）") }
+        guard settings.llmRouteReady else { return L10n.text("未设置整理模型（只去口头禅）") }
         return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（自己的 Key）"))
     }
 

@@ -67,7 +67,7 @@ internal sealed class ServiceManager
                 var appDir = AppContext.BaseDirectory;
                 var env = AppPaths.Environment();
                 var serviceDir = ServiceLocator.ServiceDirectory(appDir, env, File.Exists);
-                if (serviceDir is null) { Set(Phase.NoService, L10n.T("TypeLeast 安装目录里缺少本地服务文件，请重新安装")); return; }
+                if (serviceDir is null) { Set(Phase.NoService, L10n.T("缺少本地服务文件，请重新安装")); return; }
                 if (NodePath is null) FindNode(appDir, env);
                 ct.ThrowIfCancellationRequested();
                 if (NodePath is null || !ServiceLocator.IsSupported(NodeVersion)) { Set(Phase.NoNode, L10n.T("没有找到 Node.js（需要 22 或更新）")); NodePath = null; return; }
@@ -118,7 +118,7 @@ internal sealed class ServiceManager
             if (process != p || ct.IsCancellationRequested) { p.Dispose(); return; }
             process = null; Port = 0; client.InvalidatePort();
             delay = recovery.Next(uptime.Elapsed);
-            Set(delay is null ? Phase.Failed : Phase.Starting, delay is null ? L10n.T("本地服务反复退出，请检查安装或手动重试。") : "");
+            Set(delay is null ? Phase.Failed : Phase.Starting, delay is null ? L10n.T("本地服务反复退出，请重试或重新安装。") : "");
         }
         p.Dispose(); Log.Write("service.exit");
         if (delay is not null) _ = RestartAfter(delay.Value, ct);

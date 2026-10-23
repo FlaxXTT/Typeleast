@@ -35,7 +35,7 @@ test("dictionary and field context ride in a delimited addendum", () => {
 });
 
 test("history records the cleanup prompt version", () => {
-  assert.match(promptVersionFor(), /-cleanup\+promptify\+beta\+translate$/);
+  assert.match(promptVersionFor(), /-cleanup\+concise\+beta\+translate$/);
 });
 
 test("an uncertain answer is still the model's best guess and is used", () => {

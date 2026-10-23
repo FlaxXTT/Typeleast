@@ -5,16 +5,16 @@ public static class Messages
 {
     public static string BetaNotice(string code) => code switch {
         "empty-transcript" => L10n.T("没有听到有效补充，请再说一次；已有信息保留。"),
-        "beta-input-limit" => L10n.T("本次补充超出会话容量，未被接收。请缩短后重说，或先生成已有内容。"),
-        "beta-validation" => L10n.T("结果未通过原意或事实检查，未插入。已有信息保留，可继续补充或重试生成。"),
-        _ => L10n.T("本轮处理未完成，已有信息保留。请重说本次补充或重试生成。")
+        "beta-input-limit" => L10n.T("这次补充太长，没有收到。请说短一些，或先生成。"),
+        "beta-validation" => L10n.T("结果没通过检查，未插入。可继续补充或重新生成。"),
+        _ => L10n.T("这一轮没完成，已有信息保留。请重说或重新生成。")
     };
 
     /// <summary>How long the microphone took from the request to its first audio. Speech before that is lost,
     /// so a slow device gets advice; 350 ms is roughly where a quick speaker loses the first syllable.</summary>
     public static string MicrophoneStartup(long ms) => ms <= 350
         ? L10n.T("麦克风启动用时 {0} 毫秒。", ms)
-        : L10n.T("麦克风启动用时 {0} 毫秒，较慢：录音条的圆点变红后再开始说话。蓝牙耳机通常更慢，可在设置中换用电脑自带或有线麦克风。", ms);
+        : L10n.T("麦克风启动较慢（{0} 毫秒）。圆点变红后再说话，或换用有线、内置麦克风。", ms);
 
     /// <summary>What to say about the recogniser, or "" when it is ready.</summary>
     public static string SpeechProblem(SpeechStatus? speech) => (speech?.Phase ?? "") switch
@@ -31,7 +31,7 @@ public static class Messages
     public static string ExplainLlmCode(string? code, string? message) => (code ?? "") switch
     {
         "HTTP_401" or "HTTP_403" => L10n.T("Key 无效或没有权限（") + code + "）",
-        "HTTP_400" => L10n.T("服务商拒绝了请求：多半是模型 ID 不对（HTTP 400）。点「获取列表」选一个"),
+        "HTTP_400" => L10n.T("模型 ID 可能不对（HTTP 400），点「获取列表」选一个"),
         "HTTP_404" => L10n.T("地址或模型 ID 不对（HTTP 404）"),
         "NETWORK" => L10n.T("连不上服务商：") + (message ?? "") + L10n.T("。请检查网络或代理"),
         "HTTP_500" or "HTTP_502" or "HTTP_503" or "HTTP_504" => L10n.T("服务商那边暂时出错（") + code + L10n.T("），稍后再试"),
@@ -46,7 +46,7 @@ public static class Messages
     public static string? FallbackNote(string? reason) => reason switch
     {
         null or "" or "strength-off" => null,
-        "no-api-key" => L10n.T("整理模型未设置，已插入原话（去掉了口水词）"),
+        "no-api-key" => L10n.T("未设置整理模型，已插入原话（去掉口头禅）"),
         "empty-transcript" => L10n.T("没有听到内容"),
         "model-timeout" => L10n.T("整理超时，已插入原话"),
         "model-max-tokens" => L10n.T("模型输出达到长度上限，已插入原话"),

@@ -687,38 +687,6 @@ final class ServiceClient {
         } }
     }
 
-    /// Prompt mode (提示词模式): the fixed default, the user's additions and replacement.
-    func promptifySync() throws -> PromptifySettings {
-        try withPortRetry {
-            try withTokenRetry { token in
-                let req = try makeRequest(path: "/api/voice-polish/prompts/promptify", method: "GET", token: token, timeout: healthTimeout)
-                let (data, resp) = try performSync(req, timeout: healthTimeout)
-                guard resp.statusCode == 200 else { throw httpError(resp, data) }
-                do { return try JSONDecoder().decode(PromptifySettings.self, from: data) }
-                catch { throw ServiceError.decoding(String(describing: error)) }
-            }
-        }
-    }
-
-    /// Change the prompt-mode settings. `appendix` replaces the additions when given;
-    /// `override`: .some(text) replaces the default, .some(nil) restores it, nil leaves it.
-    func setPromptifySync(appendix: String? = nil, override: String?? = nil) throws -> PromptifySettings {
-        try withPortRetry {
-            try withTokenRetry { token in
-                var object: [String: Any] = [:]
-                if let appendix = appendix { object["appendix"] = appendix }
-                if let override = override { object["override"] = override.map { $0 as Any } ?? NSNull() }
-                let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
-                let req = try makeRequest(path: "/api/voice-polish/prompts/promptify", method: "PUT", token: token,
-                                          headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)
-                let (data, resp) = try performSync(req, timeout: healthTimeout)
-                guard resp.statusCode == 200 else { throw httpError(resp, data) }
-                do { return try JSONDecoder().decode(PromptifySettings.self, from: data) }
-                catch { throw ServiceError.decoding(String(describing: error)) }
-            }
-        }
-    }
-
     /// Ask the service to make one tiny call with this route (nothing is recorded).
     func testLLMSync(route: LLMRoute) throws -> LLMTestResult {
         try withPortRetry {
@@ -782,15 +750,6 @@ struct LLMRoute: Codable, Equatable {
     }
 }
 
-/// Answer of `GET/PUT /prompts/promptify`.
-struct PromptifySettings: Codable, Equatable {
-    var `default`: String
-    var appendix: String
-    var override: String?
-    var modified: Bool
-    var effective: String
-}
-
 /// Answer of `POST /test-llm`.
 struct LLMTestResult: Codable, Equatable {
     var ok: Bool
@@ -805,32 +764,13 @@ struct LearnedWordResult: Codable, Equatable {
     var word: String?
 }
 
-/// Pure config-file preparation. Malformed existing files must never be overwritten.
-enum PromptifyConfigFile {
-    static func editableData(existing: Data?, settings: PromptifySettings) throws -> Data {
-        if let existing = existing, existing.count > 100_000 { throw CocoaError(.fileReadTooLarge) }
-        var object: [String: Any] = [:]
-        if let existing = existing {
-            guard let parsed = try JSONSerialization.jsonObject(with: existing) as? [String: Any] else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
-            object = parsed
-            if let appendix = object["appendix"], !(appendix is String) { throw CocoaError(.fileReadCorruptFile) }
-            if let value = object["override"], !(value is String) && !(value is NSNull) { throw CocoaError(.fileReadCorruptFile) }
-        }
-        if object["appendix"] == nil { object["appendix"] = settings.appendix }
-        if (object["override"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false { object["override"] = settings.override ?? settings.default }
-        return try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
-    }
-}
-
 enum BetaMessages {
     static func notice(_ code: String) -> String {
         switch code {
         case "empty-transcript": return L10n.text("没有听到有效补充，请再说一次；已有信息保留。")
-        case "beta-input-limit": return L10n.text("本次补充超出会话容量，未被接收。请缩短后重说，或先生成已有内容。")
-        case "beta-validation": return L10n.text("结果未通过原意或事实检查，未插入。已有信息保留，可继续补充或重试生成。")
-        default: return L10n.text("本轮处理未完成，已有信息保留。请重说本次补充或重试生成。")
+        case "beta-input-limit": return L10n.text("这次补充太长，没有收到。请说短一些，或先生成。")
+        case "beta-validation": return L10n.text("结果没通过检查，未插入。可继续补充或重新生成。")
+        default: return L10n.text("这一轮没完成，已有信息保留。请重说或重新生成。")
         }
     }
 }

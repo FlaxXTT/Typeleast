@@ -12,7 +12,7 @@ internal static class MicrophoneTestPanel
     {
         if (!host.StartMicrophoneTest()) return;
         var level = new ProgressBar { Minimum = 0, Maximum = 1, Height = 10, Foreground = Theme.Accent };
-        var text = Theme.Text(L10n.T("正在测试麦克风；不会识别、整理或保留录音。"), 13);
+        var text = Theme.Text(L10n.T("正在测试麦克风，不识别也不保存。"), 13);
         var window = new Window { Title = L10n.T("麦克风测试"), Width = 420, SizeToContent = SizeToContent.Height, Background = Theme.Background,
             WindowStartupLocation = WindowStartupLocation.CenterScreen };
         var startup = Theme.Text(L10n.T("正在打开麦克风…"), 12, Theme.Grey);
@@ -29,7 +29,7 @@ internal static class MicrophoneTestPanel
             // After a few seconds of listening, judge the loudest moment (0.43 is about -40 dBFS).
             if (DateTime.UtcNow - heard > TimeSpan.FromSeconds(4))
             {
-                volume.Text = loudest < 0.43 ? L10n.T("输入音量偏低：可在 Windows 设置 → 系统 → 声音 → 输入 中调高麦克风音量，或离麦克风近一些。") : L10n.T("输入音量正常。");
+                volume.Text = loudest < 0.43 ? L10n.T("音量偏低。在「设置 → 系统 → 声音 → 输入」调高音量，或靠近麦克风。") : L10n.T("输入音量正常。");
                 volume.Foreground = loudest < 0.43 ? Theme.Warning : Theme.Success;
             }
             if (DateTime.UtcNow >= until || !host.IsMicrophoneTesting) window.Close();

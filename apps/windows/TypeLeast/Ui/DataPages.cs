@@ -20,7 +20,7 @@ internal sealed class HistoryPage : IPage
     {
         this.host = host;
         root.Children.Add(Theme.Text(L10n.T("历史"), 28, bold: true));
-        root.Children.Add(Theme.Text(L10n.T("只保存在这台电脑上；历史正文使用当前用户 DPAPI 保护，最多保留 500 条。"), 12, Theme.Grey));
+        root.Children.Add(Theme.Text(L10n.T("只存在本机，加密保存，最多 500 条。"), 12, Theme.Grey));
         var retention = Controls.Retention(host);
         foreach (var label in new[] { "全部", "已整理", "用了原文" }) filter.Items.Add(L10n.T(label));
         filter.SelectedIndex = 0;
@@ -28,7 +28,7 @@ internal sealed class HistoryPage : IPage
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.SettingRow(L10n.T("保留时长"), null, retention),
             Theme.Row(8, filter, search, Theme.Secondary(L10n.T("清空全部历史"), () =>
             {
-                if (MessageBox.Show(L10n.T("删除全部历史、活动计数和保留录音？此操作无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory();
+                if (MessageBox.Show(L10n.T("删除全部历史、统计和录音？无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory();
             })))));
         root.Children.Add(list);
         search.TextChanged += (_, _) => Render(); filter.SelectionChanged += (_, _) => Render();
@@ -53,7 +53,7 @@ internal sealed class HistoryPage : IPage
                     Theme.Secondary(L10n.T("删除"), () => host.DeleteHistory(entry.Id)));
                 var retry = Theme.Secondary(L10n.T("同录音重试"), () => _ = host.RetryHistory(entry));
                 retry.IsEnabled = host.Phase == DictationPhase.Idle && host.CanRetry(entry);
-                retry.ToolTip = L10n.T("需开启保留录音且未超过 24 小时；Beta 多阶段记录不能用单段录音重试。结果会复制到剪贴板。"); actions.Children.Add(retry);
+                retry.ToolTip = L10n.T("需要 24 小时内保留的录音；Beta 记录不能重试。结果会复制到剪贴板。"); actions.Children.Add(retry);
                 var reason = Messages.FallbackNote(entry.Reason);
                 var meta = entry.Time.ToLocalTime().ToString("t", L10n.Culture) + (entry.App.Length > 0 ? " · " + entry.App : "")
                     + (reason is not null ? " · " + reason + " (" + DiagnosticEvent.SafeReason(entry.Reason) + ")" : "");
@@ -97,7 +97,7 @@ internal sealed class DictionaryPage : IPage
     {
         this.host = host;
         root.Children.Add(Theme.Text(L10n.T("词典"), 28, bold: true));
-        root.Children.Add(Theme.Text(L10n.T("保存人名、产品名和术语的正确写法；可填写经常听成的写法。"), 13, Theme.Grey));
+        root.Children.Add(Theme.Text(L10n.T("人名、产品名和术语的正确写法，可附上常被听成的写法。"), 13, Theme.Grey));
         foreach (var label in new[] { "全部", "自动添加", "手动添加" }) filter.Items.Add(L10n.T(label)); filter.SelectedIndex = 0;
         search.ToolTip = L10n.T("搜索词典"); System.Windows.Automation.AutomationProperties.SetName(search, L10n.T("搜索词典"));
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.Row(8, filter, search), Theme.Row(8,

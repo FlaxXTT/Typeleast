@@ -3,28 +3,20 @@ import assert from 'node:assert/strict';
 import { VoicePolishService } from '../lib/service.js';
 import { systemPromptFor } from '../lib/prompt.js';
 import { validateOutput } from '../lib/validate.js';
-import { PROMPTIFY_PROMPT, BRIEF_PROMPT } from '../lib/prompts/promptify.js';
+import { CONCISE_PROMPT } from '../lib/prompts/concise.js';
 import { UTTERANCE_RULES } from '../lib/utterance-rules.js';
 import { translatePrompt } from '../lib/prompts/translate.js';
 import { STRENGTHS, validateConfig } from '../lib/config.js';
 
-test('plain and legacy standard tiers are distinct and use the existing strength field', () => {
-  assert.ok(STRENGTHS.includes('promptbrief'));
-  assert.deepEqual(validateConfig({ strength: 'promptbrief' }).issues, []);
-  assert.ok(systemPromptFor({ strength: 'promptbrief' }).startsWith(BRIEF_PROMPT));
-  assert.ok(systemPromptFor({ strength: 'promptify' }).startsWith(PROMPTIFY_PROMPT));
-  const custom = { override: 'My existing standard prompt', appendix: 'My existing appendix' };
-  assert.ok(systemPromptFor({ strength: 'promptify', promptify: custom }).startsWith(custom.override));
-  assert.doesNotMatch(systemPromptFor({ strength: 'promptbrief', promptify: custom }), /My existing/);
-  assert.match(BRIEF_PROMPT, /积极压缩/);
-  assert.match(BRIEF_PROMPT, /否定、例外、数字/);
-  assert.match(BRIEF_PROMPT, /用户明确要求表格/);
-  assert.match(BRIEF_PROMPT, /不输出角色、背景、任务/);
-  assert.match(BRIEF_PROMPT, /保留请求的语气、对象和用途/);
+test('the concise tier uses the existing strength field and its own prompt', () => {
+  assert.ok(STRENGTHS.includes('concise'));
+  assert.deepEqual(validateConfig({ strength: 'concise' }).issues, []);
+  assert.ok(systemPromptFor({ strength: 'concise' }).startsWith(CONCISE_PROMPT));
+  assert.match(CONCISE_PROMPT, /用户明确要求表格/);
 });
 
 test('all one-shot modes and translation receive scoped correction and term-restoration rules', () => {
-  for (const strength of ['prompt', 'conservative', 'maximal', 'promptify', 'promptbrief']) {
+  for (const strength of ['prompt', 'conservative', 'maximal', 'concise']) {
     assert.ok(systemPromptFor({ strength }).includes(UTTERANCE_RULES), strength);
   }
   assert.ok(translatePrompt('en').includes(UTTERANCE_RULES));
@@ -43,7 +35,7 @@ const samples = [
   ['先说做移动端页面。上一句不要了，改成只做桌面端设置页，不新增功能', '只做桌面端设置页，不新增功能。'],
   ['那个负责管理容器的工具我忘了名字，部署时需要用它，不确定是哪款', '部署需要容器管理工具，具体名称待确认。'],
 ];
-for (const strength of ['prompt', 'promptbrief', 'promptify']) {
+for (const strength of ['prompt', 'concise', 'promptify']) {
   for (const [rawText, output] of samples) {
     test(`${strength}: scoped correction or restoration passes the actual pipeline: ${output}`, async () => {
       let calls = 0;
@@ -65,11 +57,11 @@ for (const strength of ['prompt', 'promptbrief', 'promptify']) {
   }
 }
 
-test('aggressive plain compression keeps fact checks and does not demand a role template', () => {
+test('aggressive concise compression keeps fact checks and does not demand a role template', () => {
   const rawText = '那个我想把好多杂乱的设置分一下组，就是按用途分组，常用的模式呢要随时能切换，不要中断录音';
   const output = '1. 设置按用途分组。\n2. 常用模式可随时切换，不中断录音。';
-  assert.equal(validateOutput({ rawText, output, strength: 'promptbrief' }).ok, true);
-  assert.equal(validateOutput({ rawText, output: output + '\n限 512 字。', strength: 'promptbrief' }).reason, 'invented-fact');
+  assert.equal(validateOutput({ rawText, output, strength: 'concise' }).ok, true);
+  assert.equal(validateOutput({ rawText, output: output + '\n限 512 字。', strength: 'concise' }).reason, 'invented-fact');
 });
 
 test('raw mode still skips the model and does not resolve names or rewrite corrections', async () => {

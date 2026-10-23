@@ -69,14 +69,13 @@ internal sealed class MainWindow : Window
         };
         DockPanel.SetDock(badge, Dock.Bottom);
         side.Children.Add(badge);
+        var modes = ModePicker.Sidebar(host);
+        DockPanel.SetDock(modes, Dock.Bottom);
+        side.Children.Add(modes);
         root.Children.Add(side);
 
         var right = new DockPanel();
-        var modeBar = ModePicker.Pills(host);
-        modeBar.Margin = new Thickness(24, 16, 24, 0);
-        DockPanel.SetDock(modeBar, Dock.Top);
-        right.Children.Add(modeBar);
-        content.Margin = new Thickness(36, 16, 36, 28);
+        content.Margin = new Thickness(36, 28, 36, 28);
         right.Children.Add(content);
         Grid.SetColumn(right, 1);
         root.Children.Add(right);
@@ -126,6 +125,15 @@ internal sealed class MainWindow : Window
         catch (Exception) { return Theme.Text("◉", size - 2); }
     }
 
+    /// <summary>Go to a place from the 「设置在哪」 guide.</summary>
+    public void Open(SettingsGuide.Entry entry)
+    {
+        if (entry.Page == "dictionary") ShowPage(Page.Dictionary);
+        if (entry.Page != "settings") return;
+        ShowPage(Page.Settings);
+        if (pages[Page.Settings] is SettingsPage settings) settings.SelectTab(entry.Tab);
+    }
+
     public void ShowPage(Page page)
     {
         current = page;
@@ -164,6 +172,7 @@ internal interface IPage
 internal sealed class HomePage : IPage
 {
     private readonly AppHost host;
+    private readonly MainWindow window;
     private readonly StackPanel root = new();
     private readonly Button tryButton;
     private readonly TextBlock heroTitle = Theme.Text("", 22, bold: true);
@@ -181,16 +190,18 @@ internal sealed class HomePage : IPage
     public HomePage(AppHost host, MainWindow window)
     {
         this.host = host;
+        this.window = window;
         tryButton = Theme.Primary(L10n.T("试一下"), host.Toggle);
         var hero = Theme.Stack(8,
             heroTitle,
-            Theme.Text(L10n.T("在任何输入框里按一下开始说话，再按一下结束。识别在这台电脑上完成，整理好的文字会直接出现在光标处。"), 13, Theme.Grey),
+            Theme.Text(L10n.T("在任何输入框按一下开始说话，再按一下结束，文字会出现在光标处。"), 13, Theme.Grey),
             Theme.Row(10, tryButton, hint));
         root.Children.Add(Theme.Card(hero, 24));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
+        root.Children.Add(GuideViews.Card(host, window.Open));
         root.Children.Add(stats);
-        root.Children.Add(Theme.Text(L10n.T("根据保留的历史估算；假设键盘输入每分钟 40 字。并非精确测量或完整终身累计。"), 11, Theme.Grey));
+        root.Children.Add(Theme.Text(L10n.T("按历史估算，假设打字每分钟 40 字。"), 11, Theme.Grey));
         root.Children.Insert(0, Theme.Text(L10n.T(DateTime.Now.Hour is >= 5 and < 12 ? "早上好" : DateTime.Now.Hour is >= 12 and < 18 ? "下午好" : "晚上好"), 28, bold: true));
         root.Children.Insert(1, keycaps);
         root.Children.Add(activityCard);
@@ -221,12 +232,13 @@ internal sealed class HomePage : IPage
         (string, Action)? download = null;
         if (speech is { ModelsMissing: true } or { Phase: "error" }) download = (L10n.T("下载（约 241 MB）"), startDownload);
         checklist.Children.Add(Item(speech?.Ready == true, host.Speech?.ModelName ?? "SenseVoice Small", problem.Length == 0 ? L10n.T("已就绪，识别完全在本机进行") : problem, download));
-        Action openSettings = () => host.ShowWindow(MainWindow.Page.Settings);
+        if (ModelMirror.NetworkFailure(speech)) checklist.Children.Add(GuideViews.MirrorHint(host, host.RetryModelDownload));
+        Action openSettings = () => window.Open(SettingsGuide.Entries[1]);
         Action openPrivacy = () => Shell.Open("ms-settings:privacy-microphone");
         checklist.Children.Add(Item(host.LlmConfigured, L10n.T("整理模型（自己的 API Key）"),
-            host.LlmConfigured ? host.ModelSummary : L10n.T("填上 Key 才会整理成通顺的书面语；不填也能用，只去口水词。"),
+            host.LlmConfigured ? host.ModelSummary : L10n.T("填了 Key 才会整理；不填只去口头禅。"),
             (L10n.T("去设置"), openSettings)));
-        checklist.Children.Add(Item(host.MicrophoneReady == true, L10n.T("麦克风"), L10n.T("如果录不到声音：设置 → 隐私和安全性 → 麦克风 → 允许桌面应用访问麦克风"),
+        checklist.Children.Add(Item(host.MicrophoneReady == true, L10n.T("麦克风"), L10n.T("录不到声音？在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"),
             (L10n.T("打开设置"), openPrivacy), showActionWhenDone: true));
         setupCard.Visibility = running && speech?.Ready == true && host.LlmConfigured && host.MicrophoneReady == true ? Visibility.Collapsed : Visibility.Visible;
 
@@ -241,7 +253,7 @@ internal sealed class HomePage : IPage
             stats.Children.Add(tile);
         }
         LayoutStats();
-        stats.ToolTip = L10n.T("根据保留的历史估算；假设键盘输入每分钟 40 字。并非精确测量或完整终身累计。");
+        stats.ToolTip = L10n.T("按历史估算，假设打字每分钟 40 字。");
         recent.Children.Clear();
         foreach (var entry in host.History.Entries.Take(3)) recent.Children.Add(Theme.Text(entry.Time.ToLocalTime().ToString("g", L10n.Culture) + "  " + entry.Text, 13));
         if (recent.Children.Count == 0) recent.Children.Add(Theme.Text(L10n.T("还没有听写记录。"), 13, Theme.Grey));

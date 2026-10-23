@@ -87,7 +87,7 @@ class P
             })
             {
                 var window = new UpdateProgressWindow();
-                window.SetVersion("1.18.0", "• " + L10n.T("提示词 · 普通") + " / " + L10n.T("提示词 · 标准格式") + "\n• " + L10n.T("积极压缩口语，保留核心意图和约束，简洁、直白、易读。"));
+                window.SetVersion("1.19.0", "• " + L10n.T("标准整理") + " / " + L10n.T("精简整理") + "\n• " + L10n.T("更短，只留要点"));
                 window.Report(stage, received, total, source);
                 var content = (FrameworkElement)window.Content; window.Content = null;
                 var card = new Border { Background = Theme.CardFill, Child = content };
@@ -142,12 +142,12 @@ class P
                 L10n.Configure(language);
                 RenderUpdateWindow(dir);
                 foreach (var mode in new[] { "light", "dark" })
-                foreach (var strength in new[] { "promptbrief", "promptify" })
+                foreach (var strength in new[] { "prompt", "concise" })
                 {
                     host.SetStrength(strength); Theme.Apply(mode);
-                    var picker = ModePicker.Pills(host);
-                    picker.Measure(new Size(680, double.PositiveInfinity));
-                    Save(picker, Path.Combine(dir, $"modes-{strength}-{mode}-{language}.png"), 680, picker.DesiredSize.Height);
+                    var picker = new Border { Background = Theme.Sidebar, Padding = new Thickness(0, 12, 0, 12), Child = ModePicker.Sidebar(host) };
+                    picker.Measure(new Size(214, double.PositiveInfinity));
+                    Save(picker, Path.Combine(dir, $"modes-{strength}-{mode}-{language}.png"), 214, picker.DesiredSize.Height);
                 }
             }
             return 0;

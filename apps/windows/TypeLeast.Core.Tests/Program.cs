@@ -138,8 +138,11 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
     Eq("an old strength reads as natural cleanup", AppSettings.Load(file).Strength, "prompt");
-    File.WriteAllText(file, "{\"Strength\":\"promptify\"}");
-    Eq("prompt mode is remembered", AppSettings.Load(file).Strength, "promptify");
+    foreach (var retired in new[] { "promptbrief", "promptify" })
+    {
+        File.WriteAllText(file, "{\"Strength\":\"" + retired + "\"}");
+        Eq("the retired prompt-mode tier " + retired + " reads as concise", AppSettings.Load(file).Strength, "concise");
+    }
     Eq("automatic updates are on for settings saved before they existed", AppSettings.Load(file).AutoUpdate, true);
 
     var history = new LocalHistory(Path.Combine(dir, "app-history.json"), TestHistoryProtection.Shared);
@@ -290,7 +293,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     var modelStatus = JsonSerializer.Deserialize<SpeechStatus>("""{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}""", Json.Options)!;
     Eq("health identifies actual recognizer", modelStatus.ModelName, "Fun-ASR-Nano");
     Eq("health language capabilities", string.Join(",", modelStatus.Languages!), "auto,zh,en,ja");
-    Eq("natural cleanup English label", L10n.Render("自然整理", "en"), "Natural cleanup");
+    Eq("standard cleanup English label", L10n.Render("标准整理", "en"), "Standard");
 
     stub.Stop();
     var dead = new ServiceClient(dir);
@@ -320,18 +323,6 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
 
     Eq("an oversized context header is dropped", ServiceClient.EncodeContextHeader(new byte[ServiceClient.MaxContextHeaderBytes]), null);
     Eq("no route means no header", ServiceClient.EncodeRouteHeader(null), null);
-}
-
-// ---- 7. prompt mode settings
-
-{
-    var code = PromptifyGuard.MakeCode();
-    Check("the unlock code has six digits", code.Length == 6 && code.All(char.IsDigit));
-    Check("the right code unlocks", PromptifyGuard.Matches(" " + code + "\r\n", code));
-    Check("a wrong code does not", !PromptifyGuard.Matches(code == "000000" ? "111111" : "000000", code));
-    var s = JsonSerializer.Deserialize<PromptifySettings>("{\"default\":\"默认\",\"appendix\":\"追加\",\"override\":null,\"modified\":false,\"effective\":\"x\"}", Json.Options)!;
-    Eq("prompt settings decode", s.Appendix, "追加");
-    Eq("no override means the default is in use", s.Override, null);
 }
 
 Console.WriteLine();
@@ -568,18 +559,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("slow microphone gets advice", Messages.MicrophoneStartup(900).Contains("变红"));
 }
 
-// ---- prompt file: the system prompt edited as a text file
-
-{
-    const string def = "Line one\nLine two";
-    Check("no prompt file means the default", PromptFile.OverrideFrom(null, def) is null);
-    Check("an empty prompt file means the default", PromptFile.OverrideFrom(" \r\n ", def) is null);
-    Check("the default with Notepad line endings is not a change", PromptFile.OverrideFrom("Line one\r\nLine two\r\n", def) is null);
-    Eq("an edited prompt file is sent without CRLF", PromptFile.OverrideFrom("Mine\r\nsecond\r\n", def), "Mine\nsecond");
-    Eq("a new prompt file starts with the default", PromptFile.Initial(null, def), "Line one\r\nLine two\r\n");
-    Eq("a new prompt file keeps an existing replacement", PromptFile.Initial("Old", def), "Old\r\n");
-}
-
 // ---- cue sounds, waveform level and cleanup modes
 
 {
@@ -593,8 +572,9 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     double shown = 0; for (var i = 0; i < 30; i++) shown = level.Next(quiet);
     Check("quiet speech fills most of the bar", shown > 0.8, $"shown={shown}");
     Check("loud speech is clamped", new AudioLevel().Next(6) <= 1);
-    Eq("four mode families with two prompt tiers", CleanupModes.Codes.Length, 5);
-    Check("natural cleanup keeps its stored id", CleanupModes.IsKnown("prompt") && !CleanupModes.IsKnown("maximal"));
+    Eq("two natural tiers, Prompt Beta and raw transcription", string.Join(",", CleanupModes.Codes), "prompt,concise,promptbeta,off");
+    Check("natural cleanup keeps its stored id", CleanupModes.IsKnown("prompt") && !CleanupModes.IsKnown("maximal") && !CleanupModes.IsKnown("promptify"));
+    Eq("an unknown stored mode is standard cleanup", CleanupModes.Stored("maximal"), "prompt");
 }
 
 // ---- Windows release lookup: Mac keeps GitHub's "latest"; Windows reads its own assets
@@ -833,19 +813,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("round metadata decodes", waiting.Beta?.Round, 3);
     Eq("confirmed metadata decodes", waiting.Beta?.Confirmed?[0], "confirmed");
     Eq("notice metadata decodes", waiting.Beta?.Notice, "beta-validation");
-    var current = new PromptifySettings { Default = "Default body", Appendix = "Keep appendix" };
-    using var initial = JsonDocument.Parse(PromptConfiguration.Prepare(null, current));
-    Eq("config editor starts with current default", initial.RootElement.GetProperty("override").GetString(), "Default body");
-    Eq("config editor retains appendix", initial.RootElement.GetProperty("appendix").GetString(), "Keep appendix");
-    using var custom = JsonDocument.Parse(PromptConfiguration.Prepare("""{"override":"Mine","appendix":"My additions","extra":true}""", current));
-    Eq("config preserves replacement", custom.RootElement.GetProperty("override").GetString(), "Mine");
-    Eq("config preserves existing appendix", custom.RootElement.GetProperty("appendix").GetString(), "My additions");
-    Check("config preserves unknown fields", custom.RootElement.GetProperty("extra").GetBoolean());
-    foreach (var invalid in new[] { "broken", """{"override":false}""", """{"appendix":42}""", new string('a', 100_001) }) {
-        var rejected = false;
-        try { PromptConfiguration.Prepare(invalid, current); } catch (Exception e) when (e is JsonException or InvalidDataException) { rejected = true; }
-        Check("invalid config is not overwritten", rejected);
-    }
 }
 
 using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "release-notes.json"))))
@@ -856,13 +823,27 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     var path = Path.Combine(Path.GetTempPath(), "tl-tiers-" + Guid.NewGuid().ToString("N") + ".json");
     try
     {
-        var settings = new AppSettings { Strength = "promptbrief" };
+        var settings = new AppSettings { Strength = "concise" };
         settings.Save(path);
-        Eq("plain tier persists", AppSettings.Load(path).Strength, "promptbrief");
-        settings.Strength = "promptify"; settings.Save(path);
-        Eq("legacy standard tier persists", AppSettings.Load(path).Strength, "promptify");
+        Eq("the concise tier persists", AppSettings.Load(path).Strength, "concise");
     }
     finally { File.Delete(path); }
+}
+
+// ---- new-user guide: every entry names a place; a failed model download offers a mirror
+{
+    var entries = SettingsGuide.Entries;
+    Eq("the guide lists six places", entries.Count, 6);
+    Check("every guide entry says where it is", entries.All(e => e.Place.Length > 0));
+    Eq("the API key lives under Settings › Cleanup", entries.First(e => e.Title == L10n.T("API Key")).Tab, 1);
+    Eq("the mirror lives under Settings › Service and updates", entries.First(e => e.Title == L10n.T("语音模型和下载镜像")).Tab, 4);
+    SpeechStatus Speech(string json) => JsonSerializer.Deserialize<SpeechStatus>(json, Json.Options)!;
+    Check("an unreachable host is a network failure", ModelMirror.NetworkFailure(Speech("""{"phase":"error","error":"could not reach huggingface.co: fetch failed"}""")));
+    Check("a failed catalog download is a network failure", ModelMirror.NetworkFailure(Speech("""{"phase":"ready","operation":{"modelId":"x","phase":"error","error":"download-failed"}}""")));
+    Check("a checksum failure is not", !ModelMirror.NetworkFailure(Speech("""{"phase":"ready","operation":{"modelId":"x","phase":"error","error":"checksum-mismatch"}}""")));
+    Check("a load failure is not", !ModelMirror.NetworkFailure(Speech("""{"phase":"error","error":"model load failed"}""")));
+    Check("no status is not", !ModelMirror.NetworkFailure(null));
+    Eq("the suggested mirror", ModelMirror.Suggested, "https://hf-mirror.com");
 }
 
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");

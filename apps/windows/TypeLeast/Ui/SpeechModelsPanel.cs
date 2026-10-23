@@ -10,14 +10,14 @@ internal sealed class SpeechModelsPanel
 {
     public StackPanel View { get; } = new();
     private readonly AppHost host;
-    private readonly Dictionary<string, (TextBlock state, Button action, Button cancel, ProgressBar progress)> rows = new();
+    private readonly Dictionary<string, (TextBlock state, Button action, Button cancel, ProgressBar progress, Border hint)> rows = new();
     public SpeechModelsPanel(AppHost host) { this.host = host; }
 
     private static string Detail(string id) => id switch {
         "fireredasr2-ctc" => L10n.T("偏向中文与方言，也支持英文；自动检测语言。"),
         "fun-asr-nano" => L10n.T("适合中英混合听写，也支持日语。"),
         "qwen3-asr-0.6b" => L10n.T("多语言识别；体积和资源需求高于默认模型。"),
-        _ => L10n.T("默认模型；体积小、响应快，支持中文、英文、粤语、日语和韩语。"),
+        _ => L10n.T("默认模型，小而快，支持中、英、粤、日、韩。"),
     };
     public void Refresh()
     {
@@ -40,11 +40,12 @@ internal sealed class SpeechModelsPanel
                     control.Margin = new Thickness(0, 0, 8, 6);
                     tools.Children.Add(control);
                 }
+                var hint = GuideViews.MirrorHint(host, () => host.ManageSpeechModel(id, download: true));
                 var row = Theme.Stack(6,
                     Theme.SettingRow(model.Name, Theme.Text(Detail(id), 12, Theme.Grey), action),
-                    state, tools);
+                    state, tools, hint);
                 View.Children.Add(Theme.Card(row, 12));
-                rows[id] = (state, action, cancel, progress);
+                rows[id] = (state, action, cancel, progress, hint);
             }
         }
         foreach (var model in catalog.Models) {
@@ -63,6 +64,7 @@ internal sealed class SpeechModelsPanel
             row.cancel.Content = op?.Phase == "downloading" ? L10n.T("取消下载") : L10n.T("取消");
             row.progress.Visibility = op?.Phase == "downloading" && op.Total > 0 ? Visibility.Visible : Visibility.Collapsed;
             row.progress.Value = op is { Total: > 0 } ? Math.Clamp(op.Received / op.Total, 0, 1) : 0;
+            row.hint.Visibility = op is { Phase: "error", Error: "download-failed" } ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 }

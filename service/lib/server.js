@@ -52,14 +52,12 @@ export async function startService(options = {}) {
   const service = new VoicePolishService({
     recognizer,
     config,
-    promptifyPath: join(stateDir, "promptify.json"),
     logger,
     version: VERSION,
   });
   if (recognizer instanceof SpeechModels) recognizer.beforeActivate = async signal => {
     while (service.pending > 0 || service.queue > 0) { signal?.throwIfAborted(); await new Promise(resolve => setTimeout(resolve, 50)); }
   };
-  await service.loadPromptify();
   const token = await ensureToken(join(stateDir, "api-token"));
 
   const handler = createHandler({ service, logger, currentToken: async () => token, proofKey: options.proofKey ?? null });

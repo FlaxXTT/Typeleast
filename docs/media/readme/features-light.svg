@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。">
-<title>亮点：自然整理；音频不出电脑；任何输入框直接写入；提示词模式；四个本机识别模型；用你自己的 Key。</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="亮点：标准整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。">
+<title>亮点：标准整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。</title>
 <style>
 text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
 .ink { fill: #1d1d1f; } .gray { fill: #6e6e73; } .faint { fill: #a1a1a6; }
@@ -30,7 +30,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 .m1 { animation-delay: -6s; } .n0 { animation-delay: -4s; } .n1 { animation-delay: -2s; }
 @keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
 </style>
-<g transform="translate(0,0)"><rect width="880" height="310" rx="28" fill="#f5f5f7"/><text x="36" y="58" font-size="15" font-weight="600" text-anchor="start" class="blue" >自然整理</text>
+<g transform="translate(0,0)"><rect width="880" height="310" rx="28" fill="#f5f5f7"/><text x="36" y="58" font-size="15" font-weight="600" text-anchor="start" class="blue" >标准整理</text>
 <text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >随口说，它来整理。</text>
 <text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >口头禅去掉，改口照办，标点补好。不编造你没说的内容。</text>
 <rect x="24" y="162" width="832" height="56" rx="16" fill="#ffffff"/>
@@ -65,14 +65,14 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <g><rect x="164" y="176" width="70" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="199.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >浏览器</text></g>
 <g><rect x="32" y="220" width="62" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="62.8" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >Word</text></g>
 <g><rect x="104" y="220" width="87" height="34" rx="17" fill="#ffffff" stroke="#e5e5ea"/><text x="147.0" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >VS Code</text></g></g>
-<g transform="translate(0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >提示词模式</text>
-<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >说需求，得到提示词。</text>
-<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >一次说完，整理成简洁的编号段落，</text>
-<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >不套模板，不加你没提的要求。</text>
+<g transform="translate(0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >精简整理</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >说得多，留得少。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >一次说完，只留要点和条件，</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >不加你没提的要求。</text>
 <rect x="24" y="160" width="384.0" height="106" rx="16" fill="#ffffff"/>
-<g class="pl p0"><text x="44" y="190" font-size="14" font-weight="500" text-anchor="start" class="ink" >一、请帮我写一份本周周报，发给老板。</text></g>
-<g class="pl p1"><text x="44" y="220" font-size="14" font-weight="500" text-anchor="start" class="ink" >二、本周完成了登录页改版，修复了几个 bug。</text></g>
-<g class="pl p2"><text x="44" y="250" font-size="14" font-weight="500" text-anchor="start" class="ink" >三、篇幅简短。</text></g></g>
+<g class="pl p0"><text x="44" y="190" font-size="14" font-weight="500" text-anchor="start" class="ink" >请写本周周报，发给老板，篇幅简短。</text></g>
+<g class="pl p1"><text x="44" y="220" font-size="14" font-weight="500" text-anchor="start" class="ink" >1. 完成登录页改版。</text></g>
+<g class="pl p2"><text x="44" y="250" font-size="14" font-weight="500" text-anchor="start" class="ink" >2. 修复了几个 bug。</text></g></g>
 <g transform="translate(448.0,632)"><rect width="432.0" height="290" rx="28" fill="#f5f5f7"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >识别模型</text>
 <text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >四个本机模型，随时切换。</text>
 <text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >默认小而快；中文方言、中英混说、</text>

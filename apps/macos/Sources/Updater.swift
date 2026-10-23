@@ -20,12 +20,12 @@ enum UpdateError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreachable: return L10n.text("无法访问 TypeLeast 的发布页，所有下载线路也都失败了。请检查网络后再试。")
-        case .checksum: return L10n.text("下载的安装包和发布页记录的 SHA-256 不一致，已放弃更新。")
+        case .unreachable: return L10n.text("连不上发布页，各下载线路都失败了。请检查网络。")
+        case .checksum: return L10n.text("安装包校验不一致，已取消更新。")
         case .badBundle(let detail): return L10n.text("下载的安装包不对：") + detail
         case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书，已放弃更新。")
         case .sign(let detail): return L10n.text("用本机证书签名失败：") + detail
-        case .requirementChanged: return L10n.text("新版本签好名后和当前版本的签名要求不一致，装上会丢失权限，已放弃更新。")
+        case .requirementChanged: return L10n.text("新版本签名不匹配，安装会丢失权限，已取消更新。")
         }
     }
 }

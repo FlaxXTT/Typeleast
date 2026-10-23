@@ -190,7 +190,7 @@ final class ServiceManager {
             if integrityProblem != nil { DiagnosticsLog.write("integrity.fail", ["code": "signature"]) }
         }
         if integrityProblem != nil {
-            state = .failed(L10n.text("TypeLeast 的文件被改动过（签名校验没通过），为安全起见没有启动本地服务。请重新安装 TypeLeast。"))
+            state = .failed(L10n.text("TypeLeast 的文件被改动过，本地服务没有启动。请重新安装。"))
             return
         }
 
@@ -230,7 +230,7 @@ final class ServiceManager {
         var secret = [UInt8](repeating: 0, count: 32)
         // An all-zero secret would be a known one: without randomness, start nothing.
         guard SecRandomCopyBytes(kSecRandomDefault, secret.count, &secret) == errSecSuccess else {
-            state = .failed(L10n.text("无法生成本地服务的校验密钥，请重新启动 TypeLeast。"))
+            state = .failed(L10n.text("无法生成服务密钥，请重启 TypeLeast。"))
             return
         }
         let secretHex = secret.map { String(format: "%02x", $0) }.joined()
