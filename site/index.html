@@ -313,7 +313,7 @@ footer a { color: var(--ink-2); }
     </div>
     <p class="fine sample" data-i18n="sample">示意画面，对话为虚构示例。</p>
     <div class="pair">
-      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="pair.1k">提示词模式</div><h3 data-i18n="pair.1h">赶时间？说一次就行。</h3><p data-i18n="pair.1p">不追问，直接整理成简洁的编号段落。</p></div>
+      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="pair.1k">精简整理</div><h3 data-i18n="pair.1h">赶时间？说一次就行。</h3><p data-i18n="pair.1p">不追问，只留要点和条件。</p></div>
       <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="pair.2k">不编造</div><h3 data-i18n="pair.2h">你没说的，不会出现。</h3><p data-i18n="pair.2p">数字、名字、功能都来自你的原话。前后矛盾时，它不替你选。</p></div>
     </div>
   </div>
@@ -351,7 +351,7 @@ footer a { color: var(--ink-2); }
     <div class="track" id="track">
       <div class="tile"><div class="big sheen" data-i18n="t1.big">任何 App</div><h3 data-i18n="t1.h">光标在哪，就写到哪。</h3><p data-i18n="t1.p">微信、邮件、浏览器、Word、VS Code。说话时换了窗口，就只复制，不会贴错。</p></div>
       <div class="tile"><div class="big" data-i18n="t2.big">10 种语言</div><h3 data-i18n="t2.h">翻译</h3><p data-i18n="t2.p">按翻译快捷键说中文，写出英文、日文、法文等。</p></div>
-      <div class="tile"><div class="big" data-i18n="t3.big">4 种方式</div><h3 data-i18n="t3.h">整理档位</h3><p data-i18n="t3.p">自然整理、提示词模式、提示词 Beta、原话转写。每个页面顶部、托盘里都能切换。</p></div>
+      <div class="tile"><div class="big" data-i18n="t3.big">4 种方式</div><h3 data-i18n="t3.h">整理档位</h3><p data-i18n="t3.p">标准、精简、提示词 Beta、原话转写。左侧栏和托盘里都能切换。</p></div>
       <div class="tile"><div class="big" data-i18n="t4.big">词典</div><h3 data-i18n="t4.h">名字，按你的写法。</h3><p data-i18n="t4.p">人名、产品名、术语。「德普西克」写成「DeepSeek」。</p></div>
       <div class="tile"><div class="big" data-i18n="t5.big">4 个模型</div><h3 data-i18n="t5.h">本机语音识别</h3><p data-i18n="t5.p">SenseVoice、FireRedASR2、Fun-ASR-Nano、Qwen3-ASR。中英混说、粤语、方言，都有选择。</p></div>
       <div class="tile"><div class="big" data-i18n="t6.big">繁 · 简</div><h3 data-i18n="t6.h">写成你习惯的样子。</h3><p data-i18n="t6.p">简体、台湾繁体、香港繁体。美式或英式拼写。</p></div>
@@ -451,12 +451,12 @@ const SITE = {
     notices: "https://github.com/FlaxXTT/Typeleast/blob/main/THIRD-PARTY-NOTICES.md",
     license: "https://github.com/FlaxXTT/Typeleast/blob/main/LICENSE",
   },
-  versions: { windows: "1.18.0", mac: "1.18.0" },
+  versions: { windows: "1.19.0", mac: "1.19.0" },
   // The repository's public release files (no GitHub login needed).
   downloads: {
-    windowsSetup: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/TypeLeast-1.18.0-Windows-x64-Setup.exe",
-    windowsPortable: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/TypeLeast-1.18.0-Windows-x64-Portable.zip",
-    macAppleSilicon: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.18.0/TypeLeast-1.18.0-macOS-AppleSilicon.dmg",
+    windowsSetup: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.19.0/TypeLeast-1.19.0-Windows-x64-Setup.exe",
+    windowsPortable: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.19.0/TypeLeast-1.19.0-Windows-x64-Portable.zip",
+    macAppleSilicon: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.19.0/TypeLeast-1.19.0-macOS-AppleSilicon.dmg",
     macIntel: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.17.1/TypeLeast-1.17.1-macOS-Intel.dmg",
   },
 };
@@ -502,14 +502,14 @@ const EN = {
   "f.a1": "+ Many players are older; keep it simple.", "f.a1w": "You said this; the draft missed it · restored",
   "f.sent": "✓ Written at your cursor. Paste it into ChatGPT, Claude or DeepSeek.",
   "sample": "Illustration. The conversation is a made-up example.",
-  "pair.1k": "Prompt mode", "pair.1h": "In a hurry? Say it once.", "pair.1p": "No questions. Just clean, numbered paragraphs.",
+  "pair.1k": "Concise", "pair.1h": "In a hurry? Say it once.", "pair.1p": "No questions. Just the key points and conditions.",
   "pair.2k": "Nothing made up", "pair.2h": "If you didn't say it, it isn't there.", "pair.2p": "Numbers, names and features come from your words. When you contradict yourself, it won't pick for you.",
   "keys.title": "One key. That's it.", "keys.lead": "Press it in any text field and the recording bar appears. Press it again when you're done.",
   "keys.alt": "Right Alt", "keys.bar": "Recording bar",
   "feat.eyebrow": "Features", "feat.title": "Made for every day.",
   "t1.big": "Any app", "t1.h": "Wherever your cursor is.", "t1.p": "Email, chat, browser, Word, VS Code. Switch windows while you talk, and it copies instead of pasting in the wrong place.",
   "t2.big": "10 languages", "t2.h": "Translate", "t2.p": "Press the translate key, speak in one language, and write in another.",
-  "t3.big": "4 modes", "t3.h": "Cleanup modes", "t3.p": "Natural, Prompt, Prompt Beta and Verbatim. Switch at the top of any page or from the tray.",
+  "t3.big": "4 modes", "t3.h": "Cleanup modes", "t3.p": "Standard, Concise, Prompt Beta and Verbatim. Switch from the sidebar or the tray.",
   "t4.big": "Dictionary", "t4.h": "Names, spelled your way.", "t4.p": "People, products, terms. “deep seek” becomes “DeepSeek”.",
   "t5.big": "4 models", "t5.h": "On-device speech recognition", "t5.p": "SenseVoice, FireRedASR2, Fun-ASR-Nano and Qwen3-ASR. For mixed Chinese and English, Cantonese and dialects.",
   "t6.big": "US · UK", "t6.h": "Your spelling.", "t6.p": "American or British spelling. Simplified or Traditional Chinese.",
