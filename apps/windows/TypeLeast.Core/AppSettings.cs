@@ -51,7 +51,10 @@ public sealed class AppSettings
     public bool ShowInTaskbar { get; set; } = true;
     public bool ShowIdleBar { get; set; }
     public bool UseFieldContext { get; set; }
-    public bool LearnCorrections { get; set; }
+    /// <summary>On by default (as on the Mac): it compares the field on this computer only.</summary>
+    public bool LearnCorrections { get; set; } = true;
+    /// <summary>1 once LearnCorrections got its new default; before 1.17.6 it was off for everyone.</summary>
+    public int LearningDefaults { get; set; }
     public bool FormattedLists { get; set; }
     public bool PlaySounds { get; set; } = true;
     public bool MuteOtherAudio { get; set; }
@@ -122,6 +125,8 @@ public sealed class AppSettings
                 if (!EnVariants.Contains(loaded.EnVariant)) loaded.EnVariant = "us";
                 // The two keys must differ; the dictation key wins.
                 if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
+                // Learning used to be off by default and was easy to miss: switch it on once.
+                if (loaded.LearningDefaults < 1) { loaded.LearnCorrections = true; loaded.LearningDefaults = 1; }
                 return loaded;
             }
         }

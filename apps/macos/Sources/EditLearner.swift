@@ -15,6 +15,7 @@ enum EditLearner {
     static let maxSpan = 16
     /// Phonetic similarity a correction needs to count as a spelling fix.
     static let minSimilarity = 0.5
+    static let minLatinSimilarity = 0.6
 
     /// Locate what became of the inserted text inside the field's current value,
     /// using the text that surrounded the cursor when the dictation started.
@@ -79,7 +80,8 @@ enum EditLearner {
         let chinese = pair.coreFrom.contains(where: isCJK) || pair.coreTo.contains(where: isCJK)
         let score = chinese ? similarity(heard: pair.coreFrom, corrected: pair.coreTo)
                             : similarity(heard: pair.from, corrected: pair.to)
-        return score >= minSimilarity ? pair.to : nil
+        // A latin typo fix keeps most of the word; two different words (Monday/Friday) share half.
+        return score >= (chinese ? minSimilarity : minLatinSimilarity) ? pair.to : nil
     }
 
     /// How alike two spellings sound: pinyin for Chinese, letters for everything else,
@@ -148,36 +150,96 @@ enum EditLearner {
     }
 }
 
+/// When to judge an edit: the field is read every few seconds after a paste; once the
+/// pasted text has been edited and the field then stayed the same for `settle`, the user
+/// is done fixing it. Nothing is judged after `window`. `edited` says whether a value
+/// differs from the pasted text (the paste itself may land after the first read).
+struct EditPoll {
+    static let interval: TimeInterval = 3
+    static let settle: TimeInterval = 6
+    static let window: TimeInterval = 120
+
+    enum Step: Equatable { case wait, judge(String), stop }
+
+    private let start: Date
+    private let edited: (String) -> Bool
+    private var last: String?
+    private var lastChange: Date
+
+    init(start: Date, edited: @escaping (String) -> Bool) {
+        self.start = start
+        self.edited = edited
+        lastChange = start
+    }
+
+    /// The field's value at `at` (nil: it cannot be read any more).
+    mutating func feed(_ value: String?, at: Date) -> Step {
+        guard let value else { return .stop }
+        if value != last {
+            last = value
+            lastChange = at
+        }
+        if at.timeIntervalSince(lastChange) >= EditPoll.settle, edited(value) { return .judge(value) }
+        return at.timeIntervalSince(start) >= EditPoll.window ? .stop : .wait
+    }
+
+    /// Judge now (the next dictation started, or the user left the app): the value if it was edited.
+    func final(_ value: String?) -> String? {
+        guard let value, edited(value) else { return nil }
+        return value
+    }
+}
+
 /// Watches the field a dictation was pasted into and reports a learned word.
 final class EditWatcher {
-    /// Edits later than this are someone else's writing, not a correction.
-    static let window: TimeInterval = 180
-
     var onLearn: ((String) -> Void)?
 
-    private var pending: (field: FocusedField, inserted: String, at: Date)?
+    private var pending: (field: FocusedField, inserted: String, poll: EditPoll)?
     private var timer: Timer?
 
-    /// Start watching after a successful paste. Replaces any earlier watch.
+    var watchedBundleId: String? { pending?.field.bundleId }
+
+    /// Start watching after a successful paste. Replaces any earlier watch (judged first).
     func watch(field: FocusedField, inserted: String) {
         check()
-        pending = (field, inserted, Date())
-        timer?.invalidate()
-        let t = Timer(timeInterval: 20, repeats: false) { [weak self] _ in self?.check() }
+        let before = field.context.before, after = field.context.after
+        let poll = EditPoll(start: Date()) { now in
+            EditLearner.editedRegion(before: before, after: after, now: now).map { $0 != inserted } ?? false
+        }
+        pending = (field, inserted, poll)
+        let t = Timer(timeInterval: EditPoll.interval, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
 
-    /// Check now (called when the next dictation starts, which is when people have
-    /// usually finished fixing the previous one).
+    private func tick() {
+        guard var p = pending else { return stop() }
+        let step = p.poll.feed(FieldContextReader.currentValue(of: p.field.element), at: Date())
+        pending = p
+        switch step {
+        case .wait: return
+        case .stop: stop()
+        case .judge(let value): stop(); judge(p, now: value)
+        }
+    }
+
+    /// Judge what is in the field now (called when the next dictation starts or the user
+    /// switches to another app, which is when people have usually finished fixing).
     func check() {
+        guard let p = pending else { return }
+        let value = p.poll.final(FieldContextReader.currentValue(of: p.field.element))
+        stop()
+        if let value { judge(p, now: value) }
+    }
+
+    private func stop() {
         timer?.invalidate()
         timer = nil
-        guard let p = pending else { return }
         pending = nil
-        guard Date().timeIntervalSince(p.at) <= EditWatcher.window,
-              let now = FieldContextReader.currentValue(of: p.field.element),
-              let region = EditLearner.editedRegion(before: p.field.context.before, after: p.field.context.after, now: now),
+    }
+
+    private func judge(_ p: (field: FocusedField, inserted: String, poll: EditPoll), now: String) {
+        guard let region = EditLearner.editedRegion(before: p.field.context.before, after: p.field.context.after, now: now),
               region.count <= p.inserted.count * 2 + 40,
               let word = EditLearner.learnedWord(inserted: p.inserted, edited: region) else { return }
         onLearn?(word)

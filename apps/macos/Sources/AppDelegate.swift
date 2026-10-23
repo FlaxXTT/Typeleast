@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let client = ServiceClient.shared
     let model = AppModel.shared
     let editWatcher = EditWatcher()
+    let learnedToast = LearnedToast()
     lazy var hub = HubWindowController(model: model)
     lazy var onboarding = OnboardingWindowController(model: model)
     var previewPanel: PreviewPanel?
@@ -390,7 +391,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     @objc func onWake() { refreshHealth() }
 
-    @objc func onAppActivated() {
+    @objc func onAppActivated(_ note: Notification) {
+        // Leaving the app a dictation went into: the user is usually done fixing it.
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        if let watched = editWatcher.watchedBundleId, app?.bundleIdentifier != watched { editWatcher.check() }
         let trusted = AXIsProcessTrusted()
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
@@ -570,8 +574,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func learned(_ word: String) {
-        guard settings.autoLearn, settings.addWord(word, source: .auto) else { return }
+        guard settings.autoLearn, settings.addWord(word, source: .auto),
+              let id = settings.words.first(where: { $0.word == word })?.id else { return }
         setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
+        learnedToast.show(word: word) { [weak self] in
+            guard let self else { return }
+            self.settings.removeWord(id: id)
+            self.setHint(L10n.text("已从词典移除「{0}」", word))
+            self.syncDictionary()
+            self.applyState()
+        }
         syncDictionary()
         applyState()
     }

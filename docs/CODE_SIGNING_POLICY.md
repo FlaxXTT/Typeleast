@@ -85,6 +85,8 @@ network only in these cases:
   IP address and a `TypeLeast/<version>` user agent). The Windows installed version installs updates automatically
   unless this is turned off in 设置 → 服务与更新.
 
+Learning corrections (on by default) reads the field the dictation was pasted into for up to two minutes, on the
+computer only, to add a word the user corrected to the dictionary; it records no keystrokes and sends nothing.
 The local service listens only on `127.0.0.1`. API keys are stored in Windows Credential Manager (macOS: Keychain)
 and are never written to logs. Settings, history and logs stay on the computer, in `%APPDATA%\TypeLeast\` and
 `%LOCALAPPDATA%\TypeLeast\` on Windows.

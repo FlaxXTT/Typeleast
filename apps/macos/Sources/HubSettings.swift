@@ -79,7 +79,7 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考输入框里的内容"), detail: L10n.text("默认关闭。打开后，听写开始时读取光标附近的文字和窗口标题，和识别结果一起（脱敏后）发给整理模型，用来纠正同音字、人名和术语。密码框和密码管理器不会读取。"),
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("自动学习我的更正"), detail: L10n.text("听写后你改过的词，会作为「自动添加」放进词典。"),
+            ToggleRow(title: L10n.text("自动学习我的更正"), detail: L10n.text("听写后你改过的词，会作为「自动添加」放进词典。只在本机比对，不会发给模型。"),
                       isOn: model.setting(\.autoLearn))
             ToggleRow(title: L10n.text("列表粘贴为真正的列表"), detail: L10n.text("整理结果里有 1. 2. 3. 编号时，在备忘录、邮件、Pages、Word 里粘贴成带格式的列表。"),
                       isOn: model.setting(\.richTextLists))

@@ -48,6 +48,7 @@ internal sealed class AppHost
     private IntPtr betaWindow;
     private string betaApp = "";
     private BetaPanel? betaPanel;
+    private LearnedToast? learnedToast;
     // 翻译模式: the target language of the recording in progress (null: ordinary dictation).
     private string? translating;
     private bool dictionaryNeedsSync = true;
@@ -447,12 +448,20 @@ internal sealed class AppHost
         if (!SaveSettings()) { Settings.DictionaryEntries = previous; return false; }
         dictionaryNeedsSync = true; if (synchronize) _ = SyncDictionary(); return true;
     }
-    private async Task LearnWord(WordEntry entry)
+    /// <summary>A word the user corrected after a dictation: added as a spelling to prefer (never a
+    /// replacement rule), unless it is already there; the toast can take it back.</summary>
+    private void LearnWord(string word)
     {
-        if (!Settings.LearnCorrections || quitting || !SaveWord(entry, false)) return;
-        try { await Client.LearnCorrectionAsync(entry.HeardAs, entry.Word); dictionaryNeedsSync = false; DictionarySynced = true; }
-        catch (ServiceException) { dictionaryNeedsSync = true; DictionarySynced = false; }
-        Raise();
+        if (!Settings.LearnCorrections || quitting) return;
+        if (Settings.DictionaryEntries.Any(e => string.Equals(e.Word, word, StringComparison.OrdinalIgnoreCase))) return;
+        if (WordEntry.Parse(word, "", "auto") is not { } entry || !SaveWord(entry)) return;
+        SetHint(L10n.T("已把「{0}」加入词典", word));
+        learnedToast ??= new LearnedToast();
+        learnedToast.Show(L10n.T("已把「{0}」加入词典", word), () =>
+        {
+            RemoveWord(entry.Id);
+            SetHint(L10n.T("已从词典移除「{0}」", word));
+        });
     }
     public void RemoveWord(string entry)
     {
@@ -572,7 +581,7 @@ internal sealed class AppHost
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
         Raise();
-        learner.Stop();
+        learner.Finish();
         recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
         targetApp = Shell.ProcessName(targetWindow);
         var window = targetWindow;
@@ -742,7 +751,7 @@ internal sealed class AppHost
                 }
                 History.Add(entry); PruneAudio();
                 if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && Settings.LearnCorrections && targetField is { } field)
-                    learner.Start(field, text, word => _ = LearnWord(word));
+                    learner.Start(field, text, LearnWord);
                 if (History.LastError is not null) SetHint(L10n.T("历史记录无法读取或安全保存，原文件已保留。请检查系统凭据和文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);

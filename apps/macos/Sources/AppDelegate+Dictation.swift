@@ -78,8 +78,10 @@ extension AppDelegate {
         startTick()
         applyState()
 
-        // Read the target field off the main thread while the user is already speaking.
-        if settings.readFieldContext {
+        // Read the target field off the main thread while the user is already speaking: as
+        // context for the model (only with 参考输入框里的内容 on) and, locally, so the edit
+        // learner can see what the user fixes afterwards.
+        if settings.readFieldContext || settings.autoLearn {
             let bundle = pendingAppBundleId
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 let field = FieldContextReader.capture(bundleId: bundle)
@@ -166,7 +168,8 @@ extension AppDelegate {
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
         applyState()
-        let context = field?.context.encoded()
+        // The field's text goes to the model's provider only when the user turned that on.
+        let context = settings.readFieldContext ? field?.context.encoded() : nil
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let previousBeta = betaSession == nil ? nil : betaPending
         let llm = previousBeta?.llm ?? settings.activeLLMRoute

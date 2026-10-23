@@ -739,6 +739,34 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("another program replaced the clipboard: leave it", replaced.Decide(At(1000)), RestoreDecision.Keep);
 }
 
+{
+    // Learning keeps only the corrected word, and only a latin fix that looks like the same word.
+    Eq("a typo fix is learned", EditCorrection.LearnedWord("Hello DeepSeak.", "Hello DeepSeek."), "DeepSeek");
+    Eq("a different English word is not", EditCorrection.LearnedWord("meet on Monday please", "meet on Friday please"), null);
+    Eq("a Chinese correction keeps the corrected word", EditCorrection.LearnedWord("打开迪普西克设置", "打开深度求索设置"), "深度求索");
+    Check("a heard-as-latin fix keeps the latin word", EditCorrection.LearnedWord("我在用德普西克写代码", "我在用DeepSeek写代码") is null or "DeepSeek");
+
+    var t0 = new DateTime(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
+    var poll = new EditPoll(t0, v => v != "hello deepseak");
+    Eq("the pasted text alone is not an edit", poll.Feed("hello deepseak", t0.AddSeconds(30)), EditPoll.Step.Wait);
+    Eq("mid-edit: wait", poll.Feed("hello deeps", t0.AddSeconds(33)), EditPoll.Step.Wait);
+    Eq("settling: wait", poll.Feed("hello deepseek", t0.AddSeconds(36)), EditPoll.Step.Wait);
+    Eq("settled for 6 s: judge", poll.Feed("hello deepseek", t0.AddSeconds(42)), EditPoll.Step.Judge);
+    var late = new EditPoll(t0, v => v != "x");
+    Eq("nothing is watched after 2 minutes", late.Feed("x", t0.AddSeconds(120)), EditPoll.Step.Stop);
+    Eq("an unreadable field ends the watch", new EditPoll(t0, _ => true).Feed(null, t0), EditPoll.Step.Stop);
+    Eq("the next dictation judges an edit at once", new EditPoll(t0, v => v != "x").Final("y"), "y");
+    Eq("…but not an untouched paste", new EditPoll(t0, v => v != "x").Final("x"), null);
+
+    Check("learning is on for new installs", new AppSettings().LearnCorrections);
+    var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");
+    File.WriteAllText(old, """{"LearnCorrections":false}""");
+    Check("switched on once for settings from before", AppSettings.Load(old) is { LearnCorrections: true, LearningDefaults: 1 });
+    File.WriteAllText(old, """{"LearnCorrections":false,"LearningDefaults":1}""");
+    Check("a later choice to turn it off is kept", !AppSettings.Load(old).LearnCorrections);
+    File.Delete(old);
+}
+
 
 {
     var waiting = JsonSerializer.Deserialize<DictateResponse>("""{"text":"","raw":"latest answer","beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}""")!;

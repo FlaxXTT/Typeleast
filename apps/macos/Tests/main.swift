@@ -625,6 +625,27 @@ do {
 // MARK: 15. learning from corrections
 
 do {
+    // When the edit learner judges: after the pasted text was edited and the field settled.
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+    let pasted = "我在用得普西克写代码"
+    let edited: (String) -> Bool = { $0 != "前文" + pasted && $0 != "前文" }
+    var poll = EditPoll(start: t0, edited: edited)
+    checkEq("before the paste lands nothing is judged", poll.feed("前文", at: at(0)), .wait)
+    checkEq("the pasted text alone is not an edit", poll.feed("前文" + pasted, at: at(3)), .wait)
+    checkEq("…however long it stays", poll.feed("前文" + pasted, at: at(30)), .wait)
+    checkEq("mid-edit: wait", poll.feed("前文我在用D写代码", at: at(33)), .wait)
+    checkEq("still typing: wait", poll.feed("前文我在用DeepSeek写代码", at: at(36)), .wait)
+    checkEq("settled for less than 6 s: wait", poll.feed("前文我在用DeepSeek写代码", at: at(41)), .wait)
+    checkEq("settled: judge the fixed text", poll.feed("前文我在用DeepSeek写代码", at: at(42)), .judge("前文我在用DeepSeek写代码"))
+    var late = EditPoll(start: t0, edited: edited)
+    _ = late.feed("前文" + pasted, at: at(0))
+    checkEq("a fix after 2 minutes is not watched", late.feed("前文" + pasted, at: at(120)), .stop)
+    var gone = EditPoll(start: t0, edited: edited)
+    checkEq("a field that cannot be read ends the watch", gone.feed(nil, at: at(3)), .stop)
+    checkEq("leaving the app judges an edit at once", EditPoll(start: t0, edited: edited).final("前文我在用DeepSeek写代码"), "前文我在用DeepSeek写代码")
+    checkEq("…but not an untouched paste", EditPoll(start: t0, edited: edited).final("前文" + pasted), nil)
+
     let pair = EditLearner.correction(inserted: "我在用得普西克写代码", edited: "我在用DeepSeek写代码")
     checkEq("correction finds the replaced span (from)", pair?.from, "得普西克")
     checkEq("correction finds the replaced span (to)", pair?.to, "DeepSeek")
@@ -637,6 +658,7 @@ do {
     checkEq("homophone fix is learned", EditLearner.learnedWord(inserted: "这家公式很好", edited: "这家公司很好"), "公司")
     checkEq("content edit is not learned", EditLearner.learnedWord(inserted: "明天开会", edited: "后天开会"), nil)
     checkEq("typo fix is learned", EditLearner.learnedWord(inserted: "use kubernetis now", edited: "use kubernetes now"), "kubernetes")
+    checkEq("a different English word is not learned", EditLearner.learnedWord(inserted: "meet on Monday please", edited: "meet on Friday please"), nil)
     checkEq("rewriting a whole sentence is not learned",
             EditLearner.learnedWord(inserted: "我们下周把报告发出去", edited: "请在周五之前提交季度预算"), nil)
     check("acronym initials count as sound-alike", EditLearner.similarity(heard: "第四批", corrected: "DSH") >= EditLearner.minSimilarity)
