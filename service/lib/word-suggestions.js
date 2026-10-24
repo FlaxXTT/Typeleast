@@ -1,5 +1,6 @@
 /** Local, bounded suggestions from ASR corrections. No I/O except a lazy local library import. */
 import { redactSecrets } from './context.js';
+import { AMBIGUOUS_TERMS } from './term-hints.js';
 let phonetics;
 export const CJK = /[\u3400-\u9fff\uf900-\ufaff]/u;
 const LIMIT = 8;
@@ -83,6 +84,8 @@ export async function wordSuggestions(raw, cleaned) {
   for (const [heardParts, wordParts] of spans) {
     const heard = join(heardParts), word = join(wordParts);
     if (!isTerm(wordParts) || word.length < 2 || word.length > 30 || heard.length > 30) continue;
+    // A model's guess about an everyday word is not enough to suggest a brand rule.
+    if (AMBIGUOUS_TERMS.has(word.toLowerCase())) continue;
     if (heardParts.length === wordParts.length && heardParts.join('').toLowerCase() === wordParts.join('').toLowerCase()) continue;
     const cjk = [...heard].filter(c => CJK.test(c)).length;
     if (cjk > 8 || heardParts.filter(s => /^[\x00-\x7f]/u.test(s)).length > 2) continue;

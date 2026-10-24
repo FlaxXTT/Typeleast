@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { request } from "node:http";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
@@ -54,6 +54,7 @@ test("the service listens on loopback, publishes its port, and serves the contra
   await withDir(async (dir) => {
     const handle = await startService({ stateDir: dir, modelsDir: join(dir, "models"), logger: quiet, recognizer });
     try {
+      assert.equal(handle.service.pluginState().plugins.some(p => p.id === 'typeleast.tech-terms'), false, 'fresh installs stay general');
       const runtime = JSON.parse(await readFile(join(dir, "runtime.json"), "utf8"));
       assert.equal(runtime.port, handle.port);
       assert.equal(runtime.host, "127.0.0.1");
@@ -95,6 +96,22 @@ test("the service listens on loopback, publishes its port, and serves the contra
       await handle.close();
     }
     await assert.rejects(stat(join(dir, "runtime.json")), "closing withdraws runtime.json");
+  });
+});
+
+test('an existing state gets bundled terminology once without a market request', async () => {
+  await withDir(async dir => {
+    await writeFile(join(dir, 'api-token'), 'a'.repeat(64) + '\n');
+    const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
+    try {
+      const pack = handle.service.pluginState().plugins.find(p => p.id === 'typeleast.tech-terms');
+      assert.equal(pack?.enabled, true);
+      assert.equal(pack?.source, 'bundled');
+      await handle.service.plugins.setEnabled(pack.id, false);
+    } finally { await handle.close(); }
+    const again = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
+    try { assert.equal(again.service.pluginState().plugins.find(p => p.id === 'typeleast.tech-terms')?.enabled, false); }
+    finally { await again.close(); }
   });
 });
 

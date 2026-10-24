@@ -1,15 +1,14 @@
 /**
  * Prompt construction for dictated-text polishing.
  *
- * Natural cleanup uses the project's own prompt (./prompts/cleanup.js):
- *   system  the prompt with its examples, exactly as written, then a delimited
+ * Natural cleanup uses the general-purpose prompt (./prompts/cleanup.js):
+ *   system  the prompt with its examples, then a delimited
  *           addendum carrying only what the prompt cannot know: the user's
  *           dictionary and the text already in the box being typed into
  *           (when there is any)
  *   user    the raw recognised text, nothing else
  *
- * The earlier built-in prompt set (strength tiers, list detection, per-app
- * register, a list of common English terms) was removed at the user's request.
+ * Optional domain spellings and pronunciation hints come from enabled data plugins.
  *
  * @module typeleast-service/prompt
  */
@@ -19,7 +18,7 @@ import { CONCISE_PROMPT } from "./prompts/concise.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-25.1-cleanup+concise+beta+translate";
+export const PROMPT_VERSION = "2026-10-25.2-cleanup+concise+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -45,28 +44,30 @@ const CONTEXT_PARTS = [
 ];
 
 /**
- * Context appended to the owner's cleanup prompt only when it carries facts.
+ * Context appended to a cleanup prompt only when it carries facts.
  *
- * The cleanup prompt knows nothing about a personal dictionary or about the
- * text already in the box being typed into. The section is delimited so a
- * reader (or a test) can strip it and compare the rest with the owner's text
- * byte for byte.
+ * The base prompt knows nothing about a personal dictionary or about the
+ * text already in the box being typed into. Keep both separate from its rules.
  *
  * @param {object} input - dictionary entries and field context, if any.
  * @returns {string} the addendum, or an empty string when there is nothing to say.
  */
-export function harnessAddendum({ dictionary, fieldContext }) {
+export function harnessAddendum({ dictionary, aliases, fieldContext }) {
   const entries = Array.isArray(dictionary) ? dictionary.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
   const context = fieldContext !== null && typeof fieldContext === "object"
     ? CONTEXT_PARTS.filter(([key]) => typeof fieldContext[key] === "string" && fieldContext[key].trim().length > 0)
     : [];
-  if (entries.length === 0 && context.length === 0) return "";
+  if (entries.length === 0 && context.length === 0 && (!Array.isArray(aliases) || aliases.length === 0)) return "";
   const lines = [HARNESS_ADDENDUM_MARKER];
   if (entries.length > 0) {
     lines.push(
       "Dictionary entries are hard constraints. \"A=B\" means: wherever A, or anything that sounds like A, was recognised, write B. An entry without \"=\" is a spelling to use exactly whenever that word is meant.",
       "Entries: " + entries.join(" | "),
     );
+  }
+  if (Array.isArray(aliases) && aliases.length > 0) {
+    lines.push("Optional pronunciation hints from an enabled terminology plugin. Treat each as a candidate only when the meaning of this utterance supports it. Do not replace an ordinary word just because it sounds similar:");
+    for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
   }
   if (context.length > 0) {
     lines.push("The text already in the box being typed into is below. Use it only to choose correct spellings, names and terminology, and to continue in the same style. Never copy it into the output.");
@@ -83,9 +84,9 @@ export function harnessAddendum({ dictionary, fieldContext }) {
  *   the dictionary and field context the addendum needs.
  * @returns {string} the system prompt.
  */
-export function systemPromptFor({ dictionary, fieldContext, strength, style } = {}) {
+export function systemPromptFor({ dictionary, aliases, fieldContext, strength, style } = {}) {
   const base = strength === "concise" ? CONCISE_PROMPT : cleanupSystemPrompt();
-  return base + UTTERANCE_RULES + styleBlock(style) + harnessAddendum({ dictionary, fieldContext });
+  return base + UTTERANCE_RULES + styleBlock(style) + harnessAddendum({ dictionary, aliases, fieldContext });
 }
 
 /** Marks a style plugin's instructions, which the user installed and selected. */

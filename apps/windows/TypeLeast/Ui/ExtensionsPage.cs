@@ -105,11 +105,12 @@ internal sealed class ExtensionsPage : IPage
     private static Border Card(PluginSummary plugin, UIElement action)
     {
         var meta = (plugin.IsStyle ? L10n.T("风格") : L10n.T("词库")) + " · v" + plugin.Version + " · " + plugin.Author;
-        var source = plugin.Source is null ? null : Theme.Text(plugin.Source == "catalog" ? L10n.T("官方目录") : L10n.T("本地导入，未审核"), 12, plugin.Source == "catalog" ? Theme.Grey : Theme.Warning);
+        var source = plugin.Source is null ? null : Theme.Text(plugin.Source == "bundled" ? L10n.T("随应用提供") : plugin.Source == "catalog" ? L10n.T("官方目录") : L10n.T("本地导入，未审核"), 12, plugin.Source == "file" ? Theme.Warning : Theme.Grey);
         var stack = Theme.Stack(6, Theme.Text(plugin.Title, 15, bold: true), Theme.Text(meta, 12, Theme.Grey));
         if (source is not null) stack.Children.Add(source);
         stack.Children.Add(Theme.Text(plugin.Summary, 13, Theme.Grey));
         if (!plugin.IsStyle && plugin.TermCount is { } count) stack.Children.Add(Theme.Text(L10n.T("{0} 个词", count), 12, Theme.Grey));
+        if (plugin.AliasCount is > 0) stack.Children.Add(Theme.Text(L10n.T("{0} 条读音提示", plugin.AliasCount), 12, Theme.Grey));
         stack.Children.Add(action);
         return Theme.Card(stack);
     }

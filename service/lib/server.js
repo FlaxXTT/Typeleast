@@ -10,7 +10,7 @@
  * @module typeleast-service/server
  */
 import { createServer } from "node:http";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { format } from "node:util";
 import { SpeechModels } from "./speech-models.js";
@@ -42,6 +42,7 @@ export async function startService(options = {}) {
   const logger = options.logger ?? stderrLogger;
   const host = "127.0.0.1";
 
+  const existingInstallation = await stat(join(stateDir, "api-token")).then(info => info.isFile()).catch(() => false);
   await mkdir(stateDir, { recursive: true });
   const { value: config, issues } = await loadConfig(stateDir);
   for (const issue of issues) logger.warn?.("config.json: %s", issue.message);
@@ -53,6 +54,7 @@ export async function startService(options = {}) {
   // Installed plugins; a damaged plugin folder only turns plugins off, never the service.
   const plugins = new PluginStore(join(stateDir, "plugins"));
   await plugins.load().catch((error) => logger.warn?.("plugins could not be read (%s)", error?.code ?? "error"));
+  await plugins.migrateTechnicalPack(existingInstallation).catch(() => logger.warn?.("bundled terminology could not be installed"));
   const service = new VoicePolishService({
     recognizer,
     config,

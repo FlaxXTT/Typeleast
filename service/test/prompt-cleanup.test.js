@@ -6,14 +6,13 @@ import { HARNESS_ADDENDUM_MARKER, promptVersionFor, systemPromptFor } from "../l
 import { parsePolishOutput } from "../lib/parse-output.js";
 import { inventedFacts } from "../lib/validate.js";
 
-test("the cleanup prompt keeps its rules, output format and examples", () => {
-  // Guards against an edit quietly dropping a rule the service relies on.
-  assert.match(CLEANUP_PROMPT, /^# Role: ASR Intelligent Cleaning Expert \(Tech Domain\)/);
-  for (const heading of ["# Output Format", "## 1. Phonetic Mapping", "## 2. Inverse Text Normalization", "## 3. De-noising", "## 4. Mixed Script Formatting", "## 5. Semantic Flow", "## 6. Subject Consolidation", "# Few-Shot Examples"]) {
-    assert.ok(CLEANUP_PROMPT.includes(heading), heading);
+test("cleanup remains general and keeps the output contract", () => {
+  for (const rule of ["# Task", "# Rules", "# Examples", "correction", "numbers", "ordinary word", "subject"]) {
+    assert.ok(CLEANUP_PROMPT.includes(rule), rule);
   }
-  assert.match(CLEANUP_PROMPT, /"status": "ok" \| "uncertain"/);
-  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 5, "five examples");
+  assert.match(CLEANUP_PROMPT, /"status":"ok"\|"uncertain"/);
+  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 3);
+  for (const specialised of ["Tech Domain", "Python", "杰森", "Claude", "GitHub"]) assert.ok(!CLEANUP_PROMPT.includes(specialised));
 });
 
 test("natural cleanup carries no addendum when there is nothing to add", () => {
@@ -29,7 +28,7 @@ test("dictionary and field context ride in a delimited addendum", () => {
     fieldContext: { before: "Hi Emma,", after: "" },
   });
   const [base, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
-  assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd(), "the owner prompt and separate rules remain intact");
+  assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd(), "the base prompt and separate rules remain intact");
   assert.match(addendum, /第四批=TypeLeast/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);
 });

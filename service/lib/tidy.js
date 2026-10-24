@@ -195,37 +195,23 @@ export function tidy(text) {
   const stripped = stripParticles(out);
   if (stripped !== out) applied.push("strip-particles");
   out = stripped;
-  const cased = normalizeTermCase(out);
-  if (cased !== out) applied.push("term-case");
-  out = cased;
   return { text: out, applied };
 }
 
 /**
- * Names and acronyms with exactly one correct spelling and no ordinary English
- * meaning, so fixing their case can never change what was said ("iphone" ->
- * "iPhone", "api" -> "API"). Words that are also plain English (React, Notion,
- * Word, Go) are deliberately absent: those are left to the model.
+ * Exact-token case correction from an enabled version-2 dictionary pack.
+ * The caller must exclude names that are also ordinary English words.
  */
-const CANONICAL_TERMS = [
-  "iPhone", "iPad", "iOS", "macOS", "GitHub", "GitLab", "ChatGPT", "OpenAI", "DeepSeek", "JavaScript", "TypeScript",
-  "PowerPoint", "YouTube", "WeChat", "LinkedIn", "PyTorch", "TensorFlow", "Kubernetes", "PostgreSQL", "MySQL",
-  "MongoDB", "Docker", "Python", "Figma", "API", "PPT", "SDK", "URL", "PDF", "JSON", "HTTP", "HTTPS", "HTML", "CSS",
-  "CPU", "GPU", "KPI", "OKR", "LLM", "CI", "PR",
-];
-const TERM_PATTERNS = CANONICAL_TERMS.map((term) => [
-  term,
-  // Not part of a longer word or a code token ("json.loads", "my_api", "/api/").
-  new RegExp(`(?<![A-Za-z0-9_./-])${term}(?![A-Za-z0-9_./(-])`, "gi"),
-]);
-
-/**
- * Give well-known names and acronyms their standard capitalisation.
- * @param {string} text - input text.
- * @returns {string} the text with those terms re-cased.
- */
-export function normalizeTermCase(text) {
+export function normalizeTermCase(text, terms = []) {
   let out = String(text ?? "");
-  for (const [term, pattern] of TERM_PATTERNS) out = out.replace(pattern, term);
+  const sourceLower = out.toLowerCase();
+  for (const term of terms) {
+    if (typeof term !== "string" || !term || !/[a-z]/iu.test(term)) continue;
+    if (!sourceLower.includes(term.toLowerCase())) continue;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    // Do not alter code paths, identifiers or a token inside another word.
+    const pattern = new RegExp(`(?<![A-Za-z0-9_./-])${escaped}(?![A-Za-z0-9_./(-])`, "gi");
+    out = out.replace(pattern, term);
+  }
   return out;
 }

@@ -14,6 +14,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { redactSecrets } from "./context.js";
+import { safeCaseTerms } from "./term-hints.js";
 
 export const PLUGIN_FORMAT = "typeleast-plugin";
 export const CATALOG_FORMAT = "typeleast-catalog";
@@ -22,6 +23,10 @@ export const PLUGIN_LIMITS = {
   fileBytes: 256 * 1024,
   terms: 2000,
   termChars: 120,
+  aliases: 200,
+  aliasChars: 80,
+  aliasCues: 8,
+  cueChars: 40,
   instructionsBytes: 8 * 1024,
   nameChars: 40,
   descriptionChars: 200,
@@ -29,6 +34,7 @@ export const PLUGIN_LIMITS = {
   urlChars: 200,
   /** All enabled packs together. */
   enabledTerms: 10000,
+  enabledAliases: 1000,
   catalogBytes: 2 * 1024 * 1024,
   catalogPlugins: 500,
 };
@@ -68,9 +74,10 @@ export function validatePlugin(value) {
   const fail = (path, code) => { issues.push({ path, code }); };
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, issues: [{ path: "", code: "not-an-object" }] };
   if (value.format !== PLUGIN_FORMAT) fail("format", "unknown-format");
-  if (value.formatVersion !== 1) fail("formatVersion", "unsupported-version");
+  if (value.formatVersion !== 1 && !(value.formatVersion === 2 && value.type === "dictionary")) fail("formatVersion", "unsupported-version");
   if (!Object.hasOwn(FIELDS, value.type)) return { ok: false, issues: [...issues, { path: "type", code: "unknown-type" }] };
-  for (const key of Object.keys(value)) if (!FIELDS[value.type].includes(key)) fail(key, "unknown-field");
+  const allowed = value.formatVersion === 2 && value.type === "dictionary" ? [...FIELDS.dictionary, "aliases"] : FIELDS[value.type];
+  for (const key of Object.keys(value)) if (!allowed.includes(key)) fail(key, "unknown-field");
   if (typeof value.id !== "string" || !ID.test(value.id)) fail("id", "invalid-id");
   if (typeof value.version !== "string" || !VERSION.test(value.version)) fail("version", "invalid-version");
   for (const field of ["name", "description"]) {
@@ -89,6 +96,7 @@ export function validatePlugin(value) {
 
   let terms;
   let instructions;
+  let aliases;
   if (value.type === "dictionary") {
     if (!Array.isArray(value.terms) || value.terms.length === 0 || value.terms.length > PLUGIN_LIMITS.terms) fail("terms", "invalid-count");
     else {
@@ -106,6 +114,35 @@ export function validatePlugin(value) {
         terms.push(t);
       });
     }
+    if (value.formatVersion === 2) {
+      aliases = [];
+      if (value.aliases !== undefined && (!Array.isArray(value.aliases) || value.aliases.length > PLUGIN_LIMITS.aliases)) fail("aliases", "invalid-count");
+      else if (Array.isArray(value.aliases)) {
+        const heardKeys = new Set();
+        value.aliases.forEach((alias, i) => {
+          const path = `aliases[${i}]`;
+          if (!alias || typeof alias !== "object" || Array.isArray(alias)) return fail(path, "invalid-alias");
+          for (const key of Object.keys(alias)) if (!["heard", "term", "cues", "blockers"].includes(key)) fail(`${path}.${key}`, "unknown-field");
+          const validText = (s, max) => typeof s === "string" && s.trim() === s && length(s) >= 2 && length(s) <= max &&
+            /^[\p{L}\p{N}\p{M} ._+#/-]+$/u.test(s) && !secretShaped(s);
+          if (!validText(alias.heard, PLUGIN_LIMITS.aliasChars)) fail(`${path}.heard`, "invalid-text");
+          if (!validText(alias.term, PLUGIN_LIMITS.termChars) || !terms?.some(t => t === alias.term)) fail(`${path}.term`, "unknown-term");
+          if (!Array.isArray(alias.cues) || alias.cues.length < 1 || alias.cues.length > PLUGIN_LIMITS.aliasCues ||
+            alias.cues.some(cue => !validText(cue, PLUGIN_LIMITS.cueChars))) fail(`${path}.cues`, "invalid-cues");
+          if (alias.blockers !== undefined && (!Array.isArray(alias.blockers) || alias.blockers.length > PLUGIN_LIMITS.aliasCues ||
+            alias.blockers.some(cue => !validText(cue, PLUGIN_LIMITS.cueChars)))) fail(`${path}.blockers`, "invalid-blockers");
+          if (typeof alias.heard === "string" && typeof alias.term === "string") {
+            const key = `${alias.heard.toLowerCase()}=${alias.term.toLowerCase()}`;
+            if (heardKeys.has(key)) fail(path, "duplicate-alias");
+            heardKeys.add(key);
+          }
+          if (validText(alias.heard, PLUGIN_LIMITS.aliasChars) && validText(alias.term, PLUGIN_LIMITS.termChars) && Array.isArray(alias.cues) && alias.cues.every(cue => validText(cue, PLUGIN_LIMITS.cueChars)) &&
+            (alias.blockers === undefined || (Array.isArray(alias.blockers) && alias.blockers.every(cue => validText(cue, PLUGIN_LIMITS.cueChars))))) {
+            aliases.push({ heard: alias.heard, term: alias.term, cues: alias.cues, ...(alias.blockers ? { blockers: alias.blockers } : {}) });
+          }
+        });
+      }
+    }
   } else {
     instructions = typeof value.instructions === "string" ? value.instructions.trim() : "";
     if (!instructions || Buffer.byteLength(instructions, "utf8") > PLUGIN_LIMITS.instructionsBytes || CONTROL.test(instructions)) fail("instructions", "invalid-instructions");
@@ -115,12 +152,12 @@ export function validatePlugin(value) {
   return {
     ok: true,
     plugin: {
-      format: PLUGIN_FORMAT, formatVersion: 1, id: value.id, version: value.version, type: value.type,
+      format: PLUGIN_FORMAT, formatVersion: value.formatVersion, id: value.id, version: value.version, type: value.type,
       name: { "zh-Hans": value.name["zh-Hans"].trim(), en: value.name.en.trim() },
       description: { "zh-Hans": value.description["zh-Hans"].trim(), en: value.description.en.trim() },
       author: value.author.trim(), license: value.license,
       ...(value.homepage ? { homepage: value.homepage } : {}),
-      ...(terms ? { terms } : { instructions }),
+      ...(terms ? { terms, ...(value.formatVersion === 2 ? { aliases } : {}) } : { instructions }),
     },
   };
 }
@@ -147,7 +184,7 @@ export function summarize(plugin) {
     id: plugin.id, digest: pluginDigest(plugin), version: plugin.version, type: plugin.type, name: plugin.name, description: plugin.description,
     author: plugin.author, license: plugin.license, homepage: plugin.homepage ?? null,
     ...(plugin.type === "dictionary"
-      ? { termCount: plugin.terms.length, termsPreview: plugin.terms.slice(0, 30) }
+      ? { termCount: plugin.terms.length, termsPreview: plugin.terms.slice(0, 30), ...(plugin.formatVersion === 2 ? { aliasCount: plugin.aliases.length, aliasesPreview: plugin.aliases.slice(0, 12) } : {}) }
       : { instructions: plugin.instructions }),
   };
 }
@@ -161,7 +198,7 @@ export class PluginStore {
   constructor(dir) {
     this.dir = dir;
     this.plugins = new Map();
-    this.state = { formatVersion: 1, plugins: {}, style: null };
+    this.state = { formatVersion: 1, plugins: {}, style: null, technicalMigration: false };
     this.problems = [];
     this.queue = Promise.resolve();
   }
@@ -172,7 +209,8 @@ export class PluginStore {
     try {
       const parsed = JSON.parse(await readFile(join(this.dir, "state.json"), "utf8"));
       if (parsed && typeof parsed === "object" && parsed.plugins && typeof parsed.plugins === "object") {
-        this.state = { formatVersion: 1, plugins: parsed.plugins, style: typeof parsed.style === "string" ? parsed.style : null };
+        this.state = { formatVersion: 1, plugins: parsed.plugins, style: typeof parsed.style === "string" ? parsed.style : null,
+          technicalMigration: parsed.technicalMigration === true };
       }
     } catch { /* no state yet, or unreadable: start with every plugin off */ }
     let names = [];
@@ -206,6 +244,29 @@ export class PluginStore {
     await rename(temporary, target);
   }
 
+  /** One-time local upgrade. Never fetch the catalog or re-enable a user's disabled pack. */
+  async migrateTechnicalPack(existingInstallation) {
+    if (this.state.technicalMigration) return;
+    let bundled = null;
+    if (existingInstallation) {
+      const text = await readFile(new URL('./bundled/typeleast.tech-terms.typeleast-plugin', import.meta.url), 'utf8');
+      const parsed = parsePlugin(text);
+      if (!parsed.ok || parsed.plugin.id !== 'typeleast.tech-terms') throw new Error('bundled terminology is invalid');
+      bundled = parsed.plugin;
+    }
+    await this.change(async () => {
+      if (bundled && !this.state.plugins[bundled.id]) {
+        if (!this.plugins.has(bundled.id)) {
+          this.checkTermBudget(bundled);
+          await this.writeAtomic(`${bundled.id}.typeleast-plugin`, JSON.stringify(bundled, null, 2) + '\n');
+          this.plugins.set(bundled.id, bundled);
+        }
+        this.state.plugins[bundled.id] = { source: 'bundled', enabled: true };
+      }
+      this.state.technicalMigration = true;
+    });
+  }
+
   list() {
     return [...this.plugins.values()].sort((a, b) => a.id.localeCompare(b.id)).map((plugin) => ({
       ...summarize(plugin),
@@ -222,9 +283,20 @@ export class PluginStore {
     return total;
   }
 
+  enabledAliasCount(except) {
+    let total = 0;
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.id !== except && this.state.plugins[plugin.id]?.enabled) total += plugin.aliases?.length ?? 0;
+    }
+    return total;
+  }
+
   checkTermBudget(plugin) {
     if (plugin.terms.length + this.enabledTermCount(plugin.id) > PLUGIN_LIMITS.enabledTerms) {
       throw Object.assign(new Error("too many enabled terms"), { code: "plugin-terms-limit", status: 409 });
+    }
+    if ((plugin.aliases?.length ?? 0) + this.enabledAliasCount(plugin.id) > PLUGIN_LIMITS.enabledAliases) {
+      throw Object.assign(new Error("too many enabled pronunciation aliases"), { code: "plugin-aliases-limit", status: 409 });
     }
   }
 
@@ -291,6 +363,26 @@ export class PluginStore {
       if (plugin.type === "dictionary" && this.state.plugins[plugin.id]?.enabled) out.push(...plugin.terms);
     }
     return out;
+  }
+
+  /** Bounded, literal pronunciation hints from enabled version-2 packs. */
+  activeAliases() {
+    const out = [];
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.formatVersion === 2 && this.state.plugins[plugin.id]?.enabled) out.push(...plugin.aliases);
+    }
+    return out;
+  }
+
+  /** Version-2 terms are curated for safe exact-token capitalisation in raw mode. */
+  activeCaseTerms() {
+    const out = new Map();
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.formatVersion === 2 && this.state.plugins[plugin.id]?.enabled) {
+        for (const term of safeCaseTerms(plugin.terms)) if (!out.has(term.toLowerCase())) out.set(term.toLowerCase(), term);
+      }
+    }
+    return [...out.values()];
   }
 
   /** The selected style, if any. */

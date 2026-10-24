@@ -20,6 +20,7 @@
  */
 import { wordSuggestions } from "./word-suggestions.js";
 import { relevantEntries } from "./dictionary-relevance.js";
+import { relevantAliases, safePackTerms } from "./term-hints.js";
 import { fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -29,7 +30,7 @@ import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { validateOutput } from "./validate.js";
-import { tidy } from "./tidy.js";
+import { normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
@@ -183,10 +184,10 @@ export class VoicePolishService {
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
     const context = await this.buildContext(request, rawText);
-    // The cleanup prompt and its examples, plus an addendum with only the dictionary
-    // and the text around the cursor (already redacted by buildContext).
+    // Generic cleanup rules, plus relevant dictionary and optional pronunciation hints.
     const system = systemPromptFor({
       dictionary: context.dictionary,
+      aliases: context.aliases,
       fieldContext: context.fieldContext ?? null,
       strength,
       style: this.plugins?.activeStyle()?.instructions ?? null,
@@ -299,7 +300,7 @@ export class VoicePolishService {
   async polishTranslate({ request, base, route, started, rawText, target }) {
     const context = await this.buildContext(request, rawText);
     const system = translatePrompt(target)
-      + harnessAddendum({ dictionary: context.dictionary, fieldContext: context.fieldContext ?? null })
+      + harnessAddendum({ dictionary: context.dictionary, aliases: context.aliases, fieldContext: context.fieldContext ?? null })
       + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
     const outboundText = this.config.redactSecrets === false ? rawText : redactSecrets(rawText);
     this.stats.modelCalls += 1;
@@ -488,6 +489,14 @@ export class VoicePolishService {
    * @returns {Promise<object>} the same result.
    */
   async recordAndReturn(request, result) {
+    // Only an enabled pack may supply brand spelling. Ordinary English words are excluded.
+    let caseTerms = [];
+    try { caseTerms = this.plugins?.activeCaseTerms() ?? []; } catch { /* Optional plugins cannot stop dictation. */ }
+    if (!Array.isArray(caseTerms)) caseTerms = [];
+    const userSpellings = new Set(dictionaryFrom(this.dictionary, request.dictionary)
+      .map(entry => entry.slice(entry.indexOf('=') + 1).trim().toLowerCase()));
+    caseTerms = caseTerms.filter(term => typeof term === 'string' && !userSpellings.has(term.toLowerCase()));
+    result.text = normalizeTermCase(result.text, caseTerms);
     // Entries the user keeps from the model: their heard-as spellings are corrected here.
     result.text = applyLocalEntries(result.text, localEntriesFrom(request.dictionary));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
@@ -636,10 +645,20 @@ export class VoicePolishService {
   async buildContext(request, rawText) {
     const redact = this.config.redactSecrets !== false;
     const fieldContext = request.fieldContext ?? null;
-    const entries = await relevantEntries(withPackTerms(dictionaryFrom(this.dictionary, request.dictionary), this.plugins?.activeTerms() ?? []),
-      [rawText, ...Object.values(fieldContext ?? {})]);
+    const own = dictionaryFrom(this.dictionary, request.dictionary);
+    const texts = [rawText, ...Object.values(fieldContext ?? {})];
+    let entries;
+    let aliases = [];
+    try {
+      entries = await relevantEntries(withPackTerms(own, safePackTerms(this.plugins?.activeTerms() ?? [])), texts);
+      aliases = relevantAliases(this.plugins?.activeAliases() ?? [], rawText, own);
+    } catch {
+      // A damaged optional pack must never take down speech or a user's own dictionary.
+      entries = await relevantEntries(own, texts);
+    }
     return {
       dictionary: entries.map(entry => redact ? redactSecrets(entry) : entry),
+      aliases,
       // The text box being dictated into is the most relevant context there is.
       fieldContext: redactFieldContext(fieldContext, redact),
     };

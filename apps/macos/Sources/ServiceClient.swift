@@ -826,6 +826,8 @@ struct PluginSummary: Codable, Equatable, Identifiable {
     var homepage: String?
     var termCount: Int?
     var termsPreview: [String]?
+    var aliasCount: Int? = nil
+    var aliasesPreview: [PluginAliasPreview]? = nil
     var instructions: String?
     var source: String?
     var enabled: Bool?
@@ -834,6 +836,13 @@ struct PluginSummary: Codable, Equatable, Identifiable {
     var isStyle: Bool { type == "style" }
     var title: String { name[L10n.language == "en" ? "en" : "zh-Hans"] ?? id }
     var summary: String { description[L10n.language == "en" ? "en" : "zh-Hans"] ?? "" }
+}
+
+struct PluginAliasPreview: Codable, Equatable {
+    var heard: String
+    var term: String
+    var cues: [String]
+    var blockers: [String]?
 }
 
 /// Answer of `GET /plugins` and of every change.

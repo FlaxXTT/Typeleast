@@ -148,6 +148,7 @@ final class PluginController: ObservableObject {
         switch code {
         case "plugin-invalid": return L10n.text("这不是有效的插件文件")
         case "plugin-terms-limit": return L10n.text("启用的词库加起来不能超过 10000 个词")
+        case "plugin-aliases-limit": return L10n.text("启用的读音提示不能超过 1000 条")
         case "plugin-not-found": return L10n.text("找不到这个插件，请刷新")
         case "plugin-changed": return L10n.text("插件内容变了，请重新查看后再安装")
         case "market-protocol-unsupported": return L10n.text("插件目录格式不对，可能要更新 TypeLeast")

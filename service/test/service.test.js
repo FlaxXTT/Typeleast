@@ -158,8 +158,8 @@ test("the model prompt is the cleanup prompt plus a dictionary addendum", async 
   await service.polish({ rawText: RAW, strength: "prompt", appHint: "com.apple.mail", llm: ROUTE });
   const [system, user] = model.calls[0].body.messages;
   assert.equal(system.role, "system");
-  assert.match(system.content, /ASR post-processing expert/);
-  assert.match(system.content, /Output ONLY a JSON object/);
+  assert.match(system.content, /speech recognition transcripts/);
+  assert.match(system.content, /Return only one JSON object/);
   // Our constraints ride in a delimited addendum, never woven into the prompt text.
   assert.match(system.content, /=== HARNESS ADDENDUM \(not part of the upstream prompt\) ===/);
   assert.match(system.content, /Dictionary entries are hard constraints/);

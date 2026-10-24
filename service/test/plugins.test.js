@@ -19,6 +19,11 @@ const STYLE = {
   name: { 'zh-Hans': '正式书面', en: 'Formal' }, description: { 'zh-Hans': '用正式的书面语。', en: 'Formal written wording.' },
   author: 'Example', license: 'CC0-1.0', instructions: '用正式、礼貌的书面语，不用口语词。',
 };
+const PACK_V2 = {
+  ...PACK, formatVersion: 2, id: 'example.tech-terms',
+  terms: ['GitHub', 'Claude', 'JSON'],
+  aliases: [{ heard: 'cloud', term: 'Claude', cues: ['模型', 'LLM'] }],
+};
 const ROUTE = { baseURL: 'https://api.example.com/v1', model: 'm', apiKey: 'sk-test-123456789012' };
 
 async function tempStore() {
@@ -31,11 +36,17 @@ async function tempStore() {
 test('a valid pack and style pass; unknown fields, types and limits are refused', () => {
   assert.equal(validatePlugin(PACK).ok, true);
   assert.equal(validatePlugin(STYLE).ok, true);
+  assert.equal(validatePlugin(PACK_V2).ok, true);
   const refused = [
     [{ ...PACK, extra: 1 }, 'extra'],
     [{ ...PACK, type: 'script' }, 'type'],
     [{ ...PACK, format: 'zip' }, 'format'],
-    [{ ...PACK, formatVersion: 2 }, 'formatVersion'],
+    [{ ...PACK, formatVersion: 3 }, 'formatVersion'],
+    [{ ...PACK_V2, aliases: [{ heard: 'cloud', term: 'Other', cues: ['模型'] }] }, 'aliases[0].term'],
+    [{ ...PACK_V2, aliases: [{ heard: 'cloud', term: 'Claude', cues: [] }] }, 'aliases[0].cues'],
+    [{ ...PACK_V2, aliases: [{ heard: 'cloud', term: 'Claude', cues: ['模型'], blockers: ['bad:rule'] }] }, 'aliases[0].blockers'],
+    [{ ...PACK_V2, aliases: [{ heard: 'cloud', term: 'Claude', cues: ['模型'], script: 'run' }] }, 'aliases[0].script'],
+    [{ ...PACK, aliases: PACK_V2.aliases }, 'aliases'],
     [{ ...PACK, id: 'NoNamespace' }, 'id'],
     [{ ...PACK, version: '01.0.0' }, 'version'],
     [{ ...PACK, terms: [] }, 'terms'],
@@ -93,6 +104,28 @@ test('the store installs, switches and removes plugins with whole-file writes', 
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test('a bundled terminology pack is enabled once for old installs only', async () => {
+  for (const existing of [false, true]) {
+    const { dir, store } = await tempStore();
+    try {
+      await store.migrateTechnicalPack(existing);
+      assert.equal(store.state.technicalMigration, true);
+      assert.equal(store.list().some(p => p.id === 'typeleast.tech-terms'), existing);
+      if (existing) {
+        assert.ok(store.activeAliases().some(a => a.heard === '杰森'));
+        assert.ok(store.activeCaseTerms().includes('GitHub'));
+        assert.ok(!store.activeCaseTerms().includes('Go'));
+        assert.ok(!store.activeCaseTerms().includes('Python'));
+        await store.setEnabled('typeleast.tech-terms', false);
+      }
+      const again = new PluginStore(join(dir, 'plugins'));
+      await again.load();
+      await again.migrateTechnicalPack(true);
+      assert.equal(again.list().find(p => p.id === 'typeleast.tech-terms')?.enabled, existing ? false : undefined);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  }
+});
+
 test('all enabled packs together stay within the term budget', async () => {
   const { dir, store } = await tempStore();
   try {
@@ -102,6 +135,17 @@ test('all enabled packs together stay within the term budget', async () => {
     await store.install(big(5), { enable: false });
     await assert.rejects(store.setEnabled('example.pack5', true), { code: 'plugin-terms-limit' });
     assert.equal(store.activeTerms().length, 10000);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('enabled pronunciation hints have a total budget', async () => {
+  const { dir, store } = await tempStore();
+  try {
+    const pack = n => validatePlugin({ ...PACK_V2, id: `example.alias${n}`, terms: [`Term${n}`],
+      aliases: Array.from({ length: 200 }, (_, i) => ({ heard: `alias${n}x${i}`, term: `Term${n}`, cues: ['code'] })) }).plugin;
+    for (let n = 0; n < 5; n++) await store.install(pack(n), { enable: true });
+    await assert.rejects(store.install(pack(5), { enable: true }), { code: 'plugin-aliases-limit' });
+    assert.equal(store.activeAliases().length, PLUGIN_LIMITS.enabledAliases);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

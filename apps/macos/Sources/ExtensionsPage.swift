@@ -76,8 +76,8 @@ private struct PluginMeta: View {
             Badge(text: plugin.isStyle ? L10n.text("风格") : L10n.text("词库"), tint: Theme.accent)
             Text("v" + plugin.version + " · " + plugin.author).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
             if let source = plugin.source {
-                Text(source == "catalog" ? L10n.text("官方目录") : L10n.text("本地导入，未审核"))
-                    .font(.system(size: 11.5)).foregroundColor(source == "catalog" ? Theme.secondary : Theme.warning)
+                Text(source == "bundled" ? L10n.text("随应用提供") : (source == "catalog" ? L10n.text("官方目录") : L10n.text("本地导入，未审核")))
+                    .font(.system(size: 11.5)).foregroundColor(source == "file" ? Theme.warning : Theme.secondary)
             }
         }
     }
@@ -100,6 +100,9 @@ private struct InstalledCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if !plugin.isStyle, let count = plugin.termCount {
                         Text(L10n.text("{0} 个词", count)).font(.system(size: 11.5)).foregroundColor(Theme.tertiary)
+                    }
+                    if let count = plugin.aliasCount, count > 0 {
+                        Text(L10n.text("{0} 条读音提示", count)).font(.system(size: 11.5)).foregroundColor(Theme.tertiary)
                     }
                 }
                 Spacer()
@@ -209,10 +212,20 @@ struct InstallSheet: View {
                 Text(L10n.text("共 {0} 个词，例如：", plugin.termCount ?? 0)).font(.system(size: 12.5, weight: .semibold))
                 Text((plugin.termsPreview ?? []).prefix(12).joined(separator: "、")).font(.system(size: 12.5)).foregroundColor(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let aliases = plugin.aliasesPreview, !aliases.isEmpty {
+                    Text(L10n.text("仅在语境明确时使用以下读音提示：")).font(.system(size: 12.5, weight: .semibold))
+                    ScrollView {
+                        Text(aliases.map { alias in
+                            let blocked = (alias.blockers ?? []).isEmpty ? "" : " · " + L10n.text("排除：") + (alias.blockers ?? []).joined(separator: "、")
+                            return "\(alias.heard) → \(alias.term) (\(alias.cues.joined(separator: "、"))\(blocked))"
+                        }.joined(separator: "\n"))
+                            .font(.system(size: 12)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    }.frame(height: 100)
+                }
             }
             Text(plugin.isStyle
                  ? L10n.text("数据去向：选中后，这段说明会随每次标准、精简整理请求发给你选择的模型，影响写法和格式。不会多调用模型；原话转写、翻译和提示词 Beta 不受影响。")
-                 : L10n.text("数据去向：启用后，这些词里与某次听写相关的，会随那次整理请求发给你选择的模型；无关的不发送。不会多调用模型。"))
+                 : L10n.text("数据去向：启用后，本次相关的术语和读音提示会随整理请求发给你选择的模型；无关的不发送。原话转写只做明确词的大小写调整。不会多调用模型。"))
                 .font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()

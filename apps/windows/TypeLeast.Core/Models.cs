@@ -189,6 +189,8 @@ public sealed class PluginSummary
     [JsonPropertyName("homepage")] public string? Homepage { get; set; }
     [JsonPropertyName("termCount")] public int? TermCount { get; set; }
     [JsonPropertyName("termsPreview")] public List<string>? TermsPreview { get; set; }
+    [JsonPropertyName("aliasCount")] public int? AliasCount { get; set; }
+    [JsonPropertyName("aliasesPreview")] public List<PluginAliasPreview>? AliasesPreview { get; set; }
     [JsonPropertyName("instructions")] public string? Instructions { get; set; }
     [JsonPropertyName("source")] public string? Source { get; set; }
     [JsonPropertyName("enabled")] public bool? Enabled { get; set; }
@@ -197,6 +199,14 @@ public sealed class PluginSummary
     [JsonIgnore] public bool IsStyle => Type == "style";
     [JsonIgnore] public string Title => Name.GetValueOrDefault(L10n.Language == "en" ? "en" : "zh-Hans") ?? Id;
     [JsonIgnore] public string Summary => Description.GetValueOrDefault(L10n.Language == "en" ? "en" : "zh-Hans") ?? "";
+}
+
+public sealed class PluginAliasPreview
+{
+    [JsonPropertyName("heard")] public string Heard { get; set; } = "";
+    [JsonPropertyName("term")] public string Term { get; set; } = "";
+    [JsonPropertyName("cues")] public List<string> Cues { get; set; } = new();
+    [JsonPropertyName("blockers")] public List<string>? Blockers { get; set; }
 }
 
 /// <summary>Answer of GET /plugins and of every change.</summary>
@@ -231,6 +241,7 @@ public static class PluginMessages
     {
         "plugin-invalid" => L10n.T("这不是有效的插件文件"),
         "plugin-terms-limit" => L10n.T("启用的词库加起来不能超过 10000 个词"),
+        "plugin-aliases-limit" => L10n.T("启用的读音提示不能超过 1000 条"),
         "plugin-not-found" => L10n.T("找不到这个插件，请刷新"),
         "plugin-changed" => L10n.T("插件内容变了，请重新查看后再安装"),
         "market-protocol-unsupported" => L10n.T("插件目录格式不对，可能要更新 TypeLeast"),

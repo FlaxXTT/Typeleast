@@ -42,7 +42,7 @@ test("精简整理用自己的提示词，带上词典；标准整理不受影�
   assert.match(CONCISE_PROMPT, /保留请求的语气、对象和用途/);
   assert.match(system, /HARNESS ADDENDUM[\s\S]*TypeLeast/);
   const standard = systemPromptFor({ strength: "prompt" });
-  assert.ok(standard.indexOf("## 6. Subject Consolidation") < standard.indexOf("# Few-Shot Examples"), "在示例之前");
+  assert.ok(standard.indexOf("5. Combine repeated references") < standard.indexOf("# Examples"), "规则在示例之前");
   assert.doesNotMatch(system, /Subject Consolidation/);
 });
 
