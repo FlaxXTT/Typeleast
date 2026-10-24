@@ -72,10 +72,11 @@ network only in these cases:
 
 - **Speech recognition is local.** Audio is recognized on the computer by the bundled local service and never
   uploaded. Recordings are deleted after recognition, unless the user turns on keeping recordings for retries:
-  they are then stored encrypted on the computer for at most 24 hours.
+  they are then stored encrypted on the computer and deleted after five minutes.
 - **Text cleanup (optional).** If the user enters an API key for a language model provider of their choice
   (for example DeepSeek, OpenAI, Moonshot, Zhipu, Alibaba DashScope, OpenRouter, or a local Ollama), the app sends
-  that provider the recognized text and the user's dictionary words; when the user turns on 参考输入框里的内容
+  that provider the recognized text and those of the user's dictionary words that the dictation mentions (spelled
+  the same or sounding alike); unrelated dictionary words are not sent. When the user turns on 参考输入框里的内容
   (off by default), also the text near the cursor and the window title. Values that look like keys or passwords
   are removed first. The provider's own privacy policy applies to that data. Without an API key, nothing is sent.
   获取列表 (list the provider's models) asks the same provider for its model list.
@@ -90,7 +91,8 @@ network only in these cases:
   unless this is turned off in 设置 → 服务与更新.
 
 Learning corrections (on by default) reads the field the dictation was pasted into for up to two minutes, on the
-computer only, to add a word the user corrected to the dictionary; it records no keystrokes and sends nothing.
+computer only, to add a word the user corrected to the dictionary; it records no keystrokes. Like any dictionary
+word, a learned word reaches the cleanup provider only with a later dictation that mentions it.
 The local service listens only on `127.0.0.1`. API keys are stored in Windows Credential Manager (macOS: Keychain)
 and are never written to logs. Settings, history and logs stay on the computer, in `%APPDATA%\TypeLeast\` and
 `%LOCALAPPDATA%\TypeLeast\` on Windows.

@@ -3,9 +3,12 @@ using System.Text.RegularExpressions;
 
 namespace TypeLeast.Core;
 
-/// <summary>Only explicitly retained retry audio, sealed with current-user DPAPI, expires after 24h.</summary>
+/// <summary>Only explicitly retained retry audio, sealed with current-user DPAPI, expires after five minutes.</summary>
 public sealed class RetainedAudio
 {
+    /// <summary>How long a recording is kept for History's retry before it is deleted.</summary>
+    public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
+
     private readonly string directory;
     private readonly IHistoryProtection protection;
     public RetainedAudio(string directory, IHistoryProtection? protection = null)
@@ -23,7 +26,7 @@ public sealed class RetainedAudio
         var path = PathFor(id); var sealedAudio = protection.Protect(wav);
         File.WriteAllBytes(path + ".tmp", sealedAudio); File.Move(path + ".tmp", path, true);
     }
-    public bool Available(string? id) => id is not null && File.Exists(PathFor(id)) && File.GetLastWriteTimeUtc(PathFor(id)) > DateTime.UtcNow.AddHours(-24);
+    public bool Available(string? id) => id is not null && File.Exists(PathFor(id)) && File.GetLastWriteTimeUtc(PathFor(id)) > DateTime.UtcNow - Lifetime;
     public byte[] Load(string id)
     {
         if (!Available(id)) throw new IOException("Audio expired or unavailable");
@@ -41,7 +44,7 @@ public sealed class RetainedAudio
         foreach (var path in Directory.EnumerateFiles(directory, "*.audio"))
         {
             var id = Path.GetFileNameWithoutExtension(path);
-            if (Regex.IsMatch(id, "^[a-f0-9]{32}$") && (!active.Contains(id) || File.GetLastWriteTimeUtc(path) <= DateTime.UtcNow.AddHours(-24))) File.Delete(path);
+            if (Regex.IsMatch(id, "^[a-f0-9]{32}$") && (!active.Contains(id) || File.GetLastWriteTimeUtc(path) <= DateTime.UtcNow - Lifetime)) File.Delete(path);
         }
     }
 }

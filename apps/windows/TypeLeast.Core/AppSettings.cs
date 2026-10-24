@@ -49,6 +49,7 @@ public sealed class AppSettings
     public List<string> Words { get; set; } = new();
     public List<WordEntry> DictionaryEntries { get; set; } = new();
     public string HistoryRetention { get; set; } = "forever";
+    /// <summary>Keep each recording for five minutes (RetainedAudio.Lifetime) for History's retry; the stored name is older.</summary>
     public bool KeepAudio24h { get; set; }
     public string InsertionMode { get; set; } = "autoPaste";
     public string Appearance { get; set; } = "system";

@@ -19,6 +19,7 @@
  * @module typeleast-service/service
  */
 import { wordSuggestions } from "./word-suggestions.js";
+import { relevantEntries } from "./dictionary-relevance.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
@@ -176,7 +177,7 @@ export class VoicePolishService {
 
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
-    const context = await this.buildContext(request);
+    const context = await this.buildContext(request, rawText);
     // The cleanup prompt and its examples, plus an addendum with only the dictionary
     // and the text around the cursor (already redacted by buildContext).
     const system = systemPromptFor({
@@ -290,7 +291,7 @@ export class VoicePolishService {
    * original rather than nothing.
    */
   async polishTranslate({ request, base, route, started, rawText, target }) {
-    const context = await this.buildContext(request);
+    const context = await this.buildContext(request, rawText);
     const system = translatePrompt(target)
       + harnessAddendum({ dictionary: context.dictionary, fieldContext: context.fieldContext ?? null })
       + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
@@ -576,13 +577,19 @@ export class VoicePolishService {
     return { text: String(spoken.text ?? "").trim(), language: spoken.language ?? language, ms: Date.now() - started };
   }
 
-  /** Assemble bounded, redacted context for one call. */
-  async buildContext(request) {
+  /**
+   * Assemble bounded, redacted context for one call. Of the dictionary, only the entries
+   * this dictation (or the field the user let it read) mentions go to the model.
+   */
+  async buildContext(request, rawText) {
     const redact = this.config.redactSecrets !== false;
+    const fieldContext = request.fieldContext ?? null;
+    const entries = await relevantEntries(dictionaryFrom(this.dictionary, request.dictionary),
+      [rawText, ...Object.values(fieldContext ?? {})]);
     return {
-      dictionary: dictionaryFrom(this.dictionary, request.dictionary).map(entry => redact ? redactSecrets(entry) : entry),
+      dictionary: entries.map(entry => redact ? redactSecrets(entry) : entry),
       // The text box being dictated into is the most relevant context there is.
-      fieldContext: redactFieldContext(request.fieldContext ?? null, redact),
+      fieldContext: redactFieldContext(fieldContext, redact),
     };
   }
 

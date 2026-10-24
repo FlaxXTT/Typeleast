@@ -236,6 +236,8 @@ internal sealed class AppHost : IDictationHost
     public async Task RefreshHealth()
     {
         if (refreshing || quitting) return;
+        // Retry recordings live five minutes; this runs at least every 30 seconds.
+        if (Settings.KeepAudio24h) PruneAudio();
         if (DateTime.UtcNow - lastHousekeeping >= HealthPolling.Housekeeping)
         {
             lastHousekeeping = DateTime.UtcNow;

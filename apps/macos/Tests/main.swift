@@ -1346,6 +1346,35 @@ do {
     checkEq("the concise tier persists", Settings().strength, "concise")
 }
 
+// MARK: retry recordings are deleted after five minutes
+do {
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    let suite = "typeleast.tests.audio-lifetime"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    checkEq("retry audio lives five minutes", HistoryStore.audioLifetime, 300)
+    let store = HistoryStore(defaults: defaults)
+    store.keepsNothing = { false }
+    func entry(_ id: String, age: TimeInterval) -> (LocalHistoryEntry, String) {
+        let path = NSTemporaryDirectory() + "dsh-voice-test-" + UUID().uuidString + ".wav.sealed"
+        FileManager.default.createFile(atPath: path, contents: Data([1, 2, 3]))
+        return (LocalHistoryEntry(id: id, ts: Date().addingTimeInterval(-age), app: "x", language: "zh", strength: "prompt",
+                                  raw: "r", text: "t", fallback: false, fallbackReason: nil, model: nil, msTotal: nil,
+                                  audioPath: path, inserted: true, seconds: 1), path)
+    }
+    let (old, oldPath) = entry("old", age: 6 * 60)
+    let (fresh, freshPath) = entry("fresh", age: 60)
+    store.add(old)
+    store.add(fresh)
+    store.pruneAudio()
+    check("a six-minute-old recording is deleted", !FileManager.default.fileExists(atPath: oldPath))
+    checkEq("…and its entry no longer offers a retry", store.entries.first { $0.id == "old" }?.audioPath, nil)
+    check("a one-minute-old recording stays", FileManager.default.fileExists(atPath: freshPath))
+    try? FileManager.default.removeItem(atPath: freshPath)
+}
+
 // MARK: new-user guide: every entry names a place; a failed model download offers a mirror
 do {
     let entries = SettingsGuide.entries

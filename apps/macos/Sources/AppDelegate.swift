@@ -139,6 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                               name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
         HistoryStore.shared.pruneAudio()
+        // Retry recordings live five minutes: look once a minute, so none outlasts six.
+        let audioTimer = Timer(timeInterval: 60, repeats: true) { _ in HistoryStore.shared.pruneAudio() }
+        RunLoop.main.add(audioTimer, forMode: .common)
         HistoryStore.shared.applyRetention(settings.historyRetention)
         applyState()
         startService()
@@ -590,7 +593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func retryEntry(id: String) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }),
               let path = e.audioPath, FileManager.default.fileExists(atPath: path) else {
-            setHint(L10n.text("原始录音已不存在（24 小时后自动清理）"), warning: true)
+            setHint(L10n.text("原录音已删除（保留 5 分钟）"), warning: true)
             applyState()
             return
         }

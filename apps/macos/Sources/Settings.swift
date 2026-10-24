@@ -389,7 +389,8 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: "history.retention"); changed() }
     }
 
-    /// Keep the recording for 24 h so History can retry with the same audio.
+    /// Keep the recording for five minutes (HistoryStore.audioLifetime) so History can retry
+    /// with the same audio. The stored key keeps its old name.
     var keepAudio24h: Bool {
         get { bool("voice.keepAudio24h.v2", default: true) }
         set { d.set(newValue, forKey: "voice.keepAudio24h.v2"); changed() }

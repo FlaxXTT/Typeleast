@@ -302,8 +302,11 @@ final class HistoryStore {
         if let p = e.audioPath { try? FileManager.default.removeItem(atPath: p) }
     }
 
-    /// Delete retained temp WAVs older than 24h (and any orphan audio whose entry is gone).
-    func pruneAudio(olderThan: TimeInterval = 24 * 3600) {
+    /// How long a recording is kept for History's retry before it is deleted.
+    static let audioLifetime: TimeInterval = 5 * 60
+
+    /// Delete retained recordings older than `audioLifetime` (and any orphan audio whose entry is gone).
+    func pruneAudio(olderThan: TimeInterval = HistoryStore.audioLifetime) {
         let cutoff = Date().addingTimeInterval(-olderThan)
         var changed = false
         for i in entries.indices {

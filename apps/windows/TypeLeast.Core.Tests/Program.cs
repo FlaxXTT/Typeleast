@@ -543,8 +543,13 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         var id = Guid.NewGuid().ToString("N"); var wav = Wav.FromPcm16(new byte[16000]);
         audio.Save(id, wav); Check("retained audio round-trip", audio.Load(id).SequenceEqual(wav));
         Check("retained audio is sealed", !File.ReadAllBytes(Path.Combine(dir,"recordings",id+".audio")).AsSpan().SequenceEqual(wav));
-        File.SetLastWriteTimeUtc(Path.Combine(dir,"recordings",id+".audio"), DateTime.UtcNow.AddHours(-25));
-        Check("retained audio expires", !audio.Available(id)); audio.Prune(new[] { id });
+        Eq("retry audio lives five minutes", RetainedAudio.Lifetime, TimeSpan.FromMinutes(5));
+        File.SetLastWriteTimeUtc(Path.Combine(dir,"recordings",id+".audio"), DateTime.UtcNow.AddMinutes(-4));
+        Check("four-minute-old audio can still be retried", audio.Available(id));
+        audio.Prune(new[] { id });
+        Check("…and is not pruned", File.Exists(Path.Combine(dir,"recordings",id+".audio")));
+        File.SetLastWriteTimeUtc(Path.Combine(dir,"recordings",id+".audio"), DateTime.UtcNow.AddMinutes(-6));
+        Check("retained audio expires after five minutes", !audio.Available(id)); audio.Prune(new[] { id });
         Check("expired audio removed", !File.Exists(Path.Combine(dir,"recordings",id+".audio")));
         try { audio.Save("../escape", wav); Check("audio rejects path traversal", false); } catch (InvalidDataException) { Check("audio rejects path traversal", true); }
         Check("format lists produces HTML", FormattedText.HtmlClipboard("1. 第一项\n2. <safe>")?.Contains("&lt;safe&gt;") == true);

@@ -154,7 +154,7 @@ test("without an API key the tidied transcript is returned and nothing is called
 
 test("the model prompt is the cleanup prompt plus a dictionary addendum", async () => {
   const model = fakeModel("Send the report on Wednesday.");
-  const service = makeService({ model, config: { dictionary: ["SenseVoice", "第四批=TypeLeast"] } });
+  const service = makeService({ model, config: { dictionary: ["Wednesday", "第四批=TypeLeast"] } });
   await service.polish({ rawText: RAW, strength: "prompt", appHint: "com.apple.mail", llm: ROUTE });
   const [system, user] = model.calls[0].body.messages;
   assert.equal(system.role, "system");
@@ -163,7 +163,7 @@ test("the model prompt is the cleanup prompt plus a dictionary addendum", async 
   // Our constraints ride in a delimited addendum, never woven into the prompt text.
   assert.match(system.content, /=== HARNESS ADDENDUM \(not part of the upstream prompt\) ===/);
   assert.match(system.content, /Dictionary entries are hard constraints/);
-  assert.match(system.content, /SenseVoice/);
+  assert.match(system.content, /Entries: Wednesday$/m);
   // The user message is the recognised text alone.
   assert.equal(user.role, "user");
   assert.equal(user.content, RAW);
@@ -355,7 +355,7 @@ test("malformed audio never reaches the recogniser", async () => {
 
 test("the app's dictionary comes with each request and joins config.json's", async () => {
   const model = fakeModel("Send the report on Wednesday.");
-  const service = makeService({ model, config: { dictionary: ["TypeLeast"] } });
+  const service = makeService({ model, recognizer: fakeRecognizer("send the typeleast report to deep seek on wednesday"), config: { dictionary: ["TypeLeast"] } });
   await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["DeepSeek", "得普=DeepSeek", "TypeLeast", "  ", 42] });
   const system = model.calls[0].body.messages[0].content;
   for (const entry of ["TypeLeast", "DeepSeek", "得普=DeepSeek"]) assert.ok(system.includes(entry), entry);
@@ -363,6 +363,23 @@ test("the app's dictionary comes with each request and joins config.json's", asy
   assert.deepEqual(service.dictionary, ["TypeLeast"]);
   await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE });
   assert.ok(!model.calls[1].body.messages[0].content.includes("DeepSeek"));
+});
+
+test("only the dictionary entries this dictation mentions reach the model", async () => {
+  const model = fakeModel("请把报告发给章伟。");
+  const service = makeService({ model, recognizer: fakeRecognizer("请把报告发给张伟"), config: { dictionary: ["内部代号凤凰"] } });
+  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["章伟", "Kubernetes", "李雷", "迪普西克=DeepSeek"] });
+  // The cleanup prompt's own examples mention some terms, so look at the dictionary line alone.
+  const entriesLine = (call) => (call.body.messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1] ?? null;
+  assert.equal(entriesLine(model.calls[0]), "章伟", "a homophone of what was said is kept, nothing else");
+  // Nothing related means no dictionary in the request at all.
+  await service.polish({ rawText: "明天下午三点开会", strength: "prompt", llm: ROUTE, dictionary: ["章伟", "Kubernetes"] });
+  assert.equal(entriesLine(model.calls[1]), null);
+  assert.ok(!model.calls[1].body.messages[0].content.includes("Dictionary entries"));
+  // The field the user allowed it to read counts too.
+  await service.polish({ rawText: "回复他", strength: "prompt", llm: ROUTE, dictionary: ["Kubernetes"],
+    fieldContext: { before: "Kubernetes 集群升级完成了吗？", selected: "", after: "", windowTitle: "" } });
+  assert.equal(entriesLine(model.calls[2]), "Kubernetes");
 });
 
 test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {
