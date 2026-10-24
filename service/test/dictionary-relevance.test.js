@@ -28,6 +28,14 @@ test('entries unrelated to the dictation are left out', async () => {
   assert.deepEqual(await relevantEntries([], ['章伟']), []);
 });
 
+test('latin terms match whole words; short ones must sound close in full', async () => {
+  const dictionary = ['C#', '.NET', 'Go', 'Amy', 'SQL', 'Node.js', 'VS Code', 'CI/CD'];
+  assert.deepEqual(await relevantEntries(dictionary, ['click the button and connect to the network']), []);
+  assert.deepEqual(await relevantEntries(dictionary, ['我们没有去谷歌']), [], 'Amy is not 没有');
+  assert.deepEqual(await relevantEntries(dictionary, ['用 c# 和 .net 写，再用 node js 跑，在 vs code 里调 ci/cd']), ['C#', '.NET', 'Node.js', 'VS Code', 'CI/CD']);
+  assert.deepEqual(await relevantEntries(dictionary, ['今天学 go 语言']), ['Go']);
+});
+
 test('the field the user allowed it to read counts as context', async () => {
   assert.deepEqual(await relevantEntries(DICTIONARY, ['回复他', 'Kubernetes 集群升级完成了吗？']), ['Kubernetes']);
 });
