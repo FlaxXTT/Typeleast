@@ -136,6 +136,40 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODELS_ONLY"] == "1" {
     exit(0)
 }
 
+if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_FOCUS"] == "extensions" {
+    // Made-up plugins, shown without a service.
+    func summary(_ id: String, _ type: String, _ zh: String, _ en: String, _ dzh: String, _ den: String, terms: Int? = nil, source: String? = nil,
+                 enabled: Bool? = nil, installed: String? = nil) -> PluginSummary {
+        PluginSummary(id: id, version: "1.0.0", type: type, name: ["zh-Hans": zh, "en": en], description: ["zh-Hans": dzh, "en": den],
+                      author: "TypeLeast", license: "CC0-1.0", homepage: nil, termCount: terms,
+                      termsPreview: terms == nil ? nil : ["GitHub", "Kubernetes", "TypeScript", "Docker", "Node.js", "PostgreSQL", "Redis", "OAuth", "WebSocket", "Vite", "Figma", "Ollama"],
+                      instructions: type == "style" ? "用正式、礼貌、简洁的书面语表达：\n- 把口语词换成书面说法。\n- 句子完整，主语清楚，不用感叹号和网络用语。\n- 不添加称呼、问候、落款。" : nil,
+                      source: source, enabled: enabled, installedVersion: installed)
+    }
+    let pack = summary("typeleast.dev-terms", "dictionary", "开发常用术语", "Developer terms", "编程、云服务和开发工具里常被听错的英文名词。", "Developer terms that speech recognition often gets wrong.", terms: 82, source: "catalog", enabled: true)
+    let style = summary("typeleast.formal-writing", "style", "正式书面语", "Formal writing", "把口语说法改成正式、礼貌的书面表达。", "Formal, polite written language.", source: "file", enabled: true)
+    let legal = summary("example.legal-terms", "dictionary", "法律术语", "Legal terms", "合同与诉讼中的常用术语。", "Common contract and litigation terms.", terms: 640)
+    model.plugins.preview(state: PluginState(plugins: [pack, style], style: style.id, problems: []),
+                          catalog: PluginCatalog(ok: true, code: nil, source: "typeleast.promptking.workers.dev", fetchedAt: "2026-10-24T08:00:00Z",
+                                                 plugins: [{ var p = pack; p.source = nil; p.enabled = nil; p.installedVersion = "1.0.0"; return p }(), legal]))
+    for dark in [false, true] {
+        model.page = .extensions
+        snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)), size: NSSize(width: 960, height: 680), name: "extensions-installed", dark: dark)
+        snapshot(NSHostingView(rootView: MarketList(plugins: model.plugins, loadOnAppear: false).padding(24).frame(width: 700, alignment: .top)
+            .background(Theme.window).environment(\.colorScheme, dark ? .dark : .light)), size: NSSize(width: 700, height: 330), name: "extensions-market", dark: dark)
+        for (name, plugin, origin) in [("extensions-install-pack", legal, PendingPlugin.Origin.catalog), ("extensions-install-style", style, .file(Data()))] {
+            let sheet = InstallSheet(pending: PendingPlugin(summary: plugin, origin: origin, installedVersion: nil), cancel: {}, confirm: { _ in })
+                .background(Theme.window).environment(\.colorScheme, dark ? .dark : .light)
+            let host = NSHostingView(rootView: sheet)
+            snapshot(host, size: host.fittingSize, name: name, dark: dark)
+        }
+        model.settings.strength = "prompt"
+        model.page = .home
+        snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)), size: NSSize(width: 820, height: 560), name: "extensions-sidebar-style", dark: dark)
+    }
+    exit(0)
+}
+
 if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_FOCUS"] == "settings" {
     for dark in [false, true] {
         for category in 0..<5 {

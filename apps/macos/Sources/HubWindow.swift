@@ -62,6 +62,7 @@ struct HubRootView: View {
                 case .home: HomePage()
                 case .history: HistoryPage()
                 case .dictionary: DictionaryPage()
+                case .extensions: ExtensionsPage(plugins: model.plugins)
                 case .settings: SettingsPage()
                 }
             }
@@ -85,13 +86,13 @@ private struct Sidebar: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 22)
 
-            ForEach([HubPage.home, .history, .dictionary]) { page in
+            ForEach([HubPage.home, .history, .dictionary, .extensions]) { page in
                 SidebarItem(page: page)
             }
 
             Spacer()
 
-            SidebarModes()
+            SidebarModes(plugins: model.plugins)
                 .padding(.bottom, 10)
             ServiceBadge()
                 .padding(.horizontal, 12)
@@ -207,6 +208,7 @@ extension PageHeader where Trailing == EmptyView {
 /// from Settings. The chosen one shows what it does in a few words.
 struct SidebarModes: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject var plugins: PluginController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -218,9 +220,24 @@ struct SidebarModes: View {
                     model.selectStrength(strength.rawValue)
                 }
             }
+            // A style plugin applies to 标准 and 精简 only.
+            if !plugins.styles.isEmpty, ["prompt", "concise"].contains(model.settings.strength) {
+                Menu {
+                    Button(L10n.text("不用风格")) { plugins.selectStyle(nil) }
+                    ForEach(plugins.styles) { style in Button(style.title) { plugins.selectStyle(style.id) } }
+                } label: {
+                    Text(L10n.text("风格：") + (plugins.selectedStyle?.title ?? L10n.text("无")))
+                        .font(.system(size: 12)).foregroundColor(Theme.secondary).lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .padding(.leading, 39).padding(.top, 2)
+            }
         }
         .disabled(model.phase != .idle)
         .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
+        .onAppear { plugins.refresh() }
+        .onChange(of: model.serviceUp) { up in if up { plugins.refresh() } }
     }
 }
 

@@ -719,6 +719,53 @@ final class ServiceClient {
         }
     }
 
+    // MARK: plugins (data files the service checks, stores and applies)
+
+    private func pluginRequest<T: Decodable>(_ method: String, _ path: String, body: Data? = nil,
+                                             timeout: TimeInterval = 10, as type: T.Type) throws -> T {
+        try withPortRetry {
+            try withTokenRetry { token in
+                let req = try makeRequest(path: "/api/voice-polish/plugins" + path, method: method, token: token,
+                                          headers: body == nil ? [:] : ["content-type": "application/json"], body: body, timeout: timeout)
+                let (data, resp) = try performSync(req, timeout: timeout)
+                guard resp.statusCode == 200 else { throw httpError(resp, data) }
+                do { return try JSONDecoder().decode(T.self, from: data) }
+                catch { throw ServiceError.decoding(String(describing: error)) }
+            }
+        }
+    }
+
+    func pluginsSync() throws -> PluginState { try pluginRequest("GET", "", as: PluginState.self) }
+
+    /// Check a plugin file without installing it.
+    func inspectPluginSync(_ file: Data) throws -> PluginInspection {
+        try pluginRequest("POST", "/inspect", body: file, as: PluginInspection.self)
+    }
+
+    func installPluginSync(_ file: Data, enable: Bool) throws -> PluginState {
+        try pluginRequest("POST", enable ? "?enable=1" : "", body: file, as: PluginState.self)
+    }
+
+    func installCatalogPluginSync(id: String, enable: Bool) throws -> PluginState {
+        let body = (try? JSONSerialization.data(withJSONObject: ["id": id, "enable": enable])) ?? Data()
+        return try pluginRequest("POST", "/catalog/install", body: body, as: PluginState.self)
+    }
+
+    func setPluginEnabledSync(id: String, enabled: Bool) throws -> PluginState {
+        let body = (try? JSONSerialization.data(withJSONObject: ["enabled": enabled])) ?? Data()
+        return try pluginRequest("PUT", "/" + id, body: body, as: PluginState.self)
+    }
+
+    func selectStyleSync(id: String?) throws -> PluginState {
+        let body = (try? JSONSerialization.data(withJSONObject: ["id": id as Any? ?? NSNull()])) ?? Data()
+        return try pluginRequest("PUT", "/style", body: body, as: PluginState.self)
+    }
+
+    func removePluginSync(id: String) throws -> PluginState { try pluginRequest("DELETE", "/" + id, as: PluginState.self) }
+
+    /// Read the official catalog once (the service tries the official addresses in turn).
+    func pluginCatalogSync() throws -> PluginCatalog { try pluginRequest("GET", "/catalog", timeout: 30, as: PluginCatalog.self) }
+
     /// The provider's model ids, from its OpenAI-compatible `GET /models`. Called
     /// directly (not through the local service), because it needs nothing but the key.
     func listModelsSync(route: LLMRoute) throws -> [String] {
@@ -757,6 +804,51 @@ struct LLMTestResult: Codable, Equatable {
     var code: String?
     var error: String?
     var sample: String?
+}
+
+/// A plugin as the service describes it: installed (source, enabled), in the catalog
+/// (installedVersion) or being inspected before install.
+struct PluginSummary: Codable, Equatable, Identifiable {
+    var id: String
+    var version: String
+    var type: String
+    var name: [String: String]
+    var description: [String: String]
+    var author: String
+    var license: String
+    var homepage: String?
+    var termCount: Int?
+    var termsPreview: [String]?
+    var instructions: String?
+    var source: String?
+    var enabled: Bool?
+    var installedVersion: String?
+
+    var isStyle: Bool { type == "style" }
+    var title: String { name[L10n.language == "en" ? "en" : "zh-Hans"] ?? id }
+    var summary: String { description[L10n.language == "en" ? "en" : "zh-Hans"] ?? "" }
+}
+
+/// Answer of `GET /plugins` and of every change.
+struct PluginState: Codable, Equatable {
+    var plugins: [PluginSummary]
+    var style: String?
+    var problems: [String]?
+}
+
+/// Answer of `GET /plugins/catalog`; on failure `plugins` is the last catalog read.
+struct PluginCatalog: Codable, Equatable {
+    var ok: Bool
+    var code: String?
+    var source: String?
+    var fetchedAt: String?
+    var plugins: [PluginSummary]
+}
+
+/// Answer of `POST /plugins/inspect`.
+struct PluginInspection: Codable, Equatable {
+    var plugin: PluginSummary
+    var installedVersion: String?
 }
 
 /// Answer of `POST /learned-word`.

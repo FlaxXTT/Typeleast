@@ -215,6 +215,28 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     stub.Reply = (200, "{\"word\":null}");
     Eq("no word when it was not a spelling fix", await client.LearnedWordAsync("明天开会", "后天开会"), null);
 
+    // Plugins: the app only asks the service; its answers decode.
+    stub.Reply = (200, "{\"plugins\":[{\"id\":\"example.dev-terms\",\"version\":\"1.0.0\",\"type\":\"dictionary\",\"name\":{\"zh-Hans\":\"开发术语\",\"en\":\"Dev terms\"},\"description\":{\"zh-Hans\":\"术语。\",\"en\":\"Terms.\"},\"author\":\"Example\",\"license\":\"CC0-1.0\",\"termCount\":3,\"source\":\"catalog\",\"enabled\":true}],\"style\":null,\"problems\":[]}");
+    var plugins = await client.GetPluginsAsync();
+    Eq("installed plugins decode", plugins.Plugins[0].Id, "example.dev-terms");
+    Check("…with their switch and source", plugins.Plugins[0].Enabled == true && plugins.Plugins[0].Source == "catalog" && !plugins.Plugins[0].IsStyle);
+    Eq("plugins path", stub.LastPath, "/api/voice-polish/plugins");
+    await client.InstallPluginAsync(System.Text.Encoding.UTF8.GetBytes("{\"format\":\"typeleast-plugin\"}"), enable: true);
+    Eq("install carries the enable switch", stub.LastPath, "/api/voice-polish/plugins?enable=1");
+    Eq("…and the file itself as the body", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"format\":\"typeleast-plugin\"}");
+    await client.SetPluginEnabledAsync("example.dev-terms", false);
+    Eq("a switch is a PUT on the plugin", stub.LastMethod + " " + stub.LastPath, "PUT /api/voice-polish/plugins/example.dev-terms");
+    await client.SelectStyleAsync(null);
+    Eq("no style is sent as null", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"id\":null}");
+    await client.RemovePluginAsync("example.dev-terms");
+    Eq("uninstall is a DELETE", stub.LastMethod, "DELETE");
+    stub.Reply = (400, "{\"error\":\"not a valid plugin\",\"code\":\"plugin-invalid\",\"issues\":[]}");
+    try { await client.InspectPluginAsync(new byte[] { 1 }); Check("an invalid file is refused", false); }
+    catch (ServiceException e) { Eq("an invalid file is explained", PluginMessages.Describe(e), L10n.T("这不是有效的插件文件")); }
+    stub.Reply = (200, "{\"ok\":false,\"code\":\"market-offline\",\"source\":null,\"fetchedAt\":null,\"plugins\":[]}");
+    var market = await client.GetPluginCatalogAsync();
+    Check("an offline market is reported, not an error", !market.Ok && PluginMessages.Describe(market.Code) == L10n.T("连不上插件目录，请检查网络"));
+
     // The service proves it is ours before anything is sent to it.
     Eq("HMAC proof matches the service's (RFC 4231 case 2 key)",
         ServiceClient.Proof("4a656665", "what do ya want for nothing?"), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");

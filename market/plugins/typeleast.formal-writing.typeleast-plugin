@@ -1,0 +1,19 @@
+{
+  "format": "typeleast-plugin",
+  "formatVersion": 1,
+  "id": "typeleast.formal-writing",
+  "version": "1.0.0",
+  "type": "style",
+  "name": {
+    "zh-Hans": "正式书面语",
+    "en": "Formal writing"
+  },
+  "description": {
+    "zh-Hans": "把口语说法改成正式、礼貌的书面表达，适合工作邮件和公文。",
+    "en": "Turns spoken phrasing into formal, polite written language for work email and documents."
+  },
+  "author": "TypeLeast",
+  "license": "CC0-1.0",
+  "homepage": "https://github.com/FlaxXTT/Typeleast/tree/main/market",
+  "instructions": "用正式、礼貌、简洁的书面语表达：\n- 把口语词换成书面说法，例如「搞」「弄」改为具体动词，「咋」改为「如何」。\n- 句子完整，主语清楚，不用感叹号和网络用语。\n- 不添加称呼、问候、落款或说话人没有说的客套话。\n- 英文同样使用正式语气，不用缩写形式（例如 don't 写成 do not）。"
+}

@@ -94,6 +94,12 @@ let server = try StubServer { req in
         }
         return .json(healthJSON)
     }
+    if req.path.hasPrefix("/api/voice-polish/plugins") {
+        let state = #"{"plugins":[{"id":"example.dev-terms","version":"1.0.0","type":"dictionary","name":{"zh-Hans":"开发术语","en":"Dev terms"},"description":{"zh-Hans":"术语。","en":"Terms."},"author":"Example","license":"CC0-1.0","homepage":null,"termCount":3,"termsPreview":["Kubernetes"],"source":"catalog","enabled":true}],"style":null,"problems":[]}"#
+        if req.path == "/api/voice-polish/plugins/inspect" { return .json(#"{"error":"not a valid plugin","code":"plugin-invalid","issues":[]}"#, status: 400) }
+        if req.path == "/api/voice-polish/plugins/catalog" { return .json(#"{"ok":false,"code":"market-offline","source":null,"fetchedAt":null,"rejected":0,"plugins":[]}"#) }
+        return .json(state)
+    }
     if req.path == "/api/voice-polish/learned-word" {
         let edit = (try? JSONSerialization.jsonObject(with: req.body) as? [String: String]) ?? [:]
         return .json(edit["edited"] == "这家公司很好" ? #"{"word":"公司"}"# : #"{"word":null}"#)
@@ -1345,6 +1351,31 @@ do {
     settings.strength = "concise"
     checkEq("the concise tier persists", Settings().strength, "concise")
 }
+
+// MARK: plugins: the app only asks the service; its answers decode
+do {
+    let installed = try client.pluginsSync()
+    checkEq("installed plugins decode", installed.plugins.first?.id, "example.dev-terms")
+    checkEq("…with their switch and source", installed.plugins.first?.enabled, true)
+    checkEq("plugins request", state.lastRequest?.path, "/api/voice-polish/plugins")
+    _ = try client.installPluginSync(Data(#"{"format":"typeleast-plugin"}"#.utf8), enable: true)
+    checkEq("install carries the enable switch", state.lastRequest?.path, "/api/voice-polish/plugins?enable=1")
+    checkEq("…and the file itself as the body", state.lastRequest.map { String(decoding: $0.body, as: UTF8.self) }, #"{"format":"typeleast-plugin"}"#)
+    _ = try client.setPluginEnabledSync(id: "example.dev-terms", enabled: false)
+    checkEq("a switch is a PUT on the plugin", state.lastRequest.map { $0.method + " " + $0.path }, "PUT /api/voice-polish/plugins/example.dev-terms")
+    _ = try client.selectStyleSync(id: nil)
+    checkEq("no style is sent as null", state.lastRequest.map { String(decoding: $0.body, as: UTF8.self) }, #"{"id":null}"#)
+    _ = try client.removePluginSync(id: "example.dev-terms")
+    checkEq("uninstall is a DELETE", state.lastRequest?.method, "DELETE")
+    do { _ = try client.inspectPluginSync(Data("x".utf8)); check("an invalid file is refused", false) }
+    catch { checkEq("an invalid file is explained", PluginController.describe(error), L10n.text("这不是有效的插件文件")) }
+    let catalog = try client.pluginCatalogSync()
+    checkEq("an offline market is reported, not an error", catalog.ok, false)
+    checkEq("…with a reason the page can show", PluginController.describe(code: catalog.code), L10n.text("连不上插件目录，请检查网络"))
+    let style = PluginSummary(id: "example.formal", version: "1.0.0", type: "style", name: ["zh-Hans": "正式", "en": "Formal"],
+                              description: ["zh-Hans": "正式。", "en": "Formal."], author: "Example", license: "CC0-1.0", instructions: "正式。")
+    checkEq("a style's title follows the interface language", style.title, L10n.language == "en" ? "Formal" : "正式")
+} catch { check("plugin client", false, String(describing: error)) }
 
 // MARK: retry recordings are deleted after five minutes
 do {

@@ -1,0 +1,355 @@
+/**
+ * Plugins, version 1: data only. A plugin is one JSON file (".typeleast-plugin") that is
+ * either a dictionary pack (terms) or a style (extra wording/format instructions for
+ * 标准/精简整理). Nothing in a plugin runs: the service checks the file, stores it, and at
+ * dictation time adds the enabled packs' terms to the dictionary (still filtered to the
+ * terms a dictation mentions) and the selected style's instructions to the one model call.
+ *
+ * The official catalog is a static file published from the repository (market/) and read
+ * only from official addresses, only when the user opens the market.
+ *
+ * @module typeleast-service/plugins
+ */
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { redactSecrets } from "./context.js";
+
+export const PLUGIN_FORMAT = "typeleast-plugin";
+export const CATALOG_FORMAT = "typeleast-catalog";
+
+export const PLUGIN_LIMITS = {
+  fileBytes: 256 * 1024,
+  terms: 2000,
+  termChars: 120,
+  instructionsBytes: 8 * 1024,
+  nameChars: 40,
+  descriptionChars: 200,
+  authorChars: 60,
+  urlChars: 200,
+  /** All enabled packs together. */
+  enabledTerms: 10000,
+  catalogBytes: 2 * 1024 * 1024,
+  catalogPlugins: 500,
+};
+
+/** Where the catalog is read from, in order; nothing else is ever contacted. */
+export const CATALOG_URLS = [
+  "https://typeleast.promptking.workers.dev/market/catalog.json",
+  "https://raw.githubusercontent.com/FlaxXTT/Typeleast/main/market/catalog.json",
+];
+
+const ID = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
+const VERSION = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/;
+const LICENSE = /^(?:[A-Za-z0-9.+-]{1,40}|LicenseRef-[A-Za-z0-9.-]{1,40})$/;
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
+const FIELDS = {
+  dictionary: ["format", "formatVersion", "id", "version", "type", "name", "description", "author", "license", "homepage", "terms"],
+  style: ["format", "formatVersion", "id", "version", "type", "name", "description", "author", "license", "homepage", "instructions"],
+};
+
+const length = (s) => Array.from(s).length;
+const secretShaped = (s) => redactSecrets(s) !== s;
+
+/** "1.10.0" > "1.9.3", compared as numbers. */
+export function compareVersions(a, b) {
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+
+/**
+ * Check a parsed plugin file. Unknown fields, unknown types and anything over the limits
+ * are refused, never trimmed to fit.
+ * @returns {{ok: true, plugin: object} | {ok: false, issues: Array<{path: string, code: string}>}}
+ */
+export function validatePlugin(value) {
+  const issues = [];
+  const fail = (path, code) => { issues.push({ path, code }); };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, issues: [{ path: "", code: "not-an-object" }] };
+  if (value.format !== PLUGIN_FORMAT) fail("format", "unknown-format");
+  if (value.formatVersion !== 1) fail("formatVersion", "unsupported-version");
+  if (!Object.hasOwn(FIELDS, value.type)) return { ok: false, issues: [...issues, { path: "type", code: "unknown-type" }] };
+  for (const key of Object.keys(value)) if (!FIELDS[value.type].includes(key)) fail(key, "unknown-field");
+  if (typeof value.id !== "string" || !ID.test(value.id)) fail("id", "invalid-id");
+  if (typeof value.version !== "string" || !VERSION.test(value.version)) fail("version", "invalid-version");
+  for (const field of ["name", "description"]) {
+    const text = value[field];
+    const max = field === "name" ? PLUGIN_LIMITS.nameChars : PLUGIN_LIMITS.descriptionChars;
+    if (!text || typeof text !== "object" || Array.isArray(text)) { fail(field, "missing-text"); continue; }
+    for (const key of Object.keys(text)) if (key !== "zh-Hans" && key !== "en") fail(`${field}.${key}`, "unknown-field");
+    for (const language of ["zh-Hans", "en"]) {
+      const s = text[language];
+      if (typeof s !== "string" || !s.trim() || length(s) > max || CONTROL.test(s) || /[\r\n]/.test(s)) fail(`${field}.${language}`, "invalid-text");
+    }
+  }
+  if (typeof value.author !== "string" || !value.author.trim() || length(value.author) > PLUGIN_LIMITS.authorChars || CONTROL.test(value.author)) fail("author", "invalid-text");
+  if (typeof value.license !== "string" || !LICENSE.test(value.license)) fail("license", "invalid-license");
+  if (value.homepage !== undefined && (typeof value.homepage !== "string" || !/^https:\/\/[^\s]+$/.test(value.homepage) || value.homepage.length > PLUGIN_LIMITS.urlChars)) fail("homepage", "invalid-url");
+
+  let terms;
+  let instructions;
+  if (value.type === "dictionary") {
+    if (!Array.isArray(value.terms) || value.terms.length === 0 || value.terms.length > PLUGIN_LIMITS.terms) fail("terms", "invalid-count");
+    else {
+      const seen = new Set();
+      terms = [];
+      value.terms.forEach((term, i) => {
+        if (typeof term !== "string") return fail(`terms[${i}]`, "invalid-term");
+        const t = term.trim();
+        // Packs offer spellings only; "heard=word" rules stay the user's own.
+        if (!t || length(t) > PLUGIN_LIMITS.termChars || t.length > PLUGIN_LIMITS.termChars || t.includes("=") || /[\r\n\t]/.test(t) || CONTROL.test(t)) return fail(`terms[${i}]`, "invalid-term");
+        if (secretShaped(t)) return fail(`terms[${i}]`, "secret-shaped");
+        const key = t.toLowerCase();
+        if (seen.has(key)) return fail(`terms[${i}]`, "duplicate-term");
+        seen.add(key);
+        terms.push(t);
+      });
+    }
+  } else {
+    instructions = typeof value.instructions === "string" ? value.instructions.trim() : "";
+    if (!instructions || Buffer.byteLength(instructions, "utf8") > PLUGIN_LIMITS.instructionsBytes || CONTROL.test(instructions)) fail("instructions", "invalid-instructions");
+    else if (secretShaped(instructions)) fail("instructions", "secret-shaped");
+  }
+  if (issues.length) return { ok: false, issues: issues.slice(0, 20) };
+  return {
+    ok: true,
+    plugin: {
+      format: PLUGIN_FORMAT, formatVersion: 1, id: value.id, version: value.version, type: value.type,
+      name: { "zh-Hans": value.name["zh-Hans"].trim(), en: value.name.en.trim() },
+      description: { "zh-Hans": value.description["zh-Hans"].trim(), en: value.description.en.trim() },
+      author: value.author.trim(), license: value.license,
+      ...(value.homepage ? { homepage: value.homepage } : {}),
+      ...(terms ? { terms } : { instructions }),
+    },
+  };
+}
+
+/** Parse and check a plugin file's text. */
+export function parsePlugin(text) {
+  if (typeof text !== "string" || Buffer.byteLength(text, "utf8") > PLUGIN_LIMITS.fileBytes) return { ok: false, issues: [{ path: "", code: "too-large" }] };
+  let value;
+  try { value = JSON.parse(text); } catch { return { ok: false, issues: [{ path: "", code: "invalid-json" }] }; }
+  return validatePlugin(value);
+}
+
+/** What the app shows for a plugin: everything a user should see before turning it on. */
+export function summarize(plugin) {
+  return {
+    id: plugin.id, version: plugin.version, type: plugin.type, name: plugin.name, description: plugin.description,
+    author: plugin.author, license: plugin.license, homepage: plugin.homepage ?? null,
+    ...(plugin.type === "dictionary"
+      ? { termCount: plugin.terms.length, termsPreview: plugin.terms.slice(0, 30) }
+      : { instructions: plugin.instructions }),
+  };
+}
+
+/**
+ * The installed plugins and their switches, in <state dir>/plugins: one file per plugin
+ * plus state.json. Writes are whole-file replacements (temporary file, then rename) and
+ * run one at a time, so a crash never leaves half a file behind.
+ */
+export class PluginStore {
+  constructor(dir) {
+    this.dir = dir;
+    this.plugins = new Map();
+    this.state = { formatVersion: 1, plugins: {}, style: null };
+    this.problems = [];
+    this.queue = Promise.resolve();
+  }
+
+  async load() {
+    this.plugins.clear();
+    this.problems = [];
+    try {
+      const parsed = JSON.parse(await readFile(join(this.dir, "state.json"), "utf8"));
+      if (parsed && typeof parsed === "object" && parsed.plugins && typeof parsed.plugins === "object") {
+        this.state = { formatVersion: 1, plugins: parsed.plugins, style: typeof parsed.style === "string" ? parsed.style : null };
+      }
+    } catch { /* no state yet, or unreadable: start with every plugin off */ }
+    let names = [];
+    try { names = await readdir(this.dir); } catch { names = []; }
+    for (const name of names) {
+      if (!name.endsWith(".typeleast-plugin")) continue;
+      const id = name.slice(0, -".typeleast-plugin".length);
+      const result = parsePlugin(await readFile(join(this.dir, name), "utf8").catch(() => ""));
+      if (result.ok && result.plugin.id === id) this.plugins.set(id, result.plugin);
+      else this.problems.push(id);
+    }
+    if (this.state.style && this.plugins.get(this.state.style)?.type !== "style") this.state.style = null;
+  }
+
+  /** One change at a time; each change ends with the state on disk. */
+  change(work) {
+    const run = this.queue.then(async () => {
+      await mkdir(this.dir, { recursive: true, mode: 0o700 });
+      const result = await work();
+      await this.writeAtomic("state.json", JSON.stringify(this.state, null, 2) + "\n");
+      return result;
+    });
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  async writeAtomic(name, text) {
+    const target = join(this.dir, name);
+    const temporary = `${target}.${process.pid}.tmp`;
+    await writeFile(temporary, text, { encoding: "utf8", mode: 0o600 });
+    await rename(temporary, target);
+  }
+
+  list() {
+    return [...this.plugins.values()].sort((a, b) => a.id.localeCompare(b.id)).map((plugin) => ({
+      ...summarize(plugin),
+      source: this.state.plugins[plugin.id]?.source ?? "file",
+      enabled: plugin.type === "dictionary" ? this.state.plugins[plugin.id]?.enabled === true : this.state.style === plugin.id,
+    }));
+  }
+
+  enabledTermCount(except) {
+    let total = 0;
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.id !== except && this.state.plugins[plugin.id]?.enabled) total += plugin.terms.length;
+    }
+    return total;
+  }
+
+  checkTermBudget(plugin) {
+    if (plugin.terms.length + this.enabledTermCount(plugin.id) > PLUGIN_LIMITS.enabledTerms) {
+      throw Object.assign(new Error("too many enabled terms"), { code: "plugin-terms-limit", status: 409 });
+    }
+  }
+
+  /** Install or update; `enable` turns a pack on or selects a style. */
+  install(plugin, { enable = false, source = "file" } = {}) {
+    return this.change(async () => {
+      const wasEnabled = plugin.type === "dictionary" ? this.state.plugins[plugin.id]?.enabled === true : this.state.style === plugin.id;
+      const on = enable || wasEnabled;
+      if (plugin.type === "dictionary" && on) this.checkTermBudget(plugin);
+      await this.writeAtomic(`${plugin.id}.typeleast-plugin`, JSON.stringify(plugin, null, 2) + "\n");
+      this.plugins.set(plugin.id, plugin);
+      this.state.plugins[plugin.id] = { source, ...(plugin.type === "dictionary" ? { enabled: on } : {}) };
+      if (plugin.type === "style" && enable) this.state.style = plugin.id;
+    });
+  }
+
+  setEnabled(id, enabled) {
+    return this.change(async () => {
+      const plugin = this.plugins.get(id);
+      if (!plugin || plugin.type !== "dictionary") throw Object.assign(new Error("no such pack"), { code: "plugin-not-found", status: 404 });
+      if (enabled) this.checkTermBudget(plugin);
+      this.state.plugins[id] = { ...this.state.plugins[id], enabled: Boolean(enabled) };
+    });
+  }
+
+  selectStyle(id) {
+    return this.change(async () => {
+      if (id !== null && this.plugins.get(id)?.type !== "style") throw Object.assign(new Error("no such style"), { code: "plugin-not-found", status: 404 });
+      this.state.style = id;
+    });
+  }
+
+  remove(id) {
+    return this.change(async () => {
+      if (!this.plugins.has(id)) throw Object.assign(new Error("not installed"), { code: "plugin-not-found", status: 404 });
+      await rm(join(this.dir, `${id}.typeleast-plugin`), { force: true });
+      this.plugins.delete(id);
+      delete this.state.plugins[id];
+      if (this.state.style === id) this.state.style = null;
+    });
+  }
+
+  /** Keep the last catalog read from an official address, to show it offline. */
+  async saveCatalog(catalog) {
+    await mkdir(this.dir, { recursive: true, mode: 0o700 });
+    await this.writeAtomic("catalog-cache.json", JSON.stringify(catalog) + "\n");
+  }
+
+  /** The last catalog read, checked again (null when there is none). */
+  async loadCatalog() {
+    try {
+      const cached = JSON.parse(await readFile(join(this.dir, "catalog-cache.json"), "utf8"));
+      return { ...validateCatalog({ format: CATALOG_FORMAT, formatVersion: 1, generatedAt: cached.generatedAt, plugins: cached.plugins }),
+        source: typeof cached.source === "string" ? cached.source : null, fetchedAt: typeof cached.fetchedAt === "string" ? cached.fetchedAt : null };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Terms of the enabled packs, for the dictionary of one call. */
+  activeTerms() {
+    const out = [];
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && this.state.plugins[plugin.id]?.enabled) out.push(...plugin.terms);
+    }
+    return out;
+  }
+
+  /** The selected style, if any. */
+  activeStyle() {
+    const plugin = this.state.style ? this.plugins.get(this.state.style) : null;
+    return plugin?.type === "style" ? plugin : null;
+  }
+}
+
+/** Read a response body, refusing more than `limit` bytes. */
+async function readLimited(response, limit) {
+  const declared = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declared) && declared > limit) throw Object.assign(new Error("catalog too large"), { code: "market-too-large" });
+  if (!response.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > limit) throw Object.assign(new Error("catalog too large"), { code: "market-too-large" });
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) { await reader.cancel().catch(() => {}); throw Object.assign(new Error("catalog too large"), { code: "market-too-large" }); }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+}
+
+/** Check a parsed catalog; plugins that fail the checks are left out and counted. */
+export function validateCatalog(value) {
+  if (!value || typeof value !== "object" || value.format !== CATALOG_FORMAT || value.formatVersion !== 1 || !Array.isArray(value.plugins)) {
+    throw Object.assign(new Error("not a catalog"), { code: "market-protocol-unsupported" });
+  }
+  if (value.plugins.length > PLUGIN_LIMITS.catalogPlugins) throw Object.assign(new Error("catalog too large"), { code: "market-too-large" });
+  const plugins = [];
+  const seen = new Set();
+  let rejected = 0;
+  for (const entry of value.plugins) {
+    const result = validatePlugin(entry);
+    if (!result.ok || seen.has(result.plugin.id)) { rejected++; continue; }
+    seen.add(result.plugin.id);
+    plugins.push(result.plugin);
+  }
+  return { generatedAt: typeof value.generatedAt === "string" ? value.generatedAt.slice(0, 40) : null, plugins, rejected };
+}
+
+/**
+ * Read the official catalog: the first official address that answers. One request per
+ * address at most, no redirects, nothing sent but a user agent.
+ */
+export async function fetchCatalog({ fetchImpl = globalThis.fetch, version = "0", urls = CATALOG_URLS, timeoutMs = 10000 } = {}) {
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const response = await fetchImpl(url, {
+        method: "GET", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
+        headers: { accept: "application/json", "user-agent": `TypeLeast/${version}` },
+      });
+      if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { code: "market-offline" });
+      const catalog = validateCatalog(JSON.parse(await readLimited(response, PLUGIN_LIMITS.catalogBytes)));
+      return { ...catalog, source: new URL(url).host, fetchedAt: new Date().toISOString() };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  const code = lastError?.code && String(lastError.code).startsWith("market-") ? lastError.code : "market-offline";
+  throw Object.assign(new Error("catalog unavailable"), { code });
+}

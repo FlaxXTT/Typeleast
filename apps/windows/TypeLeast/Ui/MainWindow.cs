@@ -16,7 +16,7 @@ namespace TypeLeast.Ui;
 /// </summary>
 internal sealed class MainWindow : Window
 {
-    public enum Page { Home, History, Dictionary, Settings }
+    public enum Page { Home, History, Dictionary, Extensions, Settings }
 
     private readonly AppHost host;
     private readonly Dictionary<Page, Button> nav = new();
@@ -49,7 +49,7 @@ internal sealed class MainWindow : Window
         brand.Margin = new Thickness(20, 22, 0, 18);
         DockPanel.SetDock(brand, Dock.Top);
         side.Children.Add(brand);
-        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("词典")) })
+        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("词典")), (Page.Extensions, L10n.T("扩展")) })
         {
             var b = NavButton(label, () => ShowPage(page));
             DockPanel.SetDock(b, Dock.Top);
@@ -145,6 +145,7 @@ internal sealed class MainWindow : Window
                 Page.Home => new HomePage(host, this),
                 Page.History => new HistoryPage(host),
                 Page.Dictionary => new DictionaryPage(host),
+                Page.Extensions => new ExtensionsPage(host, this),
                 _ => new SettingsPage(host),
             };
             pages[page] = view;

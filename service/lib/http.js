@@ -15,6 +15,7 @@ import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
 import { learnedWord } from "./edit-correction.js";
+import { parsePlugin, PLUGIN_LIMITS, summarize } from "./plugins.js";
 
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
@@ -83,7 +84,12 @@ function classify(error) {
     case "audio-too-large":
       return { status: 400, code };
     case "model-busy":
+    case "plugin-terms-limit":
       return { status: 409, code };
+    case "plugin-not-found":
+      return { status: 404, code };
+    case "plugins-unavailable":
+      return { status: 503, code };
     case "beta-expired":
       return { status: 410, code };
     case "busy":
@@ -235,6 +241,49 @@ export function createHandler(options) {
           ...(result.translated ? { translated: result.translated } : {}),
         });
         return;
+      }
+
+      // Plugins (plugins.js): data files the user installs; managed only by the apps.
+      if (route.startsWith("/plugins")) {
+        if (!service.plugins) throw Object.assign(new Error("plugins unavailable"), { code: "plugins-unavailable" });
+        const jsonBody = async () => JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}") ?? {};
+        const pluginFile = async () => parsePlugin((await readBody(req, PLUGIN_LIMITS.fileBytes)).toString("utf8"));
+        const id = /^\/plugins\/([a-z0-9.-]{3,80})$/.exec(route)?.[1];
+        if (route === "/plugins" && req.method === "GET") { reply(res, 200, service.pluginState()); return; }
+        if ((route === "/plugins/inspect" || route === "/plugins") && req.method === "POST") {
+          const parsed = await pluginFile();
+          if (!parsed.ok) { reply(res, 400, { error: "not a valid plugin", code: "plugin-invalid", issues: parsed.issues }); return; }
+          if (route === "/plugins/inspect") {
+            reply(res, 200, { plugin: summarize(parsed.plugin), installedVersion: service.plugins.plugins.get(parsed.plugin.id)?.version ?? null });
+          } else {
+            await service.plugins.install(parsed.plugin, { enable: url.searchParams.get("enable") === "1", source: "file" });
+            reply(res, 200, service.pluginState());
+          }
+          return;
+        }
+        if (route === "/plugins/catalog" && req.method === "GET") { reply(res, 200, await service.refreshCatalog()); return; }
+        if (route === "/plugins/catalog/install" && req.method === "POST") {
+          const body = await jsonBody();
+          reply(res, 200, await service.installFromCatalog(String(body.id ?? ""), body.enable === true));
+          return;
+        }
+        if (route === "/plugins/style" && req.method === "PUT") {
+          const body = await jsonBody();
+          await service.plugins.selectStyle(typeof body.id === "string" ? body.id : null);
+          reply(res, 200, service.pluginState());
+          return;
+        }
+        if (id && req.method === "PUT") {
+          const body = await jsonBody();
+          await service.plugins.setEnabled(id, body.enabled === true);
+          reply(res, 200, service.pluginState());
+          return;
+        }
+        if (id && req.method === "DELETE") {
+          await service.plugins.remove(id);
+          reply(res, 200, service.pluginState());
+          return;
+        }
       }
 
       if (route === "/learned-word" && req.method === "POST") {

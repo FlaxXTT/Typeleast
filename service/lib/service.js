@@ -20,6 +20,7 @@
  */
 import { wordSuggestions } from "./word-suggestions.js";
 import { relevantEntries } from "./dictionary-relevance.js";
+import { fetchCatalog, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
@@ -63,6 +64,10 @@ export class VoicePolishService {
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
     this.suggestionEngine = options.suggestionEngine ?? wordSuggestions;
+    /** Installed plugins (plugins.js); null in tests and before the store loads. */
+    this.plugins = options.plugins ?? null;
+    /** The catalog last read from an official address, for installing from the market. */
+    this.catalog = null;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
     this.pending = 0;
     this.queue = 0;
@@ -184,6 +189,7 @@ export class VoicePolishService {
       dictionary: context.dictionary,
       fieldContext: context.fieldContext ?? null,
       strength,
+      style: this.plugins?.activeStyle()?.instructions ?? null,
     }) + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
@@ -577,6 +583,43 @@ export class VoicePolishService {
     return { text: String(spoken.text ?? "").trim(), language: spoken.language ?? language, ms: Date.now() - started };
   }
 
+  /** The installed plugins and the selected style, for the Extensions page. */
+  pluginState() {
+    return { plugins: this.plugins?.list() ?? [], style: this.plugins?.state.style ?? null, problems: this.plugins?.problems ?? [] };
+  }
+
+  /**
+   * Read the official catalog once: the user opened the market or pressed refresh. On
+   * failure the last catalog read is shown with the error.
+   */
+  async refreshCatalog() {
+    try {
+      this.catalog = await fetchCatalog({ fetchImpl: this.fetchImpl ?? globalThis.fetch, version: this.version });
+      await this.plugins?.saveCatalog(this.catalog).catch(() => {});
+      return this.catalogView(true, null);
+    } catch (error) {
+      this.catalog ??= (await this.plugins?.loadCatalog()) ?? null;
+      return this.catalogView(false, error.code ?? "market-offline");
+    }
+  }
+
+  catalogView(ok, code) {
+    const installed = new Map((this.plugins?.list() ?? []).map((plugin) => [plugin.id, plugin.version]));
+    return {
+      ok, ...(code ? { code } : {}),
+      source: this.catalog?.source ?? null, fetchedAt: this.catalog?.fetchedAt ?? null, rejected: this.catalog?.rejected ?? 0,
+      plugins: (this.catalog?.plugins ?? []).map((plugin) => ({ ...summarize(plugin), installedVersion: installed.get(plugin.id) ?? null })),
+    };
+  }
+
+  /** Install a plugin exactly as it appears in the catalog the user is looking at. */
+  async installFromCatalog(id, enable) {
+    const plugin = this.catalog?.plugins.find((entry) => entry.id === id);
+    if (!plugin || !this.plugins) throw Object.assign(new Error("not in the catalog"), { code: "plugin-not-found" });
+    await this.plugins.install(plugin, { enable, source: "catalog" });
+    return this.pluginState();
+  }
+
   /**
    * Assemble bounded, redacted context for one call. Of the dictionary, only the entries
    * this dictation (or the field the user let it read) mentions go to the model.
@@ -584,7 +627,7 @@ export class VoicePolishService {
   async buildContext(request, rawText) {
     const redact = this.config.redactSecrets !== false;
     const fieldContext = request.fieldContext ?? null;
-    const entries = await relevantEntries(dictionaryFrom(this.dictionary, request.dictionary),
+    const entries = await relevantEntries(withPackTerms(dictionaryFrom(this.dictionary, request.dictionary), this.plugins?.activeTerms() ?? []),
       [rawText, ...Object.values(fieldContext ?? {})]);
     return {
       dictionary: entries.map(entry => redact ? redactSecrets(entry) : entry),
@@ -643,6 +686,21 @@ export function dictionaryFrom(configured, sent) {
     if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
   }
   return entries;
+}
+
+/**
+ * The enabled dictionary packs' terms after the user's own entries, without repeating a
+ * word the user already has (their spelling and "heard=word" rules come first).
+ */
+export function withPackTerms(entries, terms) {
+  if (!terms.length) return entries;
+  const known = new Set(entries.map((entry) => entry.slice(entry.indexOf("=") + 1).trim().toLowerCase()));
+  const out = [...entries];
+  for (const term of terms) {
+    const key = term.toLowerCase();
+    if (!known.has(key)) { known.add(key); out.push(term); }
+  }
+  return out;
 }
 
 /** Narrow an unknown throwable to a printable message. */

@@ -22,6 +22,8 @@ internal sealed class AppHost : IDictationHost
     public DictionaryController Dictionary { get; }
     /// <summary>In-app updates (UpdateController).</summary>
     public UpdateController Updates { get; }
+    /// <summary>Installed plugins and the official catalog (Extensions page, style picker).</summary>
+    public PluginController Plugins { get; }
 
     /// <summary>Why an update must wait (a dictation, Prompt Beta's questions), or null.</summary>
     private string? UpdateBlocker() =>
@@ -72,6 +74,7 @@ internal sealed class AppHost : IDictationHost
         Settings = AppSettings.Load(settingsPath);
         Dictionary = new DictionaryController(Settings, SaveSettings, SetHint, () => quitting,
             (inserted, edited) => Client.LearnedWordAsync(inserted, edited));
+        Plugins = new PluginController(Client);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);
@@ -130,7 +133,7 @@ internal sealed class AppHost : IDictationHost
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
         {
-            if (Service.State == ServiceManager.Phase.Running) _ = RefreshHealth();
+            if (Service.State == ServiceManager.Phase.Running) { _ = RefreshHealth(); _ = Plugins.Refresh(); }
             Raise();
         });
         Service.Start();

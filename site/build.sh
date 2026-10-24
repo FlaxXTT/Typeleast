@@ -15,4 +15,7 @@ cp "$media/film-long.mp4" "$media/film-long-poster.jpg" "$media/film-long.en.vtt
 cp "$media/windows/recording-bar.mp4" "$media/windows/recording-bar-poster.png" "$out/assets/"
 for page in home-light home-dark settings-light history-light; do cp "$media/windows/$page.png" "$out/assets/win-$page.png"; done
 for page in home history settings dictionary-dark; do cp "$media/$page.png" "$out/assets/mac-$page.png"; done
+# The official plugin catalog (market/), read by the apps when the user opens the market.
+mkdir -p "$out/market"
+cp "$root/market/catalog.json" "$out/market/"
 echo "site: $out"

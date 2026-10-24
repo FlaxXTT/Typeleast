@@ -6,3 +6,6 @@
 
 /assets/*
   Cache-Control: public, max-age=86400
+
+/market/*
+  Cache-Control: public, max-age=300

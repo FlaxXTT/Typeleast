@@ -367,6 +367,35 @@ public sealed class ServiceClient
             return Decode<LearnedWordResult>(body).Word;
         });
 
+    // ---- plugins (data files the service checks, stores and applies)
+
+    private Task<T> PluginRequest<T>(HttpMethod method, string path, byte[]? body = null, TimeSpan? timeout = null, CancellationToken ct = default) =>
+        WithPortRetry(async () =>
+        {
+            HttpContent? content = body is null ? null : new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue("application/json") } };
+            var (status, text) = await SendAsync(method, "/plugins" + path, content, null, timeout ?? TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+            if (status != HttpStatusCode.OK) throw HttpError(status, text);
+            return Decode<T>(text);
+        });
+
+    private static byte[] JsonBody(object value) => JsonSerializer.SerializeToUtf8Bytes(value);
+
+    public Task<PluginState> GetPluginsAsync(CancellationToken ct = default) => PluginRequest<PluginState>(HttpMethod.Get, "", ct: ct);
+    /// <summary>Check a plugin file without installing it.</summary>
+    public Task<PluginInspection> InspectPluginAsync(byte[] file, CancellationToken ct = default) => PluginRequest<PluginInspection>(HttpMethod.Post, "/inspect", file, ct: ct);
+    public Task<PluginState> InstallPluginAsync(byte[] file, bool enable, CancellationToken ct = default) => PluginRequest<PluginState>(HttpMethod.Post, enable ? "?enable=1" : "", file, ct: ct);
+    public Task<PluginState> InstallCatalogPluginAsync(string id, bool enable, CancellationToken ct = default) =>
+        PluginRequest<PluginState>(HttpMethod.Post, "/catalog/install", JsonBody(new { id, enable }), ct: ct);
+    public Task<PluginState> SetPluginEnabledAsync(string id, bool enabled, CancellationToken ct = default) =>
+        PluginRequest<PluginState>(HttpMethod.Put, "/" + Uri.EscapeDataString(id), JsonBody(new { enabled }), ct: ct);
+    public Task<PluginState> SelectStyleAsync(string? id, CancellationToken ct = default) =>
+        PluginRequest<PluginState>(HttpMethod.Put, "/style", JsonBody(new { id }), ct: ct);
+    public Task<PluginState> RemovePluginAsync(string id, CancellationToken ct = default) =>
+        PluginRequest<PluginState>(HttpMethod.Delete, "/" + Uri.EscapeDataString(id), ct: ct);
+    /// <summary>Read the official catalog once (the service tries the official addresses in turn).</summary>
+    public Task<PluginCatalog> GetPluginCatalogAsync(CancellationToken ct = default) =>
+        PluginRequest<PluginCatalog>(HttpMethod.Get, "/catalog", timeout: TimeSpan.FromSeconds(30), ct: ct);
+
     /// <summary>The provider's model ids, from its OpenAI-compatible GET /models (called directly).</summary>
     public static async Task<List<string>> ListModelsAsync(LlmRoute route, CancellationToken ct = default)
     {
