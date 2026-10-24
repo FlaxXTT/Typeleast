@@ -22,6 +22,9 @@ final class DictionaryController {
     /// The entries sent with a dictation ("word" or "heard=word").
     var serviceEntries: [String] { settings.hostDictionary }
 
+    /// Entries marked 「不发给模型」: the service only fixes their heard-as spellings locally.
+    var localEntries: [String] { settings.localDictionary }
+
     /// A paste landed in `field`: watch it for a fix of `text`.
     func pasted(_ text: String, into field: FocusedField) {
         guard settings.autoLearn else { return }

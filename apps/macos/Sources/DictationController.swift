@@ -221,6 +221,7 @@ final class DictationController {
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
         let dictionary = self.dictionary.serviceEntries
+        let localOnly = self.dictionary.localEntries
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
@@ -234,7 +235,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              dictionary: dictionary))
+                                                              dictionary: dictionary, localOnly: localOnly))
             } catch {
                 outcome = .failure(error)
             }

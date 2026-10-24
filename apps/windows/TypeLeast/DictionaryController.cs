@@ -18,8 +18,11 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
     private readonly EditLearner learner = new(learnedWord);
     private LearnedToast? toast;
 
-    /// <summary>Sent with every dictation: "word" or "heard=word".</summary>
-    public string[] ServiceEntries => settings.DictionaryEntries.Select(e => e.ServiceValue).ToArray();
+    /// <summary>Sent with every dictation: "word" or "heard=word"; the service passes on only those a dictation mentions.</summary>
+    public string[] ServiceEntries => settings.DictionaryEntries.Where(e => !e.LocalOnly).Select(e => e.ServiceValue).ToArray();
+
+    /// <summary>Entries marked 「不发给模型」: the service only fixes their heard-as spellings locally.</summary>
+    public string[] LocalEntries => settings.DictionaryEntries.Where(e => e.LocalOnly).Select(e => e.ServiceValue).ToArray();
 
     public void AddWord(string entry)
     {

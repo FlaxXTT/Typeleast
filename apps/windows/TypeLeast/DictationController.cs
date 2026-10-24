@@ -113,7 +113,7 @@ internal sealed class DictationController
         {
             wav = RetainedAudio.Load(entry.AudioId!);
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
-                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries);
+                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries);
             if (!operations.IsCurrent(operation)) return;
             Paster.SetText(result.InsertableText);
             History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
@@ -278,7 +278,7 @@ internal sealed class DictationController
             var requestOptions = answering is not null ? beta.Options ?? options : options;
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
-                dictionary: Dictionary.ServiceEntries);
+                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries);
             if (!operations.IsCurrent(operation)) return;
             if (ShowBetaQuestions(result, requestOptions)) return;
             if (answering is not null)

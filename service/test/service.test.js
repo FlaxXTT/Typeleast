@@ -382,6 +382,20 @@ test("only the dictionary entries this dictation mentions reach the model", asyn
   assert.equal(entriesLine(model.calls[2]), "Kubernetes");
 });
 
+test("entries marked 「不发给模型」 never reach the model; their heard-as spellings are fixed locally", async () => {
+  const model = fakeModel("请把报告发给张为。");
+  const service = makeService({ model, recognizer: fakeRecognizer("请把报告发给张为") });
+  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["报告", { local: "张为=章伟" }, { local: "内部代号凤凰" }] });
+  const request = JSON.stringify(model.calls[0].body);
+  for (const secret of ["章伟", "张为=", "凤凰"]) assert.ok(!request.includes(secret), secret);
+  assert.equal(result.text, "请把报告发给章伟。");
+  // Raw transcription is corrected the same way, without any model call.
+  const raw = await service.polish({ rawText: "发给张为", strength: "off", dictionary: [{ local: "张为=章伟" }] });
+  assert.equal(raw.text, "发给章伟");
+  const { applyLocalEntries } = await import("../lib/service.js");
+  assert.equal(applyLocalEntries("Use deep seek, not deep seeker.", [["deep seek", "DeepSeek"]]), "Use DeepSeek, not deep seeker.");
+});
+
 test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {
   const { dictionaryFrom, DICTIONARY_LIMITS } = await import("../lib/service.js");
   assert.deepEqual(dictionaryFrom(["A"], [" B ", "B", "A", "", null, "x".repeat(200)]), ["A", "B", "x".repeat(DICTIONARY_LIMITS.entryLength)]);

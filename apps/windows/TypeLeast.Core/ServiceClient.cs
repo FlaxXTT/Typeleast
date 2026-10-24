@@ -267,11 +267,15 @@ public sealed class ServiceClient
         return Encoding.ASCII.GetByteCount(encoded) <= MaxContextHeaderBytes ? encoded : null;
     }
 
-    /// <summary>The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.</summary>
-    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary)
+    /// <summary>The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
+    /// Entries marked 「不发给模型」 go as {"local": entry}; the service never passes those to a model.</summary>
+    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null)
     {
-        if (dictionary is not { Count: > 0 }) return (wav, 0);
-        var json = JsonSerializer.SerializeToUtf8Bytes(dictionary);
+        var entries = new List<object>();
+        if (dictionary is not null) entries.AddRange(dictionary);
+        if (localOnly is not null) entries.AddRange(localOnly.Select(entry => new Dictionary<string, string> { ["local"] = entry }));
+        if (entries.Count == 0) return (wav, 0);
+        var json = JsonSerializer.SerializeToUtf8Bytes(entries);
         return ([.. json, .. wav], json.Length);
     }
 
@@ -279,7 +283,7 @@ public sealed class ServiceClient
     /// dictation; the service keeps no copy, so there is nothing to keep in sync.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null) =>
+        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null) =>
         Once(async () =>
         {
             var headers = new Dictionary<string, string>
@@ -293,7 +297,7 @@ public sealed class ServiceClient
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
-            var (payload, dictionaryBytes) = DictateBody(wav, dictionary);
+            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly);
             headers["x-voice-dictionary-bytes"] = dictionaryBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var content = new ByteArrayContent(payload);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
@@ -383,9 +387,12 @@ public sealed class ServiceClient
     public Task<PluginState> GetPluginsAsync(CancellationToken ct = default) => PluginRequest<PluginState>(HttpMethod.Get, "", ct: ct);
     /// <summary>Check a plugin file without installing it.</summary>
     public Task<PluginInspection> InspectPluginAsync(byte[] file, CancellationToken ct = default) => PluginRequest<PluginInspection>(HttpMethod.Post, "/inspect", file, ct: ct);
-    public Task<PluginState> InstallPluginAsync(byte[] file, bool enable, CancellationToken ct = default) => PluginRequest<PluginState>(HttpMethod.Post, enable ? "?enable=1" : "", file, ct: ct);
-    public Task<PluginState> InstallCatalogPluginAsync(string id, bool enable, CancellationToken ct = default) =>
-        PluginRequest<PluginState>(HttpMethod.Post, "/catalog/install", JsonBody(new { id, enable }), ct: ct);
+    /// <summary>Install the file the confirmation showed; <paramref name="digest"/> is its fingerprint from the inspection.</summary>
+    public Task<PluginState> InstallPluginAsync(byte[] file, bool enable, string digest, CancellationToken ct = default) =>
+        PluginRequest<PluginState>(HttpMethod.Post, "?enable=" + (enable ? "1" : "0") + "&digest=" + Uri.EscapeDataString(digest), file, ct: ct);
+    /// <summary>Install the catalog entry the confirmation showed; a changed entry is refused (plugin-changed).</summary>
+    public Task<PluginState> InstallCatalogPluginAsync(string id, bool enable, string digest, CancellationToken ct = default) =>
+        PluginRequest<PluginState>(HttpMethod.Post, "/catalog/install", JsonBody(new { id, enable, digest }), ct: ct);
     public Task<PluginState> SetPluginEnabledAsync(string id, bool enabled, CancellationToken ct = default) =>
         PluginRequest<PluginState>(HttpMethod.Put, "/" + Uri.EscapeDataString(id), JsonBody(new { enabled }), ct: ct);
     public Task<PluginState> SelectStyleAsync(string? id, CancellationToken ct = default) =>

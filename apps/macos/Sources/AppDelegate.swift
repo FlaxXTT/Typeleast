@@ -193,6 +193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         FnKeyMonitor.shared.stop()
         HotKeyCentre.shared.unregisterAll()
         ServiceManager.shared.stop()
+        // Retry recordings do not outlive the app.
+        HistoryStore.shared.pruneAudio(olderThan: 0)
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
@@ -410,7 +412,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     @objc func onHistoryChanged() { applyState() }
 
-    @objc func onWake() { refreshHealth() }
+    @objc func onWake() {
+        refreshHealth()
+        // Asleep, the five-minute check did not run: drop what expired meanwhile.
+        HistoryStore.shared.pruneAudio()
+    }
 
     @objc func onAppActivated(_ note: Notification) {
         // Leaving the app a dictation went into: the user is usually done fixing it.

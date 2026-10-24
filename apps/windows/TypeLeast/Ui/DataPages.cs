@@ -127,7 +127,8 @@ internal sealed class DictionaryPage : IPage
             && (filter.SelectedIndex != 2 || e.Source != "auto") && (e.Word.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase) || e.HeardAs.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase))))
         {
             list.Children.Add(Theme.Card(Theme.Stack(8, Theme.Text(entry.Word, 16, bold: true),
-                Theme.Text((entry.Source == "auto" ? L10n.T("自动添加") : L10n.T("手动添加")) + (entry.HeardAs.Length > 0 ? " · " + L10n.T("听成") + ": " + entry.HeardAs : ""), 12, Theme.Grey),
+                Theme.Text((entry.Source == "auto" ? L10n.T("自动添加") : L10n.T("手动添加")) + (entry.HeardAs.Length > 0 ? " · " + L10n.T("听成") + ": " + entry.HeardAs : "")
+                    + (entry.LocalOnly ? " · " + L10n.T("不发给模型") : ""), 12, Theme.Grey),
                 Theme.Row(8, Theme.Secondary(L10n.T("编辑"), () => Edit(entry)), Theme.Secondary(L10n.T("删除"), () => host.Dictionary.RemoveWord(entry.Id))))));
         }
         if (list.Children.Count == 0) list.Children.Add(Theme.Text(L10n.T("没有匹配的词条。"), 14, Theme.Grey));
@@ -135,15 +136,18 @@ internal sealed class DictionaryPage : IPage
     private void Edit(WordEntry? original)
     {
         var word = Theme.Input(original?.Word ?? "", 300); var heard = Theme.Input(original?.HeardAs ?? "", 300);
+        var localOnly = new CheckBox { Content = L10n.T("不发给模型"), IsChecked = original?.LocalOnly == true, Foreground = Theme.Ink };
         var error = Theme.Text("", 12, Theme.Warning);
         var dialog = new Window { Title = L10n.T(original is null ? "新增词条" : "编辑词条"), Width = 420, SizeToContent = SizeToContent.Height,
             Background = Theme.Background, WindowStartupLocation = WindowStartupLocation.CenterScreen };
-        var form = Theme.Stack(12, Theme.Text(L10n.T("正确写法")), word, Theme.Text(L10n.T("听成（可选）")), heard, error,
+        var form = Theme.Stack(12, Theme.Text(L10n.T("正确写法")), word, Theme.Text(L10n.T("听成（可选）")), heard,
+            localOnly, Theme.Text(L10n.T("这个词不会出现在任何模型请求里。填了「常被识别成」时，在本机把它换成上面的写法。"), 11.5, Theme.Grey), error,
             Theme.Row(8, Theme.Primary(L10n.T("保存"), () =>
             {
                 var entry = WordEntry.Parse(word.Text, heard.Text, original?.Source ?? "manual");
                 if (entry is null) { error.Text = L10n.T("输入无效：两项合计最多 120 字，不能包含换行或等号。"); return; }
                 if (original is not null) entry.Id = original.Id;
+                entry.LocalOnly = localOnly.IsChecked == true;
                 if (host.Dictionary.SaveWord(entry)) dialog.Close(); else error.Text = host.Hint;
             }), Theme.Secondary(L10n.T("取消"), () => dialog.Close())));
         form.Margin = new Thickness(24); dialog.Content = form; dialog.Show(); word.Focus();

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { CATALOG_URLS, PLUGIN_LIMITS, PluginStore, compareVersions, fetchCatalog, parsePlugin, validatePlugin } from '../lib/plugins.js';
+import { CATALOG_URLS, PLUGIN_LIMITS, PluginStore, compareVersions, fetchCatalog, parsePlugin, pluginDigest, validatePlugin } from '../lib/plugins.js';
 import { STYLE_MARKER, systemPromptFor } from '../lib/prompt.js';
 import { VoicePolishService } from '../lib/service.js';
 import { createHandler, ROUTE_PREFIX } from '../lib/http.js';
@@ -162,9 +162,10 @@ test('plugin routes: inspect, install, switch, market and remove need the token'
   try {
     const TOKEN = 'a'.repeat(64);
     let fetches = 0;
+    let published = [STYLE];
     const service = new VoicePolishService({
       recognizer: { snapshot: () => ({ ready: true }) }, plugins: store, config: { dictionary: [] },
-      fetchImpl: async () => { fetches++; return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: [STYLE] }); },
+      fetchImpl: async () => { fetches++; return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: published }); },
     });
     const handler = createHandler({ service, currentToken: async () => TOKEN });
     async function call(method, path, body, authorization = `Bearer ${TOKEN}`) {
@@ -180,19 +181,34 @@ test('plugin routes: inspect, install, switch, market and remove need the token'
     assert.equal(inspected.json.installedVersion, null);
     assert.equal(store.list().length, 0, 'inspecting installs nothing');
     assert.equal((await call('POST', '/plugins/inspect', { ...PACK, type: 'script' })).json.code, 'plugin-invalid');
-    assert.equal((await call('POST', '/plugins?enable=1', PACK)).json.plugins[0].enabled, true);
+    assert.equal((await call('POST', '/plugins?enable=1', PACK)).status, 409, 'no install without the fingerprint of what was shown');
+    assert.equal((await call('POST', `/plugins?enable=1&digest=${inspected.json.plugin.digest}`, { ...PACK, terms: ['Other'] })).json.code, 'plugin-changed');
+    assert.equal(store.list().length, 0);
+    assert.equal((await call('POST', `/plugins?enable=1&digest=${inspected.json.plugin.digest}`, PACK)).json.plugins[0].enabled, true);
     assert.equal((await call('PUT', '/plugins/example.dev-terms', { enabled: false })).json.plugins[0].enabled, false);
     assert.equal(fetches, 0, 'nothing reaches the network before the market opens');
     const market = await call('GET', '/plugins/catalog');
     assert.equal(fetches, 1);
     assert.deepEqual(market.json.plugins.map((p) => [p.id, p.installedVersion]), [['example.formal', null]]);
-    const installed = await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true });
+    const shown = market.json.plugins[0];
+    assert.equal(shown.digest, pluginDigest(validatePlugin(STYLE).plugin));
+    // The catalog changes after the confirmation was opened: the old confirmation installs nothing.
+    published = [{ ...STYLE, version: '2.0.0', instructions: '完全不同的说明。' }];
+    assert.equal((await call('GET', '/plugins/catalog')).json.plugins[0].version, '2.0.0');
+    const stale = await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true, digest: shown.digest });
+    assert.deepEqual([stale.status, stale.json.code], [409, 'plugin-changed']);
+    assert.ok(!store.list().some((p) => p.id === 'example.formal'), 'nothing installed from a stale confirmation');
+    assert.equal((await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true })).status, 409, 'a fingerprint is required');
+    published = [STYLE];
+    const current = (await call('GET', '/plugins/catalog')).json.plugins[0];
+    const installed = await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true, digest: current.digest });
     assert.equal(installed.json.style, 'example.formal');
     assert.equal(installed.json.plugins.find((p) => p.id === 'example.formal').source, 'catalog');
+    assert.equal(installed.json.plugins.find((p) => p.id === 'example.formal').version, '1.2.0');
     assert.equal((await call('POST', '/plugins/catalog/install', { id: 'example.missing' })).status, 404);
     assert.equal((await call('PUT', '/plugins/style', { id: null })).json.style, null);
     assert.equal((await call('DELETE', '/plugins/example.dev-terms')).json.plugins.length, 1);
     assert.equal((await call('DELETE', '/plugins/example.dev-terms')).status, 404);
-    assert.equal(fetches, 1);
+    assert.equal(fetches, 3, 'one catalog read per opening or refresh, nothing else');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

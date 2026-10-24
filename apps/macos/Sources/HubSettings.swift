@@ -200,7 +200,7 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 130)
             }
-            ToggleRow(title: L10n.text("保留录音 5 分钟"), detail: L10n.text("5 分钟内可在历史里用原录音重试，之后自动删除"),
+            ToggleRow(title: L10n.text("保留录音 5 分钟"), detail: L10n.text("约 5 分钟内可在历史里用原录音重试；退出 App 时删除，异常退出则下次启动时删除"),
                       isOn: model.setting(\.keepAudio24h))
             NoteRow(symbol: "lock", text: L10n.text("录音在本机转写，不上传。只把文字发给整理模型，密码和密钥会先去掉。"), action: nil, perform: nil)
         }

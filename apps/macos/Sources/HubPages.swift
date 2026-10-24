@@ -554,13 +554,13 @@ struct DictionaryPage: View {
             }
         }
         .sheet(isPresented: $adding) {
-            WordEditor(title: L10n.text("新词"), word: "", heardAs: "") { word, heard in
-                Settings.shared.addWord(word, heardAs: heard, source: .manual)
+            WordEditor(title: L10n.text("新词"), word: "", heardAs: "", localOnly: false) { word, heard, localOnly in
+                Settings.shared.addWord(word, heardAs: heard, source: .manual, localOnly: localOnly)
             }
         }
         .sheet(item: $editing) { word in
-            WordEditor(title: L10n.text("编辑"), word: word.word, heardAs: word.heardAs ?? "") { newWord, heard in
-                Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard)
+            WordEditor(title: L10n.text("编辑"), word: word.word, heardAs: word.heardAs ?? "", localOnly: word.localOnly == true) { newWord, heard, localOnly in
+                Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard, localOnly: localOnly)
             }
         }
     }
@@ -624,6 +624,7 @@ private struct WordRow: View {
                 }
             }
             Spacer()
+            if word.localOnly == true { Badge(text: L10n.text("不发给模型"), tint: Theme.warning) }
             Badge(text: word.source == .auto ? L10n.text("自动添加") : L10n.text("手动添加"),
                   tint: word.source == .auto ? Theme.accent : Theme.secondary)
             if hovering {
@@ -644,7 +645,8 @@ private struct WordEditor: View {
     let title: String
     @State var word: String
     @State var heardAs: String
-    let onSave: (String, String?) -> Void
+    @State var localOnly: Bool
+    let onSave: (String, String?, Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -661,11 +663,16 @@ private struct WordEditor: View {
                 Text(L10n.text("识别成这个写法时，会改成上面的词。"))
                     .font(.system(size: 11)).foregroundColor(Theme.tertiary)
             }
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(L10n.text("不发给模型"), isOn: $localOnly).toggleStyle(.checkbox)
+                Text(L10n.text("这个词不会出现在任何模型请求里。填了「常被识别成」时，在本机把它换成上面的写法。"))
+                    .font(.system(size: 11)).foregroundColor(Theme.tertiary).fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Spacer()
                 Button(L10n.text("取消")) { dismiss() }.buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
                 Button(title == L10n.text("新词") ? L10n.text("添加") : L10n.text("保存")) {
-                    onSave(word, heardAs.isEmpty ? nil : heardAs)
+                    onSave(word, heardAs.isEmpty ? nil : heardAs, localOnly)
                     dismiss()
                 }
                 .buttonStyle(PrimaryButtonStyle())

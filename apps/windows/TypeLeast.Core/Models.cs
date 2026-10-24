@@ -178,6 +178,8 @@ public sealed class LearnedWordResult
 public sealed class PluginSummary
 {
     [JsonPropertyName("id")] public string Id { get; set; } = "";
+    /// <summary>Fingerprint of the whole content; sent back when installing what was shown.</summary>
+    [JsonPropertyName("digest")] public string Digest { get; set; } = "";
     [JsonPropertyName("version")] public string Version { get; set; } = "";
     [JsonPropertyName("type")] public string Type { get; set; } = "";
     [JsonPropertyName("name")] public Dictionary<string, string> Name { get; set; } = new();
@@ -230,6 +232,7 @@ public static class PluginMessages
         "plugin-invalid" => L10n.T("这不是有效的插件文件"),
         "plugin-terms-limit" => L10n.T("启用的词库加起来不能超过 10000 个词"),
         "plugin-not-found" => L10n.T("找不到这个插件，请刷新"),
+        "plugin-changed" => L10n.T("插件内容变了，请重新查看后再安装"),
         "market-protocol-unsupported" => L10n.T("插件目录格式不对，可能要更新 TypeLeast"),
         "market-too-large" => L10n.T("插件目录太大，无法读取"),
         "market-offline" => L10n.T("连不上插件目录，请检查网络"),

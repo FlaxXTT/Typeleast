@@ -20,7 +20,7 @@
  */
 import { wordSuggestions } from "./word-suggestions.js";
 import { relevantEntries } from "./dictionary-relevance.js";
-import { fetchCatalog, summarize } from "./plugins.js";
+import { fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
@@ -488,6 +488,8 @@ export class VoicePolishService {
    * @returns {Promise<object>} the same result.
    */
   async recordAndReturn(request, result) {
+    // Entries the user keeps from the model: their heard-as spellings are corrected here.
+    result.text = applyLocalEntries(result.text, localEntriesFrom(request.dictionary));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants));
     result.suggestions = [];
@@ -612,10 +614,17 @@ export class VoicePolishService {
     };
   }
 
-  /** Install a plugin exactly as it appears in the catalog the user is looking at. */
-  async installFromCatalog(id, enable) {
+  /**
+   * Install the catalog plugin the user confirmed: `digest` is the fingerprint of what the
+   * confirmation showed. If the catalog has changed since, nothing is installed and the
+   * user has to look again.
+   */
+  async installFromCatalog(id, enable, digest) {
     const plugin = this.catalog?.plugins.find((entry) => entry.id === id);
     if (!plugin || !this.plugins) throw Object.assign(new Error("not in the catalog"), { code: "plugin-not-found" });
+    if (typeof digest !== "string" || pluginDigest(plugin) !== digest) {
+      throw Object.assign(new Error("the plugin changed after it was shown"), { code: "plugin-changed" });
+    }
     await this.plugins.install(plugin, { enable, source: "catalog" });
     return this.pluginState();
   }
@@ -686,6 +695,35 @@ export function dictionaryFrom(configured, sent) {
     if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
   }
   return entries;
+}
+
+/**
+ * Entries the user marked 「不发给模型」 arrive as {"local": "heard=word"} (or {"local": "word"})
+ * next to the ordinary strings. They never reach a model request; those with a heard-as
+ * spelling become replacements made on this computer.
+ * @returns {Array<[string, string]>} heard-as and correct spellings.
+ */
+export function localEntriesFrom(sent) {
+  const pairs = [];
+  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
+    const text = entry && typeof entry === "object" && typeof entry.local === "string" ? entry.local.trim().slice(0, DICTIONARY_LIMITS.entryLength) : "";
+    const split = text.indexOf("=");
+    if (split <= 0) continue;
+    const heard = text.slice(0, split).trim(), word = text.slice(split + 1).trim();
+    if (heard && word && heard !== word) pairs.push([heard, word]);
+  }
+  return pairs;
+}
+
+/** Replace heard-as spellings: anywhere for Chinese, as whole words (any case) for latin. */
+export function applyLocalEntries(text, pairs) {
+  if (!pairs.length || typeof text !== "string" || !text) return text;
+  let out = text;
+  for (const [heard, word] of pairs) {
+    if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(heard)) out = out.split(heard).join(word);
+    else out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${heard.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "giu"), () => word);
+  }
+  return out;
 }
 
 /**

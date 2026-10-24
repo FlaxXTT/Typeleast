@@ -8,6 +8,8 @@ public sealed class WordEntry
     public string Word { get; set; } = "";
     public string HeardAs { get; set; } = "";
     public string Source { get; set; } = "manual";
+    /// <summary>「不发给模型」: never put into a model request; a heard-as spelling is fixed on this computer.</summary>
+    public bool LocalOnly { get; set; }
     public string ServiceValue => HeardAs.Length == 0 ? Word : HeardAs + "=" + Word;
     public static WordEntry? Parse(string word, string heardAs = "", string source = "manual")
     {

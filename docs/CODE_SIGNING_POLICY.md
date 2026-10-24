@@ -72,11 +72,14 @@ network only in these cases:
 
 - **Speech recognition is local.** Audio is recognized on the computer by the bundled local service and never
   uploaded. Recordings are deleted after recognition, unless the user turns on keeping recordings for retries:
-  they are then stored encrypted on the computer and deleted after five minutes.
+  they are then stored encrypted on the computer and deleted about five minutes later (when the app quits,
+  after the computer wakes, or at the next launch after a crash).
 - **Text cleanup (optional).** If the user enters an API key for a language model provider of their choice
   (for example DeepSeek, OpenAI, Moonshot, Zhipu, Alibaba DashScope, OpenRouter, or a local Ollama), the app sends
   that provider the recognized text and those of the user's dictionary words that the dictation mentions (spelled
-  the same or sounding alike); unrelated dictionary words are not sent. When the user turns on 参考输入框里的内容
+  the same or sounding alike); unrelated dictionary words are not sent. Sound matching reduces what is sent but can
+  misjudge; words the user marks 不发给模型 are never sent (their "recognized as" spelling is corrected on the
+  computer). When the user turns on 参考输入框里的内容
   (off by default), also the text near the cursor and the window title. Values that look like keys or passwords
   are removed first. The provider's own privacy policy applies to that data. Without an API key, nothing is sent.
   获取列表 (list the provider's models) asks the same provider for its model list.

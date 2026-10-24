@@ -164,6 +164,8 @@ struct LocalWord: Codable, Equatable, Identifiable {
     var heardAs: String?
     var source: Source
     var addedAt: Date
+    /// 「不发给模型」: never put into a model request; a heard-as spelling is fixed on this computer.
+    var localOnly: Bool? = nil
 
     /// The string the host stores: "word" or "heard=word".
     var hostEntry: String {
@@ -410,11 +412,15 @@ final class Settings {
         }
     }
 
-    /// Entries in the service's format ("word" or "heard=word"), sent with every dictation.
-    var hostDictionary: [String] { words.map(\.hostEntry) }
+    /// Entries in the service's format ("word" or "heard=word"), sent with every dictation;
+    /// the service passes on only those a dictation mentions.
+    var hostDictionary: [String] { words.filter { $0.localOnly != true }.map(\.hostEntry) }
+
+    /// Entries marked 「不发给模型」, sent to the local service separately and never to a model.
+    var localDictionary: [String] { words.filter { $0.localOnly == true }.map(\.hostEntry) }
 
     @discardableResult
-    func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source) -> Bool {
+    func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source, localOnly: Bool = false) -> Bool {
         let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !w.isEmpty else { return false }
@@ -423,17 +429,18 @@ final class Settings {
         if source == .auto, list.contains(where: { $0.word.caseInsensitiveCompare(w) == .orderedSame }) { return false }
         list.removeAll { $0.word.caseInsensitiveCompare(w) == .orderedSame }
         list.insert(LocalWord(id: UUID().uuidString, word: w, heardAs: (h?.isEmpty ?? true) ? nil : h,
-                              source: source, addedAt: Date()), at: 0)
+                              source: source, addedAt: Date(), localOnly: localOnly ? true : nil), at: 0)
         words = list
         return true
     }
 
-    func updateWord(id: String, word: String, heardAs: String?) {
+    func updateWord(id: String, word: String, heardAs: String?, localOnly: Bool? = nil) {
         var list = words
         guard let index = list.firstIndex(where: { $0.id == id }) else { return }
         list[index].word = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
         list[index].heardAs = (h?.isEmpty ?? true) ? nil : h
+        if let localOnly { list[index].localOnly = localOnly ? true : nil }
         words = list
     }
 

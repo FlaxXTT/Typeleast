@@ -97,7 +97,7 @@ internal sealed class ExtensionsPage : IPage
         {
             UIElement action = plugin.InstalledVersion == plugin.Version
                 ? Theme.Text(L10n.T("已安装"), 12.5, Theme.Grey, wrap: false)
-                : Theme.Primary(plugin.InstalledVersion is null ? L10n.T("安装") : L10n.T("更新到 {0}", plugin.Version), () => Confirm(plugin, true, plugin.InstalledVersion, enable => host.Plugins.InstallFromCatalog(plugin.Id, enable)));
+                : Theme.Primary(plugin.InstalledVersion is null ? L10n.T("安装") : L10n.T("更新到 {0}", plugin.Version), () => Confirm(plugin, true, plugin.InstalledVersion, enable => host.Plugins.InstallFromCatalog(plugin.Id, enable, plugin.Digest)));
             list.Children.Add(Card(plugin, action));
         }
     }
@@ -131,7 +131,7 @@ internal sealed class ExtensionsPage : IPage
     private async System.Threading.Tasks.Task InspectAndConfirm(byte[] file)
     {
         if (await host.Plugins.Inspect(file) is not { } inspection) return;
-        Confirm(inspection.Plugin, false, inspection.InstalledVersion, enable => host.Plugins.InstallFile(file, enable));
+        Confirm(inspection.Plugin, false, inspection.InstalledVersion, enable => host.Plugins.InstallFile(file, enable, inspection.Plugin.Digest));
     }
 
     private void Confirm(PluginSummary plugin, bool fromCatalog, string? installedVersion, Func<bool, System.Threading.Tasks.Task> install)

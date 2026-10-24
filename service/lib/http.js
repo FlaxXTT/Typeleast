@@ -15,7 +15,7 @@ import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
 import { learnedWord } from "./edit-correction.js";
-import { parsePlugin, PLUGIN_LIMITS, summarize } from "./plugins.js";
+import { parsePlugin, pluginDigest, PLUGIN_LIMITS, summarize } from "./plugins.js";
 
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
@@ -85,6 +85,7 @@ function classify(error) {
       return { status: 400, code };
     case "model-busy":
     case "plugin-terms-limit":
+    case "plugin-changed":
       return { status: 409, code };
     case "plugin-not-found":
       return { status: 404, code };
@@ -256,6 +257,8 @@ export function createHandler(options) {
           if (route === "/plugins/inspect") {
             reply(res, 200, { plugin: summarize(parsed.plugin), installedVersion: service.plugins.plugins.get(parsed.plugin.id)?.version ?? null });
           } else {
+            // The file must still be the one the confirmation showed.
+            if (url.searchParams.get("digest") !== pluginDigest(parsed.plugin)) throw Object.assign(new Error("the plugin changed after it was shown"), { code: "plugin-changed" });
             await service.plugins.install(parsed.plugin, { enable: url.searchParams.get("enable") === "1", source: "file" });
             reply(res, 200, service.pluginState());
           }
@@ -264,7 +267,7 @@ export function createHandler(options) {
         if (route === "/plugins/catalog" && req.method === "GET") { reply(res, 200, await service.refreshCatalog()); return; }
         if (route === "/plugins/catalog/install" && req.method === "POST") {
           const body = await jsonBody();
-          reply(res, 200, await service.installFromCatalog(String(body.id ?? ""), body.enable === true));
+          reply(res, 200, await service.installFromCatalog(String(body.id ?? ""), body.enable === true, body.digest));
           return;
         }
         if (route === "/plugins/style" && req.method === "PUT") {

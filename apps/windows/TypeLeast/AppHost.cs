@@ -130,6 +130,7 @@ internal sealed class AppHost : IDictationHost
         started = true;
         _ = Updates.AutoCheck();
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
+        Microsoft.Win32.SystemEvents.PowerModeChanged += PowerModeChanged;
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
         {
@@ -167,6 +168,9 @@ internal sealed class AppHost : IDictationHost
     {
         quitting = true;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= SystemAppearanceChanged;
+        Microsoft.Win32.SystemEvents.PowerModeChanged -= PowerModeChanged;
+        // Retry recordings do not outlive the app.
+        try { RetainedAudio.Prune(Array.Empty<string>()); } catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { }
         idleBar?.Hide();
         onboarding?.Close();
         Cancel();
@@ -191,6 +195,12 @@ internal sealed class AppHost : IDictationHost
     }
 
     private void Raise() { UpdateIdleBar(); Changed?.Invoke(); }
+    /// <summary>Asleep, the regular check did not run: drop the retry recordings that expired meanwhile.</summary>
+    private void PowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == Microsoft.Win32.PowerModes.Resume) app.Dispatcher.InvokeAsync(() => { if (!quitting) PruneAudio(); });
+    }
+
     private void SystemAppearanceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
         => app.Dispatcher.InvokeAsync(() => { if (!quitting && Settings.Appearance == "system") Theme.Apply("system"); });
     private void UpdateIdleBar()

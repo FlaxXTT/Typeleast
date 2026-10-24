@@ -12,6 +12,7 @@
  */
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { redactSecrets } from "./context.js";
 
 export const PLUGIN_FORMAT = "typeleast-plugin";
@@ -132,10 +133,18 @@ export function parsePlugin(text) {
   return validatePlugin(value);
 }
 
+/**
+ * A fingerprint of a plugin's whole checked content. The app sends back the fingerprint of
+ * what it showed, so a confirmation installs exactly that content and nothing newer.
+ */
+export function pluginDigest(plugin) {
+  return createHash("sha256").update(JSON.stringify(plugin)).digest("hex");
+}
+
 /** What the app shows for a plugin: everything a user should see before turning it on. */
 export function summarize(plugin) {
   return {
-    id: plugin.id, version: plugin.version, type: plugin.type, name: plugin.name, description: plugin.description,
+    id: plugin.id, digest: pluginDigest(plugin), version: plugin.version, type: plugin.type, name: plugin.name, description: plugin.description,
     author: plugin.author, license: plugin.license, homepage: plugin.homepage ?? null,
     ...(plugin.type === "dictionary"
       ? { termCount: plugin.terms.length, termsPreview: plugin.terms.slice(0, 30) }

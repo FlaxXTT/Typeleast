@@ -60,8 +60,15 @@ internal sealed class PluginController(ServiceClient client)
         catch (ServiceException e) { Message = PluginMessages.Describe(e); Changed?.Invoke(); return null; }
     }
 
-    public Task InstallFile(byte[] file, bool enable) => Run(() => client.InstallPluginAsync(file, enable));
-    public Task InstallFromCatalog(string id, bool enable) => Run(() => client.InstallCatalogPluginAsync(id, enable));
+    /// <summary>Install exactly what the confirmation showed (its fingerprint); a changed plugin is refused.</summary>
+    public Task InstallFile(byte[] file, bool enable, string digest) => Run(() => client.InstallPluginAsync(file, enable, digest));
+
+    public async Task InstallFromCatalog(string id, bool enable, string digest)
+    {
+        await Run(() => client.InstallCatalogPluginAsync(id, enable, digest));
+        // The catalog changed after the confirmation was shown: show the new content.
+        if (Message == PluginMessages.Describe("plugin-changed")) await OpenMarket();
+    }
     public Task SetEnabled(string id, bool enabled) => Run(() => client.SetPluginEnabledAsync(id, enabled));
     public Task SelectStyle(string? id) => Run(() => client.SelectStyleAsync(id));
     public Task Remove(string id) => Run(() => client.RemovePluginAsync(id));

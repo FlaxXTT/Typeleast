@@ -221,13 +221,16 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("installed plugins decode", plugins.Plugins[0].Id, "example.dev-terms");
     Check("…with their switch and source", plugins.Plugins[0].Enabled == true && plugins.Plugins[0].Source == "catalog" && !plugins.Plugins[0].IsStyle);
     Eq("plugins path", stub.LastPath, "/api/voice-polish/plugins");
-    await client.InstallPluginAsync(System.Text.Encoding.UTF8.GetBytes("{\"format\":\"typeleast-plugin\"}"), enable: true);
-    Eq("install carries the enable switch", stub.LastPath, "/api/voice-polish/plugins?enable=1");
+    await client.InstallPluginAsync(System.Text.Encoding.UTF8.GetBytes("{\"format\":\"typeleast-plugin\"}"), enable: true, digest: "abc");
+    Eq("install carries the switch and the fingerprint of what was shown", stub.LastPath, "/api/voice-polish/plugins?enable=1&digest=abc");
     Eq("…and the file itself as the body", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"format\":\"typeleast-plugin\"}");
     await client.SetPluginEnabledAsync("example.dev-terms", false);
     Eq("a switch is a PUT on the plugin", stub.LastMethod + " " + stub.LastPath, "PUT /api/voice-polish/plugins/example.dev-terms");
     await client.SelectStyleAsync(null);
     Eq("no style is sent as null", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"id\":null}");
+    await client.InstallCatalogPluginAsync("example.formal", false, "def");
+    Eq("a catalog install sends the fingerprint it showed", JsonSerializer.Deserialize<JsonElement>(stub.LastBody).GetProperty("digest").GetString(), "def");
+    Eq("a changed plugin is explained", PluginMessages.Describe("plugin-changed"), L10n.T("插件内容变了，请重新查看后再安装"));
     await client.RemovePluginAsync("example.dev-terms");
     Eq("uninstall is a DELETE", stub.LastMethod, "DELETE");
     stub.Reply = (400, "{\"error\":\"not a valid plugin\",\"code\":\"plugin-invalid\",\"issues\":[]}");
@@ -236,6 +239,12 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     stub.Reply = (200, "{\"ok\":false,\"code\":\"market-offline\",\"source\":null,\"fetchedAt\":null,\"plugins\":[]}");
     var market = await client.GetPluginCatalogAsync();
     Check("an offline market is reported, not an error", !market.Ok && PluginMessages.Describe(market.Code) == L10n.T("连不上插件目录，请检查网络"));
+
+    // Entries marked 「不发给模型」 go to the local service as {"local": entry}, after the ordinary ones.
+    var (marked, markedBytes) = ServiceClient.DictateBody(new byte[] { 1, 2 }, new[] { "DeepSeek" }, new[] { "张为=章伟" });
+    var markedJson = JsonSerializer.Deserialize<JsonElement>(marked.AsSpan(0, markedBytes));
+    Check("ordinary entries first, marked ones as {local}", markedJson[0].GetString() == "DeepSeek" && markedJson[1].GetProperty("local").GetString() == "张为=章伟");
+    Eq("no entries: the body is the WAV", ServiceClient.DictateBody(new byte[] { 1 }, null, new string[0]).DictionaryBytes, 0);
 
     // The service proves it is ours before anything is sent to it.
     Eq("HMAC proof matches the service's (RFC 4231 case 2 key)",
@@ -552,6 +561,9 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 2);
         Eq("legacy heardAs preserved", settings.DictionaryEntries[0].HeardAs, "heard");
         Eq("legacy source is manual", settings.DictionaryEntries[0].Source, "manual");
+        Check("entries saved before 「不发给模型」 existed are sent as before", settings.DictionaryEntries.All(e => !e.LocalOnly));
+        var kept = JsonSerializer.Deserialize<WordEntry>("{\"Word\":\"章伟\",\"HeardAs\":\"张为\",\"LocalOnly\":true}", Json.Options)!;
+        Check("the mark survives saving", kept.LocalOnly && JsonSerializer.Deserialize<WordEntry>(JsonSerializer.Serialize(kept, Json.Options), Json.Options)!.LocalOnly);
         var preview = WordImport.Preview("word,heardAs\nTypeLeast,heard\n\"Product, Name\",wrong\nnew,old\n\"unterminated", settings.DictionaryEntries);
         Eq("CSV duplicates reported", preview.Duplicates, 1); Eq("CSV valid preview", preview.Valid.Count, 2);
         Eq("CSV invalid line reported", preview.InvalidLines.Single(), 5);

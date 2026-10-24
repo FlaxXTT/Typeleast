@@ -223,7 +223,7 @@ internal sealed class SettingsPage : IPage
         AddTab(L10n.T("隐私与权限"),
             Section(L10n.T("隐私与数据"),
                 Theme.SettingRow(L10n.T("历史保留"), Theme.Text(L10n.T("不保存时，上一条结果只留到退出。"), 12, Theme.Grey), Controls.Retention(host)),
-                Theme.SettingRow(L10n.T("保留录音用于重试"), Theme.Text(L10n.T("加密保存 5 分钟，可用来重试，之后自动删除。"), 12, Theme.Grey), Theme.Toggle(s.KeepAudio24h, v => { s.KeepAudio24h = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("保留录音用于重试"), Theme.Text(L10n.T("加密保存约 5 分钟，可用来重试；退出 App 时删除，异常退出则下次启动时删除。"), 12, Theme.Grey), Theme.Toggle(s.KeepAudio24h, v => { s.KeepAudio24h = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("删除全部数据记录"), null, Theme.Secondary(L10n.T("清空历史与活动"), () => { if (MessageBox.Show(L10n.T("删除全部历史、统计和录音？无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory(); }))),
             Section(L10n.T("权限"),
                 Theme.SettingRow(L10n.T("麦克风"), microphoneStatus, Theme.Secondary(L10n.T("打开系统权限"), () => Shell.Open("ms-settings:privacy-microphone"))),

@@ -587,16 +587,19 @@ final class ServiceClient {
     /// dictation; the service keeps no copy, so there is nothing to keep in sync.
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
-                     translateTo: String? = nil, variants: String? = nil, dictionary: [String] = []) throws -> DictateResponse {
+                     translateTo: String? = nil, variants: String? = nil, dictionary: [String] = [],
+                     localOnly: [String] = []) throws -> DictateResponse {
         try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
-                                            translateTo: translateTo, variants: variants, dictionary: dictionary) }
+                                            translateTo: translateTo, variants: variants, dictionary: dictionary, localOnly: localOnly) }
     }
 
     /// The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
-    static func dictateBody(wav: Data, dictionary: [String]) -> (body: Data, dictionaryBytes: Int) {
-        guard !dictionary.isEmpty, let json = try? JSONSerialization.data(withJSONObject: dictionary) else { return (wav, 0) }
+    /// Entries marked 「不发给模型」 go as {"local": entry}; the service never passes those to a model.
+    static func dictateBody(wav: Data, dictionary: [String], localOnly: [String] = []) -> (body: Data, dictionaryBytes: Int) {
+        let entries: [Any] = dictionary + localOnly.map { ["local": $0] }
+        guard !entries.isEmpty, let json = try? JSONSerialization.data(withJSONObject: entries) else { return (wav, 0) }
         return (json + wav, json.count)
     }
 
@@ -621,7 +624,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, dictionary: [String]) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, dictionary: [String], localOnly: [String]) throws -> DictateResponse {
         try withTokenRetry { token in
             var headers: [String: String] = [
                 "content-type": "audio/wav",
@@ -640,7 +643,7 @@ final class ServiceClient {
             if let variants { headers["x-voice-variants"] = variants }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
-            let payload = ServiceClient.dictateBody(wav: wav, dictionary: dictionary)
+            let payload = ServiceClient.dictateBody(wav: wav, dictionary: dictionary, localOnly: localOnly)
             headers["x-voice-dictionary-bytes"] = String(payload.dictionaryBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)
@@ -742,12 +745,14 @@ final class ServiceClient {
         try pluginRequest("POST", "/inspect", body: file, as: PluginInspection.self)
     }
 
-    func installPluginSync(_ file: Data, enable: Bool) throws -> PluginState {
-        try pluginRequest("POST", enable ? "?enable=1" : "", body: file, as: PluginState.self)
+    /// Install the file the confirmation showed; `digest` is its fingerprint from the inspection.
+    func installPluginSync(_ file: Data, enable: Bool, digest: String) throws -> PluginState {
+        try pluginRequest("POST", "?enable=" + (enable ? "1" : "0") + "&digest=" + digest, body: file, as: PluginState.self)
     }
 
-    func installCatalogPluginSync(id: String, enable: Bool) throws -> PluginState {
-        let body = (try? JSONSerialization.data(withJSONObject: ["id": id, "enable": enable])) ?? Data()
+    /// Install the catalog entry the confirmation showed; a changed entry is refused (plugin-changed).
+    func installCatalogPluginSync(id: String, enable: Bool, digest: String) throws -> PluginState {
+        let body = (try? JSONSerialization.data(withJSONObject: ["id": id, "enable": enable, "digest": digest])) ?? Data()
         return try pluginRequest("POST", "/catalog/install", body: body, as: PluginState.self)
     }
 
@@ -810,6 +815,8 @@ struct LLMTestResult: Codable, Equatable {
 /// (installedVersion) or being inspected before install.
 struct PluginSummary: Codable, Equatable, Identifiable {
     var id: String
+    /// Fingerprint of the whole content; sent back when installing what was shown.
+    var digest: String? = nil
     var version: String
     var type: String
     var name: [String: String]

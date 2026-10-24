@@ -52,6 +52,8 @@ final class PluginController: ObservableObject {
 
     func refresh() { run({ try $0.pluginsSync() }) { [weak self] in self?.state = $0 } }
 
+    private func reloadCatalog() { openMarket() }
+
     /// The user opened the market tab or pressed refresh: one catalog read.
     func openMarket() {
         guard !catalogLoading else { return }
@@ -101,9 +103,25 @@ final class PluginController: ObservableObject {
     func confirm(enable: Bool) {
         guard let pending else { return }
         self.pending = nil
-        switch pending.origin {
-        case .file(let data): run({ try $0.installPluginSync(data, enable: enable) }) { [weak self] in self?.installed($0) }
-        case .catalog: run({ try $0.installCatalogPluginSync(id: pending.id, enable: enable) }) { [weak self] in self?.installed($0) }
+        let digest = pending.summary.digest ?? ""
+        let client = self.client
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { () -> PluginState in
+                switch pending.origin {
+                case .file(let data): return try client.installPluginSync(data, enable: enable, digest: digest)
+                case .catalog: return try client.installCatalogPluginSync(id: pending.id, enable: enable, digest: digest)
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                switch result {
+                case .success(let state): self.message = nil; self.installed(state)
+                case .failure(let error):
+                    self.message = PluginController.describe(error)
+                    // The catalog changed after the confirmation was shown: show the new content.
+                    if case .http(_, "plugin-changed", _) = error as? ServiceError, pending.fromCatalog { self.reloadCatalog() }
+                }
+            }
         }
     }
 
@@ -131,6 +149,7 @@ final class PluginController: ObservableObject {
         case "plugin-invalid": return L10n.text("这不是有效的插件文件")
         case "plugin-terms-limit": return L10n.text("启用的词库加起来不能超过 10000 个词")
         case "plugin-not-found": return L10n.text("找不到这个插件，请刷新")
+        case "plugin-changed": return L10n.text("插件内容变了，请重新查看后再安装")
         case "market-protocol-unsupported": return L10n.text("插件目录格式不对，可能要更新 TypeLeast")
         case "market-too-large": return L10n.text("插件目录太大，无法读取")
         case "market-offline": return L10n.text("连不上插件目录，请检查网络")

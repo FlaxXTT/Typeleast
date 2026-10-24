@@ -325,6 +325,10 @@ do {
     let json = some.body.prefix(some.dictionaryBytes)
     checkEq("the dictionary comes first, as JSON", (try? JSONSerialization.jsonObject(with: json)) as? [String], ["DeepSeek", "得普=DeepSeek"])
     checkEq("then the WAV", some.body.suffix(from: some.body.startIndex + some.dictionaryBytes), wav)
+    let marked = ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek"], localOnly: ["张为=章伟"])
+    let markedJSON = (try? JSONSerialization.jsonObject(with: marked.body.prefix(marked.dictionaryBytes))) as? [Any]
+    checkEq("entries kept from the model go as {local: entry}", (markedJSON?.last as? [String: String])?["local"], "张为=章伟")
+    checkEq("…after the ordinary ones", markedJSON?.first as? String, "DeepSeek")
     _ = try client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt", dictionary: ["DeepSeek"])
     checkEq("its length is in the header", state.lastRequest?.header("x-voice-dictionary-bytes"), String(ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek"]).dictionaryBytes))
 } catch {
@@ -1358,13 +1362,17 @@ do {
     checkEq("installed plugins decode", installed.plugins.first?.id, "example.dev-terms")
     checkEq("…with their switch and source", installed.plugins.first?.enabled, true)
     checkEq("plugins request", state.lastRequest?.path, "/api/voice-polish/plugins")
-    _ = try client.installPluginSync(Data(#"{"format":"typeleast-plugin"}"#.utf8), enable: true)
-    checkEq("install carries the enable switch", state.lastRequest?.path, "/api/voice-polish/plugins?enable=1")
+    _ = try client.installPluginSync(Data(#"{"format":"typeleast-plugin"}"#.utf8), enable: true, digest: "abc")
+    checkEq("install carries the switch and the fingerprint of what was shown", state.lastRequest?.path, "/api/voice-polish/plugins?enable=1&digest=abc")
     checkEq("…and the file itself as the body", state.lastRequest.map { String(decoding: $0.body, as: UTF8.self) }, #"{"format":"typeleast-plugin"}"#)
     _ = try client.setPluginEnabledSync(id: "example.dev-terms", enabled: false)
     checkEq("a switch is a PUT on the plugin", state.lastRequest.map { $0.method + " " + $0.path }, "PUT /api/voice-polish/plugins/example.dev-terms")
     _ = try client.selectStyleSync(id: nil)
     checkEq("no style is sent as null", state.lastRequest.map { String(decoding: $0.body, as: UTF8.self) }, #"{"id":null}"#)
+    _ = try client.installCatalogPluginSync(id: "example.formal", enable: false, digest: "def")
+    let sentInstall = state.lastRequest.flatMap { try? JSONSerialization.jsonObject(with: $0.body) as? [String: Any] }
+    checkEq("a catalog install sends the fingerprint it showed", sentInstall?["digest"] as? String, "def")
+    checkEq("a changed plugin is explained", PluginController.describe(code: "plugin-changed"), L10n.text("插件内容变了，请重新查看后再安装"))
     _ = try client.removePluginSync(id: "example.dev-terms")
     checkEq("uninstall is a DELETE", state.lastRequest?.method, "DELETE")
     do { _ = try client.inspectPluginSync(Data("x".utf8)); check("an invalid file is refused", false) }
@@ -1376,6 +1384,22 @@ do {
                               description: ["zh-Hans": "正式。", "en": "Formal."], author: "Example", license: "CC0-1.0", instructions: "正式。")
     checkEq("a style's title follows the interface language", style.title, L10n.language == "en" ? "Formal" : "正式")
 } catch { check("plugin client", false, String(describing: error)) }
+
+// MARK: entries marked 「不发给模型」 stay out of the ordinary dictionary
+do {
+    let saved = UserDefaults.standard.data(forKey: "voice.words.v2")
+    defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.words.v2") } else { UserDefaults.standard.removeObject(forKey: "voice.words.v2") } }
+    let settings = Settings()
+    settings.words = []
+    settings.addWord("章伟", heardAs: "张为", source: .manual, localOnly: true)
+    settings.addWord("DeepSeek", source: .manual)
+    checkEq("ordinary entries are sent for the model", settings.hostDictionary, ["DeepSeek"])
+    checkEq("marked entries only for the local service", settings.localDictionary, ["张为=章伟"])
+    if let id = settings.words.first(where: { $0.word == "章伟" })?.id { settings.updateWord(id: id, word: "章伟", heardAs: "张为", localOnly: false) }
+    checkEq("unmarking puts it back", settings.hostDictionary.sorted(), ["DeepSeek", "张为=章伟"])
+    let old = Data(#"[{"id":"1","word":"Kubernetes","source":"manual","addedAt":0}]"#.utf8)
+    checkEq("entries saved before the mark existed still load", try? JSONDecoder().decode([LocalWord].self, from: old).first?.localOnly, LocalWord?.none?.localOnly)
+}
 
 // MARK: retry recordings are deleted after five minutes
 do {
