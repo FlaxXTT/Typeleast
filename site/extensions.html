@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TypeLeast 扩展 · 词库和风格</title>
-<meta name="description" content="TypeLeast 插件市场：词库教它写对专有名词，风格告诉它按什么格式写。这里也说明如何制作扩展、如何提交到官方目录。">
+<meta name="description" content="TypeLeast 插件市场：词库和风格，制作与提交说明。">
 <meta name="theme-color" content="#ffffff">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="assets/icon.png">
@@ -174,24 +174,24 @@ footer a { color: var(--ink-2); }
 <section class="hero">
   <div class="wrap">
     <p class="eyebrow" data-i18n="hero.eyebrow">扩展</p>
-    <h1 data-i18n="hero.title">让 TypeLeast<br><span class="sheen">更懂你的领域。</span></h1>
-    <p class="lead" data-i18n="hero.lead">词库教它写对专有名词，风格告诉它按什么格式写。插件只是数据，不运行代码，也不会多调用模型。</p>
+    <h1 data-i18n="hero.title"><span class="sheen">词库和风格</span></h1>
+    <p class="lead" data-i18n="hero.lead">让名字写对，格式按你习惯。</p>
     <div class="actions">
-      <a class="btn" href="#market" data-i18n="hero.browse">浏览插件市场</a>
-      <a class="more" href="#make" data-i18n="hero.make">制作自己的扩展</a>
+      <a class="btn" href="#market" data-i18n="hero.browse">浏览插件</a>
+      <a class="more" href="#make" data-i18n="hero.make">制作扩展</a>
     </div>
-    <p class="fine" data-i18n="hero.fine">需要 TypeLeast 1.20 或更新。App 左侧栏「扩展」→「插件市场」里看到的，就是本页列出的同一份官方目录。</p>
+    <p class="fine" data-i18n="hero.fine">需要 TypeLeast 1.20 或更新。</p>
     <div class="kinds">
       <div class="kind">
-        <div class="k" data-i18n="kind.dk">词库 · dictionary</div>
-        <h3 data-i18n="kind.dh">名字，写对。</h3>
-        <p data-i18n="kind.dp">一组术语的正确写法，可选附带受语境限制的读音提示。只有本次话语相关的词，才会随整理请求发给模型。</p>
+        <div class="k" data-i18n="kind.dk">词库</div>
+        <h3 data-i18n="kind.dh">术语写对</h3>
+        <p data-i18n="kind.dp">只发和本句相关的词。</p>
         <div class="eg"><span>Kubernetes</span><span>TypeScript</span><span>GitHub</span><span>Node.js</span></div>
       </div>
       <div class="kind">
-        <div class="k" data-i18n="kind.sk">风格 · style</div>
-        <h3 data-i18n="kind.sh">格式，照你的习惯。</h3>
-        <p data-i18n="kind.sp">一段写法和格式说明，附加在自然整理和精简整理上。同时只用一个风格，可以随时切换或关闭。</p>
+        <div class="k" data-i18n="kind.sk">风格</div>
+        <h3 data-i18n="kind.sh">固定格式</h3>
+        <p data-i18n="kind.sp">同时只用一个风格。</p>
         <div class="eg"><span data-i18n="kind.s1">正式书面语</span><span data-i18n="kind.s2">工作邮件</span><span data-i18n="kind.s3">编号列表</span></div>
       </div>
     </div>
@@ -201,8 +201,8 @@ footer a { color: var(--ink-2); }
 <section id="market">
   <div class="wrap">
     <p class="eyebrow" data-i18n="market.eyebrow">插件市场</p>
-    <h2 data-i18n="market.title">官方目录，人工审核。</h2>
-    <p class="lead" data-i18n="market.lead">App 和本页读的是同一个文件。这里能看到的插件，在 App 的「插件市场」里都能一键安装。</p>
+    <h2 data-i18n="market.title">官方插件</h2>
+    <p class="lead" data-i18n="market.lead">与 App 内插件市场相同。</p>
     <div class="bar">
       <div class="tabs" role="tablist" aria-label="插件类型" data-i18n-aria="market.tabs">
         <button role="tab" aria-selected="true" data-filter="all" data-i18n="market.all">全部</button>
@@ -212,96 +212,88 @@ footer a { color: var(--ink-2); }
       <span class="source" id="source"></span>
     </div>
     <div class="grid" id="grid" aria-live="polite"></div>
-    <div class="state" id="state" data-i18n="market.loading">正在读取插件目录…</div>
+    <div class="state" id="state" data-i18n="market.loading">正在读取…</div>
     <div class="steps">
-      <div class="step"><h4 data-i18n="inst.1h">打开「扩展」</h4><p data-i18n="inst.1p">在 TypeLeast 左侧栏点「扩展」，切到「插件市场」。目录只在打开或刷新时读取一次。</p></div>
-      <div class="step"><h4 data-i18n="inst.2h">看清楚再装</h4><p data-i18n="inst.2p">安装前会显示作者、版本、许可、全部内容和数据去向。可以选「仅安装」或「安装并启用」。</p></div>
-      <div class="step"><h4 data-i18n="inst.3h">按需开关</h4><p data-i18n="inst.3p">词库在「已安装」里逐个开关；风格在左侧栏整理档位下方选择，同时只用一个。</p></div>
+      <div class="step"><h4 data-i18n="inst.1h">打开扩展</h4><p data-i18n="inst.1p">左侧栏 → 扩展 → 插件市场。</p></div>
+      <div class="step"><h4 data-i18n="inst.2h">确认后安装</h4><p data-i18n="inst.2p">安装前显示全部内容。</p></div>
+      <div class="step"><h4 data-i18n="inst.3h">按需开关</h4><p data-i18n="inst.3p">随时启用或停用。</p></div>
     </div>
-    <p class="fine" style="margin-top:16px" data-i18n="market.file">也可以下载插件文件，在 App 的「扩展」里点「导入插件文件…」安装。从文件导入的插件会标为「本地导入，未审核」。</p>
+    <p class="fine" style="margin-top:16px" data-i18n="market.file">也可下载文件，在 App 里「导入插件文件…」。</p>
   </div>
 </section>
 
 <section id="make">
   <div class="wrap">
     <p class="eyebrow" data-i18n="make.eyebrow">制作扩展</p>
-    <h2 data-i18n="make.title">一个 JSON 文件，就是一个扩展。</h2>
-    <p class="lead" data-i18n="make.lead">不用写代码。用任何文本编辑器写好，先在自己的 App 里试装，满意了再提交到官方目录。</p>
+    <h2 data-i18n="make.title">一个 JSON 文件</h2>
+    <p class="lead" data-i18n="make.lead">不用写代码。</p>
     <div class="doc">
       <div>
-        <h3 data-i18n="make.stepsH">五步做好</h3>
+        <h3 data-i18n="make.stepsH">步骤</h3>
         <ol>
-          <li data-i18n="make.s1"><strong>选类型，起 id。</strong>词库还是风格？id 写成 <code>发布者.名字</code>，例如 <code>yourname.web-terms</code>。</li>
-          <li data-i18n="make.s2"><strong>复制下面的模板。</strong>填好中英文名字和说明、作者、许可。</li>
-          <li data-i18n="make.s3"><strong>写内容。</strong>词库写 <code>terms</code>（需要时加 <code>aliases</code>）；风格写 <code>instructions</code>。</li>
-          <li data-i18n="make.s4"><strong>保存为 <code>&lt;id&gt;.typeleast-plugin</code>。</strong>UTF-8 编码，最大 256 KiB。</li>
-          <li data-i18n="make.s5"><strong>在 App 里试装。</strong>「扩展」→「导入插件文件…」，看安装前的预览，再实际听写几句，确认效果。</li>
+          <li data-i18n="make.s1">选类型：词库或风格。</li>
+          <li data-i18n="make.s2">复制模板，填写信息。</li>
+          <li data-i18n="make.s3">写词条或风格说明。</li>
+          <li data-i18n="make.s4">存为 <code>&lt;id&gt;.typeleast-plugin</code>。</li>
+          <li data-i18n="make.s5">在 App 里导入试用。</li>
         </ol>
       </div>
 
       <div>
         <h3 data-i18n="make.tplH">模板</h3>
         <div class="two">
-          <div class="code"><div class="name" data-i18n="make.tplDict">词库（第 2 版，带读音提示）</div><button class="copy" type="button" data-copy="dict" data-i18n="make.copy">复制</button><pre><code id="tpl-dict"></code></pre></div>
+          <div class="code"><div class="name" data-i18n="make.tplDict">词库</div><button class="copy" type="button" data-copy="dict" data-i18n="make.copy">复制</button><pre><code id="tpl-dict"></code></pre></div>
           <div class="code"><div class="name" data-i18n="make.tplStyle">风格</div><button class="copy" type="button" data-copy="style" data-i18n="make.copy">复制</button><pre><code id="tpl-style"></code></pre></div>
         </div>
-        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">两个模板都能通过 App 的检查。不需要读音提示时，把词库的 <code>formatVersion</code> 写成 <code>1</code> 并删掉 <code>aliases</code>。</p>
+        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">不要读音提示时，删掉 <code>aliases</code>，<code>formatVersion</code> 写 <code>1</code>。</p>
       </div>
 
       <div>
-        <h3 data-i18n="make.fieldsH">字段规则</h3>
-        <p data-i18n="make.fieldsP">不接受未知字段；超过限制会被直接拒绝，不会截断。</p>
+        <h3 data-i18n="make.fieldsH">主要字段</h3>
         <div class="table"><table>
           <thead><tr><th data-i18n="tbl.field">字段</th><th data-i18n="tbl.rule">规则</th></tr></thead>
           <tbody>
-            <tr><td><code>format</code> / <code>formatVersion</code></td><td data-i18n="tbl.format">固定写 <code>"typeleast-plugin"</code>；版本为 <code>1</code>，或带读音提示的词库用 <code>2</code>。</td></tr>
-            <tr><td><code>id</code></td><td data-i18n="tbl.id"><code>发布者.名字</code>，小写字母、数字和连字符，每段 1–32 个字符。官方目录里的文件名必须是 <code>&lt;id&gt;.typeleast-plugin</code>。</td></tr>
-            <tr><td><code>version</code></td><td data-i18n="tbl.version"><code>主.次.修订</code>，如 <code>1.2.0</code>，不带前导零。每次更新都要调大。</td></tr>
-            <tr><td><code>type</code></td><td data-i18n="tbl.type"><code>"dictionary"</code>（词库）或 <code>"style"</code>（风格）。</td></tr>
-            <tr><td><code>name</code> / <code>description</code></td><td data-i18n="tbl.name">都要有 <code>zh-Hans</code> 和 <code>en</code> 两种语言。名字最多 40 字，说明最多 200 字，都只能一行。</td></tr>
-            <tr><td><code>author</code></td><td data-i18n="tbl.author">显示名，最多 60 字。</td></tr>
-            <tr><td><code>license</code></td><td data-i18n="tbl.license">SPDX 标识，如 <code>CC0-1.0</code>、<code>MIT</code>、<code>CC-BY-4.0</code>，或 <code>LicenseRef-…</code>。</td></tr>
-            <tr><td><code>homepage</code></td><td data-i18n="tbl.homepage">可选，只接受 <code>https://</code> 开头的地址，最多 200 字符。</td></tr>
-            <tr><td><code>terms</code></td><td data-i18n="tbl.terms">词库专用。1–2000 个，每个最多 120 字，不分大小写不能重复。只写正确写法，不能写「听成=写法」。看起来像密钥的内容会被拒绝。</td></tr>
-            <tr><td><code>aliases</code></td><td data-i18n="tbl.aliases">仅第 2 版词库，可选，最多 200 条。每条有 <code>heard</code>（被听错的写法，最多 80 字）、<code>term</code>（必须和 <code>terms</code> 里某一项完全一致）、<code>cues</code>（1–8 个语境词），可选 <code>blockers</code>（最多 8 个排除词）。语境词每个最多 40 字。</td></tr>
-            <tr><td><code>instructions</code></td><td data-i18n="tbl.instructions">风格专用。非空纯文本，最多 8 KiB。</td></tr>
+            <tr><td><code>id</code></td><td data-i18n="tbl.id">发布者.名字，小写</td></tr>
+            <tr><td><code>version</code></td><td data-i18n="tbl.version">如 1.0.0，更新时调大</td></tr>
+            <tr><td><code>name</code> / <code>description</code></td><td data-i18n="tbl.name">中英文都要写</td></tr>
+            <tr><td><code>license</code></td><td data-i18n="tbl.license">如 CC0-1.0、MIT</td></tr>
+            <tr><td><code>terms</code></td><td data-i18n="tbl.terms">最多 2000 个词</td></tr>
+            <tr><td><code>aliases</code></td><td data-i18n="tbl.aliases">可选，读音提示</td></tr>
+            <tr><td><code>instructions</code></td><td data-i18n="tbl.instructions">风格说明，最多 8 KiB</td></tr>
           </tbody>
         </table></div>
+        <p class="fine" style="margin-top:10px" data-i18n="make.fieldsFine">完整规则见<a data-link="spec" href="#">插件规范</a>。</p>
       </div>
 
       <div class="two">
         <div>
-          <h3 data-i18n="make.dictTipsH">写词库的要点</h3>
+          <h3 data-i18n="make.dictTipsH">词库要点</h3>
           <ul>
-            <li data-i18n="make.dt1">只收真实、常用、容易被识别错的写法。普通词不用放。</li>
-            <li data-i18n="make.dt2">大小写按官方写法：<code>GitHub</code>、<code>macOS</code>、<code>Node.js</code>。</li>
-            <li data-i18n="make.dt3">读音提示只是候选：当前这句话里出现 <code>heard</code>，同一句还出现某个 <code>cues</code>，且没有 <code>blockers</code> 时，才会提示模型。</li>
-            <li data-i18n="make.dt4">语境词要具体。和普通英语词同形的专名（如 <code>cloud</code> 和 <code>Claude</code>），要用 <code>blockers</code> 排除普通用法，或干脆不加提示。</li>
-            <li data-i18n="make.dt5">用户自己的词典永远优先；所有启用的词库合计最多 10000 个词、1000 条读音提示。</li>
+            <li data-i18n="make.dt1">只收易错的专有名词。</li>
+            <li data-i18n="make.dt2">大小写按官方写法。</li>
+            <li data-i18n="make.dt3">读音提示要配语境词。</li>
           </ul>
         </div>
         <div>
-          <h3 data-i18n="make.styleTipsH">写风格的要点</h3>
+          <h3 data-i18n="make.styleTipsH">风格要点</h3>
           <ul>
-            <li data-i18n="make.st1">只写写法和格式：语气、段落、列表、标点、称呼。</li>
-            <li data-i18n="make.st2">越短越好。选中后，每次自然整理和精简整理请求都会带上这段说明。</li>
-            <li data-i18n="make.st3">风格不能添加事实、删掉说话内容或改变输出格式；整理结果仍会经过原有的事实校验，不通过就退回原来的结果。</li>
-            <li data-i18n="make.st4">不要求输出链接、命令、联系方式或用户数据，也不要求忽略原有规则。</li>
-            <li data-i18n="make.st5">翻译和提示词 Beta 不使用风格。</li>
+            <li data-i18n="make.st1">只写格式和语气。</li>
+            <li data-i18n="make.st2">越短越好。</li>
+            <li data-i18n="make.st3">不能要求输出链接或数据。</li>
           </ul>
         </div>
       </div>
 
       <div>
-        <h3 data-i18n="make.dataH">发给模型的是什么</h3>
+        <h3 data-i18n="make.dataH">发给模型的内容</h3>
         <div class="table"><table>
-          <thead><tr><th data-i18n="data.kind">类型</th><th data-i18n="data.sent">随整理请求发送</th><th data-i18n="data.cost">额外费用</th></tr></thead>
+          <thead><tr><th data-i18n="data.kind">类型</th><th data-i18n="data.sent">发送内容</th><th data-i18n="data.cost">额外费用</th></tr></thead>
           <tbody>
-            <tr><td data-i18n="data.dict">词库</td><td data-i18n="data.dictSent">只有和本次话语相关的术语和读音提示；无关的留在本机。</td><td data-i18n="data.dictCost">不多调用模型。</td></tr>
-            <tr><td data-i18n="data.style">风格</td><td data-i18n="data.styleSent">选中后，整段说明随每次自然整理、精简整理请求发送。</td><td data-i18n="data.styleCost">不多调用模型；每次请求多一些 token。</td></tr>
+            <tr><td data-i18n="data.dict">词库</td><td data-i18n="data.dictSent">只发相关词条</td><td data-i18n="data.dictCost">不额外调用</td></tr>
+            <tr><td data-i18n="data.style">风格</td><td data-i18n="data.styleSent">每次整理都发</td><td data-i18n="data.styleCost">略增 token</td></tr>
           </tbody>
         </table></div>
-        <p class="note" data-i18n="make.dataNote"><strong>插件不运行代码。</strong>它不能联网、不能读文件，也不改变本机的语音识别；只是给整理模型多一些写法上的参考。</p>
+        <p class="note" data-i18n="make.dataNote"><strong>插件不运行代码。</strong></p>
       </div>
     </div>
   </div>
@@ -310,33 +302,32 @@ footer a { color: var(--ink-2); }
 <section id="submit">
   <div class="wrap">
     <p class="eyebrow" data-i18n="submit.eyebrow">提交扩展</p>
-    <h2 data-i18n="submit.title">放进官方目录，<br><span class="sheen">让更多人用上。</span></h2>
-    <p class="lead" data-i18n="submit.lead">每个提交都由维护者人工审核。合并后官网自动部署，几分钟内就会出现在所有人的插件市场里。</p>
+    <h2 data-i18n="submit.title">收录到<span class="sheen">官方目录</span></h2>
+    <p class="lead" data-i18n="submit.lead">人工审核后上线。</p>
     <div class="doc">
       <div class="two">
         <div>
-          <h3 data-i18n="submit.reqH">提交要求</h3>
+          <h3 data-i18n="submit.reqH">要求</h3>
           <ul class="checks">
-            <li data-i18n="submit.r1">文件能通过检查：在仓库根目录运行 <code>node market/build-catalog.mjs</code> 不报错。</li>
-            <li data-i18n="submit.r2">中英文名字和说明齐全，作者和许可写清楚；许可必须允许再分发。</li>
-            <li data-i18n="submit.r3">一个插件只做一件事，名字和说明如实描述内容。</li>
-            <li data-i18n="submit.r4">不含人名、内部项目名、联系方式、密钥或任何不该公开的内容。</li>
-            <li data-i18n="submit.r5">词库：词是真实、常用的写法；读音提示有依据，语境词足够具体。</li>
-            <li data-i18n="submit.r6">风格：只涉及写法和格式；不要求输出链接、命令、联系方式或用户数据，不要求忽略原有规则。</li>
-            <li data-i18n="submit.r7">更新已收录的插件时，调大 <code>version</code>。</li>
+            <li data-i18n="submit.r1">通过检查脚本。</li>
+            <li data-i18n="submit.r2">中英文名称齐全。</li>
+            <li data-i18n="submit.r3">许可允许再分发。</li>
+            <li data-i18n="submit.r4">不含隐私或密钥。</li>
+            <li data-i18n="submit.r5">一个插件一个用途。</li>
+            <li data-i18n="submit.r6">更新时调大版本号。</li>
           </ul>
         </div>
         <div>
-          <h3 data-i18n="submit.howH">提交方式</h3>
+          <h3 data-i18n="submit.howH">流程</h3>
           <ol>
-            <li data-i18n="submit.h1">Fork <a data-link="repo" href="#">GitHub 仓库</a>。</li>
-            <li data-i18n="submit.h2">把文件放进 <code>market/plugins/</code>，文件名用插件的 <code>id</code>。</li>
-            <li data-i18n="submit.h3">在仓库根目录运行 <code>node market/build-catalog.mjs</code>，它会检查文件并重新生成 <code>catalog.json</code>。</li>
-            <li data-i18n="submit.h4">开一个 PR，写明用途、内容来源和许可。</li>
-            <li data-i18n="submit.h5">维护者审阅后合并；官网部署完成，插件就会出现在 App 的插件市场里。</li>
+            <li data-i18n="submit.h1">Fork <a data-link="repo" href="#">仓库</a>。</li>
+            <li data-i18n="submit.h2">放入 <code>market/plugins/</code>。</li>
+            <li data-i18n="submit.h3">运行 <code>node market/build-catalog.mjs</code>。</li>
+            <li data-i18n="submit.h4">提交 PR。</li>
+            <li data-i18n="submit.h5">审核后上线。</li>
           </ol>
           <div class="actions" style="margin-top:20px">
-            <a class="btn" data-link="market" href="#" data-i18n="submit.go">在 GitHub 上提交</a>
+            <a class="btn" data-link="market" href="#" data-i18n="submit.go">去 GitHub 提交</a>
             <a class="more" data-link="marketReadme" href="#" data-i18n="submit.readme">提交说明</a>
             <a class="more" data-link="spec" href="#" data-i18n="submit.spec">完整规范</a>
           </div>
@@ -344,24 +335,24 @@ footer a { color: var(--ink-2); }
       </div>
       <div class="upload">
         <div>
-          <h3><span data-i18n="upload.h">在官网直接上传</span><span class="soon" data-i18n="upload.soon">即将开放</span></h3>
-          <p data-i18n="upload.p">以后可以在这里直接选择插件文件提交审核。在此之前，请通过 GitHub 提交。</p>
+          <h3><span data-i18n="upload.h">官网上传</span><span class="soon" data-i18n="upload.soon">即将开放</span></h3>
+          <p data-i18n="upload.p">暂请通过 GitHub 提交。</p>
         </div>
         <button class="btn" type="button" disabled data-i18n="upload.btn">上传插件</button>
       </div>
     </div>
     <div class="faq">
-      <div><h4 data-i18n="faq.1h">插件安全吗？</h4><p data-i18n="faq.1p">插件只是数据，不运行代码。安装前会显示全部内容；官方目录里的插件经过人工审核，从文件导入的会标为未审核。</p></div>
-      <div><h4 data-i18n="faq.2h">会多花钱吗？</h4><p data-i18n="faq.2p">不会多调用模型。风格说明会让每次整理请求多一些 token；词库只发送本次相关的词。</p></div>
-      <div><h4 data-i18n="faq.3h">为什么我的 App 里没有插件市场？</h4><p data-i18n="faq.3p">插件从 TypeLeast 1.20 开始支持。请到首页下载最新版本。</p></div>
-      <div><h4 data-i18n="faq.4h">可以只给自己用吗？</h4><p data-i18n="faq.4p">可以。做好的文件直接在 App 里「导入插件文件…」，不用提交。也可以发给同事，他们同样从文件导入。</p></div>
+      <div><h4 data-i18n="faq.1h">安全吗？</h4><p data-i18n="faq.1p">只是数据，不运行代码。</p></div>
+      <div><h4 data-i18n="faq.2h">会多花钱吗？</h4><p data-i18n="faq.2p">不额外调用模型。</p></div>
+      <div><h4 data-i18n="faq.3h">看不到插件市场？</h4><p data-i18n="faq.3p">请升级到 1.20。</p></div>
+      <div><h4 data-i18n="faq.4h">只给自己用？</h4><p data-i18n="faq.4p">直接导入文件即可。</p></div>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <span data-i18n="foot.left">© <span data-year></span> TypeLeast · 免费软件，以 <a data-link="license" href="#">GPL-3.0</a> 许可开源</span>
+    <span data-i18n="foot.left">© <span data-year></span> TypeLeast · <a data-link="license" href="#">GPL-3.0</a> 开源</span>
     <span><a href="index.html" data-i18n="foot.home">首页</a> · <a data-link="repo" href="#">GitHub</a> · <a data-link="spec" href="#" data-i18n="foot.spec">插件规范</a> · <a data-link="releases" href="#" data-i18n="foot.releases">所有版本</a></span>
   </div>
 </footer>
@@ -394,91 +385,82 @@ const TEMPLATES = {
 
 const EN = {
   title: "TypeLeast Extensions · Dictionary packs and styles",
-  description: "The TypeLeast plugin market: dictionary packs teach it the right spelling for names, styles tell it how to format. How to make an extension and submit it to the official catalog.",
+  description: "The TypeLeast plugin market: dictionary packs and styles, plus how to make and submit one.",
   "nav.features": "Features", "nav.ext": "Extensions", "nav.make": "Make", "nav.submit": "Submit", "nav.download": "Download",
   "hero.eyebrow": "Extensions",
-  "hero.title": "Teach TypeLeast<br><span class=\"sheen\">your field.</span>",
-  "hero.lead": "Dictionary packs teach it the right spelling for names. Styles tell it how to format. Plugins are data only: they run no code and add no model calls.",
-  "hero.browse": "Browse the plugin market", "hero.make": "Make your own",
-  "hero.fine": "Needs TypeLeast 1.20 or later. The Plugin market under Extensions in the app shows the same official catalog as this page.",
-  "kind.dk": "Dictionary pack · dictionary", "kind.dh": "Names, spelled right.",
-  "kind.dp": "Correct spellings for a set of terms, optionally with context-limited pronunciation hints. Only terms relevant to what you just said go to the model with the cleanup request.",
-  "kind.sk": "Style · style", "kind.sh": "Formatting, your way.",
-  "kind.sp": "A short note on wording and layout, added to Natural and Concise cleanup. One style at a time; switch or turn it off whenever you like.",
+  "hero.title": "<span class=\"sheen\">Dictionary packs and styles</span>",
+  "hero.lead": "Right names, your format.",
+  "hero.browse": "Browse plugins", "hero.make": "Make one",
+  "hero.fine": "Needs TypeLeast 1.20 or later.",
+  "kind.dk": "Dictionary pack", "kind.dh": "Terms spelled right",
+  "kind.dp": "Only relevant terms are sent.",
+  "kind.sk": "Style", "kind.sh": "Set formats",
+  "kind.sp": "One style at a time.",
   "kind.s1": "Formal writing", "kind.s2": "Work email", "kind.s3": "Numbered lists",
-  "market.eyebrow": "Plugin market", "market.title": "One official catalog. Reviewed by hand.",
-  "market.lead": "The app and this page read the same file. Every plugin you see here installs in one click from the app's Plugin market.",
+  "market.eyebrow": "Plugin market", "market.title": "Official plugins",
+  "market.lead": "Same as the app's Plugin market.",
   "market.tabs": "Plugin type", "market.all": "All", "market.dict": "Dictionary packs", "market.style": "Styles",
-  "market.loading": "Reading the plugin catalog…",
-  "market.file": "You can also download a plugin file and install it with Import plugin file… under Extensions. Plugins imported from a file are marked Imported, not reviewed.",
-  "inst.1h": "Open Extensions", "inst.1p": "Click Extensions in the TypeLeast sidebar and switch to Plugin market. The catalog is read once, when you open or refresh it.",
-  "inst.2h": "Look before you install", "inst.2p": "Before installing you see the author, version, license, the full contents and where the data goes. Choose Install only or Install and turn on.",
-  "inst.3h": "Turn on what you need", "inst.3p": "Turn dictionary packs on or off under Installed. Pick a style below the cleanup modes in the sidebar; one at a time.",
-  "make.eyebrow": "Make an extension", "make.title": "One JSON file is one extension.",
-  "make.lead": "No code needed. Write it in any text editor, try it in your own app, and submit it to the official catalog when you're happy with it.",
-  "make.stepsH": "Five steps",
-  "make.s1": "<strong>Pick a type and an id.</strong> Dictionary pack or style? Write the id as <code>publisher.name</code>, for example <code>yourname.web-terms</code>.",
-  "make.s2": "<strong>Copy a template below.</strong> Fill in the Chinese and English name and description, the author and the license.",
-  "make.s3": "<strong>Add the content.</strong> A dictionary pack has <code>terms</code> (plus <code>aliases</code> if needed); a style has <code>instructions</code>.",
-  "make.s4": "<strong>Save it as <code>&lt;id&gt;.typeleast-plugin</code>.</strong> UTF-8, at most 256 KiB.",
-  "make.s5": "<strong>Try it in the app.</strong> Extensions → Import plugin file…, check the preview, then dictate a few sentences to see the effect.",
-  "make.tplH": "Templates", "make.tplDict": "Dictionary pack (version 2, with pronunciation hints)", "make.tplStyle": "Style", "make.copy": "Copy",
-  "make.tplNote": "Both templates pass the app's check. Without pronunciation hints, set the pack's <code>formatVersion</code> to <code>1</code> and remove <code>aliases</code>.",
-  "make.fieldsH": "Field rules", "make.fieldsP": "Unknown fields are refused, and anything over a limit is rejected, never trimmed.",
+  "market.loading": "Loading…",
+  "market.file": "Or download the file and use Import plugin file… in the app.",
+  "inst.1h": "Open Extensions", "inst.1p": "Sidebar → Extensions → Plugin market.",
+  "inst.2h": "Check, then install", "inst.2p": "You see everything first.",
+  "inst.3h": "Turn on or off", "inst.3p": "Any time.",
+  "make.eyebrow": "Make an extension", "make.title": "One JSON file",
+  "make.lead": "No code needed.",
+  "make.stepsH": "Steps",
+  "make.s1": "Pick a type: dictionary pack or style.",
+  "make.s2": "Copy a template and fill it in.",
+  "make.s3": "Add terms or style instructions.",
+  "make.s4": "Save as <code>&lt;id&gt;.typeleast-plugin</code>.",
+  "make.s5": "Import it in the app to try.",
+  "make.tplH": "Templates", "make.tplDict": "Dictionary pack", "make.tplStyle": "Style", "make.copy": "Copy",
+  "make.tplNote": "Without hints, remove <code>aliases</code> and set <code>formatVersion</code> to <code>1</code>.",
+  "make.fieldsH": "Key fields", "make.fieldsFine": "Full rules in the <a data-link=\"spec\" href=\"#\">plugin specification</a>.",
   "tbl.field": "Field", "tbl.rule": "Rule",
-  "tbl.format": "Always <code>\"typeleast-plugin\"</code>; version <code>1</code>, or <code>2</code> for a dictionary pack with pronunciation hints.",
-  "tbl.id": "<code>publisher.name</code>: lowercase letters, digits and hyphens, 1–32 characters per part. In the official catalog the file name must be <code>&lt;id&gt;.typeleast-plugin</code>.",
-  "tbl.version": "<code>major.minor.patch</code>, such as <code>1.2.0</code>, with no leading zeros. Raise it on every update.",
-  "tbl.type": "<code>\"dictionary\"</code> or <code>\"style\"</code>.",
-  "tbl.name": "Both need <code>zh-Hans</code> and <code>en</code>. Name up to 40 characters, description up to 200, each on one line.",
-  "tbl.author": "Display name, up to 60 characters.",
-  "tbl.license": "An SPDX identifier such as <code>CC0-1.0</code>, <code>MIT</code> or <code>CC-BY-4.0</code>, or <code>LicenseRef-…</code>.",
-  "tbl.homepage": "Optional. <code>https://</code> addresses only, up to 200 characters.",
-  "tbl.terms": "Dictionary packs only. 1–2000 terms, each up to 120 characters, no duplicates ignoring case. Correct spellings only, never \"heard=written\" rules. Anything that looks like a secret is refused.",
-  "tbl.aliases": "Version 2 dictionary packs only, optional, up to 200. Each has <code>heard</code> (the misheard form, up to 80 characters), <code>term</code> (exactly one of the <code>terms</code>), <code>cues</code> (1–8 context words) and optional <code>blockers</code> (up to 8 words that rule it out). Each context word is up to 40 characters.",
-  "tbl.instructions": "Styles only. Plain text, not empty, up to 8 KiB.",
-  "make.dictTipsH": "Writing a dictionary pack",
-  "make.dt1": "Include real, common spellings that speech recognition gets wrong. Ordinary words don't need to be there.",
-  "make.dt2": "Use the official capitalisation: <code>GitHub</code>, <code>macOS</code>, <code>Node.js</code>.",
-  "make.dt3": "Pronunciation hints are only candidates: the model is told about one only when <code>heard</code> appears in what was just said, one of its <code>cues</code> appears in the same sentence, and none of its <code>blockers</code> does.",
-  "make.dt4": "Make context words specific. For a name that is also an everyday English word (<code>cloud</code> and <code>Claude</code>), use <code>blockers</code> to rule out the everyday meaning, or leave the hint out.",
-  "make.dt5": "The user's own dictionary always wins. All enabled packs together hold at most 10,000 terms and 1,000 pronunciation hints.",
-  "make.styleTipsH": "Writing a style",
-  "make.st1": "Cover wording and layout only: tone, paragraphs, lists, punctuation, forms of address.",
-  "make.st2": "Keep it short. When selected, it goes with every Natural and Concise cleanup request.",
-  "make.st3": "A style can't add facts, drop what was said or change the output format. The result still goes through the usual fact check and falls back if it fails.",
-  "make.st4": "Don't ask for links, commands, contact details or user data, and don't ask the model to ignore its rules.",
-  "make.st5": "Translation and Prompt Beta don't use styles.",
-  "make.dataH": "What goes to the model",
-  "data.kind": "Type", "data.sent": "Sent with the cleanup request", "data.cost": "Extra cost",
-  "data.dict": "Dictionary pack", "data.dictSent": "Only the terms and hints relevant to what you just said; the rest stays on your computer.", "data.dictCost": "No extra model calls.",
-  "data.style": "Style", "data.styleSent": "When selected, the whole note goes with every Natural and Concise cleanup request.", "data.styleCost": "No extra model calls; a few more tokens per request.",
-  "make.dataNote": "<strong>Plugins run no code.</strong> They can't reach the network, read files or change on-device speech recognition; they only give the cleanup model more to go on.",
-  "submit.eyebrow": "Submit an extension", "submit.title": "Put it in the official catalog,<br><span class=\"sheen\">for everyone.</span>",
-  "submit.lead": "Every submission is reviewed by a maintainer. Once merged, the site deploys by itself and the plugin shows up in everyone's Plugin market within minutes.",
+  "tbl.id": "publisher.name, lowercase",
+  "tbl.version": "Like 1.0.0; raise it on updates",
+  "tbl.name": "Chinese and English",
+  "tbl.license": "Like CC0-1.0 or MIT",
+  "tbl.terms": "Up to 2,000 terms",
+  "tbl.aliases": "Optional pronunciation hints",
+  "tbl.instructions": "Style text, up to 8 KiB",
+  "make.dictTipsH": "Dictionary tips",
+  "make.dt1": "Only names that are often misheard.",
+  "make.dt2": "Use official capitalisation.",
+  "make.dt3": "Give each hint context words.",
+  "make.styleTipsH": "Style tips",
+  "make.st1": "Format and tone only.",
+  "make.st2": "Keep it short.",
+  "make.st3": "No links or user data.",
+  "make.dataH": "What the model gets",
+  "data.kind": "Type", "data.sent": "Sent", "data.cost": "Extra cost",
+  "data.dict": "Dictionary pack", "data.dictSent": "Relevant terms only", "data.dictCost": "No extra calls",
+  "data.style": "Style", "data.styleSent": "With every cleanup", "data.styleCost": "A few more tokens",
+  "make.dataNote": "<strong>Plugins run no code.</strong>",
+  "submit.eyebrow": "Submit an extension", "submit.title": "Get into the <span class=\"sheen\">official catalog</span>",
+  "submit.lead": "Reviewed by hand, then published.",
   "submit.reqH": "Requirements",
-  "submit.r1": "The file passes the check: <code>node market/build-catalog.mjs</code> runs without errors from the repository root.",
-  "submit.r2": "Chinese and English name and description, a clear author and license; the license must allow redistribution.",
-  "submit.r3": "One plugin, one purpose, with a name and description that say what it contains.",
-  "submit.r4": "No personal names, internal project names, contact details, secrets or anything else that shouldn't be public.",
-  "submit.r5": "Dictionary packs: real, common spellings; pronunciation hints backed by evidence, with specific context words.",
-  "submit.r6": "Styles: wording and layout only; no links, commands, contact details or user data, and no asking the model to ignore its rules.",
-  "submit.r7": "When updating a plugin already in the catalog, raise <code>version</code>.",
-  "submit.howH": "How to submit",
-  "submit.h1": "Fork the <a data-link=\"repo\" href=\"#\">GitHub repository</a>.",
-  "submit.h2": "Put the file in <code>market/plugins/</code>, named after the plugin's <code>id</code>.",
-  "submit.h3": "From the repository root, run <code>node market/build-catalog.mjs</code>. It checks the file and regenerates <code>catalog.json</code>.",
-  "submit.h4": "Open a pull request that says what it is for, where the content comes from and its license.",
-  "submit.h5": "A maintainer reviews and merges it; once the site deploys, the plugin appears in the app's Plugin market.",
+  "submit.r1": "Passes the check script.",
+  "submit.r2": "Chinese and English names.",
+  "submit.r3": "A license that allows redistribution.",
+  "submit.r4": "No private data or secrets.",
+  "submit.r5": "One purpose per plugin.",
+  "submit.r6": "Raise the version on updates.",
+  "submit.howH": "Steps",
+  "submit.h1": "Fork the <a data-link=\"repo\" href=\"#\">repository</a>.",
+  "submit.h2": "Add it to <code>market/plugins/</code>.",
+  "submit.h3": "Run <code>node market/build-catalog.mjs</code>.",
+  "submit.h4": "Open a pull request.",
+  "submit.h5": "Published after review.",
   "submit.go": "Submit on GitHub", "submit.readme": "Submission guide", "submit.spec": "Full specification",
-  "upload.h": "Upload on this site", "upload.soon": "Coming soon",
-  "upload.p": "Later you will be able to choose a plugin file here and submit it for review. Until then, please submit through GitHub.",
+  "upload.h": "Upload here", "upload.soon": "Coming soon",
+  "upload.p": "For now, submit on GitHub.",
   "upload.btn": "Upload plugin",
-  "faq.1h": "Are plugins safe?", "faq.1p": "Plugins are data and run no code. You see the full contents before installing; plugins in the official catalog are reviewed by hand, and ones imported from a file are marked as not reviewed.",
-  "faq.2h": "Do they cost more?", "faq.2p": "No extra model calls. A style adds a few tokens to each cleanup request; a dictionary pack only sends the terms relevant to what you said.",
-  "faq.3h": "Why is there no Plugin market in my app?", "faq.3p": "Plugins arrived in TypeLeast 1.20. Download the latest version from the home page.",
-  "faq.4h": "Can I keep one to myself?", "faq.4p": "Yes. Install your file with Import plugin file… in the app; no submission needed. Colleagues can import the same file.",
-  "foot.left": "© <span data-year></span> TypeLeast · Free software, open source under <a data-link=\"license\" href=\"#\">GPL-3.0</a>",
+  "faq.1h": "Is it safe?", "faq.1p": "Data only, no code.",
+  "faq.2h": "Does it cost more?", "faq.2p": "No extra model calls.",
+  "faq.3h": "No Plugin market?", "faq.3p": "Update to 1.20.",
+  "faq.4h": "Just for me?", "faq.4p": "Import the file directly.",
+  "foot.left": "© <span data-year></span> TypeLeast · <a data-link=\"license\" href=\"#\">GPL-3.0</a>",
   "foot.home": "Home", "foot.spec": "Plugin specification", "foot.releases": "All releases",
 };
 const ZH = { title: document.title, description: document.querySelector('meta[name="description"]').content };
