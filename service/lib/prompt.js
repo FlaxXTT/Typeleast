@@ -18,7 +18,7 @@ import { CONCISE_PROMPT } from "./prompts/concise.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-25.3-cleanup+concise+beta+translate";
+export const PROMPT_VERSION = "2026-10-25.4-cleanup+concise+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -49,15 +49,17 @@ const CONTEXT_PARTS = [
  * The base prompt knows nothing about a personal dictionary or about the
  * text already in the box being typed into. Keep both separate from its rules.
  *
- * @param {object} input - dictionary entries and field context, if any.
+ * @param {object} input - dictionary entries, pronunciation hints, spellings found in the
+ *   utterance, and field context, if any.
  * @returns {string} the addendum, or an empty string when there is nothing to say.
  */
-export function harnessAddendum({ dictionary, aliases, fieldContext }) {
+export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }) {
   const entries = Array.isArray(dictionary) ? dictionary.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
   const context = fieldContext !== null && typeof fieldContext === "object"
     ? CONTEXT_PARTS.filter(([key]) => typeof fieldContext[key] === "string" && fieldContext[key].trim().length > 0)
     : [];
-  if (entries.length === 0 && context.length === 0 && (!Array.isArray(aliases) || aliases.length === 0)) return "";
+  const spelled = Array.isArray(spellings) ? spellings.filter((item) => item?.spelled && item?.word) : [];
+  if (entries.length === 0 && context.length === 0 && spelled.length === 0 && (!Array.isArray(aliases) || aliases.length === 0)) return "";
   const lines = [HARNESS_ADDENDUM_MARKER];
   if (entries.length > 0) {
     lines.push(
@@ -68,6 +70,10 @@ export function harnessAddendum({ dictionary, aliases, fieldContext }) {
   if (Array.isArray(aliases) && aliases.length > 0) {
     lines.push("Optional pronunciation hints from an enabled terminology plugin. Treat each as a candidate only when the meaning of this utterance supports it. Do not replace an ordinary word just because it sounds similar:");
     for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
+  }
+  if (spelled.length > 0) {
+    lines.push("Letter-by-letter spellings in this utterance. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it:");
+    for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);
   }
   if (context.length > 0) {
     lines.push("The text already in the box being typed into is below. Use it only to choose correct spellings, names and terminology, and to continue in the same style. Never copy it into the output.");
@@ -84,9 +90,9 @@ export function harnessAddendum({ dictionary, aliases, fieldContext }) {
  *   the dictionary and field context the addendum needs.
  * @returns {string} the system prompt.
  */
-export function systemPromptFor({ dictionary, aliases, fieldContext, strength, style } = {}) {
+export function systemPromptFor({ dictionary, aliases, fieldContext, spellings, strength, style } = {}) {
   const base = strength === "concise" ? CONCISE_PROMPT : cleanupSystemPrompt();
-  return base + UTTERANCE_RULES + styleBlock(style) + harnessAddendum({ dictionary, aliases, fieldContext });
+  return base + UTTERANCE_RULES + styleBlock(style) + harnessAddendum({ dictionary, aliases, fieldContext, spellings });
 }
 
 /** Marks a style plugin's instructions, which the user installed and selected. */

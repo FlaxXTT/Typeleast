@@ -21,6 +21,7 @@
 import { wordSuggestions } from "./word-suggestions.js";
 import { relevantEntries } from "./dictionary-relevance.js";
 import { relevantAliases, safePackTerms } from "./term-hints.js";
+import { spelledWords } from "./spelling.js";
 import { fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -182,6 +183,7 @@ export class VoicePolishService {
       dictionary: context.dictionary,
       aliases: context.aliases,
       fieldContext: context.fieldContext ?? null,
+      spellings: context.spellings,
       strength,
       style: this.plugins?.activeStyle()?.instructions ?? null,
     }) + variantInstruction(parseVariants(request.variants));
@@ -294,7 +296,7 @@ export class VoicePolishService {
   async polishTranslate({ request, base, route, started, rawText, target }) {
     const context = await this.buildContext(request, rawText);
     const cleanupSystem = systemPromptFor({
-      dictionary: context.dictionary, aliases: context.aliases,
+      dictionary: context.dictionary, aliases: context.aliases, spellings: context.spellings,
       fieldContext: context.fieldContext ?? null, strength: "prompt", style: null,
     });
     const variants = target === "en" ? variantInstruction(parseVariants(request.variants)) : "";
@@ -323,7 +325,7 @@ export class VoicePolishService {
         const issue = sourceVerdict ? sourceVerdict.reason : `source-output-format:${parsed.failure ?? "unknown"}`;
         this.logger.warn?.("typeleast: source cleanup unusable (%s); translating the transcript directly", issue);
         const direct = await call(directTranslatePrompt(target)
-          + harnessAddendum({ dictionary: context.dictionary, aliases: context.aliases, fieldContext: context.fieldContext ?? null })
+          + harnessAddendum({ dictionary: context.dictionary, aliases: context.aliases, spellings: context.spellings, fieldContext: context.fieldContext ?? null })
           + variants, outboundText, 0.3);
         const attempts = cleanup.attempts + direct.attempts;
         const verdict = validateOutput({ rawText, output: String(direct.text ?? "").trim(), strength: "translate" });
@@ -689,6 +691,8 @@ export class VoicePolishService {
     return {
       dictionary: entries.map(entry => redact ? redactSecrets(entry) : entry),
       aliases,
+      // Found in the outbound text, so a redacted secret cannot return through a hint.
+      spellings: spelledWords(redact ? redactSecrets(rawText) : rawText),
       // The text box being dictated into is the most relevant context there is.
       fieldContext: redactFieldContext(fieldContext, redact),
     };

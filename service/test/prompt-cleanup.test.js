@@ -7,11 +7,12 @@ import { parsePolishOutput } from "../lib/parse-output.js";
 import { inventedFacts } from "../lib/validate.js";
 
 test("cleanup remains general and keeps the output contract", () => {
-  for (const rule of ["# Task", "# Rules", "# Examples", "correction", "numbers", "ordinary word", "subject"]) {
+  for (const rule of ["# Task", "# Rules", "# Examples", "# Check before answering", "correction", "numbers", "ordinary word", "subject", "everyday sense", "letter by letter", "非常非常"]) {
     assert.ok(CLEANUP_PROMPT.includes(rule), rule);
   }
   assert.match(CLEANUP_PROMPT, /"status":"ok"\|"uncertain"/);
-  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 3);
+  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 5);
+  assert.ok(CLEANUP_PROMPT.indexOf("# Examples") < CLEANUP_PROMPT.indexOf("# Check before answering"), "the check comes last");
   for (const specialised of ["Tech Domain", "Python", "杰森", "Claude", "GitHub"]) assert.ok(!CLEANUP_PROMPT.includes(specialised));
 });
 
@@ -31,6 +32,15 @@ test("dictionary and field context ride in a delimited addendum", () => {
   assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd(), "the base prompt and separate rules remain intact");
   assert.match(addendum, /第四批=TypeLeast/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);
+});
+
+test("a letter-by-letter spelling adds a hint only when the utterance has one", () => {
+  const prompt = systemPromptFor({ strength: "prompt", spellings: [{ spelled: "R-O-G", word: "ROG" }] });
+  const [base, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
+  assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd());
+  assert.match(addendum, /"R-O-G" spells "ROG"\./);
+  assert.match(addendum, /where the spelling itself is the subject, keep it/);
+  assert.equal(systemPromptFor({ strength: "prompt", spellings: [] }), cleanupSystemPrompt() + UTTERANCE_RULES);
 });
 
 test("history records the cleanup prompt version", () => {
