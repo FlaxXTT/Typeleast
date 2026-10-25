@@ -394,6 +394,9 @@ test("entries marked 「不发给模型」 never reach the model; their heard-as
   assert.equal(withoutRoute.text, "发给章伟");
   const { applyLocalEntries } = await import("../lib/service.js");
   assert.equal(applyLocalEntries("Use deep seek, not deep seeker.", [["deep seek", "DeepSeek"]]), "Use DeepSeek, not deep seeker.");
+  // A marked entry with no heard-as form still fixes the case of a Latin word.
+  const spelled = await service.polish({ rawText: "ask acmecorp about it", strength: "prompt", dictionary: [{ local: "AcmeCorp" }] });
+  assert.equal(spelled.text, "ask AcmeCorp about it");
 });
 
 test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {

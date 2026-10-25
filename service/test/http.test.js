@@ -164,6 +164,15 @@ test("speech model endpoints preserve auth and pass only catalog IDs to lifecycl
   assert.equal((await request('/models/active','PUT',null)).status,400);
   assert.equal((await request('/models/download','POST',[])).status,400);
   assert.equal((await request('/models/download','POST',{modelId:null})).status,400);
+  // A cleared mirror is passed on as "" (huggingface.co), not dropped back to the startup HF_ENDPOINT.
+  await request('/models/download','POST',{endpoint:''});
+  assert.equal(seen.at(-1).endpoint,'');
+  await request('/models/download','POST',{endpoint:'https://hf-mirror.com'});
+  assert.equal(seen.at(-1).endpoint,'https://hf-mirror.com');
+  await request('/models/download','POST',{});
+  assert.equal(seen.at(-1).endpoint,undefined);
+  const { downloadUrl } = await import('../lib/models.js');
+  assert.match(downloadUrl({ repo: 'a/b', path: 'c' }, ''), /^https:\/\/huggingface\.co\//);
   const denied=await call(handler,ROUTE_PREFIX+'/models',{authorization:'Bearer invalid'});
   assert.equal(denied.status,401);
 });

@@ -659,7 +659,8 @@ final class ServiceClient {
         try withPortRetry {
             try withTokenRetry { token in
                 var object: [String: Any] = [:]
-                if let endpoint = endpoint, !endpoint.isEmpty { object["endpoint"] = endpoint }
+                // Always sent: an empty mirror means huggingface.co, so clearing it needs no service restart.
+                object["endpoint"] = endpoint ?? ""
                 let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
                 let req = try makeRequest(path: "/api/voice-polish/models/download", method: "POST", token: token,
                                           headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)

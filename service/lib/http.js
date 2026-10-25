@@ -205,11 +205,14 @@ export function createHandler(options) {
           reply(res, 400, { error: "model request must be an object", code: "invalid-model" }); return;
         }
         const modelId = body.modelId === undefined ? "sensevoice-small" : body.modelId;
+        // An empty mirror means huggingface.co itself, even if the service started with HF_ENDPOINT:
+        // clearing the setting takes effect without a restart. No field keeps the startup default.
+        const endpoint = typeof body.endpoint !== "string" ? undefined
+          : body.endpoint.trim() === "" ? "" : /^https:\/\/[^/\s]+/i.test(body.endpoint) ? body.endpoint : undefined;
         if (route === "/models/download/cancel") service.recognizer.cancel(modelId);
         else if (typeof service.recognizer.start === "function") {
-          const endpoint = typeof body.endpoint === "string" && /^https:\/\/[^/\s]+/i.test(body.endpoint) ? body.endpoint : undefined;
           service.recognizer.start(modelId, { endpoint, activate: route === "/models/active" || body.activate !== false, download: route !== "/models/active" });
-        } else await service.recognizer.downloadAndPrepare({ endpoint: body.endpoint });
+        } else await service.recognizer.downloadAndPrepare({ endpoint });
         reply(res, 202, { ok: true, phase: "accepted" });
         return;
       }

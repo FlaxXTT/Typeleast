@@ -101,7 +101,7 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 150)
             }
-            SettingRow(title: L10n.text("翻译成"), detail: nil) {
+            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("不用风格插件。")) {
                 Picker("", selection: model.setting(\.translateTarget)) {
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)
@@ -426,6 +426,16 @@ private struct PermissionRow: View {
 enum HotkeySlot {
     case main, alt, pasteLast, translate
 
+    /// The registration slot name (AppDelegate.registerHotKeys).
+    var name: String {
+        switch self {
+        case .main: return "main"
+        case .alt: return "alt"
+        case .pasteLast: return "pasteLast"
+        case .translate: return "translate"
+        }
+    }
+
     var keyPath: ReferenceWritableKeyPath<Settings, HotKeyBinding> {
         switch self {
         case .main: return \.hotkeyMain
@@ -466,6 +476,9 @@ struct HotkeyField: View {
             }
             .buttonStyle(.plain)
             .help(L10n.text("Esc 取消，Delete 清除。"))
+            if let problem = model.hotkeyProblems[slot.name], !recording {
+                Text(problem).font(.system(size: 11.5)).foregroundColor(Theme.warning)
+            }
         }
         .onDisappear { stop() }
     }

@@ -41,6 +41,8 @@ internal sealed class AppHost : IDictationHost
 
     /// <summary>Something the windows show changed (raised on the UI thread).</summary>
     public event Action? Changed;
+    /// <summary>A setting change could not be saved and was undone: pages showing it are rebuilt.</summary>
+    public event Action? SettingsReverted;
 
     private readonly Application app;
     private readonly string settingsPath;
@@ -224,7 +226,8 @@ internal sealed class AppHost : IDictationHost
             var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(savedSettingsJson, Json.Options)!;
             foreach (var property in typeof(AppSettings).GetProperties().Where(p => p.SetMethod?.IsPublic == true && !p.IsDefined(typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), true))) property.SetValue(Settings, property.GetValue(restored));
             SettingsSaveError = L10n.T("设置未保存。请检查文件权限和磁盘空间。");
-            Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未保存。请检查文件权限和磁盘空间。")); return false; }
+            Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未保存。请检查文件权限和磁盘空间。"));
+            SettingsReverted?.Invoke(); return false; }
         SettingsSaveError = null;
         Theme.Apply(Settings.Appearance);
         if (window is not null) window.ShowInTaskbar = Settings.ShowInTaskbar;

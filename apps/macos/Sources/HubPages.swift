@@ -409,7 +409,8 @@ struct HistoryRow: View {
     @State private var copied = false
 
     private var canRetry: Bool {
-        guard let path = entry.audioPath else { return false }
+        // A Prompt Beta record cannot be retried: it would start a new clarification from scratch.
+        guard entry.strength != "promptbeta", let path = entry.audioPath else { return false }
         return FileManager.default.fileExists(atPath: path)
     }
 
@@ -665,6 +666,9 @@ private struct WordEditor: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.text("不发给模型"), isOn: $localOnly).toggleStyle(.checkbox)
+                if localOnly && heardAs.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text(L10n.text("没填识别成时，只修正英文大小写。")).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                }
             }
             HStack {
                 Spacer()

@@ -16,6 +16,8 @@ internal sealed class PluginController(ServiceClient client, Func<string> source
     public PluginState State { get; private set; } = new();
     public PluginCatalog? Catalog { get; private set; }
     public bool CatalogLoading { get; private set; }
+    /// <summary>Bumped when a change fails, so views redraw from the real state.</summary>
+    public int Revision { get; private set; }
     public string? Message { get; private set; }
     public event Action? Changed;
 
@@ -25,7 +27,9 @@ internal sealed class PluginController(ServiceClient client, Func<string> source
     private async Task Run(Func<Task<PluginState>> work)
     {
         try { Installed(await work()); Message = null; }
-        catch (ServiceException e) { Message = PluginMessages.Describe(e); }
+        // A refused change leaves the state as it was; the revision makes the page redraw anyway, so a
+        // switch the user flipped goes back to what is really installed.
+        catch (ServiceException e) { Message = PluginMessages.Describe(e); Revision++; }
         Changed?.Invoke();
     }
 

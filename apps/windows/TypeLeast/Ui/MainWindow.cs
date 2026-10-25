@@ -91,6 +91,12 @@ internal sealed class MainWindow : Window
             }
         };
         host.Changed += Refresh;
+        // A toggle whose change was undone must not keep showing the new value: rebuild the pages with settings.
+        host.SettingsReverted += () => Dispatcher.InvokeAsync(() =>
+        {
+            foreach (var page in new[] { Page.Settings, Page.Home }) { pages.Remove(page); pageSurfaces.Remove(page); }
+            ShowPage(current);
+        });
         ShowPage(Page.Home);
     }
 

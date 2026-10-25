@@ -29,7 +29,7 @@ import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
-import { tidy } from "./tidy.js";
+import { normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
@@ -526,10 +526,14 @@ export class VoicePolishService {
     } catch { /* Core output stays intact. */ }
     // Entries the user keeps from the model: their heard-as spellings are corrected here.
     result.text = applyLocalEntries(result.text, localEntriesFrom(request.dictionary));
+    // Marked entries with no heard-as form can still fix the case of a Latin word (acme → Acme).
+    result.text = normalizeTermCase(result.text, localSpellingsFrom(request.dictionary));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
     const target = typeof request.translateTo === "string" && request.translateTo ? request.translateTo : null;
-    if (request.variants && (!target || target === "zh")) result.text = await applyVariants(result.text, parseVariants(request.variants));
+    // Speech recognised as Japanese or Korean is not Chinese either, even with no kana (企画書).
+    const spokenOther = !target && ["ja", "ko"].includes(String(request.language ?? "").toLowerCase());
+    if (request.variants && (!target || target === "zh") && !spokenOther) result.text = await applyVariants(result.text, parseVariants(request.variants));
     result.suggestions = [];
     if (!result.fallback && !request.translateTo && !result.translated &&
         !result.beta?.sessionId) {
@@ -720,6 +724,16 @@ export function localEntriesFrom(sent) {
     if (heard && word && heard !== word) pairs.push([heard, word]);
   }
   return pairs;
+}
+
+/** Marked entries that are only a spelling (no "heard=" part). */
+export function localSpellingsFrom(sent) {
+  const words = [];
+  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
+    const text = entry && typeof entry === "object" && typeof entry.local === "string" ? entry.local.trim().slice(0, DICTIONARY_LIMITS.entryLength) : "";
+    if (text && !text.includes("=")) words.push(text);
+  }
+  return words;
 }
 
 /** Replace heard-as spellings: anywhere for Chinese, as whole words (any case) for latin. */

@@ -85,6 +85,8 @@ final class AppModel: ObservableObject {
     @Published var micStatus: AVAuthorizationStatus = .notDetermined
     /// Short status line for the hub ("已粘贴", "听写失败：…").
     @Published var hint = ""
+    /// Shortcut slot ("main", "alt", "pasteLast", "translate") -> why it is not working.
+    @Published var hotkeyProblems: [String: String] = [:]
 
     /// Bumped whenever a Settings value changes so bindings re-read.
     @Published private var settingsRevision = 0
