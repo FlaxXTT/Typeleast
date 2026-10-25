@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { CATALOG_MIRRORS, CATALOG_URLS, PLUGIN_LIMITS, PluginStore, catalogSources, compareVersions, fetchCatalog, parsePlugin, pluginDigest, validatePlugin } from '../lib/plugins.js';
 import { STYLE_MARKER, systemPromptFor } from '../lib/prompt.js';
 import { VoicePolishService } from '../lib/service.js';
+import { PluginRuntime } from '../lib/plugin-runtime.js';
 import { createHandler, ROUTE_PREFIX } from '../lib/http.js';
 
 const PACK = {
@@ -156,7 +157,7 @@ test('a selected style rides in the one model call; packs add only the terms a d
     await store.install(validatePlugin(STYLE).plugin, { enable: true });
     const calls = [];
     const service = new VoicePolishService({
-      recognizer: { snapshot: () => ({ ready: true }) }, plugins: store,
+      recognizer: { snapshot: () => ({ ready: true }) }, extension: new PluginRuntime(store),
       config: { maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt', redactSecrets: true, dictionary: [] },
       fetchImpl: async (_, init) => { calls.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ choices: [{ message: { content: '部署到 Kubernetes。' }, finish_reason: 'stop' }] }) }; },
     });
@@ -235,8 +236,8 @@ test('the market route follows the app\'s source setting and reports a mirrored 
     const TOKEN = 'b'.repeat(64);
     const urls = [];
     const service = new VoicePolishService({
-      recognizer: { snapshot: () => ({ ready: true }) }, plugins: store, config: { dictionary: [] },
-      fetchImpl: async (url) => { urls.push(url); return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: [STYLE] }); },
+      recognizer: { snapshot: () => ({ ready: true }) }, config: { dictionary: [] },
+      extension: new PluginRuntime(store, { fetchImpl: async (url) => { urls.push(url); return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: [STYLE] }); } }),
     });
     const handler = createHandler({ service, currentToken: async () => TOKEN });
     const call = async (path) => {
@@ -262,8 +263,8 @@ test('plugin routes: inspect, install, switch, market and remove need the token'
     let fetches = 0;
     let published = [STYLE];
     const service = new VoicePolishService({
-      recognizer: { snapshot: () => ({ ready: true }) }, plugins: store, config: { dictionary: [] },
-      fetchImpl: async () => { fetches++; return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: published }); },
+      recognizer: { snapshot: () => ({ ready: true }) }, config: { dictionary: [] },
+      extension: new PluginRuntime(store, { fetchImpl: async () => { fetches++; return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: published }); } }),
     });
     const handler = createHandler({ service, currentToken: async () => TOKEN });
     async function call(method, path, body, authorization = `Bearer ${TOKEN}`) {
