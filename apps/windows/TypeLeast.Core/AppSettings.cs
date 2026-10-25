@@ -26,7 +26,7 @@ public sealed class AppSettings
     /// <summary>语言变体: Chinese "hans" / "tw" / "hk", English "us" / "gb".</summary>
     public string ZhVariant { get; set; } = "hans";
     public string EnVariant { get; set; } = "us";
-    /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (标准整理), "concise" (精简整理), "promptbeta" or "off".</summary>
+    /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (自然整理), "concise" (精简整理), or "promptbeta".</summary>
     public string Strength { get; set; } = "prompt";
     public string InterfaceLanguage { get; set; } = "system";
     public string Language { get; set; } = "auto";

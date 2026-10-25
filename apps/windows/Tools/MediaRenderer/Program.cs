@@ -87,7 +87,7 @@ class P
             })
             {
                 var window = new UpdateProgressWindow();
-                window.SetVersion("1.19.0", "• " + L10n.T("标准整理") + " / " + L10n.T("精简整理") + "\n• " + L10n.T("更短，只留要点"));
+                window.SetVersion("1.19.0", "• " + L10n.T("自然整理") + " / " + L10n.T("精简整理") + "\n• " + L10n.T("更短，只留要点"));
                 window.Report(stage, received, total, source);
                 var content = (FrameworkElement)window.Content; window.Content = null;
                 var card = new Border { Background = Theme.CardFill, Child = content };

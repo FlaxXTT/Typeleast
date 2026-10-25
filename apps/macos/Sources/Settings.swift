@@ -70,17 +70,15 @@ enum EnglishVariant: String, CaseIterable {
     }
 }
 
-/// The cleanup modes (整理档位). Natural cleanup has two tiers, 标准 ("prompt", its historical
-/// id) and 精简 ("concise"). The host's other strength names (conservative, maximal) only change
-/// validation strictness and read as `.prompt`; the retired prompt-mode tiers read as `.concise`.
+/// The cleanup modes. "prompt" is the historical stored id for 自然整理.
+/// Retired prompt tiers read as `.concise`; retired verbatim reads as `.prompt`.
 enum VoiceStrength: String, CaseIterable {
-    case prompt, concise, promptbeta, off
+    case prompt, concise, promptbeta
     var label: String {
         switch self {
-        case .prompt: return L10n.text("标准整理")
+        case .prompt: return L10n.text("自然整理")
         case .concise: return L10n.text("精简整理")
         case .promptbeta: return L10n.text("提示词 Beta")
-        case .off: return L10n.text("原话转写")
         }
     }
 
@@ -89,13 +87,13 @@ enum VoiceStrength: String, CaseIterable {
         case .prompt: return L10n.text("去口头禅，改通顺")
         case .concise: return L10n.text("更短，只留要点")
         case .promptbeta: return L10n.text("多轮补充后写成提示词")
-        case .off: return L10n.text("不用模型，只去口头禅")
         }
     }
 
     /// The tier a stored value means: the prompt-mode tiers of 1.18 became 精简整理.
     static func stored(_ value: String?) -> VoiceStrength {
         if value == "promptbrief" || value == "promptify" { return .concise }
+        if value == "off" { return .prompt }
         return VoiceStrength(rawValue: value ?? "") ?? .prompt
     }
 }

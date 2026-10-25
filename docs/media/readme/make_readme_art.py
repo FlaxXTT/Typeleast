@@ -186,7 +186,7 @@ def features(t):
     body = []
 
     # 1. Standard cleanup (full width).
-    inner = [text(36, 58, "标准整理", 15, "blue", 600),
+    inner = [text(36, 58, "自然整理", 15, "blue", 600),
              text(36, 98, "随口说，它来整理。", 32, "ink", 700),
              text(36, 132, "口头禅去掉，改口照办，标点补好。不编造你没说的内容。", 16, "gray")]
     by, x0, size = 196, 36, 18
@@ -273,7 +273,7 @@ def features(t):
 @keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
 """
     return svg(W, H, "\n".join(body), css, t,
-               "亮点：标准整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。")
+               "亮点：自然整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。")
 
 
 # ---------------------------------------------------------------- prompt Beta

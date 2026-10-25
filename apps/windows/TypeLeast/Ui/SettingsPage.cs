@@ -89,7 +89,7 @@ internal sealed class SettingsPage : IPage
         var languageRows = new UIElement[]
         {
             Theme.SettingRow(L10n.T("听写语言"), Theme.Text(L10n.T("只能选当前模型支持的语言，其余自动识别。"), 12, Theme.Grey), dictationLanguage),
-            Theme.SettingRow(L10n.T("翻译成"), Theme.Text(L10n.T("用翻译快捷键说的话会译成这种语言。需要先设置整理模型。"), 12, Theme.Grey), translateTarget),
+            Theme.SettingRow(L10n.T("翻译成"), Theme.Text(L10n.T("先整理原语言，再翻译成所选语言。每次用两次模型调用。"), 12, Theme.Grey), translateTarget),
             Theme.SettingRow(L10n.T("中文写法"), Theme.Text(L10n.T("中文输出用简体还是繁体（繁体会换成当地用语）。"), 12, Theme.Grey), zhVariant),
             Theme.SettingRow(L10n.T("英文拼写"), Theme.Text(L10n.T("输出的英文用美式还是英式拼写（color / colour）。"), 12, Theme.Grey), enVariant),
         };

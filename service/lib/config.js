@@ -18,9 +18,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const STRENGTHS = ["off", "conservative", "prompt", "maximal", "concise", "promptbeta"];
-/** Tiers that no longer exist, and the one each now means (both prompt-mode tiers became 精简整理). */
-export const RETIRED_STRENGTHS = { promptbrief: "concise", promptify: "concise" };
+export const STRENGTHS = ["conservative", "prompt", "maximal", "concise", "promptbeta"];
+/** Tiers that no longer exist, and the one each now means. */
+export const RETIRED_STRENGTHS = { off: "prompt", promptbrief: "concise", promptify: "concise" };
 
 /** The tier a request asks for, with a retired id read as its replacement. */
 export function canonicalStrength(value) {
@@ -33,7 +33,7 @@ export const CONFIG_FILE = "config.json";
 const FIELDS = {
   maxOutputTokens: { kind: "integer", default: 800, help: "Upper bound for the polished text." },
   timeoutMs: { kind: "integer", default: 12000, help: "Polishing budget; on expiry the raw transcript is used. Real dictations need 4-6s, so 12s leaves headroom." },
-  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "off skips the model. conservative | prompt | maximal use the cleanup prompt and only change how strict output validation is. concise (精简整理) keeps the intent and constraints in fewer words; promptbrief and promptify, the retired prompt-mode tiers, are read as concise. promptbeta (提示词 Beta) clarifies information over multiple rounds, then drafts only when the user finishes." },
+  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "prompt (自然整理) uses the general cleanup prompt. conservative and maximal are legacy validation levels. concise (精简整理) keeps the intent and constraints in fewer words. Retired off reads as prompt; retired promptbrief and promptify read as concise. promptbeta (提示词 Beta) clarifies information over multiple rounds." },
   temperature: { kind: "number", default: 0.8, help: "Sampling temperature. Keeps the existing default; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
@@ -92,8 +92,8 @@ export function validateConfig(value) {
         else output[name] = raw;
         break;
       case "enum":
-        if (!field.values.includes(raw)) issues.push({ message: `${name} must be one of ${field.values.join(", ")}`, path: [name] });
-        else output[name] = raw;
+        if (!field.values.includes(name === "strength" ? canonicalStrength(raw) : raw)) issues.push({ message: `${name} must be one of ${field.values.join(", ")}`, path: [name] });
+        else output[name] = name === "strength" ? canonicalStrength(raw) : raw;
         break;
       case "stringArray":
         if (!Array.isArray(raw) || raw.some((entry) => typeof entry !== "string")) issues.push({ message: `${name} must be an array of strings`, path: [name] });

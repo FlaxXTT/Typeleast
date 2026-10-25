@@ -103,7 +103,7 @@ struct RecordingBarModel {
     private(set) var phase: Phase = .hidden
     private(set) var destination = ""
     private(set) var detail = ""
-    /// A short tag beside the waveform while listening, e.g. "→EN" for 翻译模式.
+    /// The mode used by this recording, or the translation target.
     private(set) var badge = ""
     private(set) var resultText = ""
     private(set) var warning = false
@@ -222,7 +222,11 @@ final class PillView: NSView {
     static let height: CGFloat = 32
     /// Diameter of the cancel (left) and stop (right) buttons.
     static let buttonSize: CGFloat = 20
-    static let badgeWidth: CGFloat = 34
+    static func badgeWidth(_ text: String) -> CGFloat {
+        guard !text.isEmpty else { return 0 }
+        let font = NSFont.systemFont(ofSize: 10, weight: .bold)
+        return max(34, ceil((text as NSString).size(withAttributes: [.font: font]).width) + 12)
+    }
     /// Font of the result line.
     static let resultFont = NSFont.systemFont(ofSize: 12, weight: .medium)
 
@@ -231,8 +235,8 @@ final class PillView: NSView {
         switch model.phase {
         case .hidden: return 100
         case .recording:
-            return (limit - model.elapsed <= countdownSeconds ? 206 : 168) + (model.badge.isEmpty ? 0 : badgeWidth + 6)
-        case .thinking: return 72
+            return (limit - model.elapsed <= countdownSeconds ? 206 : 168) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
+        case .thinking: return 72 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
             let width = text.size(withAttributes: [.font: resultFont]).width
@@ -377,7 +381,8 @@ final class PillView: NSView {
             waveRight = stopRect.minX - 46
         }
         if !model.badge.isEmpty {
-            let rect = NSRect(x: waveRight - PillView.badgeWidth, y: bounds.midY - 8, width: PillView.badgeWidth, height: 16)
+            let badgeWidth = PillView.badgeWidth(model.badge)
+            let rect = NSRect(x: waveRight - badgeWidth, y: bounds.midY - 8, width: badgeWidth, height: 16)
             NSColor.systemBlue.withAlphaComponent(0.85).setFill()
             NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
             let font = NSFont.systemFont(ofSize: 10, weight: .bold)
@@ -395,7 +400,7 @@ final class PillView: NSView {
     private func drawThinking() {
         // three dots breathing in sequence
         let spacing: CGFloat = 10
-        let centreX = bounds.midX
+        let centreX: CGFloat = model.badge.isEmpty ? bounds.midX : 36
         for index in 0..<3 {
             let phase = spinnerPhase - CGFloat(index) * 0.9
             let wave = reduceMotion ? 0.6 : (0.35 + 0.65 * (0.5 + 0.5 * sin(phase)))
@@ -404,6 +409,16 @@ final class PillView: NSView {
             NSColor.white.withAlphaComponent(CGFloat(wave)).setFill()
             NSBezierPath(ovalIn: NSRect(x: x - radius, y: bounds.midY - radius,
                                         width: radius * 2, height: radius * 2)).fill()
+        }
+        if !model.badge.isEmpty {
+            let badgeWidth = PillView.badgeWidth(model.badge)
+            let rect = NSRect(x: 62, y: bounds.midY - 8, width: badgeWidth, height: 16)
+            NSColor.systemBlue.withAlphaComponent(0.85).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+            let font = NSFont.systemFont(ofSize: 10, weight: .bold)
+            let textWidth = ceil((model.badge as NSString).size(withAttributes: [.font: font]).width)
+            drawText(model.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
+                     font: font, color: .white)
         }
     }
 

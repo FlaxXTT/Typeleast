@@ -42,7 +42,7 @@ test("defaults are copied, not shared between calls", () => {
 test("bad values are reported and keep their defaults, never fatal", () => {
   const cases = [
     [{ nope: 1 }, /unknown configuration key/, null],
-    [{ strength: "aggressive" }, /must be one of off, conservative, prompt/, ["strength", "prompt"]],
+    [{ strength: "aggressive" }, /must be one of conservative, prompt/, ["strength", "prompt"]],
     [{ redactSecrets: "yes" }, /must be a boolean/, ["redactSecrets", true]],
     [{ dictionary: [1, 2] }, /array of strings/, ["dictionary", []]],
     [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 12000]],
@@ -62,7 +62,8 @@ test("bad values are reported and keep their defaults, never fatal", () => {
 test("the JSON Schema view is derived from the same declarations", () => {
   const schema = configJsonSchema();
   assert.equal(schema.type, "object");
-  assert.deepEqual(schema.properties.strength.enum, ["off", "conservative", "prompt", "maximal", "concise", "promptbeta"]);
+  assert.deepEqual(schema.properties.strength.enum, ["conservative", "prompt", "maximal", "concise", "promptbeta"]);
+  assert.equal(validateConfig({ strength: "off" }).value.strength, "prompt", "retired mode migrates");
   assert.equal(schema.properties.timeoutMs.type, "integer");
   // Measured: real dictations take 4-6s, so a 6s budget cut them off and fell
   // back to the raw transcript. The default must leave headroom.

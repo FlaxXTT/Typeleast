@@ -421,9 +421,10 @@ do {
     model.update(level: 0.5, elapsed: 1)
     checkEq("pill ignores level ticks while hidden", model.history.count, 0)
 
-    model.showRecording(destination: "com.apple.mail")
+    model.showRecording(destination: "com.apple.mail", badge: "自然整理")
     checkEq("showRecording enters recording", model.phase, RecordingBarModel.Phase.recording)
     checkEq("showRecording keeps the destination", model.destination, "com.apple.mail")
+    checkEq("recording shows its cleanup mode", model.badge, "自然整理")
     check("pill is visible while recording", model.isVisible)
     checkEq("showRecording resets the timer", model.elapsed, 0)
     for step in 1...45 {
@@ -438,6 +439,7 @@ do {
     model.showThinking(detail: "转写中")
     checkEq("showThinking enters thinking", model.phase, RecordingBarModel.Phase.thinking)
     checkEq("showThinking keeps the detail", model.detail, "转写中")
+    checkEq("thinking keeps the same mode", model.badge, "自然整理")
     check("pill stays visible while thinking", model.isVisible)
     let frozenElapsed = model.elapsed
     model.update(level: 1, elapsed: 99)
@@ -453,6 +455,7 @@ do {
 
     model.hide()
     checkEq("hide returns to hidden", model.phase, RecordingBarModel.Phase.hidden)
+    checkEq("hide clears the mode", model.badge, "")
     check("pill is invisible after hide", !model.isVisible)
     checkEq("hide clears the waveform", model.history.count, 0)
     checkEq("hide clears the level", model.level, 0)
@@ -742,7 +745,9 @@ do {
     UserDefaults.standard.set("maximal", forKey: "voice.strength")
     checkEq("a strength saved by an older build reads as natural cleanup", s.strength, "prompt")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
-    checkEq("two natural tiers, Prompt Beta and raw transcription are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "concise", "promptbeta", "off"])
+    checkEq("three cleanup modes are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "concise", "promptbeta"])
+    UserDefaults.standard.set("off", forKey: "voice.strength")
+    checkEq("retired verbatim setting reads as natural cleanup", s.strength, "prompt")
     for retired in ["promptbrief", "promptify"] {
         UserDefaults.standard.set(retired, forKey: "voice.strength")
         checkEq("the retired prompt-mode tier " + retired + " reads as concise", s.strength, "concise")
@@ -899,7 +904,7 @@ do {
     let status = try JSONDecoder().decode(SpeechStatus.self, from: Data(#"{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}"#.utf8))
     checkEq("health identifies actual recognizer", status.modelName, "Fun-ASR-Nano")
     checkEq("health exposes language capabilities", status.languages, ["auto", "zh", "en", "ja"])
-    checkEq("standard cleanup English label", L10n.render("标准整理", arguments: [], language: "en"), "Standard")
+    checkEq("natural cleanup English label", L10n.render("自然整理", arguments: [], language: "en"), "Natural cleanup")
 } catch { check("speech model client contract", false, String(describing: error)) }
 
 // MARK: 23. Prompt Beta: questions come back with a session; the answer carries it

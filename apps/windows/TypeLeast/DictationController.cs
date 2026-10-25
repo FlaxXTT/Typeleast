@@ -194,7 +194,9 @@ internal sealed class DictationController
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
         if (translating is null && beta.Session is not null) beta.SetBusy(L10n.T("正在听你补充，说完再按 {0}", HotkeyLabel));
         hook.SwallowEscape = true;
-        bar.ShowRecording(recorder, translating is { } target ? "→" + target.ToUpperInvariant() + " " : "");
+        bar.ShowRecording(recorder, translating is { } target
+            ? L10n.T("翻译") + " →" + target.ToUpperInvariant()
+            : CleanupModes.Title(Settings.Strength));
         Raise();
         Dictionary.DictationStarting();
         recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
@@ -267,7 +269,7 @@ internal sealed class DictationController
         if (answering is not null) beta.SetBusy(L10n.T("正在根据你的补充更新…"));
         Phase = DictationPhase.Thinking;
         hook.SwallowEscape = true;
-        bar.ShowThinking(translateTo is null ? null : L10n.T("翻译中…"));
+        bar.ShowThinking(translateTo is null ? CleanupModes.Title(options.Strength) : L10n.T("翻译中…"));
         Raise();
         targetField = await Within(targetFieldTask, 300);
         recordingContext = await Within(recordingContextTask, 300);

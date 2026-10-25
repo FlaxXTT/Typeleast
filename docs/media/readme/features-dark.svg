@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="亮点：标准整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。">
-<title>亮点：标准整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="亮点：自然整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。">
+<title>亮点：自然整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。</title>
 <style>
 text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
 .ink { fill: #f5f5f7; } .gray { fill: #a1a1a6; } .faint { fill: #6e6e73; }
@@ -30,7 +30,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 .m1 { animation-delay: -6s; } .n0 { animation-delay: -4s; } .n1 { animation-delay: -2s; }
 @keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
 </style>
-<g transform="translate(0,0)"><rect width="880" height="310" rx="28" fill="#1c1c1e"/><text x="36" y="58" font-size="15" font-weight="600" text-anchor="start" class="blue" >标准整理</text>
+<g transform="translate(0,0)"><rect width="880" height="310" rx="28" fill="#1c1c1e"/><text x="36" y="58" font-size="15" font-weight="600" text-anchor="start" class="blue" >自然整理</text>
 <text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >随口说，它来整理。</text>
 <text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >口头禅去掉，改口照办，标点补好。不编造你没说的内容。</text>
 <rect x="24" y="162" width="832" height="56" rx="16" fill="#2c2c2e"/>

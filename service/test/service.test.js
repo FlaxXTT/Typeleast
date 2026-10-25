@@ -87,12 +87,12 @@ test('optional suggestion failure preserves dictation, does not retry or log use
   assert.ok(!JSON.stringify(logs).includes('private-demo-text'));
 });
 
-test('suggestions are skipped for fallback, raw dictation, translation and pending Beta', async () => {
+test('suggestions are skipped for fallback, translation and pending Beta', async () => {
   const service = makeService();
   let calls = 0;
   service.suggestionEngine = async () => { calls++; return [{ word: 'JSON', heardAs: '杰森' }]; };
   for (const [request, extra] of [
-    [{}, { fallback: true }], [{ strength: 'off' }, {}],
+    [{}, { fallback: true }],
     [{ translateTo: 'en' }, {}], [{}, { translated: 'en' }],
     [{ strength: 'promptbeta' }, { beta: { sessionId: 'waiting' } }],
   ]) {
@@ -308,14 +308,14 @@ test("a successful polish records no failure detail", async () => {
   assert.deepEqual(service.snapshot().recentFailures, []);
 });
 
-test("strength=off skips the model entirely", async () => {
-  const model = fakeModel("should not be used");
+test("retired strength=off uses natural cleanup instead of skipping the model", async () => {
+  const model = fakeModel('{"status":"ok","text":"' + RAW + '","reason":"kept"}');
   const service = makeService({ model });
   const result = await service.polish({ rawText: RAW, strength: "off", llm: ROUTE });
   assert.equal(result.text, RAW);
   assert.equal(result.fallback, false);
-  assert.equal(result.reason, "strength-off");
-  assert.equal(model.calls.length, 0);
+  assert.equal(result.reason, null);
+  assert.equal(model.calls.length, 1);
 });
 
 test("an empty transcript is reported without calling the model", async () => {
@@ -389,9 +389,9 @@ test("entries marked 「不发给模型」 never reach the model; their heard-as
   const request = JSON.stringify(model.calls[0].body);
   for (const secret of ["章伟", "张为=", "凤凰"]) assert.ok(!request.includes(secret), secret);
   assert.equal(result.text, "请把报告发给章伟。");
-  // Raw transcription is corrected the same way, without any model call.
-  const raw = await service.polish({ rawText: "发给张为", strength: "off", dictionary: [{ local: "张为=章伟" }] });
-  assert.equal(raw.text, "发给章伟");
+  // A local rule also applies when no model route is configured.
+  const withoutRoute = await service.polish({ rawText: "发给张为", strength: "prompt", dictionary: [{ local: "张为=章伟" }] });
+  assert.equal(withoutRoute.text, "发给章伟");
   const { applyLocalEntries } = await import("../lib/service.js");
   assert.equal(applyLocalEntries("Use deep seek, not deep seeker.", [["deep seek", "DeepSeek"]]), "Use DeepSeek, not deep seeker.");
 });
@@ -446,7 +446,7 @@ test("dictation language reaches recognition and invalid languages do not run re
     transcribe: async (_audio, language) => { languages.push(language); return { text: "hello" }; },
   } });
   for (const language of ["auto", "zh", "en", "yue", "ja", "ko"]) {
-    await service.transcribeAndPolish({ audio: wavOfSilence(), language, strength: "off" });
+    await service.transcribeAndPolish({ audio: wavOfSilence(), language, strength: "prompt" });
   }
   assert.deepEqual(languages, ["auto", "zh", "en", "yue", "ja", "ko"]);
   await assert.rejects(service.transcribeAndPolish({ audio: wavOfSilence(), language: "bad" }), { code: "invalid-language" });

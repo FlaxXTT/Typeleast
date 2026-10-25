@@ -170,12 +170,13 @@ test('a selected style rides in the one model call; packs add only the terms a d
     }
     await service.polish({ rawText: '部署到酷伯内特斯', strength: 'off', llm: ROUTE });
     await service.polish({ rawText: '部署到酷伯内特斯', translateTo: 'en', llm: ROUTE });
-    assert.equal(calls.length, 3, 'raw transcription calls nothing');
-    assert.ok(!calls[2].messages[0].content.includes(STYLE_MARKER), 'translation takes no style');
-    assert.equal((calls[2].messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1], 'Kubernetes', 'translation keeps pack terms');
+    assert.equal(calls.length, 5, 'retired off mode cleans, translation uses two calls');
+    assert.ok(!calls[3].messages[0].content.includes(STYLE_MARKER), 'translation source cleanup takes no selected style');
+    assert.equal((calls[3].messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1], 'Kubernetes', 'source cleanup keeps pack terms');
+    assert.ok(!calls[4].messages[0].content.includes('=== HARNESS ADDENDUM'), 'translation sees only the cleaned source');
     // The user's own spelling wins over a pack's.
     await service.polish({ rawText: '部署到酷伯内特斯', strength: 'prompt', llm: ROUTE, dictionary: ['kubernetes'] });
-    assert.equal((calls[3].messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1], 'kubernetes');
+    assert.equal((calls[5].messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1], 'kubernetes');
     assert.equal(systemPromptFor({ strength: 'prompt' }), systemPromptFor({ strength: 'prompt', style: '  ' }), 'no style, no block');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

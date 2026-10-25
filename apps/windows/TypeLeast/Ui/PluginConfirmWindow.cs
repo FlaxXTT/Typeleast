@@ -53,8 +53,8 @@ internal sealed class PluginConfirmWindow : Window
             }
         }
         content.Children.Add(Spaced(Theme.Text(plugin.IsStyle
-            ? L10n.T("数据去向：选中后，这段说明会随每次标准、精简整理请求发给你选择的模型，影响写法和格式。不会多调用模型；原话转写、翻译和提示词 Beta 不受影响。")
-            : L10n.T("数据去向：启用后，本次相关的术语和读音提示会随整理请求发给你选择的模型；无关的不发送。原话转写只做明确词的大小写调整。不会多调用模型。"), 12.5)));
+            ? L10n.T("数据去向：选中后，这段说明会随每次自然、精简整理请求发给你选择的模型，影响写法和格式。不会多调用模型；翻译和提示词 Beta 不受影响。")
+            : L10n.T("数据去向：启用后，本次相关的术语和读音提示会随整理请求发给你选择的模型；无关的不发送。不会多调用模型。"), 12.5)));
         var buttons = Theme.Row(8,
             Theme.Secondary(L10n.T("取消"), Close),
             Theme.Secondary(L10n.T("仅安装"), () => { Choice = false; Close(); }),

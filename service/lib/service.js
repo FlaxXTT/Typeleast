@@ -25,7 +25,7 @@ import { fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
-import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } from "./prompt.js";
+import { buildUserMessage, promptVersionFor, systemPromptFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
@@ -162,13 +162,6 @@ export class VoicePolishService {
       this.lastRoute = { provider: base.provider, model: base.model };
       return await this.polishTranslate({ request, base, route, started, rawText, target: translateTo });
     }
-    if (strength === "off") {
-      // "off" means no model, not "leave the disfluency in". The deterministic
-      // pass is free, so an unpolished dictation is still a tidy one.
-      const tidyOnly = tidy(rawText);
-      return await this.recordAndReturn(request, { ...base, text: tidyOnly.text, reason: "strength-off", postprocess: tidyOnly.applied });
-    }
-
     // The model and the user's own API key come with the request. Without a
     // usable route there is nothing to call: the tidied transcript is inserted
     // and the app tells the user to add a key.
@@ -292,39 +285,71 @@ export class VoicePolishService {
     }
   }
 
-  /**
-   * 翻译模式: clean up the spoken transcript and write it in the target language, in
-   * one call. Only the decisive fact check applies; a failure inserts the tidied
-   * original rather than nothing.
-   */
+  /** Clean and validate the source before a separate translation call. */
   async polishTranslate({ request, base, route, started, rawText, target }) {
     const context = await this.buildContext(request, rawText);
-    const system = translatePrompt(target)
-      + harnessAddendum({ dictionary: context.dictionary, aliases: context.aliases, fieldContext: context.fieldContext ?? null })
+    const cleanupSystem = systemPromptFor({
+      dictionary: context.dictionary, aliases: context.aliases,
+      fieldContext: context.fieldContext ?? null, strength: "prompt", style: null,
+    });
+    const translationSystem = translatePrompt(target)
       + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
     const outboundText = this.config.redactSecrets === false ? rawText : redactSecrets(rawText);
-    this.stats.modelCalls += 1;
+    let cleanedSource = null;
     try {
-      const result = await completeOpenAI({
-        route, system, user: outboundText,
+      this.stats.modelCalls += 1;
+      const cleanup = await completeOpenAI({
+        route, system: cleanupSystem, user: buildUserMessage({ rawText: outboundText }),
+        maxTokens: Math.max(this.config.maxOutputTokens, 1200),
+        temperature: 0.2,
+        timeoutMs: Math.max(this.config.timeoutMs, 20000),
+        signal: request.signal,
+        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
+      });
+      const parsed = parsePolishOutput(cleanup.text);
+      if (!parsed.ok) {
+        this.stats.jsonFallback += 1;
+        const tidyOnly = tidy(rawText);
+        return await this.recordFallback(request, {
+          ...base, text: tidyOnly.text, fallback: true, reason: "output-format",
+          detail: `source-output-format:${parsed.failure ?? "unknown"}`, ms: timing(started, 0),
+          attempts: cleanup.attempts, postprocess: tidyOnly.applied, translated: target,
+        });
+      }
+      if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
+      const tidied = tidy(parsed.text);
+      const sourceVerdict = validateOutput({ rawText, output: tidied.text, strength: "prompt" });
+      if (!sourceVerdict.ok) {
+        const tidyOnly = tidy(rawText);
+        return await this.recordFallback(request, {
+          ...base, text: tidyOnly.text, fallback: true, reason: sourceVerdict.reason,
+          detail: describeVerdict(sourceVerdict.metrics), ms: timing(started, 0), metrics: sourceVerdict.metrics,
+          attempts: cleanup.attempts, postprocess: tidyOnly.applied, translated: target,
+        });
+      }
+      cleanedSource = sourceVerdict.text;
+      this.stats.modelCalls += 1;
+      const translation = await completeOpenAI({
+        route, system: translationSystem,
+        user: this.config.redactSecrets === false ? cleanedSource : redactSecrets(cleanedSource),
         maxTokens: Math.max(this.config.maxOutputTokens, 1200),
         temperature: 0.3,
         timeoutMs: Math.max(this.config.timeoutMs, 20000),
         signal: request.signal,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });
-      const verdict = validateOutput({ rawText, output: String(result.text ?? "").trim(), strength: "translate" });
+      const verdict = validateOutput({ rawText: cleanedSource, output: String(translation.text ?? "").trim(), strength: "translate" });
       if (!verdict.ok) {
-        const tidyOnly = tidy(rawText);
         return await this.recordFallback(request, {
-          ...base, text: tidyOnly.text, fallback: true, reason: verdict.reason,
+          ...base, text: cleanedSource, fallback: true, reason: verdict.reason,
           detail: describeVerdict(verdict.metrics), ms: timing(started, 0), metrics: verdict.metrics,
-          attempts: result.attempts, postprocess: tidyOnly.applied, translated: target,
+          attempts: cleanup.attempts + translation.attempts, postprocess: tidied.applied, translated: target,
         });
       }
       return await this.recordAndReturn(request, {
         ...base, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
-        usage: result.usage, attempts: result.attempts, translated: target,
+        usage: { cleanup: cleanup.usage, translation: translation.usage },
+        attempts: cleanup.attempts + translation.attempts, translated: target,
       });
     } catch (error) {
       const reason = request.signal?.aborted
@@ -332,12 +357,12 @@ export class VoicePolishService {
         : error instanceof ModelCallError ? failureReason(error) : "internal-error";
       const detail = this.redactDetail(failureDetail(error)).split(route.apiKey || "\u0000").join("[redacted-key]");
       this.stats.lastError = `${reason}: ${detail}`;
-      this.logger.warn?.("typeleast: translation failed (%s: %s); using the raw transcript", reason, detail);
+      this.logger.warn?.("typeleast: translation failed (%s: %s); using the cleaned source when available", reason, detail);
       const tidyOnly = tidy(rawText);
       return await this.recordFallback(request, {
-        ...base, text: tidyOnly.text, fallback: true, reason, detail, ms: timing(started, 0),
+        ...base, text: cleanedSource ?? tidyOnly.text, fallback: true, reason, detail, ms: timing(started, 0),
         attempts: error instanceof ModelCallError ? error.attempts : undefined,
-        postprocess: tidyOnly.applied, translated: target,
+        postprocess: cleanedSource === null ? tidyOnly.applied : undefined, translated: target,
       });
     }
   }
@@ -503,7 +528,7 @@ export class VoicePolishService {
     if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants));
     result.suggestions = [];
     if (!result.fallback && !request.translateTo && !result.translated &&
-        (request.strength ?? this.strength) !== "off" && !result.beta?.sessionId) {
+        !result.beta?.sessionId) {
       try { result.suggestions = await this.suggestionEngine(result.raw, result.text); }
       catch { /* Optional suggestions must never fail dictation or echo user text into logs. */ }
     }

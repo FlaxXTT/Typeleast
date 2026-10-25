@@ -101,7 +101,7 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 150)
             }
-            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("用翻译快捷键说的话会译成这种语言。需要先设置整理模型。")) {
+            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("先整理原语言，再翻译成所选语言。每次用两次模型调用。")) {
                 Picker("", selection: model.setting(\.translateTarget)) {
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)

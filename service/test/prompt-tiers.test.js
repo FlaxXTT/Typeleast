@@ -15,11 +15,11 @@ test('the concise tier uses the existing strength field and its own prompt', () 
   assert.match(CONCISE_PROMPT, /用户明确要求表格/);
 });
 
-test('all one-shot modes and translation receive scoped correction and term-restoration rules', () => {
+test('all one-shot cleanup modes receive scoped correction and term-restoration rules', () => {
   for (const strength of ['prompt', 'conservative', 'maximal', 'concise']) {
     assert.ok(systemPromptFor({ strength }).includes(UTTERANCE_RULES), strength);
   }
-  assert.ok(translatePrompt('en').includes(UTTERANCE_RULES));
+  assert.match(translatePrompt('en'), /已经整理好的原语言文本/);
   assert.match(UTTERANCE_RULES, /只处理本次口述/);
   assert.match(UTTERANCE_RULES, /连续改口/);
   assert.match(UTTERANCE_RULES, /引号内引用/);
@@ -62,12 +62,4 @@ test('aggressive concise compression keeps fact checks and does not demand a rol
   const output = '1. 设置按用途分组。\n2. 常用模式可随时切换，不中断录音。';
   assert.equal(validateOutput({ rawText, output, strength: 'concise' }).ok, true);
   assert.equal(validateOutput({ rawText, output: output + '\n限 512 字。', strength: 'concise' }).reason, 'invented-fact');
-});
-
-test('raw mode still skips the model and does not resolve names or rewrite corrections', async () => {
-  let calls = 0;
-  const service = new VoicePolishService({ config: { strength: 'off' }, fetchImpl: async () => { calls++; throw Error('must not call'); } });
-  const result = await service.polish({ rawText: '周三不对周四开会', strength: 'off' });
-  assert.ok(result.text.includes('不对'));
-  assert.equal(calls, 0);
 });

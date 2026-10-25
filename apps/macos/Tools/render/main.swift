@@ -107,7 +107,7 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODES_ONLY"] == "1" {
             let progress = UpdateProgressModel()
             progress.version = "1.18.0"
             progress.stage = .downloading(received: 33 << 20, total: 52 << 20, source: "GitHub")
-            progress.summary = "• " + L10n.text("标准整理") + " / " + L10n.text("精简整理") + "\n• " + L10n.text("更短，只留要点")
+            progress.summary = "• " + L10n.text("自然整理") + " / " + L10n.text("精简整理") + "\n• " + L10n.text("更短，只留要点")
             let view = NSHostingView(rootView: UpdateProgressView(model: progress).environment(\.colorScheme, dark ? .dark : .light))
             snapshot(view, size: view.fittingSize, name: "summary-" + language, dark: dark)
         }

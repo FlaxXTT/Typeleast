@@ -324,7 +324,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     var modelStatus = JsonSerializer.Deserialize<SpeechStatus>("""{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}""", Json.Options)!;
     Eq("health identifies actual recognizer", modelStatus.ModelName, "Fun-ASR-Nano");
     Eq("health language capabilities", string.Join(",", modelStatus.Languages!), "auto,zh,en,ja");
-    Eq("standard cleanup English label", L10n.Render("标准整理", "en"), "Standard");
+    Eq("natural cleanup English label", L10n.Render("自然整理", "en"), "Natural cleanup");
 
     stub.Stop();
     var dead = new ServiceClient(dir);
@@ -611,7 +611,9 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     double shown = 0; for (var i = 0; i < 30; i++) shown = level.Next(quiet);
     Check("quiet speech fills most of the bar", shown > 0.8, $"shown={shown}");
     Check("loud speech is clamped", new AudioLevel().Next(6) <= 1);
-    Eq("two natural tiers, Prompt Beta and raw transcription", string.Join(",", CleanupModes.Codes), "prompt,concise,promptbeta,off");
+    Eq("three cleanup modes", string.Join(",", CleanupModes.Codes), "prompt,concise,promptbeta");
+    Eq("retired verbatim setting becomes natural cleanup", CleanupModes.Stored("off"), "prompt");
+    Eq("natural cleanup appears in the mode label", CleanupModes.Title("prompt"), L10n.T("自然整理"));
     Check("natural cleanup keeps its stored id", CleanupModes.IsKnown("prompt") && !CleanupModes.IsKnown("maximal") && !CleanupModes.IsKnown("promptify"));
     Eq("an unknown stored mode is standard cleanup", CleanupModes.Stored("maximal"), "prompt");
 }

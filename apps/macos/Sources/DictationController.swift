@@ -115,7 +115,8 @@ final class DictationController {
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
         recordingBar.showRecording(destination: pendingAppBundleId,
-                                   badge: pendingTranslate.map { "→" + $0.uppercased() } ?? "")
+                                   badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
+                                       ?? VoiceStrength.stored(settings.strength).label)
         if settings.muteWhileDictating { OutputMuter.shared.muteIfNeeded() }
         setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
         playSound(start: true)

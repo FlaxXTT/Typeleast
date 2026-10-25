@@ -12,7 +12,7 @@
   const TEXT = {
     zh: {
       c1: "按一下，说话。", c2: "再按一下，就写好了。", c3: "长提示词，聊着就写好了。",
-      c4: "说一种语言，写另一种。", c5: "四种整理方式，一键切换。", c6: "你的声音，留在你的电脑上。",
+      c4: "说一种语言，写另一种。", c5: "三种整理方式，一键切换。", c6: "你的声音，留在你的电脑上。",
       mail: "新邮件", to: "收件人：项目组", subject: "主题：周会改期",
       raw: [["嗯那个，", 1], ["明天，不对，", 1], ["后天下午三点开会，", 0], ["然后", 1], ["会前把报告发给大家", 0]],
       final: "后天下午三点开会，会前把报告发给大家。", done: "已写入",
@@ -27,14 +27,14 @@
       from: "周五之前把方案发我，谢谢。", fromTag: "你说 · 中文",
       to2: "Please send me the proposal by Friday. Thanks.", toTag: "写出 · English",
       langs: ["English", "日本語", "한국어", "Français", "Deutsch", "Español"], target: 0,
-      modes: [["标准整理", "删掉口头禅，改通顺。"], ["精简整理", "一次说完，只留要点。"],
-              ["提示词 Beta", "多轮追问，写成长提示词。"], ["原话转写", "不调用模型，原话照录。"]],
+      modes: [["自然整理", "删掉口头禅，改通顺。"], ["精简整理", "一次说完，只留要点。"],
+              ["提示词 Beta", "多轮追问，写成长提示词。"]],
       dictFrom: "德普西克", dictTo: "DeepSeek", dictTag: "词典",
       facts: ["本机识别", "你自己的模型", "免费"], platforms: "Mac · Windows · 免费",
     },
     en: {
       c1: "Press once. Speak.", c2: "Press again. It's written.", c3: "Long prompts. Just talk them through.",
-      c4: "Speak one language. Write another.", c5: "Four ways to clean up. One click to switch.", c6: "Your voice stays on your computer.",
+      c4: "Speak one language. Write another.", c5: "Three ways to clean up. One click to switch.", c6: "Your voice stays on your computer.",
       mail: "New Message", to: "To: Project team", subject: "Subject: Weekly meeting",
       raw: [["Um, so, ", 1], ["tomorrow, no wait, ", 1], ["the meeting is Friday at three, ", 0], ["and uh, ", 1], ["bring the report", 0]],
       final: "The meeting is Friday at three. Please bring the report.", done: "Written",
@@ -49,8 +49,8 @@
       from: "Please send me the proposal by Friday. Thanks.", fromTag: "You say · English",
       to2: "金曜日までに企画書を送ってください。", toTag: "Written · 日本語",
       langs: ["中文", "日本語", "한국어", "Français", "Deutsch", "Español"], target: 1,
-      modes: [["Standard", "Removes filler words. Smooths it out."], ["Concise", "Say it once. Keep only the key points."],
-              ["Prompt Beta", "Asks questions. Writes a long prompt."], ["Verbatim", "No model. Exactly what you said."]],
+      modes: [["Natural cleanup", "Removes filler words. Smooths it out."], ["Concise", "Say it once. Keep only the key points."],
+              ["Prompt Beta", "Asks questions. Writes a long prompt."]],
       dictFrom: "deep seek", dictTo: "DeepSeek", dictTag: "Dictionary",
       facts: ["On-device recognition", "Your own model", "Free"], platforms: "Mac · Windows · Free",
     },
@@ -95,7 +95,7 @@
 .tlf .seg { left: 190px; top: 250px; width: 900px; height: 64px; border-radius: 32px; background: #1d1d1f; display: flex; padding: 6px; }
 .tlf .seg span { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 19px; color: #a1a1a6; position: relative; z-index: 1; }
 .tlf .seg span.on { color: #1d1d1f; font-weight: 600; }
-.tlf .knob { position: absolute; top: 6px; height: 52px; width: 222px; border-radius: 26px; background: #f5f5f7; }
+.tlf .knob { position: absolute; top: 6px; height: 52px; width: 296px; border-radius: 26px; background: #f5f5f7; }
 .tlf .desc { left: 0; right: 0; top: 352px; text-align: center; font-size: 26px; color: #f5f5f7; }
 .tlf .dict { left: 0; right: 0; top: 470px; display: flex; justify-content: center; align-items: center; gap: 18px; font-size: 24px; }
 .tlf .dict s { color: #6e6e73; text-decoration-color: #ff453a; }
@@ -234,11 +234,11 @@ ${L.modes.map(([, d], i) => `<div class="a desc" data-k="desc${i}">${esc(d)}</di
       // Scene 4: modes and the dictionary (17.5–21 s).
       cap(k.cap5, 17.6, 20.6);
       show(k.seg, span(t, 17.7, 20.7, .45), (1 - ease((t - 17.7) / .6)) * 20);
-      const pick = Math.max(0, Math.min(3, Math.floor((t - 18.0) / .7)));
-      const slide = 18.0 + pick * .7, from2 = Math.max(0, pick - 1);
+      const pick = Math.max(0, Math.min(2, Math.floor((t - 18.0) / .85)));
+      const slide = 18.0 + pick * .85, from2 = Math.max(0, pick - 1);
       const at = from2 + (pick - from2) * ease((t - slide) / .3);
-      k.knob.style.transform = `translateX(${(222 * at).toFixed(1)}px)`;
-      for (let i = 0; i < 4; i++) {
+      k.knob.style.transform = `translateX(${(296 * at).toFixed(1)}px)`;
+      for (let i = 0; i < 3; i++) {
         k["m" + i].classList.toggle("on", i === Math.round(at));
         show(k["desc" + i], i === Math.round(at) ? span(t, slide + .15, 20.6, .25) : 0);
       }
