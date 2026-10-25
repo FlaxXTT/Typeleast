@@ -175,23 +175,22 @@ footer a { color: var(--ink-2); }
   <div class="wrap">
     <p class="eyebrow" data-i18n="hero.eyebrow">扩展</p>
     <h1 data-i18n="hero.title"><span class="sheen">词库和风格</span></h1>
-    <p class="lead" data-i18n="hero.lead">让名字写对，格式按你习惯。</p>
+    <p class="lead" data-i18n="hero.lead">专业词写对，格式随你定。</p>
     <div class="actions">
       <a class="btn" href="#market" data-i18n="hero.browse">浏览插件</a>
       <a class="more" href="#make" data-i18n="hero.make">制作扩展</a>
     </div>
-    <p class="fine" data-i18n="hero.fine">需要 TypeLeast 1.20 或更新。</p>
     <div class="kinds">
       <div class="kind">
         <div class="k" data-i18n="kind.dk">词库</div>
-        <h3 data-i18n="kind.dh">术语写对</h3>
-        <p data-i18n="kind.dp">只发和本句相关的词。</p>
+        <h3 data-i18n="kind.dh">专业词写对</h3>
+        <p data-i18n="kind.dp">只发相关词</p>
         <div class="eg"><span>Kubernetes</span><span>TypeScript</span><span>GitHub</span><span>Node.js</span></div>
       </div>
       <div class="kind">
         <div class="k" data-i18n="kind.sk">风格</div>
         <h3 data-i18n="kind.sh">固定格式</h3>
-        <p data-i18n="kind.sp">同时只用一个风格。</p>
+        <p data-i18n="kind.sp">同时只用一个</p>
         <div class="eg"><span data-i18n="kind.s1">正式书面语</span><span data-i18n="kind.s2">工作邮件</span><span data-i18n="kind.s3">编号列表</span></div>
       </div>
     </div>
@@ -202,7 +201,7 @@ footer a { color: var(--ink-2); }
   <div class="wrap">
     <p class="eyebrow" data-i18n="market.eyebrow">插件市场</p>
     <h2 data-i18n="market.title">官方插件</h2>
-    <p class="lead" data-i18n="market.lead">与 App 内插件市场相同。</p>
+    <p class="lead" data-i18n="market.lead">与 App 内相同。</p>
     <div class="bar">
       <div class="tabs" role="tablist" aria-label="插件类型" data-i18n-aria="market.tabs">
         <button role="tab" aria-selected="true" data-filter="all" data-i18n="market.all">全部</button>
@@ -214,11 +213,11 @@ footer a { color: var(--ink-2); }
     <div class="grid" id="grid" aria-live="polite"></div>
     <div class="state" id="state" data-i18n="market.loading">正在读取…</div>
     <div class="steps">
-      <div class="step"><h4 data-i18n="inst.1h">打开扩展</h4><p data-i18n="inst.1p">左侧栏 → 扩展 → 插件市场。</p></div>
-      <div class="step"><h4 data-i18n="inst.2h">确认后安装</h4><p data-i18n="inst.2p">安装前显示全部内容。</p></div>
-      <div class="step"><h4 data-i18n="inst.3h">按需开关</h4><p data-i18n="inst.3p">随时启用或停用。</p></div>
+      <div class="step"><h4 data-i18n="inst.1h">打开扩展</h4><p data-i18n="inst.1p">左栏 → 扩展 → 插件市场</p></div>
+      <div class="step"><h4 data-i18n="inst.2h">确认安装</h4><p data-i18n="inst.2p">先看全部内容</p></div>
+      <div class="step"><h4 data-i18n="inst.3h">随时开关</h4><p data-i18n="inst.3p">启用或停用</p></div>
     </div>
-    <p class="fine" style="margin-top:16px" data-i18n="market.file">也可下载文件，在 App 里「导入插件文件…」。</p>
+    <p class="fine" style="margin-top:16px" data-i18n="market.file">也可下载后导入。</p>
   </div>
 </section>
 
@@ -226,7 +225,7 @@ footer a { color: var(--ink-2); }
   <div class="wrap">
     <p class="eyebrow" data-i18n="make.eyebrow">制作扩展</p>
     <h2 data-i18n="make.title">一个 JSON 文件</h2>
-    <p class="lead" data-i18n="make.lead">不用写代码。</p>
+    <p class="lead" data-i18n="make.lead">无需代码。</p>
     <div class="doc">
       <div>
         <h3 data-i18n="make.stepsH">步骤</h3>
@@ -245,7 +244,7 @@ footer a { color: var(--ink-2); }
           <div class="code"><div class="name" data-i18n="make.tplDict">词库</div><button class="copy" type="button" data-copy="dict" data-i18n="make.copy">复制</button><pre><code id="tpl-dict"></code></pre></div>
           <div class="code"><div class="name" data-i18n="make.tplStyle">风格</div><button class="copy" type="button" data-copy="style" data-i18n="make.copy">复制</button><pre><code id="tpl-style"></code></pre></div>
         </div>
-        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">不要读音提示时，删掉 <code>aliases</code>，<code>formatVersion</code> 写 <code>1</code>。</p>
+        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">无读音提示：删 <code>aliases</code>，版本写 <code>1</code>。</p>
       </div>
 
       <div>
@@ -279,7 +278,7 @@ footer a { color: var(--ink-2); }
           <ul>
             <li data-i18n="make.st1">只写格式和语气。</li>
             <li data-i18n="make.st2">越短越好。</li>
-            <li data-i18n="make.st3">不能要求输出链接或数据。</li>
+            <li data-i18n="make.st3">不要求输出链接或数据。</li>
           </ul>
         </div>
       </div>
@@ -336,7 +335,7 @@ footer a { color: var(--ink-2); }
       <div class="upload">
         <div>
           <h3><span data-i18n="upload.h">官网上传</span><span class="soon" data-i18n="upload.soon">即将开放</span></h3>
-          <p data-i18n="upload.p">暂请通过 GitHub 提交。</p>
+          <p data-i18n="upload.p">暂用 GitHub 提交。</p>
         </div>
         <button class="btn" type="button" disabled data-i18n="upload.btn">上传插件</button>
       </div>
@@ -389,24 +388,23 @@ const EN = {
   "nav.features": "Features", "nav.ext": "Extensions", "nav.make": "Make", "nav.submit": "Submit", "nav.download": "Download",
   "hero.eyebrow": "Extensions",
   "hero.title": "<span class=\"sheen\">Dictionary packs and styles</span>",
-  "hero.lead": "Right names, your format.",
+  "hero.lead": "Right terms, your format.",
   "hero.browse": "Browse plugins", "hero.make": "Make one",
-  "hero.fine": "Needs TypeLeast 1.20 or later.",
   "kind.dk": "Dictionary pack", "kind.dh": "Terms spelled right",
-  "kind.dp": "Only relevant terms are sent.",
+  "kind.dp": "Only relevant terms sent",
   "kind.sk": "Style", "kind.sh": "Set formats",
-  "kind.sp": "One style at a time.",
+  "kind.sp": "One at a time",
   "kind.s1": "Formal writing", "kind.s2": "Work email", "kind.s3": "Numbered lists",
   "market.eyebrow": "Plugin market", "market.title": "Official plugins",
-  "market.lead": "Same as the app's Plugin market.",
+  "market.lead": "Same as in the app.",
   "market.tabs": "Plugin type", "market.all": "All", "market.dict": "Dictionary packs", "market.style": "Styles",
   "market.loading": "Loading…",
-  "market.file": "Or download the file and use Import plugin file… in the app.",
-  "inst.1h": "Open Extensions", "inst.1p": "Sidebar → Extensions → Plugin market.",
-  "inst.2h": "Check, then install", "inst.2p": "You see everything first.",
-  "inst.3h": "Turn on or off", "inst.3p": "Any time.",
+  "market.file": "Or download and import.",
+  "inst.1h": "Open Extensions", "inst.1p": "Sidebar → Extensions → Plugin market",
+  "inst.2h": "Confirm", "inst.2p": "See everything first",
+  "inst.3h": "On or off", "inst.3p": "Any time",
   "make.eyebrow": "Make an extension", "make.title": "One JSON file",
-  "make.lead": "No code needed.",
+  "make.lead": "No code.",
   "make.stepsH": "Steps",
   "make.s1": "Pick a type: dictionary pack or style.",
   "make.s2": "Copy a template and fill it in.",
@@ -414,7 +412,7 @@ const EN = {
   "make.s4": "Save as <code>&lt;id&gt;.typeleast-plugin</code>.",
   "make.s5": "Import it in the app to try.",
   "make.tplH": "Templates", "make.tplDict": "Dictionary pack", "make.tplStyle": "Style", "make.copy": "Copy",
-  "make.tplNote": "Without hints, remove <code>aliases</code> and set <code>formatVersion</code> to <code>1</code>.",
+  "make.tplNote": "No hints: drop <code>aliases</code>, set version <code>1</code>.",
   "make.fieldsH": "Key fields", "make.fieldsFine": "Full rules in the <a data-link=\"spec\" href=\"#\">plugin specification</a>.",
   "tbl.field": "Field", "tbl.rule": "Rule",
   "tbl.id": "publisher.name, lowercase",
@@ -454,7 +452,7 @@ const EN = {
   "submit.h5": "Published after review.",
   "submit.go": "Submit on GitHub", "submit.readme": "Submission guide", "submit.spec": "Full specification",
   "upload.h": "Upload here", "upload.soon": "Coming soon",
-  "upload.p": "For now, submit on GitHub.",
+  "upload.p": "Use GitHub for now.",
   "upload.btn": "Upload plugin",
   "faq.1h": "Is it safe?", "faq.1p": "Data only, no code.",
   "faq.2h": "Does it cost more?", "faq.2p": "No extra model calls.",
@@ -542,7 +540,7 @@ function pluginCard(p) {
   card.append(meta);
 
   const details = el("details");
-  details.append(el("summary", null, p.type === "style" ? t("查看风格说明", "Show the instructions") : t("查看全部词条", "Show all terms")));
+  details.append(el("summary", null, p.type === "style" ? t("看说明", "Instructions") : t("看词条", "Terms")));
   const content = el("div", "content");
   if (p.type === "style") content.textContent = p.instructions;
   else {
@@ -552,7 +550,7 @@ function pluginCard(p) {
     if (Array.isArray(p.aliases) && p.aliases.length) {
       const hints = el("p", null);
       hints.style.marginTop = "10px";
-      hints.textContent = t("读音提示（语境明确时才使用）：", "Pronunciation hints (used only in context): ")
+      hints.textContent = t("读音提示：", "Hints: ")
         + p.aliases.slice(0, 12).map((a) => `${a.heard} → ${a.term}`).join(t("；", "; "))
         + (p.aliases.length > 12 ? t(" 等", " …") : "");
       content.append(hints);
@@ -562,7 +560,7 @@ function pluginCard(p) {
   card.append(details);
 
   const foot = el("div", "foot");
-  foot.append(el("span", "where", t("App 里：扩展 → 插件市场", "In the app: Extensions → Plugin market")));
+  foot.append(el("span", "where", t("App：扩展 → 插件市场", "App: Extensions → Plugin market")));
   const file = el("a", "btn plain small", t("下载文件", "Download file"));
   file.href = `market/plugins/${encodeURIComponent(p.id)}.typeleast-plugin`;
   file.setAttribute("download", `${p.id}.typeleast-plugin`);
@@ -582,7 +580,7 @@ function renderMarket() {
   if (failed) {
     state.hidden = false;
     state.innerHTML = "";
-    state.append(t("暂时读不到插件目录。", "The plugin catalog can't be read right now. "));
+    state.append(t("目录读不到。", "Catalog unavailable. "));
     const link = el("a", null, t("在 GitHub 上查看", "See it on GitHub"));
     link.href = SITE.links.market;
     state.append(link);
@@ -594,7 +592,7 @@ function renderMarket() {
   state.hidden = shown.length > 0;
   if (!shown.length) state.textContent = t("这个分类里还没有插件。", "No plugins of this type yet.");
   for (const p of shown) grid.append(pluginCard(p));
-  source.textContent = t(`共 ${catalog.plugins.length} 个插件 · 来源 market/catalog.json`, `${catalog.plugins.length} plugins · from market/catalog.json`);
+  source.textContent = t(`共 ${catalog.plugins.length} 个`, `${catalog.plugins.length} plugins`);
 }
 
 async function loadCatalog() {
