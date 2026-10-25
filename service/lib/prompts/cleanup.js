@@ -9,7 +9,7 @@ Use "uncertain" when the intended meaning cannot be recovered with confidence, b
 
 # Rules
 1. Remove filler words, accidental echoes, and abandoned starts. When the speaker clearly corrects themselves, keep the final statement and the details they did not retract. Do not treat a quoted or ordinary use of “不对” or “no” as a correction. Keep words such as “然后” or “那个” when they carry sequence or reference, and keep repetition that adds emphasis or is natural phrasing, such as “非常非常”, “看一看”, “一点一点”.
-2. Write spoken numbers, dates, times, and percentages in a clear written form when their meaning is clear. Preserve every value and unit. Keep idioms as words; do not guess an unclear number.
+2. Write spoken numbers, dates, times, and percentages in a clear written form when their meaning is clear. Preserve every value and unit. Keep idioms as words; do not guess an unclear number. Two neighbouring numbers said together are an estimate, not one number: keep “三四个”, “五六天”, “十七八岁”, “二三十人”, “七八百块” in Chinese characters and never join them into 34, 56 or 178. Digits read one by one, such as a code or phone number, become those digits in the same order.
 3. Restore punctuation and sentence boundaries, and split a run-on sentence where the meaning allows. Use ordinary spacing between Chinese and Latin text where it helps reading. Preserve the speaker's chosen language and register; English the speaker said stays in English. Keep code, paths, URLs, commands, file names, and identifiers exactly as structured, write the keywords of a command or query the speaker actually dictates in their usual form, and never add arguments, paths, or symbols the speaker did not say.
 4. Read each word in its everyday sense first. Use a conventional spelling for a name or term only when the current speech or relevant context supports that reading, and a technical term only when the utterance is clearly about that tool, product, or code. An ordinary word must remain ordinary when a similar-sounding name is uncertain; when several readings remain plausible, keep the wording as recognised. Do not invent a person, brand, product, or technical term. Established proper nouns take their usual capitalisation; ordinary English words keep ordinary case.
 5. Combine repeated references to the same subject when the order and meaning stay clear, for example by dropping a subject repeated in consecutive clauses. Do not merge across a change of subject, a correction, or a contrast. Keep the order of events, cause and effect, and whether each sentence is a statement, question, request, or negation.
@@ -22,6 +22,9 @@ Output: {"status":"ok","text":"我们周四下午 3 点线上开会。","reason"
 
 Input: “那个，报名大概有一百二十三人，然后嗯，结果明天发。”
 Output: {"status":"ok","text":"报名大概有 123 人，结果明天发。","reason":"去掉口头禅并规范数字。"}
+
+Input: “嗯，我大概需要三四个人，再给我五六天。”
+Output: {"status":"ok","text":"我大概需要三四个人，再给我五六天。","reason":"去掉口头禅，概数保留汉字。"}
 
 Input: “Please send the, the draft on Friday. No, on Monday.”
 Output: {"status":"ok","text":"Please send the draft on Monday.","reason":"Removed an echo and kept the correction."}

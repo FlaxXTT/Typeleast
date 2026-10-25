@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chineseNumeral, contentLength, coverage, inventedFacts, novelty, stripListMarkers, unwrap, validateOutput } from "../lib/validate.js";
+import { approximateNumbers, chineseNumeral, contentLength, coverage, inventedFacts, novelty, restoreApproximateNumbers, stripListMarkers, translationInventedNumbers, unwrap, validateOutput } from "../lib/validate.js";
 
 const FENCE = String.fromCharCode(96).repeat(3);
 const NL = String.fromCharCode(10);
@@ -180,6 +180,35 @@ test("Chinese numerals and digits state the same fact", () => {
   assert.deepEqual(inventedFacts("我们有两个平台要支持", "我们有 2 个平台要支持。"), []);
   assert.deepEqual(inventedFacts("这个功能有问题", "这个功能有一个问题。"), [], "the indefinite 一个 is not a fact");
   assert.deepEqual(inventedFacts("帮我做一个语音输入软件", "帮我做一个语音输入软件，预算不超过两千元，周五前完成。"), ["N:2000", "D:周五"]);
+});
+
+test("two neighbouring numbers are an estimate, not one number", () => {
+  const ranges = (text) => approximateNumbers(text).map(({ lo, hi }) => [lo, hi]);
+  assert.deepEqual(ranges("我要三四个"), [[3, 4]]);
+  assert.deepEqual(ranges("来了十七八个人，大概二三十分钟，七八百块，二十三四岁，一两天，三五天"), [[17, 18], [20, 30], [700, 800], [23, 24], [1, 2], [3, 5]]);
+  assert.deepEqual(ranges("验证码是一二三四五六"), [], "a code read digit by digit is not an estimate");
+  assert.deepEqual(ranges("房间乱七八糟"), [], "an idiom is not an estimate");
+  assert.deepEqual(ranges("三十四个"), [], "thirty-four is one number");
+
+  assert.deepEqual(inventedFacts("我要三四个苹果", "我要 34 个苹果。"), ["N:34"], "three or four is not 34");
+  assert.deepEqual(inventedFacts("来了十七八个同学", "来了 178 个同学。"), ["N:178"]);
+  assert.deepEqual(inventedFacts("我要三四个苹果", "我要三四个苹果。"), []);
+  assert.deepEqual(inventedFacts("我要三四个苹果", "我要 3 到 4 个苹果。"), []);
+  assert.deepEqual(inventedFacts("我要三个或者四个", "我要三四个。"), []);
+  assert.deepEqual(inventedFacts("我要三个或者四个", "我要 34 个。"), ["N:34"]);
+  assert.deepEqual(inventedFacts("验证码是一二三四五六", "验证码是 123456。"), []);
+  assert.deepEqual(translationInventedNumbers("我要三四个苹果", "I want 3 or 4 apples."), []);
+  assert.deepEqual(translationInventedNumbers("我要三四个苹果", "I want 34 apples."), ["34"]);
+});
+
+test("an estimate joined into one number is put back in the speaker's words", () => {
+  assert.equal(restoreApproximateNumbers("嗯我要三四个苹果然后十七八个梨", "我要 34 个苹果，然后 178 个梨。"), "我要三四个苹果，然后十七八个梨。");
+  assert.equal(restoreApproximateNumbers("我要三四个", "I need 34 of them"), "I need 三四 of them");
+  assert.equal(restoreApproximateNumbers("我有三十四个，还要三四个", "我有 34 个，还要三四个。"), "我有 34 个，还要三四个。", "a number the speaker said is left alone");
+  assert.equal(restoreApproximateNumbers("我要三四个", "编号 1345 的我要 34 个"), "编号 1345 的我要三四个", "only a whole number is replaced");
+  const raw = "那个我大概要三四个人然后再给我五六天时间";
+  assert.equal(validateOutput({ rawText: raw, output: "我大概要 34 个人，再给我 56 天时间。", strength: "prompt" }).reason, "invented-fact");
+  assert.equal(validateOutput({ rawText: raw, output: restoreApproximateNumbers(raw, "我大概要 34 个人，再给我 56 天时间。"), strength: "prompt" }).ok, true);
 });
 
 test("a count that matches the list it introduces is structure, not invention", () => {

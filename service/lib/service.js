@@ -30,7 +30,7 @@ import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } 
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
-import { validateOutput } from "./validate.js";
+import { restoreApproximateNumbers, validateOutput } from "./validate.js";
 import { normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
@@ -233,7 +233,7 @@ export class VoicePolishService {
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
       // Deterministic cleanup runs BEFORE validation so the safety checks judge
       // exactly the text that would be inserted.
-      const tidied = tidy(parsed.text);
+      const tidied = tidy(restoreApproximateNumbers(rawText, parsed.text));
       const verdict = validateOutput({ rawText, output: tidied.text, strength });
       if (!verdict.ok) {
         // Same fallback text as the exception path below: the rejected rewrite
@@ -319,7 +319,7 @@ export class VoicePolishService {
       const parsed = parsePolishOutput(cleanup.text);
       if (!parsed.ok) this.stats.jsonFallback += 1;
       else if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      const tidied = parsed.ok ? tidy(parsed.text) : null;
+      const tidied = parsed.ok ? tidy(restoreApproximateNumbers(rawText, parsed.text)) : null;
       const sourceVerdict = tidied ? validateOutput({ rawText, output: tidied.text, strength: "prompt" }) : null;
       if (!sourceVerdict?.ok) {
         const issue = sourceVerdict ? sourceVerdict.reason : `source-output-format:${parsed.failure ?? "unknown"}`;

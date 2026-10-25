@@ -11,7 +11,8 @@ test("cleanup remains general and keeps the output contract", () => {
     assert.ok(CLEANUP_PROMPT.includes(rule), rule);
   }
   assert.match(CLEANUP_PROMPT, /"status":"ok"\|"uncertain"/);
-  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 5);
+  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 6);
+  assert.ok(CLEANUP_PROMPT.includes("三四个") && CLEANUP_PROMPT.includes("never join them"), "an estimate stays an estimate");
   assert.ok(CLEANUP_PROMPT.indexOf("# Examples") < CLEANUP_PROMPT.indexOf("# Check before answering"), "the check comes last");
   for (const specialised of ["Tech Domain", "Python", "杰森", "Claude", "GitHub"]) assert.ok(!CLEANUP_PROMPT.includes(specialised));
 });

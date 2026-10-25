@@ -178,12 +178,54 @@ const CALENDAR_SYNONYMS = {
   星期日: "周日", 周天: "周日",
 };
 
+// Two neighbouring numbers said together are an estimate, not one number:
+// 三四个 is "three or four", 十七八岁 "seventeen or eighteen", 二三十人 "twenty or
+// thirty". Read digit by digit they would be 34, 178 and 230, which is the
+// mistake a rewrite must not make. A longer run (一二三四五六) is a code read
+// out digit by digit and stays a single number.
+const CN_ANY = "零〇一二三四五六七八九十百千万亿两";
+const APPROX = new RegExp(`(?<![${CN_ANY}乱])(?:([一二三四五六七八九两]?)十)?(一两|两三|二三|三四|四五|五六|六七|七八|八九|三五)([十百千万])?(?![${CN_ANY}点])`, "gu");
+const RANGE = /(?<![\d.])(\d+)\s*(?:到|至|~|～|或者|或|[-–—](?=\s*[\u4e00-\u9fff]))\s*(\d+)(?![\d.])/gu;
+
+/**
+ * Spoken estimates in a text, with their range.
+ * @param {string} text - text to search.
+ * @returns {{text: string, index: number, lo: number, hi: number, merged: string|null}[]}
+ *   merged is the wrong single number a rewrite tends to write ("34" for 三四),
+ *   when the estimate has an obvious one.
+ */
+export function approximateNumbers(text) {
+  const found = [];
+  for (const match of String(text ?? "").matchAll(APPROX)) {
+    const [whole, tensDigit, pair, unit] = match;
+    const [a, b] = Array.from(pair).map((c) => CN_DIGITS[c]);
+    const hasTens = whole.startsWith(pair) ? false : true;
+    const tens = hasTens ? (tensDigit ? CN_DIGITS[tensDigit] : 1) : 0;
+    const scale = unit ? (CN_UNITS[unit] ?? CN_BIG[unit]) : 1;
+    // 二十三四 is 23 to 24; 十三四万 is 130,000 to 140,000.
+    const lo = (tens * 10 + a) * scale, hi = (tens * 10 + b) * scale;
+    const merged = unit ? null : hasTens ? `${tens}${a}${b}` : `${a}${b}`;
+    found.push({ text: whole, index: match.index, lo, hi, merged });
+  }
+  return found;
+}
+
 export function factTokens(text) {
   // List labels are layout, not facts: "1. 更新解析器" adds structure, not the
   // number one. Without this every numbered list the user asked for was
   // rejected as an invented fact.
-  const source = stripListMarkers(text);
   const set = new Set();
+  // Estimates ("三四个", "3 到 4 个") are ranges, recorded before anything reads
+  // their digits as one number.
+  let source = stripListMarkers(text);
+  for (const estimate of approximateNumbers(source)) set.add(`A:${estimate.lo}-${estimate.hi}`);
+  source = source.replace(APPROX, (m) => " ".repeat(m.length));
+  source = source.replace(RANGE, (m, lo, hi) => { set.add(`A:${Number(lo)}-${Number(hi)}`); return " ".repeat(m.length); });
+  // A code or phone number read digit by digit ("一二三四五六") is written as those
+  // digits, leading zeros included.
+  for (const [run] of source.matchAll(new RegExp(`(?<![${CN_ANY}])[零〇一二三四五六七八九]{3,}(?![${CN_ANY}])`, "gu"))) {
+    set.add("N:" + Array.from(run).map((c) => CN_DIGITS[c]).join(""));
+  }
   // Arabic digits and Chinese numerals both count, and both normalise to the
   // same value: "两个平台" and "2 个平台" state the same fact, so rewriting one
   // into the other is not fabrication.
@@ -332,9 +374,43 @@ export function correctionWindow(source) {
  */
 export function inventedFacts(source, output) {
   const from = factTokens(source);
+  // "三四个" and "三个或四个" say the same thing, so a range and its two ends
+  // vouch for each other. Nothing vouches for 34.
+  for (const token of [...from]) {
+    const range = /^A:(\d+)-(\d+)$/.exec(token);
+    if (range) { from.add("N:" + range[1]); from.add("N:" + range[2]); }
+  }
   const invented = [];
-  for (const token of factTokens(output)) if (!from.has(token)) invented.push(token);
+  for (const token of factTokens(output)) {
+    if (from.has(token)) continue;
+    const range = /^A:(\d+)-(\d+)$/.exec(token);
+    if (range && from.has("N:" + range[1]) && from.has("N:" + range[2])) continue;
+    invented.push(token);
+  }
   return invented;
+}
+
+/**
+ * Put back an estimate that a rewrite joined into one number: the speaker said
+ * 三四个 and the model wrote 34 个. Only a number the speaker never said is
+ * touched, and it is replaced by the speaker's own words.
+ * @param {string} raw - the transcript.
+ * @param {string} output - the rewrite.
+ * @returns {string} the rewrite with such numbers restored.
+ */
+export function restoreApproximateNumbers(raw, output) {
+  let text = String(output ?? "");
+  const said = factTokens(raw);
+  for (const estimate of approximateNumbers(raw)) {
+    if (!estimate.merged || said.has("N:" + estimate.merged)) continue;
+    const pattern = new RegExp(`( ?)(?<![\\d.,])${estimate.merged}(?![\\d.,])( ?)`, "gu");
+    text = text.replace(pattern, (m, before, after, at, whole) => {
+      const prev = whole[at - 1] ?? "", next = whole[at + m.length] ?? "";
+      const cjk = /[\u4e00-\u9fff]/u;
+      return (before && !cjk.test(prev) ? before : "") + estimate.text + (after && !cjk.test(next) ? after : "");
+    });
+  }
+  return text;
 }
 
 /** Language balance of a text: CJK characters, latin letters and latin words. */
@@ -434,7 +510,9 @@ export const THRESHOLDS = {
  */
 export function translationInventedNumbers(raw, output) {
   const said = new Set([0]);
-  const source = stripListMarkers(String(raw ?? ""));
+  let source = stripListMarkers(String(raw ?? ""));
+  for (const estimate of approximateNumbers(source)) { said.add(estimate.lo); said.add(estimate.hi); }
+  source = source.replace(APPROX, (m) => " ".repeat(m.length));
   for (const token of source.match(/\d+(?:[.:/-]\d+)*/g) ?? []) {
     said.add(Number(token));
     for (const part of token.split(/[.:/-]/)) said.add(Number(part));
