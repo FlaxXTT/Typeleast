@@ -207,6 +207,40 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
     Eq("ordinary dictation sends no target", stub.LastHeaders.GetValueOrDefault("x-voice-translate"), null);
 
+    using (var requestContract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v1.json"))))
+    {
+        var sampleWav = Wav.FromPcm16(new byte[3200]);
+        foreach (var sample in requestContract.RootElement.GetProperty("requestCases").EnumerateArray())
+        {
+            var id = sample.GetProperty("id").GetString();
+            string? Optional(string name) => sample.GetProperty(name).ValueKind == JsonValueKind.Null ? null : sample.GetProperty(name).GetString();
+            var dictionary = sample.GetProperty("dictionary").EnumerateArray().Select(v => v.GetString()!).ToArray();
+            var localOnly = sample.GetProperty("localOnly").EnumerateArray().Select(v => v.GetString()!).ToArray();
+            var language = sample.GetProperty("language").GetString()!;
+            var strength = sample.GetProperty("strength").GetString()!;
+            await client.DictateAsync(sampleWav, language, "example.editor", strength, null,
+                translateTo: Optional("translateTo"), variants: Optional("variants"), dictionary: dictionary, localOnly: localOnly);
+            Eq("shared request path: " + id, stub.LastPath, "/api/voice-polish/dictate");
+            Eq("shared request language: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-language"), language);
+            Eq("shared request mode: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-strength"), strength);
+            Eq("shared request translation: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-translate"), Optional("translateTo"));
+            Eq("shared request variants: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-variants"), Optional("variants"));
+            var dictionaryBytes = int.Parse(stub.LastHeaders["x-voice-dictionary-bytes"]);
+            Check("shared dictionary length: " + id, dictionaryBytes >= 0 && dictionaryBytes <= stub.LastBody.Length);
+            if (dictionaryBytes > 0)
+            {
+                using var sentEntries = JsonDocument.Parse(stub.LastBody.AsMemory(0, dictionaryBytes));
+                Eq("shared dictionary count: " + id, sentEntries.RootElement.GetArrayLength(), dictionary.Length + localOnly.Length);
+                if (sentEntries.RootElement.GetArrayLength() == dictionary.Length + localOnly.Length)
+                {
+                    for (var i = 0; i < dictionary.Length; i++) Eq("shared dictionary word: " + id + "/" + i, sentEntries.RootElement[i].GetString(), dictionary[i]);
+                    for (var i = 0; i < localOnly.Length; i++) Eq("shared local word: " + id + "/" + i, sentEntries.RootElement[dictionary.Length + i].GetProperty("local").GetString(), localOnly[i]);
+                }
+            }
+            Check("shared WAV tail: " + id, stub.LastBody.AsSpan(dictionaryBytes).SequenceEqual(sampleWav));
+        }
+    }
+
     stub.Reply = (200, "{\"word\":\"公司\"}");
     Eq("the service names the learned word", await client.LearnedWordAsync("这家公式很好", "这家公司很好"), "公司");
     Eq("learned-word path", stub.LastPath, "/api/voice-polish/learned-word");
@@ -793,6 +827,28 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
             var expected = sample.GetProperty("expectedWords").EnumerateArray().Select(e => e.GetString());
             Eq("suggestion response: " + sample.GetProperty("id").GetString(), string.Join("|", response.Suggestions.Select(s => s.Word)), string.Join("|", expected));
             Eq("optional suggestions cannot break text", response.InsertableText, "Result stays usable.");
+        }
+    }
+    using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v1.json"))))
+    {
+        Eq("shared client contract version", contract.RootElement.GetProperty("version").GetInt32(), 1);
+        foreach (var sample in contract.RootElement.GetProperty("modeCases").EnumerateArray())
+        {
+            var storedElement = sample.GetProperty("stored");
+            var stored = storedElement.ValueKind == JsonValueKind.Null ? null : storedElement.GetString();
+            var label = stored ?? "null";
+            var mode = CleanupModes.Stored(stored);
+            Eq("shared stored mode: " + label, mode, sample.GetProperty("expected").GetString());
+            Eq("shared mode title: " + label, CleanupModes.Title(mode), sample.GetProperty("labelZh").GetString());
+        }
+        foreach (var sample in contract.RootElement.GetProperty("responseCases").EnumerateArray())
+        {
+            var id = sample.GetProperty("id").GetString();
+            var response = JsonSerializer.Deserialize<DictateResponse>(sample.GetProperty("response").GetRawText(), Json.Options)!;
+            Eq("shared insertable response: " + id, response.InsertableText, sample.GetProperty("insertable").GetString());
+            Eq("shared beta waiting: " + id, response.BetaWaiting, sample.GetProperty("betaWaiting").GetBoolean());
+            var translation = sample.GetProperty("translated");
+            Eq("shared translation result: " + id, response.Translated, translation.ValueKind == JsonValueKind.Null ? null : translation.GetString());
         }
     }
     var seenAt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Utc);

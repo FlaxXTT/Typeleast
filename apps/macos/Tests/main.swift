@@ -1343,6 +1343,74 @@ do {
     }
 }
 
+// Shared, versioned behavior for a future client written in another language.
+do {
+    struct ModeCase: Decodable { let stored: String?; let expected: String; let labelZh: String }
+    struct RequestCase: Decodable {
+        let id: String
+        let language: String
+        let strength: String
+        let translateTo: String?
+        let variants: String?
+        let dictionary: [String]
+        let localOnly: [String]
+    }
+    struct ResponseCase: Decodable {
+        let id: String
+        let response: DictateResponse
+        let insertable: String
+        let betaWaiting: Bool
+        let translated: String?
+    }
+    struct ClientContract: Decodable { let version: Int; let modeCases: [ModeCase]; let requestCases: [RequestCase]; let responseCases: [ResponseCase] }
+    guard let path = ProcessInfo.processInfo.environment["TYPELEAST_CLIENT_CONTRACT"] else { fatalError("Missing client contract") }
+    let contract = try JSONDecoder().decode(ClientContract.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+    checkEq("client contract version", contract.version, 1)
+    let oldLanguage = L10n.language
+    L10n.language = "zh-Hans"
+    for sample in contract.modeCases {
+        let mode = VoiceStrength.stored(sample.stored)
+        checkEq("shared stored mode: " + (sample.stored ?? "null"), mode.rawValue, sample.expected)
+        checkEq("shared mode title: " + (sample.stored ?? "null"), mode.label, sample.labelZh)
+    }
+    L10n.language = oldLanguage
+    state.mode = "health"
+    for sample in contract.requestCases {
+        _ = try client.dictateSync(wav: wav, language: sample.language, appBundleId: "example.editor",
+                                   strength: sample.strength, translateTo: sample.translateTo,
+                                   variants: sample.variants, dictionary: sample.dictionary,
+                                   localOnly: sample.localOnly)
+        let sent = state.lastRequest
+        checkEq("shared request path: " + sample.id, sent?.path, "/api/voice-polish/dictate")
+        checkEq("shared request language: " + sample.id, sent?.header("x-voice-language"), sample.language)
+        checkEq("shared request mode: " + sample.id, sent?.header("x-voice-strength"), sample.strength)
+        checkEq("shared request translation: " + sample.id, sent?.header("x-voice-translate"), sample.translateTo ?? "")
+        checkEq("shared request variants: " + sample.id, sent?.header("x-voice-variants"), sample.variants ?? "")
+        let length = Int(sent?.header("x-voice-dictionary-bytes") ?? "") ?? -1
+        let body = sent?.body ?? Data()
+        check("shared dictionary length: " + sample.id, length >= 0 && length <= body.count)
+        if length >= 0 && length <= body.count {
+            let actual = length == 0 ? [] : ((try? JSONSerialization.jsonObject(with: body.prefix(length))) as? [Any] ?? [])
+            checkEq("shared dictionary count: " + sample.id, actual.count, sample.dictionary.count + sample.localOnly.count)
+            if actual.count == sample.dictionary.count + sample.localOnly.count {
+                for (index, word) in sample.dictionary.enumerated() {
+                    checkEq("shared dictionary word: " + sample.id + "/" + String(index), actual[index] as? String, word)
+                }
+                for (index, word) in sample.localOnly.enumerated() {
+                    checkEq("shared local word: " + sample.id + "/" + String(index),
+                            (actual[sample.dictionary.count + index] as? [String: String])?["local"], word)
+                }
+            }
+            checkEq("shared WAV tail: " + sample.id, Data(body.suffix(from: length)), wav)
+        }
+    }
+    for sample in contract.responseCases {
+        checkEq("shared insertable response: " + sample.id, sample.response.insertableText, sample.insertable)
+        checkEq("shared beta waiting: " + sample.id, sample.response.betaWaiting, sample.betaWaiting)
+        checkEq("shared translation result: " + sample.id, sample.response.translated, sample.translated)
+    }
+}
+
 do {
     struct NotesCase: Decodable { let id: String; let language: String; let markdown: String; let expected: String }
     let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TYPELEAST_SUGGESTION_RESPONSES"]!).deletingLastPathComponent()

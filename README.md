@@ -283,6 +283,8 @@ npm start
 
 镜像：`HF_ENDPOINT=https://hf-mirror.com npm run setup-models`。
 
+验收测试：[跨语言验收契约](tests/conformance/README.md)。只连本机假模型，不下载语音模型。
+
 macOS：
 
 ```bash
