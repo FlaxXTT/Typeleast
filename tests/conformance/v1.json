@@ -50,6 +50,10 @@
       "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "rawBody": "{\"text\":\"fake-private-text\",\"apiKey\":\"sk-test-conformance-only\"", "expect": { "fields": { "status": 400, "json.code": "invalid-json" }, "excludes": ["fake-private-text", "sk-test-conformance-only"] } }]
     },
     {
+      "id": "oversized-json-is-rejected", "group": "security",
+      "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "repeatBody": { "char": "x", "count": 262145 }, "expect": { "fields": { "status": 413, "json.code": "payload-too-large" }, "modelCalls": 0 } }]
+    },
+    {
       "id": "route-does-not-send-key-to-remote-http", "group": "security",
       "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "body": { "text": "Send the report.", "llm": { "baseURL": "http://model.example.invalid/v1", "model": "m", "apiKey": "sk-test-conformance-only" } }, "expect": { "fields": { "status": 200, "json.fallback": true, "json.fallbackReason": "no-api-key" }, "excludes": ["sk-test-conformance-only"], "modelCalls": 0 } }]
     },
@@ -66,11 +70,6 @@
       "id": "bad-dictionary-json", "group": "audio",
       "steps": [{ "method": "POST", "path": "/api/voice-polish/dictate", "headers": { "x-voice-dictionary-bytes": "3" }, "rawBody": "bad", "expect": { "fields": { "status": 400 }, "modelCalls": 0 } }]
     },
-    {
-      "id": "unknown-language-is-client-error", "group": "audio",
-      "steps": [{ "method": "POST", "path": "/api/voice-polish/dictate", "headers": { "x-voice-language": "zz" }, "rawBody": "RIFF", "expect": { "fields": { "status": 400 }, "modelCalls": 0 } }]
-    },
-
     {
       "id": "natural-cleanup", "group": "cleanup",
       "modelReplies": ["{\"status\":\"ok\",\"text\":\"Send the report on Monday.\",\"reason\":\"Removed an echo.\"}"],

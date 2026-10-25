@@ -83,7 +83,10 @@ async function runScenario(scenario) {
         continue;
       }
       const route = { baseURL: `http://127.0.0.1:${model.port}/v1`, model: 'contract-model', apiKey: fakeKey };
-      const rawBody = step.wavId ? wavWithId(step.wavId) : step.rawBody !== undefined ? step.rawBody : step.body === undefined ? '' : JSON.stringify(replace(step.body, route, lastSession));
+      const rawBody = step.wavId ? wavWithId(step.wavId)
+        : step.repeatBody ? step.repeatBody.char.repeat(step.repeatBody.count)
+        : step.rawBody !== undefined ? step.rawBody
+        : step.body === undefined ? '' : JSON.stringify(replace(step.body, route, lastSession));
       const requestStep = { ...step, path: step.path.replace('$LAST_DIGEST', encodeURIComponent(lastDigest)), headers: replace(step.headers ?? {}, route, lastSession) };
       if (step.wavId) requestStep.headers['content-type'] = 'audio/wav';
       const response = await call(service.port, service.token, requestStep, rawBody);

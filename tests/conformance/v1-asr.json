@@ -13,6 +13,10 @@
       ]
     },
     {
+      "id": "unknown-language-is-client-error", "group": "dictation",
+      "steps": [{ "method": "POST", "path": "/api/voice-polish/dictate", "wavId": 4, "headers": { "x-voice-language": "zz" }, "expect": { "fields": { "status": 400, "json.code": "invalid-language" }, "modelCalls": 0 } }]
+    },
+    {
       "id": "beta-three-rounds-and-explicit-finish", "group": "beta-flow",
       "modelReplies": [
         "{\"goal\":\"整理纪要\",\"confirmed\":[\"整理详细纪要，供团队阅读\"],\"questions\":[\"给谁看？\"]}",
