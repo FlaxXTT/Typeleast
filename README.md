@@ -339,6 +339,8 @@ npm run setup-models
 npm start
 ```
 
+重写本地服务或桌面客户端时，可使用[跨语言验收契约](tests/conformance/README.md)。默认黑盒测试只连接本机假模型，不下载语音模型。
+
 `npm run setup-models` 下载并校验语音模型；已经有这些文件时用 `npm run setup-models -- --from <文件夹>` 导入。镜像：macOS 上 `HF_ENDPOINT=https://hf-mirror.com npm run setup-models`，Windows PowerShell 里先 `$env:HF_ENDPOINT="https://hf-mirror.com"`。
 
 ### macOS App
