@@ -165,6 +165,20 @@ test("繁体转换在本机完成：台湾用语、香港字形；简体、数�
   assert.equal(await applyVariants("Hello 123", { zh: "tw" }), "Hello 123");
 });
 
+test("繁体只用于中文：日文汉字和译成其他语言的结果不转换", async () => {
+  assert.equal(await applyVariants("会社の設定を変更してください。", { zh: "tw" }), "会社の設定を変更してください。");
+  assert.equal(await applyVariants("金曜日までに企画書を送ってください。", { zh: "hk" }), "金曜日までに企画書を送ってください。");
+  const japanese = "会議は木曜日の午後3時です。";
+  const { fetchImpl } = provider(calls => calls.length === 1
+    ? JSON.stringify({ status: "ok", text: "周四下午三点开会。", reason: "改口" }) : japanese);
+  const translated = await makeService(fetchImpl).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "ja", variants: "zh=tw" });
+  assert.equal(translated.text, japanese);
+  const { fetchImpl: toChinese } = provider(calls => calls.length === 1
+    ? JSON.stringify({ status: "ok", text: "周四下午三点开会。", reason: "改口" }) : "这个软件周四更新。");
+  const chinese = await makeService(toChinese).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "zh", variants: "zh=tw" });
+  assert.equal(chinese.text, "這個軟體週四更新。");
+});
+
 test("变体对整理结果和无模型回退都生效；英式拼写写进系统提示词", async () => {
   const { calls, fetchImpl } = provider('{"status":"ok","text":"周四下午三点开会，大家记得带电脑。"}');
   const service = makeService(fetchImpl);

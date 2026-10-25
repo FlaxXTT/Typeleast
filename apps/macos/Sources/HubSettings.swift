@@ -565,9 +565,10 @@ struct ModelSection: View {
                             SecureField("sk-…", text: $keyDraft)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 220)
-                            Button(L10n.text("保存")) { saveKey() }
+                            // An emptied field with a saved key deletes it from the Keychain.
+                            Button(keyDraft.isEmpty && keySaved ? L10n.text("删除") : L10n.text("保存")) { saveKey() }
                             .buttonStyle(SecondaryButtonStyle())
-                            .disabled(keyDraft.isEmpty)
+                            .disabled(keyDraft.isEmpty && !keySaved)
                         }
                     }
                 }

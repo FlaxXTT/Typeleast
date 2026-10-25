@@ -260,6 +260,14 @@ public sealed class ServiceClient
         route is null ? null : Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(route));
 
     /// <summary>Field context travels as base64(JSON) in x-voice-context; too large means none.</summary>
+    // Default escaping writes each CJK character as \uXXXX (6 bytes instead of 3); a full Chinese
+    // field then went over MaxContextHeaderBytes and was dropped. The service parses UTF-8 JSON.
+    private static readonly JsonSerializerOptions ContextOptions = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>The text around the cursor as UTF-8 JSON for x-voice-context.</summary>
+    public static byte[] ContextJson(string before, string selected, string after) =>
+        JsonSerializer.SerializeToUtf8Bytes(new { before, selected, after }, ContextOptions);
+
     public static string? EncodeContextHeader(byte[]? json)
     {
         if (json is null || json.Length == 0) return null;

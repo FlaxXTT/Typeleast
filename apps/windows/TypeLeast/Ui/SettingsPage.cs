@@ -136,9 +136,10 @@ internal sealed class SettingsPage : IPage
         var restore = Theme.Toggle(s.RestoreClipboard, value => { s.RestoreClipboard = value; host.SaveSettings(); });
         var login = Theme.Toggle(s.LaunchAtLogin, value => { s.LaunchAtLogin = value; if (host.SaveSettings()) Autostart.Apply(value); });
         var pasteKey = Theme.Choice(180);
-        foreach (var code in new[] { "CtrlShiftV", "CtrlAltV", "off" }) pasteKey.Items.Add(new ComboBoxItem { Content = code == "off" ? L10n.T("关") : code == "CtrlShiftV" ? "Ctrl + Shift + V" : "Ctrl + Alt + V", Tag = code });
-        pasteKey.SelectedIndex = s.PasteLastShortcut == "CtrlAltV" ? 1 : s.PasteLastShortcut == "off" ? 2 : 0;
-        pasteKey.SelectionChanged += (_, _) => { if (pasteKey.SelectedItem is ComboBoxItem { Tag: string code }) { s.PasteLastShortcut = code; host.SaveSettings(); } };
+        foreach (var code in new[] { "CtrlShiftAltV", "CtrlShiftV", "CtrlAltV", "off" })
+            pasteKey.Items.Add(new ComboBoxItem { Content = code switch { "off" => L10n.T("关"), "CtrlShiftAltV" => "Ctrl + Shift + Alt + V", "CtrlShiftV" => "Ctrl + Shift + V", _ => "Ctrl + Alt + V" }, Tag = code });
+        pasteKey.SelectedIndex = s.PasteLastShortcut switch { "CtrlShiftV" => 1, "CtrlAltV" => 2, "off" => 3, _ => 0 };
+        pasteKey.SelectionChanged += (_, _) => { if (pasteKey.SelectedItem is ComboBoxItem { Tag: string code }) { s.PasteLastShortcut = code; s.PasteShortcutDefaults = 1; host.SaveSettings(); } };
         // ---- cleanup model
         foreach (var p in LlmPreset.All) preset.Items.Add(new ComboBoxItem { Content = p.Name, Tag = p.Id });
         preset.SelectedIndex = Math.Max(0, LlmPreset.All.ToList().FindIndex(p => p.Id == s.LlmPresetId));

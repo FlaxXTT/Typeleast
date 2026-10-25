@@ -103,8 +103,9 @@ internal sealed class TrayMenu : Window
     private static string PasteShortcut(string code) => code switch
     {
         "CtrlAltV" => "Ctrl+Alt+V",
+        "CtrlShiftV" => "Ctrl+Shift+V",
         "off" => "",
-        _ => "Ctrl+Shift+V",
+        _ => "Ctrl+Shift+Alt+V",
     };
 
     /// <summary>Open the menu by the pointer, in physical pixels.</summary>

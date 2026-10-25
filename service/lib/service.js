@@ -527,7 +527,9 @@ export class VoicePolishService {
     // Entries the user keeps from the model: their heard-as spellings are corrected here.
     result.text = applyLocalEntries(result.text, localEntriesFrom(request.dictionary));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
-    if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants));
+    // It is for Chinese only: a translation into another language is never converted.
+    const target = typeof request.translateTo === "string" && request.translateTo ? request.translateTo : null;
+    if (request.variants && (!target || target === "zh")) result.text = await applyVariants(result.text, parseVariants(request.variants));
     result.suggestions = [];
     if (!result.fallback && !request.translateTo && !result.translated &&
         !result.beta?.sessionId) {

@@ -24,7 +24,7 @@ internal sealed class KeyboardHook : IDisposable
     /// <summary>A clean tap of the translate key.</summary>
     public event Action? TranslateTapped;
     public event Action? PasteLast;
-    public string CopyShortcut { get; set; } = "CtrlShiftV";
+    public string CopyShortcut { get; set; } = "CtrlShiftAltV";
     private bool copyPressed;
     /// <summary>Esc while <see cref="SwallowEscape"/> is set (recording).</summary>
     public event Action? Escape;
@@ -77,7 +77,7 @@ internal sealed class KeyboardHook : IDisposable
                 var ctrl = (Native.GetAsyncKeyState(0x11) & 0x8000) != 0;
                 var shift = (Native.GetAsyncKeyState(0x10) & 0x8000) != 0;
                 var alt = (Native.GetAsyncKeyState(0x12) & 0x8000) != 0;
-                if (isDown && ctrl && (CopyShortcut == "CtrlShiftV" && shift && !alt || CopyShortcut == "CtrlAltV" && alt && !shift))
+                if (isDown && ctrl && (CopyShortcut == "CtrlShiftAltV" && shift && alt || CopyShortcut == "CtrlShiftV" && shift && !alt || CopyShortcut == "CtrlAltV" && alt && !shift))
                 { copyPressed = true; return new IntPtr(1); }
             }
 

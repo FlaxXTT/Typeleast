@@ -334,7 +334,9 @@ internal sealed class DictationController
                 if (options.InsertionMode == "preview")
                 {
                     var preview = await PreviewPanel.Show(text, operation.Token);
-                    if (preview is null || !operations.IsCurrent(operation)) return;
+                    if (!operations.IsCurrent(operation)) return;
+                    // Closing the preview cancels: replace the "thinking" pill, which would otherwise stay on screen.
+                    if (preview is null) { bar.ShowResult(L10n.T("已取消"), warning: false); return; }
                     text = TerminalGuard.SafeText(preview, targetApp);
                     Native.SetForegroundWindow(targetWindow);
                     await Task.Delay(100, operation.Token);

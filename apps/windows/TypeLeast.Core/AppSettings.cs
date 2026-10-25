@@ -68,7 +68,11 @@ public sealed class AppSettings
     public bool FormattedLists { get; set; }
     public bool PlaySounds { get; set; } = true;
     public bool MuteOtherAudio { get; set; }
-    public string PasteLastShortcut { get; set; } = "CtrlShiftV";
+    /// <summary>Ctrl+Shift+V is paste in terminals and paste-as-plain-text in browsers and Office,
+    /// so the default no longer takes it.</summary>
+    public string PasteLastShortcut { get; set; } = "CtrlShiftAltV";
+    /// <summary>1 once a Ctrl+Shift+V paste-last shortcut moved to Ctrl+Shift+Alt+V (1.21.1).</summary>
+    public int PasteShortcutDefaults { get; set; }
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double WindowWidth { get; set; } = 956;
@@ -142,6 +146,12 @@ public sealed class AppSettings
                 if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
                 // Learning used to be off by default and was easy to miss: switch it on once.
                 if (loaded.LearningDefaults < 1) { loaded.LearnCorrections = true; loaded.LearningDefaults = 1; }
+                // The old default took Ctrl+Shift+V from every app: move it once.
+                if (loaded.PasteShortcutDefaults < 1)
+                {
+                    if (loaded.PasteLastShortcut == "CtrlShiftV") loaded.PasteLastShortcut = "CtrlShiftAltV";
+                    loaded.PasteShortcutDefaults = 1;
+                }
                 return loaded;
             }
         }
