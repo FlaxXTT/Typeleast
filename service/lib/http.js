@@ -264,7 +264,7 @@ export function createHandler(options) {
           }
           return;
         }
-        if (route === "/plugins/catalog" && req.method === "GET") { reply(res, 200, await service.refreshCatalog()); return; }
+        if (route === "/plugins/catalog" && req.method === "GET") { reply(res, 200, await service.refreshCatalog(url.searchParams.get("sources") ?? "auto")); return; }
         if (route === "/plugins/catalog/install" && req.method === "POST") {
           const body = await jsonBody();
           reply(res, 200, await service.installFromCatalog(String(body.id ?? ""), body.enable === true, body.digest));

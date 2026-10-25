@@ -239,6 +239,10 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     stub.Reply = (200, "{\"ok\":false,\"code\":\"market-offline\",\"source\":null,\"fetchedAt\":null,\"plugins\":[]}");
     var market = await client.GetPluginCatalogAsync();
     Check("an offline market is reported, not an error", !market.Ok && PluginMessages.Describe(market.Code) == L10n.T("连不上插件目录，请检查网络"));
+    Eq("the market follows the update source setting", stub.LastPath, "/api/voice-polish/plugins/catalog?sources=auto");
+    stub.Reply = (200, "{\"ok\":true,\"source\":\"fastly.jsdelivr.net\",\"mirrored\":true,\"fetchedAt\":null,\"plugins\":[]}");
+    var mirrored = await client.GetPluginCatalogAsync("mirror");
+    Check("a catalog read through a mirror is marked", mirrored.Mirrored && stub.LastPath == "/api/voice-polish/plugins/catalog?sources=mirror");
 
     // Entries marked 「不发给模型」 go to the local service as {"local": entry}, after the ordinary ones.
     var (marked, markedBytes) = ServiceClient.DictateBody(new byte[] { 1, 2 }, new[] { "DeepSeek" }, new[] { "张为=章伟" });
@@ -833,10 +837,11 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("steps: download, check, install", string.Join(",", UpdatePolicy.Steps), "下载,核对,安装");
     Eq("verifying is the second step", UpdatePolicy.Step(UpdateStage.Verifying), 1);
     var newer = new WindowsReleaseInfo("1.18.0", "v1.18.0", "");
-    Check("auto-install when all is clear", UpdatePolicy.AutoInstall(newer, true, true, null, false));
-    Check("not while dictating or Prompt Beta is open", !UpdatePolicy.AutoInstall(newer, true, true, null, true));
-    Check("not a version that already failed in this run", !UpdatePolicy.AutoInstall(newer, true, true, "1.18.0", false));
-    Check("not with 自动更新 off, nor for the portable copy", !UpdatePolicy.AutoInstall(newer, false, true, null, false) && !UpdatePolicy.AutoInstall(newer, true, false, null, false));
+    Check("a found update is offered when all is clear", UpdatePolicy.ShouldOffer(newer, true, null, false));
+    Check("not while dictating or Prompt Beta is open", !UpdatePolicy.ShouldOffer(newer, true, null, true));
+    Check("稍后: not offered again in this run", !UpdatePolicy.ShouldOffer(newer, true, "1.18.0", false));
+    Check("a newer version is offered even after 稍后", UpdatePolicy.ShouldOffer(new WindowsReleaseInfo("1.19.0", "v1.19.0", ""), true, "1.18.0", false));
+    Check("not with 更新提醒 off", !UpdatePolicy.ShouldOffer(newer, false, null, false));
     Check("learning is on for new installs", new AppSettings().LearnCorrections);
     var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(old, """{"LearnCorrections":false}""");

@@ -3,36 +3,38 @@ TypeLeast：按快捷键说话，本机识别，再用你选择的模型整理�
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 新增「扩展」：可安装词库和风格两种插件，插件市场读官方目录。
-- 词典只把这次听写提到的词发给模型；词条可标「不发给模型」。
-- 保留录音改为约 5 分钟后删除，退出 App 时也会删除。
+- 发现新版本时先问你「立即更新」还是「稍后」，不再自动安装。
+- 插件市场在国内网络下改用镜像，也能打开。
+- 整理档位改为自然整理、精简整理、提示词 Beta，录音条显示当前档位。
+- 翻译先整理原文再翻译，译文更准确。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- New Extensions: install dictionary packs and styles from the official plugin market.
-- Only the dictionary words a dictation mentions go to the model; entries can be kept from it entirely.
-- Kept recordings are deleted after about 5 minutes, and when you quit.
+- When a new version is found, you choose Update now or Later; nothing installs by itself.
+- The plugin market uses mirrors when GitHub can't be reached.
+- Cleanup modes are now Natural, Concise and Prompt Beta; the recording bar shows the mode.
+- Translation cleans up the source first, then translates.
 <!-- /typeleast-update -->
 
-**扩展：** 左侧栏新增「扩展」，第一版只有两种数据插件，不运行代码。词库是一组术语写法，只把某次听写提到的词发给模型；风格是附加在标准、精简整理上的写法说明，在左侧栏切换。安装前会显示内容、来源和数据去向，确认安装的就是所显示的那份内容。插件市场只在打开时读一次官方目录（官网或 GitHub 官方地址），不带任何你的数据。规范见[插件规范](https://github.com/FlaxXTT/Typeleast/blob/main/docs/插件规范.md)。
+**更新由你决定：** 发现新版本时弹窗显示版本和更新内容，选「立即更新」才下载安装；选「稍后」本次运行不再询问，下次启动再问。Windows 设置里的「自动更新」改为「更新提醒」，关掉后只在「设置 → 服务与更新」里显示新版本。
 
-**词典外发：** 整份词典只交给本机服务，只有这次口述（以及你允许读取的输入框内容）提到的词，按写法相同或读音相近发给模型。读音匹配可能误判；敏感词可以在词典里标「不发给模型」，它就不会出现在任何模型请求里，填了「常被识别成」时由本机替换成正确写法。
+**插件市场镜像：** 官网和 GitHub 连不上时，依次试 jsDelivr 和 ghfast.top 等公共镜像读取官方目录，遵守「更新下载源」设置。经镜像读到的目录会注明「经镜像获取」，安装前照常显示全部内容。
 
-**保留录音：** 打开「保留录音」时，录音约 5 分钟后删除；退出 App 时全部删除，电脑唤醒后补删过期的，异常退出则下次启动时删除。
+**整理与翻译：** 整理档位改为自然整理、精简整理、提示词 Beta，原话转写的设置自动改为自然整理；每次录音的悬浮条显示当前档位。翻译先在原语言中整理并校验，再译成目标语言；整理没通过时改用一次调用直接翻译。自然整理提示词强调忠实原意和最小修改，逐字母拼读（如「拼法是 R-O-G」）会合成单词。
 
 ## 下载
 
 | 电脑 | 安装包 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.20.0-macOS-AppleSilicon.dmg` 或 `.zip` |
-| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.20.0-Windows-x64-Setup.exe`（安装版，支持自动更新）或 `TypeLeast-1.20.0-Windows-x64-Portable.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.20.1-macOS-AppleSilicon.dmg` 或 `.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.20.1-Windows-x64-Setup.exe`（安装版，支持软件内更新）或 `TypeLeast-1.20.1-Windows-x64-Portable.zip` |
 | Intel Mac | 已停止更新，最终版为 [v1.17.1](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.1) |
 
-已安装的用户可在软件内检查更新；Windows 安装版保留自动更新行为。Mac 构建号为 23。
+已安装的用户可在软件内检查更新，发现新版本时会先询问。Mac 构建号为 24。
 
 ## 验证与限制
 
-服务、Mac 和 Windows 核心测试及三平台 CI 通过。Mac 扩展页用虚构数据离屏渲染检查；Windows 界面只经过编译、单元测试和 CI 渲染，未进行真机人工操作验证；睡眠唤醒和退出时删除录音未在真机实测。
+服务、Mac 和 Windows 测试及三平台 CI 通过；镜像地址已实测能读到目录。Windows 更新弹窗只经过编译、单元测试和 CI 渲染，未在真机上人工操作；国内网络下的插件市场未在真机实测。
 
 Mac 包未经过 Apple Developer ID 公证；Windows 包未进行代码签名，浏览器或 SmartScreen 可能提示下载信誉不足。请从本仓库下载。四个安装包的校验值位于 `SHA256SUMS.txt`。
 

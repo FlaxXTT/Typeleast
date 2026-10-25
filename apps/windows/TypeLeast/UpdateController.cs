@@ -7,9 +7,10 @@ using TypeLeast.Ui;
 namespace TypeLeast;
 
 /// <summary>
-/// In-app updates as one piece: the check on every launch and window open (installing by itself
-/// when 自动更新 is on, UpdatePolicy), 检查更新 in settings, and the download, check and install
-/// with the progress window. The app is reached only through the delegates it is given.
+/// In-app updates as one piece: the check on every launch and window open (offering a found
+/// version with 立即更新 / 稍后 when 更新提醒 is on, UpdatePolicy; nothing installs without that
+/// choice), 检查更新 in settings, and the download, check and install with the progress window.
+/// The app is reached only through the delegates it is given.
 /// </summary>
 internal sealed class UpdateController(AppSettings settings, Dispatcher dispatcher,
     Func<string?> busyReason, Func<bool> quitting, Action<string> setHint, Action changed, Action quit)
@@ -19,9 +20,9 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
     public bool Updating { get; private set; }
 
     private bool checking;
-    /// <summary>A version whose automatic download or install failed in this run: it is not
-    /// downloaded again on every window open (检查更新 in settings still can).</summary>
-    private string? autoFailed;
+    /// <summary>The version offered in this run: after 稍后 it is not offered again until the next
+    /// launch (设置 → 服务与更新 can still install it).</summary>
+    private string? offered;
 
     /// <summary>On every launch and every time the window is opened.</summary>
     public async Task AutoCheck()
@@ -37,21 +38,24 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
                 {
                     Available = newest;
                     changed();
-                    if (!(settings.AutoUpdate && Updater.IsInstalledCopy)) setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
+                    if (!settings.AutoUpdate) setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
                 }
             }
             catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
-            // Not while a dictation or Prompt Beta's questions are open: the next window open tries again.
-            if (UpdatePolicy.AutoInstall(Available, settings.AutoUpdate, Updater.IsInstalledCopy, autoFailed, busyReason() is not null))
+            // Not while a dictation or Prompt Beta's questions are open: the next window open asks.
+            if (UpdatePolicy.ShouldOffer(Available, settings.AutoUpdate, offered, busyReason() is not null))
             {
                 var update = Available!;
-                Log.Write("update.auto", update.Version);
-                setHint(L10n.T("正在更新到 {0}，完成后自动重开。", update.Version));
-                if (await Install() is { } error)
+                offered = update.Version;
+                var offer = new UpdateOfferWindow(update, Updater.CurrentVersion, Updater.IsInstalledCopy);
+                offer.ShowDialog();
+                if (!offer.UpdateNow)
                 {
-                    autoFailed = update.Version;
-                    setHint(error);
+                    setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", update.Version));
+                    return;
                 }
+                Log.Write("update.accept", update.Version);
+                if (await Install() is { } error) setHint(error);
             }
         }
         finally { checking = false; }

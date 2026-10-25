@@ -87,7 +87,8 @@ internal sealed class ExtensionsPage : IPage
     {
         var plugins = host.Plugins;
         var header = plugins.CatalogLoading ? L10n.T("正在读取插件目录…")
-            : plugins.Catalog?.FetchedAt is { } time ? (plugins.Catalog.Ok ? L10n.T("目录更新于 ") : L10n.T("离线，显示上次的目录：")) + Time(time) : "";
+            : plugins.Catalog?.FetchedAt is { } time ? (plugins.Catalog.Ok ? L10n.T("目录更新于 ") : L10n.T("离线，显示上次的目录：")) + Time(time)
+                + (plugins.Catalog.Mirrored ? " · " + L10n.T("经镜像获取") : "") : "";
         var refresh = Theme.Secondary(L10n.T("刷新"), () => _ = host.Plugins.OpenMarket());
         refresh.IsEnabled = !plugins.CatalogLoading;
         list.Children.Add(Theme.Row(12, refresh, Theme.Text(header, 12, Theme.Grey, wrap: false)));
@@ -137,7 +138,7 @@ internal sealed class ExtensionsPage : IPage
 
     private void Confirm(PluginSummary plugin, bool fromCatalog, string? installedVersion, Func<bool, System.Threading.Tasks.Task> install)
     {
-        var dialog = new PluginConfirmWindow(plugin, fromCatalog, installedVersion) { Owner = owner };
+        var dialog = new PluginConfirmWindow(plugin, fromCatalog, fromCatalog && host.Plugins.Catalog?.Mirrored == true, installedVersion) { Owner = owner };
         dialog.ShowDialog();
         if (dialog.Choice is { } enable) _ = install(enable);
     }

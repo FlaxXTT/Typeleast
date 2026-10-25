@@ -18,7 +18,8 @@ final class UpdateController {
 
     private let host: Host
     private let progress = UpdateProgressWindow()
-    private let offeredKey = "voice.updateOffered"
+    /// The version offered in this run: after 稍后 it is asked again at the next launch, not every six hours.
+    private var offered: String?
     private var summary = ""
 
     init(host: Host) {
@@ -45,10 +46,9 @@ final class UpdateController {
                     let latest = release.version
                     self.summary = release.summary
                     self.host.showAvailable(latest)
-                    let offered = UserDefaults.standard.string(forKey: self.offeredKey)
-                    if Updater.shouldOffer(latest: latest, offered: offered, interactive: interactive,
-                                                    busy: self.host.busyReason() != nil) {
-                        UserDefaults.standard.set(latest, forKey: self.offeredKey)
+                    if Updater.shouldOffer(latest: latest, offered: self.offered, interactive: interactive,
+                                           busy: self.host.busyReason() != nil) {
+                        self.offered = latest
                         self.offer(latest)
                     }
                 case .success:
@@ -81,7 +81,7 @@ final class UpdateController {
         }
         alert.informativeText = detail
         alert.addButton(withTitle: L10n.text("立即更新"))
-        alert.addButton(withTitle: L10n.text("以后"))
+        alert.addButton(withTitle: L10n.text("稍后"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         install(version)
     }

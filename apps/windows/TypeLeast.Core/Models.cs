@@ -223,6 +223,8 @@ public sealed class PluginCatalog
     [JsonPropertyName("ok")] public bool Ok { get; set; }
     [JsonPropertyName("code")] public string? Code { get; set; }
     [JsonPropertyName("source")] public string? Source { get; set; }
+    /// <summary>Read through a public mirror rather than an official address.</summary>
+    [JsonPropertyName("mirrored")] public bool Mirrored { get; set; }
     [JsonPropertyName("fetchedAt")] public string? FetchedAt { get; set; }
     [JsonPropertyName("plugins")] public List<PluginSummary> Plugins { get; set; } = new();
 }

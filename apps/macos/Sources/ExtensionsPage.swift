@@ -134,7 +134,8 @@ struct MarketList: View {
                     ProgressView().controlSize(.small)
                     Text(L10n.text("正在读取插件目录…")).font(.system(size: 12)).foregroundColor(Theme.secondary)
                 } else if let catalog = plugins.catalog, let time = catalog.fetchedAt {
-                    Text((catalog.ok ? L10n.text("目录更新于 ") : L10n.text("离线，显示上次的目录：")) + Self.time(time))
+                    Text((catalog.ok ? L10n.text("目录更新于 ") : L10n.text("离线，显示上次的目录：")) + Self.time(time)
+                         + (catalog.mirrored == true ? " · " + L10n.text("经镜像获取") : ""))
                         .font(.system(size: 12)).foregroundColor(Theme.secondary)
                 }
                 Spacer()
@@ -196,7 +197,8 @@ struct InstallSheet: View {
                 .font(.system(size: 17, weight: .bold))
             Text(plugin.summary).font(.system(size: 13)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             Text("v" + plugin.version + " · " + plugin.author + " · " + plugin.license).font(.system(size: 12)).foregroundColor(Theme.secondary)
-            Label(pending.fromCatalog ? L10n.text("来自 TypeLeast 官方目录，已审核。") : L10n.text("来自本地文件，未经审核。只安装你信任的人给的插件。"),
+            Label(!pending.fromCatalog ? L10n.text("来自本地文件，未经审核。只安装你信任的人给的插件。")
+                  : pending.mirrored ? L10n.text("来自 TypeLeast 官方目录（经镜像获取），已审核。") : L10n.text("来自 TypeLeast 官方目录，已审核。"),
                   systemImage: pending.fromCatalog ? "checkmark.seal" : "exclamationmark.triangle")
                 .font(.system(size: 12.5)).foregroundColor(pending.fromCatalog ? Theme.ink : Theme.warning)
             if plugin.isStyle {

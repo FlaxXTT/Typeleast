@@ -248,7 +248,7 @@ struct SettingsPage: View {
                 Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
             }
             SettingRow(title: L10n.text("更新下载源"),
-                       detail: L10n.text("GitHub 慢时自动换镜像。安装包都会校验，改过的不会安装。")) {
+                       detail: L10n.text("更新和插件市场连不上时换镜像。安装包都会校验，改过的不会安装。")) {
                 Picker("", selection: model.setting(\.updateSource)) {
                     Text(L10n.text("自动（GitHub 慢时换镜像）")).tag("auto")
                     Text(L10n.text("只用 GitHub")).tag("github")

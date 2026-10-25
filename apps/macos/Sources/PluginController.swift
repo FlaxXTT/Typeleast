@@ -12,6 +12,8 @@ struct PendingPlugin: Identifiable {
     let summary: PluginSummary
     let origin: Origin
     let installedVersion: String?
+    /// A catalog plugin whose catalog came through a public mirror.
+    var mirrored = false
     var id: String { summary.id }
     var fromCatalog: Bool { if case .catalog = origin { return true } else { return false } }
 }
@@ -59,8 +61,9 @@ final class PluginController: ObservableObject {
         guard !catalogLoading else { return }
         catalogLoading = true
         let client = self.client
+        let sources = Settings.shared.updateSource
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try client.pluginCatalogSync() }
+            let result = Result { try client.pluginCatalogSync(sources: sources) }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.catalogLoading = false
@@ -96,7 +99,8 @@ final class PluginController: ObservableObject {
     }
 
     func askToInstall(_ summary: PluginSummary) {
-        pending = PendingPlugin(summary: summary, origin: .catalog, installedVersion: summary.installedVersion)
+        pending = PendingPlugin(summary: summary, origin: .catalog, installedVersion: summary.installedVersion,
+                                mirrored: catalog?.mirrored == true)
     }
 
     /// The user confirmed the pending plugin; `enable` turns a pack on or selects a style.

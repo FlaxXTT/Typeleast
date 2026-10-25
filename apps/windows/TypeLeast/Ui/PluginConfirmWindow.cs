@@ -13,7 +13,7 @@ internal sealed class PluginConfirmWindow : Window
 {
     public bool? Choice { get; private set; }
 
-    public PluginConfirmWindow(PluginSummary plugin, bool fromCatalog, string? installedVersion)
+    public PluginConfirmWindow(PluginSummary plugin, bool fromCatalog, bool mirrored, string? installedVersion)
     {
         Title = "TypeLeast";
         Width = 480; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
@@ -23,7 +23,8 @@ internal sealed class PluginConfirmWindow : Window
         content.Children.Add(Theme.Text(installedVersion is null ? L10n.T("安装「{0}」？", plugin.Title) : L10n.T("把「{0}」更新到 {1}？", plugin.Title, plugin.Version), 18, bold: true));
         content.Children.Add(Spaced(Theme.Text(plugin.Summary, 13, Theme.Grey)));
         content.Children.Add(Spaced(Theme.Text("v" + plugin.Version + " · " + plugin.Author + " · " + plugin.License, 12, Theme.Grey)));
-        content.Children.Add(Spaced(Theme.Text(fromCatalog ? L10n.T("来自 TypeLeast 官方目录，已审核。") : "⚠ " + L10n.T("来自本地文件，未经审核。只安装你信任的人给的插件。"),
+        content.Children.Add(Spaced(Theme.Text(!fromCatalog ? "⚠ " + L10n.T("来自本地文件，未经审核。只安装你信任的人给的插件。")
+            : mirrored ? L10n.T("来自 TypeLeast 官方目录（经镜像获取），已审核。") : L10n.T("来自 TypeLeast 官方目录，已审核。"),
             12.5, fromCatalog ? Theme.Ink : Theme.Warning)));
         if (plugin.IsStyle)
         {

@@ -11,7 +11,7 @@ namespace TypeLeast;
 /// this only asks it, and asks the official catalog through it only when the market tab is
 /// opened or refreshed. Results arrive on the UI thread (the awaits resume there).
 /// </summary>
-internal sealed class PluginController(ServiceClient client)
+internal sealed class PluginController(ServiceClient client, Func<string> sources)
 {
     public PluginState State { get; private set; } = new();
     public PluginCatalog? Catalog { get; private set; }
@@ -47,7 +47,7 @@ internal sealed class PluginController(ServiceClient client)
         CatalogLoading = true; Changed?.Invoke();
         try
         {
-            Catalog = await client.GetPluginCatalogAsync();
+            Catalog = await client.GetPluginCatalogAsync(sources());
             Message = Catalog.Ok ? null : PluginMessages.Describe(Catalog.Code);
         }
         catch (ServiceException e) { Message = PluginMessages.Describe(e); }

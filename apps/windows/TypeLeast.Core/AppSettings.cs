@@ -38,6 +38,7 @@ public sealed class AppSettings
     public string NodePath { get; set; } = "";
     public bool LaunchAtLogin { get; set; }
     public bool RestoreClipboard { get; set; } = true;
+    /// <summary>更新提醒: a found version is offered with 立即更新 / 稍后. Nothing installs by itself.</summary>
     public bool AutoUpdate { get; set; } = true;
     /// <summary>auto, github or mirror (UpdateSources).</summary>
     public string UpdateSource { get; set; } = "auto";

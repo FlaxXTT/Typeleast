@@ -97,7 +97,7 @@ let server = try StubServer { req in
     if req.path.hasPrefix("/api/voice-polish/plugins") {
         let state = #"{"plugins":[{"id":"example.dev-terms","version":"1.0.0","type":"dictionary","name":{"zh-Hans":"开发术语","en":"Dev terms"},"description":{"zh-Hans":"术语。","en":"Terms."},"author":"Example","license":"CC0-1.0","homepage":null,"termCount":3,"termsPreview":["Kubernetes"],"source":"catalog","enabled":true}],"style":null,"problems":[]}"#
         if req.path == "/api/voice-polish/plugins/inspect" { return .json(#"{"error":"not a valid plugin","code":"plugin-invalid","issues":[]}"#, status: 400) }
-        if req.path == "/api/voice-polish/plugins/catalog" { return .json(#"{"ok":false,"code":"market-offline","source":null,"fetchedAt":null,"rejected":0,"plugins":[]}"#) }
+        if req.path.hasPrefix("/api/voice-polish/plugins/catalog?") { return .json(#"{"ok":false,"code":"market-offline","source":null,"fetchedAt":null,"rejected":0,"plugins":[]}"#) }
         return .json(state)
     }
     if req.path == "/api/voice-polish/learned-word" {
@@ -1382,7 +1382,8 @@ do {
     checkEq("uninstall is a DELETE", state.lastRequest?.method, "DELETE")
     do { _ = try client.inspectPluginSync(Data("x".utf8)); check("an invalid file is refused", false) }
     catch { checkEq("an invalid file is explained", PluginController.describe(error), L10n.text("这不是有效的插件文件")) }
-    let catalog = try client.pluginCatalogSync()
+    let catalog = try client.pluginCatalogSync(sources: "github")
+    checkEq("the market follows the update source setting", state.lastRequest?.path, "/api/voice-polish/plugins/catalog?sources=github")
     checkEq("an offline market is reported, not an error", catalog.ok, false)
     checkEq("…with a reason the page can show", PluginController.describe(code: catalog.code), L10n.text("连不上插件目录，请检查网络"))
     let style = PluginSummary(id: "example.formal", version: "1.0.0", type: "style", name: ["zh-Hans": "正式", "en": "Formal"],

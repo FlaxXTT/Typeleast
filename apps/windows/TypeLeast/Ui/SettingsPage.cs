@@ -237,9 +237,9 @@ internal sealed class SettingsPage : IPage
             Section(L10n.T("版本与更新"),
                 Theme.SettingRow("TypeLeast " + version, updateStatus,
                     Theme.Row(8, Theme.Secondary(L10n.T("检查更新"), () => _ = CheckUpdates()), installUpdate)),
-                Theme.SettingRow(L10n.T("自动更新"), Theme.Text(L10n.T("启动和打开窗口时检查，空闲时自动安装并重新打开。"), 12, Theme.Grey),
+                Theme.SettingRow(L10n.T("更新提醒"), Theme.Text(L10n.T("发现新版本时询问是否更新。关闭后只在这里显示。"), 12, Theme.Grey),
                     Theme.Toggle(s.AutoUpdate, v => { s.AutoUpdate = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("更新下载源"), Theme.Text(L10n.T("GitHub 慢时自动换镜像。安装包都会校验，改过的不会安装。"), 12, Theme.Grey), UpdateSourceChoice(s)),
+                Theme.SettingRow(L10n.T("更新下载源"), Theme.Text(L10n.T("更新和插件市场连不上时换镜像。安装包都会校验，改过的不会安装。"), 12, Theme.Grey), UpdateSourceChoice(s)),
                 Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机模型（sherpa-onnx）· 整理：你自己的模型"), 12, Theme.Grey),
                     Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
         DockPanel.SetDock(root, Dock.Top); surface.Children.Add(root);
@@ -263,8 +263,6 @@ internal sealed class SettingsPage : IPage
         updateStatus.Text = L10n.T("正在检查…");
         updateStatus.Text = await host.Updates.Check();
         RefreshUpdateButton();
-        // Same as at launch: with 自动更新 on, a found update installs right away.
-        if (host.Updates.Available is not null && host.Settings.AutoUpdate && Updater.IsInstalledCopy) await RunUpdate();
     }
 
     private async Task RunUpdate()

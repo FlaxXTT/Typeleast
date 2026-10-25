@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { CATALOG_URLS, PLUGIN_LIMITS, PluginStore, compareVersions, fetchCatalog, parsePlugin, pluginDigest, validatePlugin } from '../lib/plugins.js';
+import { CATALOG_MIRRORS, CATALOG_URLS, PLUGIN_LIMITS, PluginStore, catalogSources, compareVersions, fetchCatalog, parsePlugin, pluginDigest, validatePlugin } from '../lib/plugins.js';
 import { STYLE_MARKER, systemPromptFor } from '../lib/prompt.js';
 import { VoicePolishService } from '../lib/service.js';
 import { createHandler, ROUTE_PREFIX } from '../lib/http.js';
@@ -186,20 +186,73 @@ function catalogResponse(body, { status = 200 } = {}) {
   return { ok: status === 200, status, headers: new Headers({ 'content-length': String(Buffer.byteLength(text)) }), body: Readable.toWeb(Readable.from([Buffer.from(text)])) };
 }
 
-test('the catalog is read only from official addresses, once, without redirects', async () => {
+test('the catalog is read from the official addresses first, once, without redirects', async () => {
   const seen = [];
   const catalog = { format: 'typeleast-catalog', formatVersion: 1, generatedAt: '2026-10-24T00:00:00Z', plugins: [PACK, STYLE, { ...PACK, id: 'bad id' }] };
   const result = await fetchCatalog({ fetchImpl: async (url, init) => { seen.push([url, init.redirect, Object.keys(init.headers).sort().join(',')]); return catalogResponse(catalog); } });
   assert.deepEqual(seen, [[CATALOG_URLS[0], 'error', 'accept,user-agent']]);
   assert.deepEqual(result.plugins.map((p) => p.id), ['example.dev-terms', 'example.formal']);
   assert.equal(result.rejected, 1);
-  // The site down: the official GitHub copy is next; nothing else is tried.
+  // The site down: the official GitHub copy is next; no mirror is contacted.
   const tried = [];
-  await fetchCatalog({ fetchImpl: async (url) => { tried.push(url); if (tried.length === 1) throw new Error('down'); return catalogResponse(catalog); } });
+  const official = await fetchCatalog({ fetchImpl: async (url) => { tried.push(url); if (tried.length === 1) throw new Error('down'); return catalogResponse(catalog); } });
   assert.deepEqual(tried, CATALOG_URLS);
+  assert.equal(official.mirrored, false);
   await assert.rejects(fetchCatalog({ fetchImpl: async () => catalogResponse('x', { status: 503 }) }), { code: 'market-offline' });
   await assert.rejects(fetchCatalog({ fetchImpl: async () => catalogResponse({ format: 'other' }) }), { code: 'market-protocol-unsupported' });
   await assert.rejects(fetchCatalog({ fetchImpl: async () => catalogResponse('x'.repeat(PLUGIN_LIMITS.catalogBytes + 1)) }), { code: 'market-too-large' });
+});
+
+test('both official addresses blocked: the mirrors are tried in order and the result says so', async () => {
+  const catalog = { format: 'typeleast-catalog', formatVersion: 1, plugins: [PACK] };
+  const tried = [];
+  const result = await fetchCatalog({ fetchImpl: async (url) => { tried.push(url); if (CATALOG_URLS.includes(url)) throw new Error('blocked'); return catalogResponse(catalog); } });
+  assert.deepEqual(tried, [...CATALOG_URLS, CATALOG_MIRRORS[0]]);
+  assert.equal(result.mirrored, true);
+  assert.equal(result.source, 'fastly.jsdelivr.net');
+  assert.ok(CATALOG_MIRRORS.some((url) => url.startsWith('https://ghfast.top/https://raw.githubusercontent.com/')), 'the updater\'s GitHub proxies are mirrors too');
+  // 只用 GitHub: never a mirror. 优先镜像: mirrors first.
+  assert.deepEqual(catalogSources('github').map((s) => s.url), CATALOG_URLS);
+  assert.equal(catalogSources('mirror')[0].url, CATALOG_MIRRORS[0]);
+  const githubOnly = [];
+  await assert.rejects(fetchCatalog({ mode: 'github', fetchImpl: async (url) => { githubOnly.push(url); throw new Error('blocked'); } }), { code: 'market-offline' });
+  assert.deepEqual(githubOnly, CATALOG_URLS);
+});
+
+test('an address that hangs does not hold up the next one, and the rest are cancelled', async () => {
+  const catalog = { format: 'typeleast-catalog', formatVersion: 1, plugins: [PACK] };
+  const aborted = [];
+  const hang = (url, signal) => new Promise((_, reject) => signal.addEventListener('abort', () => { aborted.push(url); reject(new Error('aborted')); }));
+  const result = await fetchCatalog({ staggerMs: 20, fetchImpl: async (url, init) => url === CATALOG_MIRRORS[0] ? catalogResponse(catalog) : hang(url, init.signal) });
+  assert.equal(result.source, 'fastly.jsdelivr.net');
+  assert.deepEqual(aborted.sort(), [...CATALOG_URLS].sort(), 'the silent official addresses are cancelled once a mirror answers');
+  await assert.rejects(fetchCatalog({ timeoutMs: 60, staggerMs: 10, fetchImpl: async (url, init) => hang(url, init.signal) }), { code: 'market-offline' });
+});
+
+test('the market route follows the app\'s source setting and reports a mirrored catalog', async () => {
+  const { dir, store } = await tempStore();
+  try {
+    const TOKEN = 'b'.repeat(64);
+    const urls = [];
+    const service = new VoicePolishService({
+      recognizer: { snapshot: () => ({ ready: true }) }, plugins: store, config: { dictionary: [] },
+      fetchImpl: async (url) => { urls.push(url); return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: [STYLE] }); },
+    });
+    const handler = createHandler({ service, currentToken: async () => TOKEN });
+    const call = async (path) => {
+      const req = Readable.from([]);
+      Object.assign(req, { url: ROUTE_PREFIX + path, method: 'GET', headers: { host: '127.0.0.1', authorization: `Bearer ${TOKEN}` } });
+      const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(b) { this.body = b; } };
+      await handler(req, res);
+      return { status: res.status, json: JSON.parse(res.body) };
+    };
+    const mirrored = await call('/plugins/catalog?sources=mirror');
+    assert.equal(mirrored.json.mirrored, true);
+    assert.equal(urls[0], CATALOG_MIRRORS[0]);
+    const official = await call('/plugins/catalog?sources=nonsense');
+    assert.equal(official.json.mirrored, false, 'an unknown setting reads as auto');
+    assert.equal(urls[1], CATALOG_URLS[0]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test('plugin routes: inspect, install, switch, market and remove need the token', async () => {

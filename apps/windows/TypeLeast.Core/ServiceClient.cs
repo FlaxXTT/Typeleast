@@ -399,9 +399,10 @@ public sealed class ServiceClient
         PluginRequest<PluginState>(HttpMethod.Put, "/style", JsonBody(new { id }), ct: ct);
     public Task<PluginState> RemovePluginAsync(string id, CancellationToken ct = default) =>
         PluginRequest<PluginState>(HttpMethod.Delete, "/" + Uri.EscapeDataString(id), ct: ct);
-    /// <summary>Read the official catalog once (the service tries the official addresses in turn).</summary>
-    public Task<PluginCatalog> GetPluginCatalogAsync(CancellationToken ct = default) =>
-        PluginRequest<PluginCatalog>(HttpMethod.Get, "/catalog", timeout: TimeSpan.FromSeconds(30), ct: ct);
+    /// <summary>Read the catalog once: official addresses first, public mirrors as <paramref name="sources"/>
+    /// (the 更新下载源 setting: auto, github or mirror) allows.</summary>
+    public Task<PluginCatalog> GetPluginCatalogAsync(string sources = "auto", CancellationToken ct = default) =>
+        PluginRequest<PluginCatalog>(HttpMethod.Get, "/catalog?sources=" + Uri.EscapeDataString(sources), timeout: TimeSpan.FromSeconds(30), ct: ct);
 
     /// <summary>The provider's model ids, from its OpenAI-compatible GET /models (called directly).</summary>
     public static async Task<List<string>> ListModelsAsync(LlmRoute route, CancellationToken ct = default)

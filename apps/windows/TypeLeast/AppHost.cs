@@ -74,7 +74,7 @@ internal sealed class AppHost : IDictationHost
         Settings = AppSettings.Load(settingsPath);
         Dictionary = new DictionaryController(Settings, SaveSettings, SetHint, () => quitting,
             (inserted, edited) => Client.LearnedWordAsync(inserted, edited));
-        Plugins = new PluginController(Client);
+        Plugins = new PluginController(Client, () => Settings.UpdateSource);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);

@@ -147,12 +147,12 @@ public static class UpdateSources
     }
 }
 
-/// <summary>When an update installs by itself: the installed copy, 自动更新 on, not a version that
-/// already failed in this run, and nothing in the way (a dictation, Prompt Beta's questions).</summary>
+/// <summary>When a found update is offered (立即更新 or 稍后; nothing installs by itself): 更新提醒 on,
+/// not a version already offered in this run, and nothing in the way (a dictation, Prompt Beta's questions).</summary>
 public static class UpdatePolicy
 {
-    public static bool AutoInstall(WindowsReleaseInfo? available, bool autoUpdate, bool installedCopy, string? failedVersion, bool busy) =>
-        available is not null && autoUpdate && installedCopy && failedVersion != available.Version && !busy;
+    public static bool ShouldOffer(WindowsReleaseInfo? available, bool remind, string? offeredVersion, bool busy) =>
+        available is not null && remind && offeredVersion != available.Version && !busy;
 
     /// <summary>The ring's three steps (下载 · 核对 · 安装), and which one a stage is.</summary>
     public static readonly string[] Steps = ["下载", "核对", "安装"];

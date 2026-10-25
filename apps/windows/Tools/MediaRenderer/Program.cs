@@ -94,6 +94,13 @@ class P
                 card.Measure(new Size(360, double.PositiveInfinity));
                 Save(card, Path.Combine(dir, $"update-{name}-{mode}-{L10n.Language}.png"), 360, card.DesiredSize.Height);
             }
+            // The offer that comes before any download: 立即更新 or 稍后.
+            var release = new WindowsReleaseInfo("1.20.1", "v1.20.1", "", Summary: "• " + L10n.T("自然整理") + "\n• " + L10n.T("经镜像获取"));
+            var offer = new UpdateOfferWindow(release, "1.20.0", installedCopy: true);
+            var offerContent = (FrameworkElement)offer.Content; offer.Content = null;
+            var offerCard = new Border { Background = Theme.Background, Child = offerContent };
+            offerCard.Measure(new Size(440, double.PositiveInfinity));
+            Save(offerCard, Path.Combine(dir, $"update-offer-{mode}-{L10n.Language}.png"), 440, offerCard.DesiredSize.Height);
         }
     }
 

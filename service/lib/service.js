@@ -22,7 +22,7 @@ import { wordSuggestions } from "./word-suggestions.js";
 import { relevantEntries } from "./dictionary-relevance.js";
 import { relevantAliases, safePackTerms } from "./term-hints.js";
 import { spelledWords } from "./spelling.js";
-import { fetchCatalog, pluginDigest, summarize } from "./plugins.js";
+import { CATALOG_SOURCE_MODES, fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
@@ -635,9 +635,11 @@ export class VoicePolishService {
    * Read the official catalog once: the user opened the market or pressed refresh. On
    * failure the last catalog read is shown with the error.
    */
-  async refreshCatalog() {
+  /** `mode` is the app's 更新来源 setting: auto, github (official addresses only) or mirror. */
+  async refreshCatalog(mode = "auto") {
     try {
-      this.catalog = await fetchCatalog({ fetchImpl: this.fetchImpl ?? globalThis.fetch, version: this.version });
+      this.catalog = await fetchCatalog({ fetchImpl: this.fetchImpl ?? globalThis.fetch, version: this.version,
+        mode: CATALOG_SOURCE_MODES.includes(mode) ? mode : "auto" });
       await this.plugins?.saveCatalog(this.catalog).catch(() => {});
       return this.catalogView(true, null);
     } catch (error) {
@@ -650,7 +652,8 @@ export class VoicePolishService {
     const installed = new Map((this.plugins?.list() ?? []).map((plugin) => [plugin.id, plugin.version]));
     return {
       ok, ...(code ? { code } : {}),
-      source: this.catalog?.source ?? null, fetchedAt: this.catalog?.fetchedAt ?? null, rejected: this.catalog?.rejected ?? 0,
+      source: this.catalog?.source ?? null, mirrored: this.catalog?.mirrored === true,
+      fetchedAt: this.catalog?.fetchedAt ?? null, rejected: this.catalog?.rejected ?? 0,
       plugins: (this.catalog?.plugins ?? []).map((plugin) => ({ ...summarize(plugin), installedVersion: installed.get(plugin.id) ?? null })),
     };
   }

@@ -768,8 +768,11 @@ final class ServiceClient {
 
     func removePluginSync(id: String) throws -> PluginState { try pluginRequest("DELETE", "/" + id, as: PluginState.self) }
 
-    /// Read the official catalog once (the service tries the official addresses in turn).
-    func pluginCatalogSync() throws -> PluginCatalog { try pluginRequest("GET", "/catalog", timeout: 30, as: PluginCatalog.self) }
+    /// Read the catalog once: official addresses first, public mirrors as `sources` (the
+    /// 更新来源 setting: auto, github or mirror) allows.
+    func pluginCatalogSync(sources: String) throws -> PluginCatalog {
+        try pluginRequest("GET", "/catalog?sources=" + sources, timeout: 30, as: PluginCatalog.self)
+    }
 
     /// The provider's model ids, from its OpenAI-compatible `GET /models`. Called
     /// directly (not through the local service), because it needs nothing but the key.
@@ -857,6 +860,8 @@ struct PluginCatalog: Codable, Equatable {
     var ok: Bool
     var code: String?
     var source: String?
+    /// Read through a public mirror rather than an official address.
+    var mirrored: Bool?
     var fetchedAt: String?
     var plugins: [PluginSummary]
 }

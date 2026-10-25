@@ -39,11 +39,34 @@ export const PLUGIN_LIMITS = {
   catalogPlugins: 500,
 };
 
-/** Where the catalog is read from, in order; nothing else is ever contacted. */
+/** The official addresses of the catalog, tried first. */
 export const CATALOG_URLS = [
   "https://typeleast.promptking.workers.dev/market/catalog.json",
   "https://raw.githubusercontent.com/FlaxXTT/Typeleast/main/market/catalog.json",
 ];
+
+/**
+ * Public copies of the same file, for networks that block both official addresses (mainland
+ * China): jsDelivr serves the GitHub file as it is, and the GitHub proxies are the ones the apps'
+ * updater already uses. A mirror could change what it serves, so a catalog read through one is
+ * marked `mirrored` and the apps say so before installing.
+ */
+export const CATALOG_MIRRORS = [
+  "https://fastly.jsdelivr.net/gh/FlaxXTT/Typeleast@main/market/catalog.json",
+  "https://cdn.jsdelivr.net/gh/FlaxXTT/Typeleast@main/market/catalog.json",
+  ...["https://ghfast.top/", "https://gh-proxy.com/", "https://gh-proxy.org/", "https://gh.llkk.cc/"].map((proxy) => proxy + CATALOG_URLS[1]),
+];
+
+/** The apps' 更新来源 setting: auto (official, then mirrors), github (official only), mirror (mirrors first). */
+export const CATALOG_SOURCE_MODES = ["auto", "github", "mirror"];
+
+/** The addresses to try for one source mode, in order. */
+export function catalogSources(mode = "auto") {
+  const official = CATALOG_URLS.map((url) => ({ url, mirrored: false }));
+  const mirrors = CATALOG_MIRRORS.map((url) => ({ url, mirrored: true }));
+  if (mode === "github") return official;
+  return mode === "mirror" ? [...mirrors, ...official] : [...official, ...mirrors];
+}
 
 const ID = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 const VERSION = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/;
@@ -433,24 +456,52 @@ export function validateCatalog(value) {
 }
 
 /**
- * Read the official catalog: the first official address that answers. One request per
- * address at most, no redirects, nothing sent but a user agent.
+ * Read the catalog from the first address that answers with a valid one. The next address is
+ * tried only when the previous ones failed or stayed silent for `staggerMs`, so a working official
+ * address is the only one contacted and a blocked one costs seconds, not a full timeout. No
+ * redirects; nothing is sent but a user agent.
  */
-export async function fetchCatalog({ fetchImpl = globalThis.fetch, version = "0", urls = CATALOG_URLS, timeoutMs = 10000 } = {}) {
-  let lastError = null;
-  for (const url of urls) {
-    try {
-      const response = await fetchImpl(url, {
-        method: "GET", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
-        headers: { accept: "application/json", "user-agent": `TypeLeast/${version}` },
+export async function fetchCatalog({ fetchImpl = globalThis.fetch, version = "0", mode = "auto", urls, timeoutMs = 20000, staggerMs = 2000 } = {}) {
+  const sources = urls ? urls.map((url) => ({ url, mirrored: false })) : catalogSources(mode);
+  const read = async ({ url, mirrored }, signal) => {
+    const response = await fetchImpl(url, {
+      method: "GET", redirect: "error", signal,
+      headers: { accept: "application/json", "user-agent": `TypeLeast/${version}` },
+    });
+    if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { code: "market-offline" });
+    const catalog = validateCatalog(JSON.parse(await readLimited(response, PLUGIN_LIMITS.catalogBytes)));
+    return { ...catalog, source: new URL(url).host, mirrored, fetchedAt: new Date().toISOString() };
+  };
+  return await new Promise((resolve, reject) => {
+    const controllers = [];
+    let next = 0, running = 0, done = false, lastError = null, stagger = null;
+    const finish = (catalog) => {
+      if (done) return;
+      done = true;
+      clearTimeout(deadline); clearTimeout(stagger);
+      for (const controller of controllers) controller.abort();
+      if (catalog) resolve(catalog);
+      else {
+        const code = lastError?.code && String(lastError.code).startsWith("market-") ? lastError.code : "market-offline";
+        reject(Object.assign(new Error("catalog unavailable"), { code }));
+      }
+    };
+    const deadline = setTimeout(() => finish(null), timeoutMs);
+    const start = () => {
+      if (done || next >= sources.length) return;
+      clearTimeout(stagger);
+      const controller = new AbortController();
+      controllers.push(controller);
+      running++;
+      read(sources[next++], controller.signal).then(finish, (error) => {
+        running--;
+        if (done) return;
+        lastError = error;
+        if (next < sources.length) start();
+        else if (running === 0) finish(null);
       });
-      if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { code: "market-offline" });
-      const catalog = validateCatalog(JSON.parse(await readLimited(response, PLUGIN_LIMITS.catalogBytes)));
-      return { ...catalog, source: new URL(url).host, fetchedAt: new Date().toISOString() };
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  const code = lastError?.code && String(lastError.code).startsWith("market-") ? lastError.code : "market-offline";
-  throw Object.assign(new Error("catalog unavailable"), { code });
+      if (next < sources.length) stagger = setTimeout(start, staggerMs);
+    };
+    start();
+  });
 }
