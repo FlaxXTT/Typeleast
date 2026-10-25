@@ -19,7 +19,7 @@ function wav(seconds, value = 0) {
 }
 
 /** A sherpa-onnx stand-in that records what it was given. */
-function fakeSherpa({ texts = ["你好"], vadSegments = null } = {}) {
+function fakeSherpa({ texts = ["你好"], vadSegments = null, languages = ["<|zh|>"] } = {}) {
   const decoded = [];
   const configs = [];
   let call = 0;
@@ -38,7 +38,8 @@ function fakeSherpa({ texts = ["你好"], vadSegments = null } = {}) {
           },
           decodeAsync: async (stream) => {
             decoded.push({ length: stream.samples.length, rate: stream.rate });
-            return { text: texts[Math.min(call++, texts.length - 1)], lang: "<|zh|>" };
+            const index = call++;
+            return { text: texts[Math.min(index, texts.length - 1)], lang: languages[Math.min(index, languages.length - 1)] };
           },
         };
       },
@@ -115,6 +116,18 @@ test("a short recording is decoded in one piece, with a lead-in of silence", asy
     assert.equal(sherpa.decoded.length, 1);
     assert.equal(sherpa.decoded[0].rate, 16000);
     assert.equal(sherpa.decoded[0].length, 16000 * 2 + Math.round(16000 * 0.3), "0.3 s of lead-in comes first");
+  });
+});
+
+test("automatic recognition preserves explicit language metadata, including kana-free Japanese", async () => {
+  await withDir(async dir => {
+    await fakeModels(dir);
+    const sherpa = fakeSherpa({ texts: ["企画書", "软件", "회사", "unknown"], languages: ["<|ja|>", "zh", "ko", ""] });
+    const recognizer = new LocalRecognizer({ modelsDir: dir, language: "auto", loadSherpa: () => sherpa });
+    await recognizer.prepare();
+    const actual = [];
+    for (let i = 0; i < 4; i++) actual.push((await recognizer.transcribe(wav(1), "auto")).detectedLanguage);
+    assert.deepEqual(actual, ["ja", "zh", "ko", null]);
   });
 });
 

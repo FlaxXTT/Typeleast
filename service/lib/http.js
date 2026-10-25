@@ -221,6 +221,7 @@ export function createHandler(options) {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const result = await service.polish({
           rawText: body.text,
+          language: typeof body.language === "string" ? body.language : "auto",
           appHint: body.appHint ?? null,
           strength: body.strength,
           fieldContext: normalizeFieldContext(body.fieldContext),

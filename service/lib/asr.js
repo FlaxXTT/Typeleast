@@ -186,6 +186,7 @@ export class LocalRecognizer {
     const samples = pcm16ToFloat32(withLeadIn(audio));
     const segments = samples.length / SAMPLE_RATE > SEGMENT_THRESHOLD_SECONDS ? this.split(samples) : [samples];
     const texts = [];
+    const detected = [];
     for (const segment of segments) {
       const stream = this.recognizer.createStream();
       if (this.modelId === "qwen3-asr-0.6b" && language !== "auto") {
@@ -194,9 +195,15 @@ export class LocalRecognizer {
       stream.acceptWaveform({ sampleRate: SAMPLE_RATE, samples: segment });
       const result = await this.recognizer.decodeAsync(stream);
       const text = String(result?.text ?? "").trim();
-      if (text.length > 0) texts.push(text);
+      if (text.length > 0) {
+        texts.push(text);
+        // SenseVoice exposes its detected language as e.g. <|ja|>. Other models may omit it.
+        const code = String(result?.lang ?? result?.language ?? "").trim().toLowerCase().replace(/^<\|([^|]+)\|>$/, "$1");
+        detected.push(LANGUAGES.includes(code) && code !== "auto" ? code : null);
+      }
     }
-    return { text: joinSegments(texts), language };
+    const detectedLanguage = detected.length > 0 && detected[0] && detected.every(code => code === detected[0]) ? detected[0] : null;
+    return { text: joinSegments(texts), language, detectedLanguage };
   }
 
   async release() {

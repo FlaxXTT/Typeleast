@@ -26,6 +26,30 @@ func checkEq<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     check(name, got == want, "got=" + String(describing: got) + " want=" + String(describing: want))
 }
 
+// Developer-only UI fixture. No service, microphone, global shortcuts or real Keychain access.
+if CommandLine.arguments.contains("--dictionary-ui") {
+    guard let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"],
+          home.hasPrefix(NSTemporaryDirectory()) || home.hasPrefix("/private/tmp/") else {
+        print("Set TYPELEAST_HOME to an isolated temporary directory first.")
+        exit(2)
+    }
+    let settings = Settings.shared
+    let oldWords = settings.words
+    let oldSuggestions = settings.wordSuggestions
+    settings.words = (1...60).map { LocalWord(id: "fixture-\($0)", word: "示例术语 \($0)", heardAs: "示例读音 \($0)", source: .manual, addedAt: Date()) }
+    settings.wordSuggestions = (1...8).map { WordSuggestion(word: "Example\($0)", heardAs: "示例 \($0)", count: 2, lastSeen: Date()) }
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    let model = AppModel()
+    let hub = HubWindowController(model: model)
+    hub.show(page: .dictionary)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 180) { app.stop(nil) }
+    app.run()
+    settings.words = oldWords
+    settings.wordSuggestions = oldSuggestions
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--live-health") {
     let c = ServiceClient()
     if let t = ProcessInfo.processInfo.environment["TYPELEAST_TOKEN"], !t.isEmpty { c.tokenOverride = t }

@@ -530,10 +530,10 @@ export class VoicePolishService {
     result.text = normalizeTermCase(result.text, localSpellingsFrom(request.dictionary));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
-    const target = typeof request.translateTo === "string" && request.translateTo ? request.translateTo : null;
-    // Speech recognised as Japanese or Korean is not Chinese either, even with no kana (企画書).
-    const spokenOther = !target && ["ja", "ko"].includes(String(request.language ?? "").toLowerCase());
-    if (request.variants && (!target || target === "zh") && !spokenOther) result.text = await applyVariants(result.text, parseVariants(request.variants));
+    const target = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
+    // A failed translation returns source text. Unknown languages never opt in by their script.
+    const outputLanguage = target ? (result.fallback ? "auto" : target) : (request.language ?? this.config.language ?? "auto");
+    if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants), outputLanguage);
     result.suggestions = [];
     if (!result.fallback && !request.translateTo && !result.translated &&
         !result.beta?.sessionId) {
@@ -624,7 +624,7 @@ export class VoicePolishService {
   async transcribe(audio, language) {
     const started = Date.now();
     const spoken = await this.recognizer.transcribe(audio, language);
-    return { text: String(spoken.text ?? "").trim(), language: spoken.language ?? language, ms: Date.now() - started };
+    return { text: String(spoken.text ?? "").trim(), language: language !== "auto" ? language : (spoken.detectedLanguage ?? spoken.language ?? "auto"), ms: Date.now() - started };
   }
 
   /**

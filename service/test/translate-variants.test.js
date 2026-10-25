@@ -23,7 +23,7 @@ function makeService(fetchImpl, history = []) {
   return new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: "" }) },
     fetchImpl,
-    config: { maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
+    config: { language: "zh", maxOutputTokens: 800, timeoutMs: 12000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [] },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
   });
 }
@@ -159,15 +159,15 @@ test("语言变体：解析请求头，忽略不认识的值", () => {
 
 test("繁体转换在本机完成：台湾用语、香港字形；简体、数字和英文保持不变", async () => {
   const text = "这个软件的鼠标和内存有问题，DeepSeek 3.5 版本";
-  assert.equal(await applyVariants(text, { zh: "tw" }), "這個軟體的滑鼠和記憶體有問題，DeepSeek 3.5 版本");
-  assert.match(await applyVariants(text, { zh: "hk" }), /^這個軟件/);
-  assert.equal(await applyVariants(text, { zh: "hans" }), text);
-  assert.equal(await applyVariants("Hello 123", { zh: "tw" }), "Hello 123");
+  assert.equal(await applyVariants(text, { zh: "tw" }, "zh"), "這個軟體的滑鼠和記憶體有問題，DeepSeek 3.5 版本");
+  assert.match(await applyVariants(text, { zh: "hk" }, "zh"), /^這個軟件/);
+  assert.equal(await applyVariants(text, { zh: "hans" }, "zh"), text);
+  assert.equal(await applyVariants("Hello 123", { zh: "tw" }, "zh"), "Hello 123");
 });
 
 test("繁体只用于中文：日文汉字和译成其他语言的结果不转换", async () => {
-  assert.equal(await applyVariants("会社の設定を変更してください。", { zh: "tw" }), "会社の設定を変更してください。");
-  assert.equal(await applyVariants("金曜日までに企画書を送ってください。", { zh: "hk" }), "金曜日までに企画書を送ってください。");
+  assert.equal(await applyVariants("会社の設定を変更してください。", { zh: "tw" }, "zh"), "会社の設定を変更してください。");
+  assert.equal(await applyVariants("金曜日までに企画書を送ってください。", { zh: "hk" }, "zh"), "金曜日までに企画書を送ってください。");
   const japanese = "会議は木曜日の午後3時です。";
   const { fetchImpl } = provider(calls => calls.length === 1
     ? JSON.stringify({ status: "ok", text: "周四下午三点开会。", reason: "改口" }) : japanese);
@@ -190,6 +190,32 @@ test("变体对整理结果和无模型回退都生效；英式拼写写进系�
   assert.match(calls[0].system, /British spelling/);
   const withoutRoute = await service.polish({ rawText: "下午三点开会", strength: "prompt", variants: "zh=hk" });
   assert.equal(withoutRoute.text, "下午三點開會");
+});
+
+test("繁体按语言启用：中文和粤语启用，其他及未知语言关闭", async () => {
+  for (const language of [undefined, "auto", "ja", "ko", "en", "fr"]) {
+    for (const text of ["会社", "企画書", "软件开发"]) {
+      assert.equal(await applyVariants(text, { zh: "tw" }, language), text, `${language}: ${text}`);
+    }
+    const result = await makeService().polish({ rawText: "企画書", language: language ?? "auto", variants: "zh=tw" });
+    assert.equal(result.text, "企画書");
+  }
+  for (const language of ["zh", "yue"]) {
+    assert.equal(await applyVariants("软件开发", { zh: "tw" }, language), "軟體開發");
+  }
+  const failed = await makeService().polish({ rawText: "会社", language: "ja", translateTo: "zh", variants: "zh=tw" });
+  assert.equal(failed.fallback, true);
+  assert.equal(failed.text, "会社", "a failed translation must not treat its Japanese source as Chinese");
+});
+
+test("recognizer metadata reaches the output-language gate without another model call", async () => {
+  const service = makeService();
+  for (const [detectedLanguage, text, expected] of [["ja", "企画書", "企画書"], ["zh", "软件", "軟體"], [null, "企画書", "企画書"]]) {
+    service.recognizer.transcribe = async () => ({ text, language: "auto", detectedLanguage });
+    const spoken = await service.transcribe(Buffer.alloc(0), "auto");
+    const result = await service.polish({ rawText: spoken.text, language: spoken.language, variants: "zh=tw" });
+    assert.equal(result.text, expected);
+  }
 });
 
 test("翻译的防编造按数值比对：换写法的时间日期能过，凭空出现的数字被拦下", async () => {

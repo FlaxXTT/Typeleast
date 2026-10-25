@@ -485,8 +485,7 @@ struct DictionaryPage: View {
     @EnvironmentObject var model: AppModel
     @State private var filter: WordFilter = .all
     @State private var query = ""
-    @State private var editing: LocalWord?
-    @State private var adding = false
+    @State private var editor = WordEditorController()
     @State private var importNote = ""
 
     private var filtered: [LocalWord] {
@@ -507,7 +506,9 @@ struct DictionaryPage: View {
                 HStack(spacing: 8) {
                     Button(L10n.text("导入 CSV")) { importCSV() }.buttonStyle(SecondaryButtonStyle())
                     Button {
-                        adding = true
+                        editor.show(title: L10n.text("新词"), word: "", heardAs: "", localOnly: false) { word, heard, localOnly in
+                            Settings.shared.addWord(word, heardAs: heard, source: .manual, localOnly: localOnly)
+                        }
                     } label: {
                         Label(L10n.text("新词"), systemImage: "plus")
                     }
@@ -523,49 +524,44 @@ struct DictionaryPage: View {
             .padding(.horizontal, 36)
             .padding(.bottom, 12)
 
-            if !model.suggestions.isEmpty, query.isEmpty {
-                SuggestionList(suggestions: model.suggestions, onAdd: { suggestion in
-                    Settings.shared.acceptSuggestion(suggestion)
-                }, onDismiss: { Settings.shared.dismissSuggestion($0) })
-                .padding(.horizontal, 36)
-                .padding(.bottom, 12)
-            }
-
-            if filtered.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(query.isEmpty ? L10n.text("词典是空的。") : L10n.text("没有匹配的词"))
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(Theme.secondary)
-                        .frame(maxWidth: 360)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(filtered) { word in
-                            WordRow(word: word, onEdit: { editing = word }, onDelete: {
-                                Settings.shared.removeWord(id: word.id)
-                            })
-                            if word.id != filtered.last?.id { Divider().padding(.leading, 16) }
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !model.suggestions.isEmpty, query.isEmpty {
+                        SuggestionList(suggestions: model.suggestions, onAdd: { suggestion in
+                            Settings.shared.acceptSuggestion(suggestion)
+                        }, onDismiss: { Settings.shared.dismissSuggestion($0) })
                     }
-                    .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
-                    .padding(.horizontal, 36)
-                    .padding(.bottom, 36)
+                    if filtered.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
+                            Text(query.isEmpty ? L10n.text("词典是空的。") : L10n.text("没有匹配的词"))
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(Theme.secondary)
+                                .frame(maxWidth: 360)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 160)
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(filtered) { word in
+                                WordRow(word: word, onEdit: {
+                                    editor.show(title: L10n.text("编辑"), word: word.word, heardAs: word.heardAs ?? "", localOnly: word.localOnly == true) { newWord, heard, localOnly in
+                                        Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard, localOnly: localOnly)
+                                    }
+                                }, onDelete: {
+                                    Settings.shared.removeWord(id: word.id)
+                                })
+                                if word.id != filtered.last?.id { Divider().padding(.leading, 16) }
+                            }
+                        }
+                        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 36)
+                .padding(.bottom, 36)
             }
         }
-        .sheet(isPresented: $adding) {
-            WordEditor(title: L10n.text("新词"), word: "", heardAs: "", localOnly: false) { word, heard, localOnly in
-                Settings.shared.addWord(word, heardAs: heard, source: .manual, localOnly: localOnly)
-            }
-        }
-        .sheet(item: $editing) { word in
-            WordEditor(title: L10n.text("编辑"), word: word.word, heardAs: word.heardAs ?? "", localOnly: word.localOnly == true) { newWord, heard, localOnly in
-                Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard, localOnly: localOnly)
-            }
-        }
+        .onDisappear { editor.close() }
     }
 
     private func importCSV() {
@@ -643,12 +639,39 @@ private struct WordRow: View {
     }
 }
 
+/// A modeless editor: the dictionary remains scrollable while it is open.
+private final class WordEditorController {
+    private var panel: NSPanel?
+
+    func show(title: String, word: String, heardAs: String, localOnly: Bool,
+              onSave: @escaping (String, String?, Bool) -> Void) {
+        close()
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 468, height: 330),
+                            styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        panel.title = title
+        panel.isReleasedWhenClosed = false
+        panel.isFloatingPanel = false
+        panel.hidesOnDeactivate = false
+        panel.contentViewController = NSHostingController(rootView:
+            WordEditor(title: title, word: word, heardAs: heardAs, localOnly: localOnly,
+                       onCancel: { [weak self] in self?.close() }, onSave: { [weak self] word, heard, localOnly in
+                           onSave(word, heard, localOnly)
+                           self?.close()
+                       }))
+        panel.center()
+        self.panel = panel
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func close() { panel?.close(); panel = nil }
+}
+
 private struct WordEditor: View {
-    @Environment(\.dismiss) private var dismiss
     let title: String
     @State var word: String
     @State var heardAs: String
     @State var localOnly: Bool
+    let onCancel: () -> Void
     let onSave: (String, String?, Bool) -> Void
 
     var body: some View {
@@ -672,10 +695,9 @@ private struct WordEditor: View {
             }
             HStack {
                 Spacer()
-                Button(L10n.text("取消")) { dismiss() }.buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
+                Button(L10n.text("取消"), action: onCancel).buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
                 Button(title == L10n.text("新词") ? L10n.text("添加") : L10n.text("保存")) {
                     onSave(word, heardAs.isEmpty ? nil : heardAs, localOnly)
-                    dismiss()
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)

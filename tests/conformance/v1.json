@@ -179,7 +179,7 @@
     },
     {
       "id": "taiwan-writing-without-model", "group": "variants",
-      "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "body": { "text": "这个软件很好用。", "variants": { "zh": "tw" } }, "expect": { "fields": { "status": 200, "json.fallback": true }, "contains": ["軟體"], "modelCalls": 0 } }]
+      "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "body": { "text": "这个软件很好用。", "language": "zh", "variants": { "zh": "tw" } }, "expect": { "fields": { "status": 200, "json.fallback": true }, "contains": ["軟體"], "modelCalls": 0 } }]
     },
     {
       "id": "invalid-variant-does-not-break-text", "group": "variants",

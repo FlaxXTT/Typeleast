@@ -1,6 +1,6 @@
 import AppKit
 
-// main.swift - entry point. LSUIElement app: menu bar only, no Dock icon, no main window.
+// Registered as an application for the Apps list; runtime policy follows the Dock setting.
 
 // An in-app update starts the new copy this way to hand over the Keychain items (LLMSettings.swift).
 if CommandLine.arguments.dropFirst().first == KeychainHandoff.receiveFlag { exit(KeychainHandoff.receive()) }

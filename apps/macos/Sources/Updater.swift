@@ -331,6 +331,7 @@ enum Updater {
         if mv "$3" "$3.old"; then
           if /usr/bin/ditto "$2" "$3"; then rm -rf "$3.old"; else rm -rf "$3"; mv "$3.old" "$3"; fi
         fi
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$3" >/dev/null 2>&1 || true
         /usr/bin/open "$3"
         rm -rf "$4"
         """
