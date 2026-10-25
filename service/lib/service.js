@@ -25,7 +25,7 @@ import { fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
-import { buildUserMessage, promptVersionFor, systemPromptFor } from "./prompt.js";
+import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
@@ -36,7 +36,7 @@ import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
   cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
 } from "./prompts/prompt-beta.js";
-import { TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
+import { directTranslatePrompt, TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
 import { applyVariants, parseVariants, variantInstruction } from "./variants.js";
 
 /** Hard ceiling on concurrent recognition+polish work. */
@@ -285,59 +285,64 @@ export class VoicePolishService {
     }
   }
 
-  /** Clean and validate the source before a separate translation call. */
+  /**
+   * Clean and validate the source, then translate it in a second call. A source
+   * that fails cleanup is translated directly in one call instead, so the user
+   * still gets the target language; only when that fails too is the tidied
+   * original inserted.
+   */
   async polishTranslate({ request, base, route, started, rawText, target }) {
     const context = await this.buildContext(request, rawText);
     const cleanupSystem = systemPromptFor({
       dictionary: context.dictionary, aliases: context.aliases,
       fieldContext: context.fieldContext ?? null, strength: "prompt", style: null,
     });
-    const translationSystem = translatePrompt(target)
-      + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
-    const outboundText = this.config.redactSecrets === false ? rawText : redactSecrets(rawText);
-    let cleanedSource = null;
-    try {
+    const variants = target === "en" ? variantInstruction(parseVariants(request.variants)) : "";
+    const redact = text => this.config.redactSecrets === false ? text : redactSecrets(text);
+    const outboundText = redact(rawText);
+    const call = (system, user, temperature) => {
       this.stats.modelCalls += 1;
-      const cleanup = await completeOpenAI({
-        route, system: cleanupSystem, user: buildUserMessage({ rawText: outboundText }),
+      return completeOpenAI({
+        route, system, user,
         maxTokens: Math.max(this.config.maxOutputTokens, 1200),
-        temperature: 0.2,
+        temperature,
         timeoutMs: Math.max(this.config.timeoutMs, 20000),
         signal: request.signal,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });
+    };
+    let cleanedSource = null;
+    try {
+      const cleanup = await call(cleanupSystem, buildUserMessage({ rawText: outboundText }), 0.2);
       const parsed = parsePolishOutput(cleanup.text);
-      if (!parsed.ok) {
-        this.stats.jsonFallback += 1;
-        const tidyOnly = tidy(rawText);
-        return await this.recordFallback(request, {
-          ...base, text: tidyOnly.text, fallback: true, reason: "output-format",
-          detail: `source-output-format:${parsed.failure ?? "unknown"}`, ms: timing(started, 0),
-          attempts: cleanup.attempts, postprocess: tidyOnly.applied, translated: target,
-        });
-      }
-      if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      const tidied = tidy(parsed.text);
-      const sourceVerdict = validateOutput({ rawText, output: tidied.text, strength: "prompt" });
-      if (!sourceVerdict.ok) {
-        const tidyOnly = tidy(rawText);
-        return await this.recordFallback(request, {
-          ...base, text: tidyOnly.text, fallback: true, reason: sourceVerdict.reason,
-          detail: describeVerdict(sourceVerdict.metrics), ms: timing(started, 0), metrics: sourceVerdict.metrics,
-          attempts: cleanup.attempts, postprocess: tidyOnly.applied, translated: target,
+      if (!parsed.ok) this.stats.jsonFallback += 1;
+      else if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
+      const tidied = parsed.ok ? tidy(parsed.text) : null;
+      const sourceVerdict = tidied ? validateOutput({ rawText, output: tidied.text, strength: "prompt" }) : null;
+      if (!sourceVerdict?.ok) {
+        const issue = sourceVerdict ? sourceVerdict.reason : `source-output-format:${parsed.failure ?? "unknown"}`;
+        this.logger.warn?.("typeleast: source cleanup unusable (%s); translating the transcript directly", issue);
+        const direct = await call(directTranslatePrompt(target)
+          + harnessAddendum({ dictionary: context.dictionary, aliases: context.aliases, fieldContext: context.fieldContext ?? null })
+          + variants, outboundText, 0.3);
+        const attempts = cleanup.attempts + direct.attempts;
+        const verdict = validateOutput({ rawText, output: String(direct.text ?? "").trim(), strength: "translate" });
+        if (!verdict.ok) {
+          const tidyOnly = tidy(rawText);
+          return await this.recordFallback(request, {
+            ...base, text: tidyOnly.text, fallback: true, reason: verdict.reason,
+            detail: `${issue}; direct ${describeVerdict(verdict.metrics) ?? verdict.reason}`, ms: timing(started, 0), metrics: verdict.metrics,
+            attempts, postprocess: tidyOnly.applied, translated: target,
+          });
+        }
+        return await this.recordAndReturn(request, {
+          ...base, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
+          usage: { cleanup: cleanup.usage, translation: direct.usage },
+          attempts, translated: target, detail: `direct-after:${issue}`,
         });
       }
       cleanedSource = sourceVerdict.text;
-      this.stats.modelCalls += 1;
-      const translation = await completeOpenAI({
-        route, system: translationSystem,
-        user: this.config.redactSecrets === false ? cleanedSource : redactSecrets(cleanedSource),
-        maxTokens: Math.max(this.config.maxOutputTokens, 1200),
-        temperature: 0.3,
-        timeoutMs: Math.max(this.config.timeoutMs, 20000),
-        signal: request.signal,
-        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
-      });
+      const translation = await call(translatePrompt(target) + variants, redact(cleanedSource), 0.3);
       const verdict = validateOutput({ rawText: cleanedSource, output: String(translation.text ?? "").trim(), strength: "translate" });
       if (!verdict.ok) {
         return await this.recordFallback(request, {

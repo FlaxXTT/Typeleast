@@ -74,13 +74,49 @@ test("译文编造数字时退回已校验的原语言整理稿；没填 Key 时
   assert.equal(noKey.reason, "no-api-key");
 });
 
-test("source cleanup fails validation: no translation request is made", async () => {
-  const { calls, fetchImpl } = provider('{"status":"ok","text":"周五在 512 房间开会。","reason":"guess"}');
+test("原语言整理没通过校验：改用一次调用直接翻译原话，仍然插入译文", async () => {
+  const { calls, fetchImpl } = provider(calls => calls.length === 1
+    ? '{"status":"ok","text":"周五在 512 房间开会。","reason":"guess"}'
+    : "The meeting is on Thursday at 3 pm. Please bring your laptops.");
   const service = makeService(fetchImpl);
   const result = await service.polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
+  assert.equal(result.fallback, false);
+  assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+  assert.equal(result.translated, "en");
+  assert.equal(result.detail, "direct-after:invented-fact");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].user, SPOKEN, "the direct call works from the spoken transcript, not the rejected cleanup");
+  assert.match(calls[1].system, /只翻译最后的说法/);
+  assert.match(calls[1].system, /可以调整句式/);
+  assert.equal(service.stats.modelCalls, 2);
+  assert.equal(service.stats.modelFallbacks, 0);
+});
+
+test("原语言整理的回复无法解析：同样改用直接翻译", async () => {
+  const { calls, fetchImpl } = provider(calls => calls.length === 1
+    ? '{"status":"ok","text": }'
+    : "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+  const service = makeService(fetchImpl);
+  const result = await service.polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
+  assert.equal(result.fallback, false);
+  assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+  assert.match(result.detail, /^direct-after:source-output-format:/);
+  assert.equal(calls.length, 2);
+  assert.equal(service.stats.jsonFallback, 1);
+});
+
+test("直接翻译也编造数字时，退回去掉口头禅的原话", async () => {
+  const { calls, fetchImpl } = provider(calls => calls.length === 1
+    ? '{"status":"ok","text":"周五在 512 房间开会。","reason":"guess"}'
+    : "The meeting is on Thursday at 3 pm in room 512.");
+  const service = makeService(fetchImpl);
+  const result = await service.polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
+  assert.equal(calls.length, 2);
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
-  assert.equal(calls.length, 1);
+  assert.match(result.detail, /^invented-fact; direct /);
+  assert.doesNotMatch(result.text, /512/);
+  assert.match(result.text, /周四/);
   assert.equal(service.stats.modelFallbacks, 1);
 });
 

@@ -200,9 +200,10 @@ snapshot(NSHostingView(rootView: OnboardingView(finish: {}).environmentObject(mo
 
 // The pill in each look, drawn on a grey backdrop.
 for (name, configure) in [
-    ("pill-recording", { (m: inout RecordingBarModel) in m.showRecording(destination: "x"); for i in 0..<40 { m.update(level: Float(abs(sin(Double(i) / 3))) * 0.5, elapsed: 7) } }),
+    ("pill-recording", { (m: inout RecordingBarModel) in m.showRecording(destination: "x", badge: VoiceStrength.prompt.label); for i in 0..<40 { m.update(level: Float(abs(sin(Double(i) / 3))) * 0.5, elapsed: 7) } }),
     ("pill-countdown", { (m: inout RecordingBarModel) in m.showRecording(destination: "x"); for i in 0..<40 { m.update(level: Float(abs(sin(Double(i) / 2))) * 0.4, elapsed: 109) } }),
-    ("pill-thinking", { (m: inout RecordingBarModel) in m.showRecording(destination: "x"); m.showThinking(detail: "") }),
+    ("pill-thinking", { (m: inout RecordingBarModel) in m.showRecording(destination: "x", badge: VoiceStrength.prompt.label); m.showThinking(detail: "") }),
+    ("pill-translate", { (m: inout RecordingBarModel) in m.showRecording(destination: "x", badge: L10n.text("翻译") + " →EN"); for i in 0..<40 { m.update(level: Float(abs(sin(Double(i) / 3))) * 0.5, elapsed: 7) } }),
     ("pill-result", { (m: inout RecordingBarModel) in m.showRecording(destination: "x"); m.showResult("我想说三点：1. 要快 2. 要准 3. 要便宜", warning: false) }),
 ] as [(String, (inout RecordingBarModel) -> Void)] {
     var m = RecordingBarModel()
