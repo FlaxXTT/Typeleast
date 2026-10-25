@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using TypeLeast.Core;
@@ -10,55 +11,78 @@ internal sealed class SpeechModelsPanel
 {
     public StackPanel View { get; } = new();
     private readonly AppHost host;
-    private readonly Dictionary<string, (TextBlock state, Button action, Button cancel, ProgressBar progress, Border hint)> rows = new();
+    private readonly Dictionary<string, (TextBlock state, Button action, Button cancel, ProgressBar progress)> rows = new();
+    private string signature = "";
+    private bool otherExpanded;
+    private readonly TextBlock problem = Theme.Text("", 12, Theme.Grey);
     public SpeechModelsPanel(AppHost host) { this.host = host; }
 
     public void Refresh()
     {
         if (host.SpeechCatalog is not { } catalog) return;
-        if (rows.Count == 0) {
+        var next = catalog.ActiveModelId + "|" + string.Join("|", catalog.Models.Select(m => m.Id + ":" + m.Registered));
+        if (signature != next || View.Children.Count == 0) {
+            signature = next; rows.Clear(); View.Children.Clear();
             View.Children.Add(Theme.SectionTitle(L10n.T("语音模型")));
-            foreach (var model in catalog.Models) {
-                var id = model.Id;
-                var state = Theme.Text("", 12, Theme.Grey);
-                var action = Theme.Secondary("", async () => {
-                    var current = host.SpeechCatalog?.Models.Find(m => m.Id == id);
-                    var badHash = host.SpeechCatalog?.Operation is { Error: "checksum-mismatch" } op && op.ModelId == id;
-                    await host.ManageSpeechModel(id, current?.Installed != true || badHash);
-                });
-                var cancel = Theme.Secondary(L10n.T("取消下载"), async () => await host.ManageSpeechModel(id, cancel: true));
-                var progress = new ProgressBar { Minimum = 0, Maximum = 1, Height = 5, Width = 150 };
-                var source = Theme.Secondary(L10n.T("模型来源与下载"), () => Shell.Open(model.SourceUrl));
-                var tools = new WrapPanel { Orientation = Orientation.Horizontal };
-                foreach (var control in new FrameworkElement[] { source, progress, cancel }) {
-                    control.Margin = new Thickness(0, 0, 8, 6);
-                    tools.Children.Add(control);
-                }
-                var hint = GuideViews.MirrorHint(host, () => host.ManageSpeechModel(id, download: true));
-                var row = Theme.Stack(6,
-                    Theme.SettingRow(model.Name, null, action),
-                    state, tools, hint);
-                View.Children.Add(Theme.Card(row, 12));
-                rows[id] = (state, action, cancel, progress, hint);
-            }
+            View.Children.Add(Theme.Text(L10n.T("选择模型与精度后再下载。不会自动选择或下载。"), 12, Theme.Grey));
+            foreach (var m in catalog.Models.Where(m => m.Category == "primary" || m.Id == "qwen3-asr-0.6b")) AddRow(View, m);
+            var others = Theme.Stack(10);
+            others.Children.Add(Theme.Text(L10n.T("自行下载兼容的 ONNX 文件，再选择目录配置。不会搬动或删除原文件。"), 12, Theme.Grey));
+            others.Children.Add(Theme.Secondary(L10n.T("导入本地模型"), () => new LocalSpeechModelImport(host).Show()));
+            foreach (var m in catalog.Models.Where(m => m.Category == "other" || m.Category is null && m.Id != "qwen3-asr-0.6b")) AddRow(others, m);
+            var expand = new Expander { Header = L10n.T("其他模型"), Content = others, Foreground = Theme.Ink, IsExpanded = otherExpanded, Margin = new Thickness(0, 10, 0, 10) };
+            expand.Expanded += (_, _) => otherExpanded = true; expand.Collapsed += (_, _) => otherExpanded = false;
+            View.Children.Add(expand); View.Children.Add(problem);
         }
-        foreach (var model in catalog.Models) {
-            if (!rows.TryGetValue(model.Id, out var row)) continue;
-            var op = catalog.Operation?.ModelId == model.Id ? catalog.Operation : null;
-            var selected = catalog.ActiveModelId == model.Id && host.Speech?.Ready == true;
-            row.action.Content = selected ? L10n.T("使用中") : !model.Installed || op?.Error == "checksum-mismatch" ? L10n.T("下载并使用") : L10n.T("使用");
+        foreach (var m in catalog.Models) {
+            if (!rows.TryGetValue(m.Id, out var row)) continue;
+            var selected = catalog.ActiveModelId == m.Id && host.Speech?.Ready == true;
+            var primary = m.Category == "primary" || m.Id == "qwen3-asr-0.6b";
+            var configured = primary || m.Registered || selected;
+            var op = catalog.Operation?.ModelId == m.Id ? catalog.Operation : null;
+            row.action.Content = selected ? L10n.T("使用中") : !configured ? L10n.T("一键配置") : !m.Installed && primary ? L10n.T("下载并使用") : L10n.T("使用");
+            row.action.Visibility = configured || m.Installed ? Visibility.Visible : Visibility.Collapsed;
             row.action.IsEnabled = !selected && catalog.Operation?.Running != true && host.Phase == DictationPhase.Idle;
-            var status = model.ModelBytes / 1_000_000_000.0;
-            row.state.Text = status.ToString("F2", L10n.Culture) + " GB · " + (model.Installed ? L10n.T("已下载") : L10n.T("未下载"));
-            if (op?.Running == true) row.state.Text += " · " + (op.Phase == "downloading" ? L10n.T("正在下载…") : L10n.T("等待或加载中…"));
+            row.state.Text = (m.Precision == "local" ? L10n.T("本地文件") : m.Precision == "fp16" ? L10n.T("FP16（前端 FP32）") : "INT8") + " · " + (m.ModelBytes / 1_000_000_000).ToString("F2", L10n.Culture) + " GB";
+            if (m.Installed) row.state.Text += " · " + L10n.T("已下载");
+            if (op?.Running == true) row.state.Text += " · " + L10n.T("等待或加载中…");
             if (op?.Phase == "error") row.state.Text += " · " + op.Problem;
-            if (op?.Phase == "cancelled") row.state.Text += " · " + L10n.T("下载已取消。已校验的文件下次可用。");
-            if (catalog.Notice is not null && selected) row.state.Text += " · " + L10n.T("所选模型不可用，正在尝试默认模型。");
             row.cancel.Visibility = op?.Running == true && op.Phase != "loading" ? Visibility.Visible : Visibility.Collapsed;
-            row.cancel.Content = op?.Phase == "downloading" ? L10n.T("取消下载") : L10n.T("取消");
-            row.progress.Visibility = op?.Phase == "downloading" && op.Total > 0 ? Visibility.Visible : Visibility.Collapsed;
+            row.progress.Visibility = op?.Phase == "downloading" ? Visibility.Visible : Visibility.Collapsed;
             row.progress.Value = op is { Total: > 0 } ? Math.Clamp(op.Received / op.Total, 0, 1) : 0;
-            row.hint.Visibility = op is { Phase: "error", Error: "download-failed" } ? Visibility.Visible : Visibility.Collapsed;
         }
+        problem.Text = catalog.Notice is not null ? L10n.T("所选模型不可用，请重新选择。") : "";
+        if (catalog.Operation is { } pending && !catalog.Models.Any(m => m.Id == pending.ModelId))
+            problem.Text = pending.Running ? L10n.T("等待或加载中…") : pending.Phase == "error" ? pending.Problem : L10n.T("配置完成。请在其他模型中选择使用。");
+    }
+    private void AddRow(StackPanel target, SpeechModelOption m)
+    {
+        var id = m.Id;
+        var state = Theme.Text("", 12, Theme.Grey);
+        var action = Theme.Secondary("", async () => {
+            var current = host.SpeechCatalog?.Models.Find(x => x.Id == id);
+            if (current is null) return;
+            if (current.Category != "primary" && id != "qwen3-asr-0.6b" && !current.Registered && host.SpeechCatalog?.ActiveModelId != id)
+                await LocalAction("register-known", id);
+            else await host.ManageSpeechModel(id, (current.Category == "primary" || id == "qwen3-asr-0.6b") && (!current.Installed || host.SpeechCatalog?.Operation is { Error: "checksum-mismatch" } op && op.ModelId == id));
+        });
+        var cancel = Theme.Secondary(L10n.T("取消"), () => _ = host.ManageSpeechModel(id, cancel: true));
+        var progress = new ProgressBar { Minimum = 0, Maximum = 1, Height = 5, Width = 150 };
+        var tools = new WrapPanel();
+        if (!string.IsNullOrEmpty(m.SourceUrl)) tools.Children.Add(Theme.Secondary(L10n.T("模型来源与下载"), () => Shell.Open(m.SourceUrl)));
+        tools.Children.Add(progress); tools.Children.Add(cancel);
+        if (m.Registered && host.SpeechCatalog?.ActiveModelId != id) tools.Children.Add(Theme.Secondary(L10n.T("移除登记"), () => _ = LocalAction("local/remove", id)));
+        var card = Theme.Stack(6, Theme.SettingRow(m.Name, state, action));
+        if (m.Category == "primary" || id == "qwen3-asr-0.6b") card.Children.Add(Theme.Text(id.Contains("1.7b") ? L10n.T("多语种 · 中英混说 · 较大容量") : L10n.T("多语种 · 中英混说 · 较小体积"), 12, Theme.Grey));
+        else card.Children.Add(Theme.Text(id switch { "sensevoice-small" => L10n.T("轻量 · 快速 · 五语种"), "fireredasr2-ctc" => L10n.T("中文 · 方言 · CTC"), "fun-asr-nano" => L10n.T("中英日 · 混说 · 口音"), _ => L10n.T("兼容导入 · 本地识别") }, 12, Theme.Grey));
+        card.Children.Add(tools); target.Children.Add(Theme.Card(card));
+        if (m.Precision == "fp16") card.Children.Add(Theme.Text(L10n.T("Mac 实测加载峰值约 12.5 GiB；不同环境会变化。"), 12, Theme.Grey));
+        rows[id] = (state, action, cancel, progress);
+    }
+    private async System.Threading.Tasks.Task LocalAction(string path, string id)
+    {
+        if (host.Phase != DictationPhase.Idle) return;
+        try { await host.Client.LocalModelActionAsync(path, new { modelId = id }); await host.RefreshHealth(); }
+        catch (ServiceException) { problem.Text = L10n.T("模型操作失败，请重试。当前模型保留。"); }
     }
 }

@@ -179,7 +179,7 @@ final class AppModel: ObservableObject {
     var modelsDownloading: Bool { speech?.downloading ?? false }
 
     var speechSummary: String {
-        let name = speech?.modelName ?? "SenseVoice Small"
+        let name = speech?.displayName ?? L10n.text("未选择语音模型")
         return name + " · " + (speech?.ready == true ? L10n.text("就绪") : L10n.text("准备中"))
     }
 

@@ -39,6 +39,11 @@ public sealed class SpeechModelOption
     public string LicenseUrl { get; set; } = "";
     public bool CanSetLanguage { get; set; }
     public bool Installed { get; set; }
+    public string? Family { get; set; }
+    public string? Precision { get; set; }
+    public string? Category { get; set; }
+    public bool Registered { get; set; }
+    public bool Downloadable { get; set; }
 }
 public sealed class SpeechModelCatalog
 {
@@ -53,6 +58,7 @@ public sealed class SpeechStatus
     [JsonPropertyName("providerId")] public string? ProviderId { get; set; }
     public string? ModelId { get; set; }
     public string? ModelName { get; set; }
+    [JsonIgnore] public string DisplayName => string.IsNullOrWhiteSpace(ModelName) ? L10n.T("未选择语音模型") : ModelName;
     public bool? CanSetLanguage { get; set; }
     public List<string>? Languages { get; set; }
     public SpeechModelOperation? Operation { get; set; }

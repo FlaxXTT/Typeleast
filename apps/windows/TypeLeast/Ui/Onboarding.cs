@@ -10,10 +10,11 @@ internal sealed class Onboarding : Window
     private readonly StackPanel content = new();
     private readonly AppHost host;
     private int step;
+    private readonly SpeechModelsPanel speechModels;
     private readonly string[] titles = { "欢迎使用 TypeLeast", "准备本地服务和模型", "麦克风与权限", "Windows 快捷键", "麦克风测试", "首次听写", "设置位置", "准备完成" };
     public Onboarding(AppHost host)
     {
-        this.host = host; Title = "TypeLeast"; Width = 560; Height = 460; MinWidth = 400; MinHeight = 360; Background = Theme.Background;
+        this.host = host; speechModels = new SpeechModelsPanel(host); Title = "TypeLeast"; Width = 560; Height = 460; MinWidth = 400; MinHeight = 360; Background = Theme.Background;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Content = new ScrollViewer { Content = content, Padding = new Thickness(28), VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Render(); host.Changed += Refresh; Closed += (_, _) => host.Changed -= Refresh;
@@ -34,9 +35,8 @@ internal sealed class Onboarding : Window
         if (description.Length > 0) content.Children.Add(Theme.Card(Theme.Text(L10n.T(description), 14)));
         if (step == 1)
         {
-            if (host.Speech is { ModelsMissing: true } or { Phase: "error" })
-                content.Children.Add(Theme.Primary(L10n.T("下载（241 MB）"), () => _ = host.DownloadModels()));
-            if (ModelMirror.NetworkFailure(host.Speech)) content.Children.Add(GuideViews.MirrorHint(host, host.RetryModelDownload));
+            speechModels.Refresh();
+            content.Children.Add(speechModels.View);
             content.Children.Add(Theme.Secondary(L10n.T("打开设置"), () => host.ShowWindow(MainWindow.Page.Settings)));
         }
         if (step == 6) content.Children.Add(Theme.Card(GuideViews.List(null)));

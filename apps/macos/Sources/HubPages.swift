@@ -153,9 +153,9 @@ private struct SetupCard: View {
                         model.actions?.restartService()
                     }
                 }
-                SetupRow(done: model.speech?.ready == true, title: model.speech?.modelName ?? "SenseVoice Small",
+                SetupRow(done: model.speech?.ready == true, title: model.speech?.displayName ?? L10n.text("未选择语音模型"),
                          detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("就绪，本机识别") : AppDelegate.speechProblem(model.speech),
-                         action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("下载") : "") {
+                         action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("选择语音模型") : "") {
                     model.actions?.downloadModels()
                 }
                 if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }

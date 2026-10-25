@@ -148,9 +148,9 @@ test("speech model endpoints preserve auth and pass only catalog IDs to lifecycl
   service.recognizer.start=(id,options)=>{modelFor(id);seen.push({id,...options});};
   service.recognizer.cancel=id=>{modelFor(id);seen.push({cancel:id});};
   const handler=createHandler({service,currentToken:async()=>TOKEN});
-  async function request(path,method,body={}) {
+  async function request(path,method,body={},headers={}) {
     const req=Readable.from([Buffer.from(JSON.stringify(body))]);
-    Object.assign(req,{url:ROUTE_PREFIX+path,method,headers:{host:'127.0.0.1',authorization:`Bearer ${TOKEN}`}});
+    Object.assign(req,{url:ROUTE_PREFIX+path,method,headers:{host:'127.0.0.1',authorization:`Bearer ${TOKEN}`,...headers}});
     const res={headersSent:false,writeHead(status){this.status=status;this.headersSent=true;},end(body){this.body=body;}};
     await handler(req,res);return res;
   }
@@ -175,6 +175,19 @@ test("speech model endpoints preserve auth and pass only catalog IDs to lifecycl
   assert.match(downloadUrl({ repo: 'a/b', path: 'c' }, ''), /^https:\/\/huggingface\.co\//);
   const denied=await call(handler,ROUTE_PREFIX+'/models',{authorization:'Bearer invalid'});
   assert.equal(denied.status,401);
+  let inspected = 0;
+  service.recognizer.inspectLocal = async body => { inspected++; if (!body.name) throw Object.assign(new Error('invalid description'), { code: 'invalid-local-model' }); return { name: body.name }; };
+  service.recognizer.registerLocal = () => 'local-demo';
+  service.recognizer.registerKnown = async id => modelFor(id);
+  service.recognizer.removeLocal = async () => {};
+  assert.equal((await request('/models/local/inspect', 'POST', { name: 'Fictional model' }, { authorization: 'Bearer invalid' })).status, 401);
+  assert.equal(inspected, 0, 'no model inspection before authentication');
+  assert.equal((await request('/models/local/inspect', 'POST', { name: 'Fictional model' })).status, 200);
+  assert.equal((await request('/models/local/inspect', 'POST', {})).status, 400);
+  assert.equal((await request('/models/local/register', 'POST', {})).status, 202);
+  assert.equal((await request('/models/register-known', 'POST', { modelId: 'sensevoice-small' })).status, 200);
+  assert.equal((await request('/models/local/remove', 'POST', { modelId: 'local-demo' })).status, 200);
+  assert.equal((await request('/models/local/remove', 'POST', null)).status, 400);
 });
 
 test("Prompt Beta endpoints: skip and cancel take a session id; an expired one is 410", async () => {

@@ -463,7 +463,7 @@ internal sealed class SettingsPage : IPage
         serviceStatus.Foreground = svc.State == ServiceManager.Phase.Running ? Theme.Grey : Theme.Warning;
         var speech = host.Speech;
         var problem = Messages.SpeechProblem(speech);
-        speechStatus.Text = (speech?.ModelName ?? "SenseVoice Small") + " · " + (problem.Length == 0 ? L10n.T("就绪，音频不出本机") : problem);
+        speechStatus.Text = (speech?.DisplayName ?? L10n.T("未选择语音模型")) + " · " + (problem.Length == 0 ? L10n.T("就绪，音频不出本机") : problem);
         if (speech?.DownloadFraction is { } f)
         {
             progress.Visibility = Visibility.Visible;

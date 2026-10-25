@@ -81,6 +81,11 @@ struct SpeechModelOption: Codable, Identifiable {
     var licenseUrl: String
     var canSetLanguage: Bool
     var installed: Bool
+    var family: String?
+    var precision: String?
+    var category: String?
+    var registered: Bool?
+    var downloadable: Bool?
 }
 struct SpeechModelCatalog: Codable {
     var activeModelId: String
@@ -93,6 +98,7 @@ struct SpeechStatus: Codable, Equatable {
     var providerId: String?
     var modelId: String?
     var modelName: String?
+    var displayName: String { (modelName?.isEmpty == false ? modelName : nil) ?? L10n.text("未选择语音模型") }
     var canSetLanguage: Bool?
     var languages: [String]?
     var operation: SpeechModelOperation?
@@ -674,6 +680,17 @@ final class ServiceClient {
             let (data, response) = try performSync(req, timeout: healthTimeout)
             guard response.statusCode == 200 else { throw httpError(response, data) }
             return try JSONDecoder().decode(SpeechModelCatalog.self, from: data)
+        } }
+    }
+
+    func localModelActionSync(path: String, body: [String: Any]) throws -> Data {
+        try withPortRetry { try withTokenRetry { token in
+            let payload = try JSONSerialization.data(withJSONObject: body)
+            let request = try makeRequest(path: "/api/voice-polish/models/" + path, method: "POST", token: token,
+                headers: ["content-type": "application/json"], body: payload, timeout: 60)
+            let (data, response) = try performSync(request, timeout: 60)
+            guard response.statusCode == 200 || response.statusCode == 202 else { throw httpError(response, data) }
+            return data
         } }
     }
 

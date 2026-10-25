@@ -2,6 +2,7 @@ import Foundation
 import Darwin
 import AVFoundation
 import AppKit
+import SwiftUI
 
 KeychainStore.stub = [:]
 L10n.language = "zh-Hans"
@@ -27,6 +28,35 @@ func checkEq<T: Equatable>(_ name: String, _ got: T, _ want: T) {
 }
 
 // Developer-only UI fixture. No service, microphone, global shortcuts or real Keychain access.
+if let index = CommandLine.arguments.firstIndex(of: "--model-ui-render"), CommandLine.arguments.count > index + 1 {
+    let output = CommandLine.arguments[index + 1]
+    guard output.hasPrefix("/private/tmp/"), let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"], home.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
+    try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+    let app = NSApplication.shared
+    let fixture = #"{"activeModelId":"qwen3-asr-0.6b","models":[{"id":"qwen3-asr-0.6b","name":"Qwen3-ASR-0.6B","modelBytes":990000000,"sourceUrl":"https://example.com/model","licenseUrl":"https://example.com/license","canSetLanguage":true,"installed":true,"category":"primary","precision":"int8"},{"id":"qwen3-asr-1.7b-fp16","name":"Qwen3-ASR-1.7B","modelBytes":4731171333,"sourceUrl":"https://example.com/model","licenseUrl":"https://example.com/license","canSetLanguage":true,"installed":false,"category":"primary","precision":"fp16"},{"id":"sensevoice-small","name":"SenseVoice Small","modelBytes":240000000,"sourceUrl":"https://example.com/model","licenseUrl":"https://example.com/license","canSetLanguage":true,"installed":true,"category":"other","precision":"int8","registered":false}]}"#
+    for language in ["zh-Hans", "en"] {
+        L10n.language = language
+        for dark in [false, true] {
+            app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            let model = AppModel()
+            model.speechCatalog = try JSONDecoder().decode(SpeechModelCatalog.self, from: Data(fixture.utf8))
+            model.health = try JSONDecoder().decode(HealthResponse.self, from: Data(#"{"ok":true,"speech":{"ready":true,"phase":"ready","modelName":"Qwen3-ASR-0.6B"}}"#.utf8))
+            let view = NSHostingView(rootView: ScrollView { SpeechModelOptions().padding(20) }.background(Theme.window).environmentObject(model).environment(\.colorScheme, dark ? .dark : .light))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = view
+            view.frame = NSRect(x: 0, y: 0, width: 500, height: 700)
+            window.layoutIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: output + "/" + language + (dark ? "-dark.png" : "-light.png")))
+            }
+            window.orderOut(nil)
+        }
+    }
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--dictionary-ui") {
     guard let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"],
           home.hasPrefix(NSTemporaryDirectory()) || home.hasPrefix("/private/tmp/") else {
@@ -916,6 +946,12 @@ do {
     checkEq("catalog request path", state.lastRequest?.path, "/api/voice-polish/models")
     checkEq("catalog preserves selected default", catalog.activeModelId, "sensevoice-small")
     checkEq("catalog decodes installed model", catalog.models.first?.installed, true)
+    let formatCatalog = try JSONDecoder().decode(SpeechModelCatalog.self, from: Data(#"{"activeModelId":"","models":[{"id":"qwen3-asr-1.7b-fp16","name":"Qwen3-ASR-1.7B","modelBytes":4731171333,"sourceUrl":"https://huggingface.co/example/model","licenseUrl":"https://example.com/license","canSetLanguage":true,"installed":false,"category":"primary","precision":"fp16","downloadable":true}]}"#.utf8))
+    checkEq("no model is implicitly selected", formatCatalog.activeModelId, "")
+    checkEq("model precision survives decoding", formatCatalog.models.first?.precision, "fp16")
+    checkEq("model category survives decoding", formatCatalog.models.first?.category, "primary")
+    _ = try client.localModelActionSync(path: "register-known", body: ["modelId": "sensevoice-small"])
+    checkEq("known model configuration path", state.lastRequest?.path, "/api/voice-polish/models/register-known")
     checkEq("catalog waiting blocks repeat actions", catalog.operation?.running, true)
     try client.speechModelActionSync(id: "fun-asr-nano", download: true, endpoint: "https://mirror.example.com")
     checkEq("candidate download method", state.lastRequest?.method, "POST")

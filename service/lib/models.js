@@ -252,7 +252,11 @@ export function recognizerConfig(modelsDir, id, { language = "auto", numThreads 
     case "qwen3-asr-0.6b":
       config.modelConfig.qwen3Asr = { convFrontend: at("conv_frontend.onnx"),
         encoder: at("encoder.int8.onnx"), decoder: at("decoder.int8.onnx"),
-        tokenizer: join(modelsDir, id, "tokenizer"), hotwords: "" }; break;
+        tokenizer: join(modelsDir, id, "tokenizer"), hotwords: "", maxTotalLen: 512, maxNewTokens: 384 }; break;
+    case "qwen3-asr-1.7b-fp16":
+      config.modelConfig.qwen3Asr = { convFrontend: at("conv_frontend.onnx"),
+        encoder: at("encoder.onnx"), decoder: at("decoder.onnx"),
+        tokenizer: join(modelsDir, id, "tokenizer"), hotwords: "", maxTotalLen: 512, maxNewTokens: 384 }; break;
   }
   return config;
 }

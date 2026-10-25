@@ -19,7 +19,7 @@ async function fixture(run, options = {}) {
 }
 
 test('model catalog has only approved fixed candidates and unique checked files', () => {
-  assert.deepEqual(MODEL_CATALOG.map(m=>m.id), ['sensevoice-small','fireredasr2-ctc','fun-asr-nano','qwen3-asr-0.6b']);
+  assert.deepEqual(MODEL_CATALOG.map(m=>m.id), ['sensevoice-small','fireredasr2-ctc','fun-asr-nano','qwen3-asr-0.6b','qwen3-asr-1.7b-fp16']);
   for(const m of MODEL_CATALOG) {
     const config=recognizerConfig('/models',m.id);
     assert.equal(config.modelConfig.provider,'cpu');
@@ -33,9 +33,9 @@ test('model catalog has only approved fixed candidates and unique checked files'
   assert.throws(()=>recognizerConfig('/models','unknown'),{code:'invalid-model'});
 });
 
-test('default remains SenseVoice and a successful switch survives restart', async()=>fixture(async(m,dir)=>{
+test('a fresh installation does not select a model; an explicit switch survives restart', async()=>fixture(async(m,dir)=>{
   await m.prepare();
-  assert.equal(m.activeId,DEFAULT_MODEL_ID);
+  assert.equal(m.activeId,'');
   m.start('fireredasr2-ctc',{download:false});
   await m.job;
   assert.equal(m.operation.phase,'complete');
@@ -77,9 +77,9 @@ test('duplicate actions do not start a second load and other models report busy'
   assert.equal(m.operation.phase,'cancelled'); assert.equal(m.activeId,DEFAULT_MODEL_ID);
 }));
 
-test('invalid saved selection falls back with a visible notice', async()=>fixture(async(m,dir)=>{
+test('invalid saved selection asks for a choice without silently switching', async()=>fixture(async(m,dir)=>{
   await writeFile(join(dir,'selection.json'),'{"modelId":"unexpected"}');
-  await m.prepare(); assert.equal(m.activeId,DEFAULT_MODEL_ID);
+  await m.prepare(); assert.equal(m.activeId,'');
   assert.equal(m.snapshot().notice,'saved-model-unavailable');
 }));
 
@@ -106,11 +106,31 @@ test('the current model stays usable during download, cancellation permits a new
   assert.equal(m.activeId,'fun-asr-nano');
 }));
 
-test('an unavailable saved candidate falls back without loading it', async()=>fixture(async(m,dir,events)=>{
+test('an unavailable saved candidate does not load a different model', async()=>fixture(async(m,dir,events)=>{
   await writeFile(join(dir,'selection.json'),'{"modelId":"fun-asr-nano"}');
   m.verify=async()=>{throw Object.assign(new Error('missing'),{code:'model-not-installed'});};
   await m.prepare();
-  assert.deepEqual(events,['load:sensevoice-small']);
+  assert.deepEqual(events,[]);
   assert.equal(m.snapshot().notice,'saved-model-unavailable');
-  assert.equal(m.activeId,DEFAULT_MODEL_ID);
+  assert.equal(m.activeId,'');
+}));
+
+test('only two Qwen downloads are primary and other models require explicit registration', async () => fixture(async (m, dir) => {
+  const catalog = await m.catalog();
+  assert.deepEqual(catalog.models.filter(v => v.category === 'primary').map(v => v.id), ['qwen3-asr-0.6b', 'qwen3-asr-1.7b-fp16']);
+  assert(catalog.models.filter(v => v.category === 'other').every(v => !v.downloadable && !v.registered));
+  await m.registerKnown('fireredasr2-ctc');
+  assert.equal(JSON.parse(await readFile(join(dir, 'local-speech-models.json'), 'utf8')).builtins[0], 'fireredasr2-ctc');
+  assert.equal(m.activeId, DEFAULT_MODEL_ID, 'registration does not switch the running model');
+  await m.removeLocal('fireredasr2-ctc');
+  assert.deepEqual(JSON.parse(await readFile(join(dir, 'local-speech-models.json'), 'utf8')).builtins, []);
+}));
+
+test('failed local registration keeps the current recognizer and creates no selection', async () => fixture(async m => {
+  const id = m.registerLocal({ name: 'Fictional', family: 'unsupported' });
+  assert.match(id, /^local-/);
+  await m.job;
+  assert.equal(m.operation.phase, 'error');
+  assert.equal(m.local.size, 0);
+  assert.equal(m.activeId, DEFAULT_MODEL_ID);
 }));

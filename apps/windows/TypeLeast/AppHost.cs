@@ -287,17 +287,11 @@ internal sealed class AppHost : IDictationHost
         SetHint(L10n.T("正在重启本地服务…"));
     }
 
-    public async Task DownloadModels()
+    public Task DownloadModels()
     {
-        try
-        {
-            await Client.DownloadModelsAsync(Settings.ModelMirror);
-            await RefreshHealth();
-        }
-        catch (ServiceException e)
-        {
-            SetHint(L10n.T("无法开始下载：") + e.Message);
-        }
+        ShowWindow(MainWindow.Page.Settings);
+        window?.Open(SettingsGuide.Entries[3]);
+        return Task.CompletedTask;
     }
 
     /// <summary>Download again after a failure: the model whose download failed, else the default one.</summary>

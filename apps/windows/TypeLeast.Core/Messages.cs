@@ -20,7 +20,7 @@ public static class Messages
     public static string SpeechProblem(SpeechStatus? speech) => (speech?.Phase ?? "") switch
     {
         "ready" => "",
-        "missing-model" => L10n.T("语音模型未下载（241 MB，只需一次）"),
+        "missing-model" => L10n.T("请选择并安装语音模型。"),
         "downloading" => L10n.T("正在下载语音模型") + (speech?.DownloadFraction is { } f ? "：" + (int)(f * 100) + "%" : "…"),
         "loading" => L10n.T("正在加载语音模型…"),
         "error" => L10n.T("语音模型出错：") + (speech?.Error ?? L10n.T("原因未知")),

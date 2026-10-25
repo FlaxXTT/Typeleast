@@ -29,6 +29,7 @@ import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
+import { normalizeNumbers } from './number-format.js';
 import { normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
@@ -231,8 +232,8 @@ export class VoicePolishService {
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
       // Deterministic cleanup runs BEFORE validation so the safety checks judge
       // exactly the text that would be inserted.
-      const tidied = tidy(restoreApproximateNumbers(rawText, parsed.text));
-      const verdict = validateOutput({ rawText, output: tidied.text, strength });
+      const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text)));
+      const verdict = validateOutput({ rawText, output: tidied.text, strength, termEvidence: context.dictionary });
       if (!verdict.ok) {
         // Same fallback text as the exception path below: the rejected rewrite
         // is discarded, but the filler in the raw transcript still is not wanted.
@@ -317,8 +318,8 @@ export class VoicePolishService {
       const parsed = parsePolishOutput(cleanup.text);
       if (!parsed.ok) this.stats.jsonFallback += 1;
       else if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      const tidied = parsed.ok ? tidy(restoreApproximateNumbers(rawText, parsed.text)) : null;
-      const sourceVerdict = tidied ? validateOutput({ rawText, output: tidied.text, strength: "prompt" }) : null;
+      const tidied = parsed.ok ? tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text))) : null;
+      const sourceVerdict = tidied ? validateOutput({ rawText, output: tidied.text, strength: "prompt", termEvidence: context.dictionary }) : null;
       if (!sourceVerdict?.ok) {
         const issue = sourceVerdict ? sourceVerdict.reason : `source-output-format:${parsed.failure ?? "unknown"}`;
         this.logger.warn?.("typeleast: source cleanup unusable (%s); translating the transcript directly", issue);

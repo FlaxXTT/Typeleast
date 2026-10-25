@@ -204,7 +204,7 @@ test("per-request languages are applied serially and a rejection does not poison
 });
 
 test("optional models use only supported language hints and keep Qwen hints on their own stream", async () => {
-  for (const id of ['fireredasr2-ctc', 'fun-asr-nano', 'qwen3-asr-0.6b']) {
+  for (const id of ['fireredasr2-ctc', 'fun-asr-nano', 'qwen3-asr-0.6b', 'qwen3-asr-1.7b-fp16']) {
     const hints = [], configs = [];
     const make = async config => {
       configs.push(config);
@@ -219,7 +219,7 @@ test("optional models use only supported language hints and keep Qwen hints on t
     const languages = ['zh','en','yue','ja','ko','auto'];
     const results = await Promise.all(languages.map(language => r.transcribe(wav(1),language)));
     assert.deepEqual(results.map(v=>v.language), languages.map(v=>modelFor(id).languages.includes(v) ? v : 'auto'));
-    if (id === 'qwen3-asr-0.6b') {
+    if (id.startsWith('qwen3-asr-')) {
       assert.equal(configs.length,1,'a per-stream hint must not reload Qwen');
       assert.deepEqual(hints,[['language','Chinese'],['language','English'],['language','Cantonese'],['language','Japanese'],['language','Korean']]);
     } else if (id === 'fun-asr-nano') {

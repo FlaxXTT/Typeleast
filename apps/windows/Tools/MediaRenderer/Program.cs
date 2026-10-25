@@ -104,6 +104,22 @@ class P
         }
     }
 
+    static void RenderSpeechModels(AppHost host, string dir, string language)
+    {
+        var catalog = new SpeechModelCatalog { ActiveModelId = "qwen3-asr-0.6b", Models = new() {
+            new() { Id = "qwen3-asr-0.6b", Name = "Qwen3-ASR-0.6B", ModelBytes = 990000000, SourceUrl = "https://example.com/model", Category = "primary", Precision = "int8", Installed = true, Downloadable = true },
+            new() { Id = "qwen3-asr-1.7b-fp16", Name = "Qwen3-ASR-1.7B", ModelBytes = 4731171333, SourceUrl = "https://example.com/model", Category = "primary", Precision = "fp16", Downloadable = true },
+            new() { Id = "sensevoice-small", Name = "SenseVoice Small", ModelBytes = 240000000, SourceUrl = "https://example.com/model", Category = "other", Precision = "int8", Installed = true },
+        } };
+        host.GetType().GetProperty("SpeechCatalog")!.SetValue(host, catalog);
+        foreach (var mode in new[] { "light", "dark" }) {
+            Theme.Apply(mode);
+            var panel = new SpeechModelsPanel(host); panel.Refresh();
+            Save(new Border { Background = Theme.Background, Padding = new Thickness(20), Child = panel.View },
+                Path.Combine(dir, $"speech-models-{mode}-{language}.png"), 500, 700);
+        }
+    }
+
     // Exercise the real controller composition with fake credentials and an isolated profile.
     static void CheckControllers(AppHost host)
     {
@@ -148,6 +164,7 @@ class P
             {
                 L10n.Configure(language);
                 RenderUpdateWindow(dir);
+                RenderSpeechModels(host, dir, language);
                 foreach (var mode in new[] { "light", "dark" })
                 foreach (var strength in new[] { "prompt", "concise" })
                 {

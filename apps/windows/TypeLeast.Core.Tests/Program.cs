@@ -350,6 +350,12 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("catalog request path", stub.LastPath, "/api/voice-polish/models");
     Eq("catalog selected default", catalog.ActiveModelId, "sensevoice-small");
     Check("catalog installed state", catalog.Models[0].Installed);
+    var formatCatalog = JsonSerializer.Deserialize<SpeechModelCatalog>("""{"activeModelId":"","models":[{"id":"qwen3-asr-1.7b-fp16","name":"Qwen3-ASR-1.7B","precision":"fp16","category":"primary","downloadable":true}]}""", Json.Options)!;
+    Eq("no model implicitly selected", formatCatalog.ActiveModelId, "");
+    Eq("model precision preserved", formatCatalog.Models[0].Precision, "fp16");
+    Eq("model category preserved", formatCatalog.Models[0].Category, "primary");
+    await client.LocalModelActionAsync("register-known", new { modelId = "sensevoice-small" });
+    Eq("known model configuration path", stub.LastPath, "/api/voice-polish/models/register-known");
     Check("catalog waiting blocks repeated actions", catalog.Operation?.Running == true);
     stub.Reply = (202, "{\"ok\":true,\"phase\":\"accepted\"}");
     await client.SpeechModelActionAsync("fun-asr-nano", download: true, endpoint: "https://mirror.example.com");

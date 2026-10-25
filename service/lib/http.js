@@ -76,6 +76,7 @@ function classify(error) {
     case "payload-too-large":
       return { status: 413, code };
     case "invalid-model":
+    case "invalid-local-model":
     case "invalid-language":
     case "invalid-prompt":
       return { status: 400, code };
@@ -196,6 +197,18 @@ export function createHandler(options) {
 
       if (route === "/models" && req.method === "GET") {
         reply(res, 200, await service.recognizer.catalog());
+        return;
+      }
+      if (['/models/local/inspect', '/models/local/register', '/models/local/remove', '/models/register-known'].includes(route) && req.method === 'POST') {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString('utf8') || '{}');
+        if (route === '/models/local/inspect') reply(res, 200, await service.recognizer.inspectLocal(body));
+        else if (route === '/models/local/register') reply(res, 202, { ok: true, modelId: service.recognizer.registerLocal(body) });
+        else {
+          if (typeof body?.modelId !== 'string') throw Object.assign(new Error('invalid model id'), { code: 'invalid-model' });
+          if (route === '/models/register-known') await service.recognizer.registerKnown(body.modelId);
+          else await service.recognizer.removeLocal(body.modelId);
+          reply(res, 200, { ok: true });
+        }
         return;
       }
       if (["/models/download", "/models/active", "/models/download/cancel"].includes(route)

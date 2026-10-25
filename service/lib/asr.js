@@ -22,6 +22,8 @@ import { pcm16ToFloat32, SAMPLE_RATE, withLeadIn } from "./wav.js";
 /** Above this many seconds a recording is split at pauses before recognition. */
 export const SEGMENT_THRESHOLD_SECONDS = 20;
 
+const optionsFiles = recognizer => recognizer.definition.inventory ?? filesForModel(recognizer.modelId);
+
 /** Silero's window at 16 kHz. */
 const VAD_WINDOW = 512;
 
@@ -49,8 +51,10 @@ export class LocalRecognizer {
   constructor(options) {
     this.modelsDir = options.modelsDir;
     this.modelId = options.modelId ?? DEFAULT_MODEL_ID;
+    this.definition = options.modelDefinition ?? modelFor(this.modelId);
+    this.configFactory = options.configFactory ?? (settings => recognizerConfig(this.modelsDir, this.modelId, settings));
     this.numThreads = options.numThreads ?? 2;
-    this.language = modelFor(this.modelId).languages.includes(options.language) ? options.language : "auto";
+    this.language = this.definition.languages.includes(options.language) ? options.language : "auto";
     this.logger = options.logger ?? { info: () => {}, warn: () => {} };
     this.loadSherpa = options.loadSherpa ?? loadSherpa;
     /** missing-model | loading | ready | downloading | error */
@@ -74,7 +78,7 @@ export class LocalRecognizer {
     if (this.preparing) return this.preparing;
     this.preparing = (async () => {
       try {
-        const status = await modelStatus(this.modelsDir, filesForModel(this.modelId));
+        const status = await modelStatus(this.modelsDir, optionsFiles(this));
         if (!status.ready) {
           this.phase = "missing-model";
           this.error = null;
@@ -83,8 +87,7 @@ export class LocalRecognizer {
         this.phase = "loading";
         this.sherpa = this.loadSherpa();
         const started = Date.now();
-        this.recognizer = await this.sherpa.OfflineRecognizer.createAsync(recognizerConfig(this.modelsDir, this.modelId,
-          { language: this.language, numThreads: this.numThreads }));
+        this.recognizer = await this.sherpa.OfflineRecognizer.createAsync(this.configFactory({ language: this.language, numThreads: this.numThreads }));
         this.phase = "ready";
         this.error = null;
         this.logger.info?.("typeleast: speech model loaded in %d ms", Date.now() - started);
@@ -138,10 +141,10 @@ export class LocalRecognizer {
       engine: "sherpa-onnx",
       phase: this.phase,
       ready: this.phase === "ready",
-      languages: modelFor(this.modelId).languages,
+      languages: this.definition.languages,
       ...(this.error ? { error: this.error } : {}),
       ...(this.download ? { download: { ...this.download } } : {}),
-      modelBytes: filesForModel(this.modelId).reduce((sum, file) => sum + file.size, 0),
+      modelBytes: optionsFiles(this).reduce((sum, file) => sum + file.size, 0),
     };
   }
 
@@ -169,9 +172,9 @@ export class LocalRecognizer {
       error.code = "speech-not-ready";
       throw error;
     }
-    if (!modelFor(this.modelId).languages.includes(language)) language = "auto";
-    if (language !== this.activeLanguage && this.modelId !== "qwen3-asr-0.6b") {
-      const config = recognizerConfig(this.modelsDir, this.modelId, { language, numThreads: this.numThreads });
+    if (!this.definition.languages.includes(language)) language = "auto";
+    if (language !== this.activeLanguage && !this.modelId.startsWith("qwen3-asr-")) {
+      const config = this.configFactory({ language, numThreads: this.numThreads });
       // SenseVoice reads the inherited config on every decode in 1.13.8.
       // FunASR keeps a separate config, so its language hint requires a reload.
       if (this.modelId === DEFAULT_MODEL_ID) this.recognizer.setConfig(config);
@@ -189,7 +192,7 @@ export class LocalRecognizer {
     const detected = [];
     for (const segment of segments) {
       const stream = this.recognizer.createStream();
-      if (this.modelId === "qwen3-asr-0.6b" && language !== "auto") {
+      if (this.modelId.startsWith("qwen3-asr-") && language !== "auto") {
         stream.setOption("language", ({ zh: "Chinese", en: "English", yue: "Cantonese", ja: "Japanese", ko: "Korean" })[language]);
       }
       stream.acceptWaveform({ sampleRate: SAMPLE_RATE, samples: segment });

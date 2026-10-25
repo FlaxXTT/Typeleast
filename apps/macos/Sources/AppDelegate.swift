@@ -514,7 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     static func speechProblem(_ speech: SpeechStatus?) -> String {
         switch speech?.phase ?? "" {
         case "ready": return ""
-        case "missing-model": return L10n.text("语音模型未下载（241 MB，只需一次）")
+        case "missing-model": return L10n.text("请选择并安装语音模型。")
         case "downloading":
             return L10n.text("正在下载语音模型") + (speech?.downloadFraction.map { "：" + String(Int($0 * 100)) + "%" } ?? "…")
         case "loading": return L10n.text("正在加载语音模型…")
@@ -550,20 +550,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func downloadModels() {
-        let mirror = settings.modelMirror
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            do {
-                try self.client.downloadModelsSync(endpoint: mirror.isEmpty ? nil : mirror)
-                DispatchQueue.main.async { self.refreshHealth() }
-            } catch {
-                let desc = (error as? ServiceError)?.description ?? error.localizedDescription
-                DispatchQueue.main.async {
-                    self.setHint(L10n.text("无法开始下载：") + desc, warning: true)
-                    self.applyState()
-                }
-            }
-        }
+        model.settingsCategory = 4
+        hub.show(page: .settings)
     }
 
     /// Let the user point at a Node.js binary (for unusual installs).

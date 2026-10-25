@@ -348,6 +348,13 @@ public sealed class ServiceClient
         if (status != HttpStatusCode.OK) throw HttpError(status, body);
         return Decode<SpeechModelCatalog>(body);
     });
+    public Task<string> LocalModelActionAsync(string path, object value, CancellationToken ct = default) => WithPortRetry(async () => {
+        var json = JsonSerializer.Serialize(value, Json.Options);
+        var (status, body) = await SendAsync(HttpMethod.Post, "/models/" + path,
+            new StringContent(json, Encoding.UTF8, "application/json"), null, TimeSpan.FromSeconds(60), ct).ConfigureAwait(false);
+        if (status is not (HttpStatusCode.OK or HttpStatusCode.Accepted)) throw HttpError(status, body);
+        return body;
+    });
     public Task<bool> SpeechModelActionAsync(string id, bool download = false, bool cancel = false, string endpoint = "", CancellationToken ct = default) => WithPortRetry(async () => {
         var path = cancel ? "/models/download/cancel" : download ? "/models/download" : "/models/active";
         var json = JsonSerializer.Serialize(new { modelId = id, activate = true, endpoint });

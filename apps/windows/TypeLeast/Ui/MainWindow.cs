@@ -220,7 +220,7 @@ internal sealed class HomePage : IPage
     public void Refresh()
     {
         keycaps.Content = Theme.Keycaps(host.HotkeyLabel);
-        engine.Text = (host.Speech?.ModelName ?? "SenseVoice Small") + " · " + host.ServiceSummary + " · " + host.ModelSummary;
+        engine.Text = (host.Speech?.DisplayName ?? L10n.T("未选择语音模型")) + " · " + host.ServiceSummary + " · " + host.ModelSummary;
         heroTitle.Text = L10n.T("按 ") + host.HotkeyLabel + L10n.T(" 开始听写");
         tryButton.Content = host.Phase == DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("试一下");
         tryButton.IsEnabled = host.Phase != DictationPhase.Thinking;
@@ -236,8 +236,8 @@ internal sealed class HomePage : IPage
         var problem = Messages.SpeechProblem(speech);
         Action startDownload = () => { _ = host.DownloadModels(); };
         (string, Action)? download = null;
-        if (speech is { ModelsMissing: true } or { Phase: "error" }) download = (L10n.T("下载（241 MB）"), startDownload);
-        checklist.Children.Add(Item(speech?.Ready == true, host.Speech?.ModelName ?? "SenseVoice Small", problem.Length == 0 ? L10n.T("就绪，本机识别") : problem, download));
+        if (speech is { ModelsMissing: true } or { Phase: "error" }) download = (L10n.T("选择语音模型"), startDownload);
+        checklist.Children.Add(Item(speech?.Ready == true, host.Speech?.DisplayName ?? L10n.T("未选择语音模型"), problem.Length == 0 ? L10n.T("就绪，本机识别") : problem, download));
         if (ModelMirror.NetworkFailure(speech)) checklist.Children.Add(GuideViews.MirrorHint(host, host.RetryModelDownload));
         Action openSettings = () => window.Open(SettingsGuide.Entries[1]);
         Action openPrivacy = () => Shell.Open("ms-settings:privacy-microphone");

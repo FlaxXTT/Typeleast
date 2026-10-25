@@ -4,6 +4,9 @@ import { dirname } from 'node:path';
 import { LocalRecognizer } from './asr.js';
 import { DEFAULT_MODEL_ID, MODEL_CATALOG, filesForModel, modelFor, modelStatus, downloadModels, sha256File } from './models.js';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { inspectLocalModel, LOCAL_MODEL_TEMPLATES } from './local-models.js';
+import { LocalModelProcess } from './local-recognizer.js';
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 export class SpeechModels {
@@ -11,7 +14,9 @@ export class SpeechModels {
     this.options = options;
     this.modelsDir = options.modelsDir;
     this.selectionPath = options.selectionPath;
-    this.factory = options.factory ?? (id => new LocalRecognizer({ ...options, modelId: id }));
+    this.local = new Map(); this.registered = new Set();
+    this.registryPath = join(dirname(this.selectionPath), 'local-speech-models.json');
+    this.factory = options.factory ?? (id => this.local.has(id) ? new LocalModelProcess(this.local.get(id)) : new LocalRecognizer({ ...options, modelId: id }));
     this.current = this.factory(DEFAULT_MODEL_ID);
     this.activeId = DEFAULT_MODEL_ID;
     this.serial = Promise.resolve();
@@ -26,9 +31,26 @@ export class SpeechModels {
   }
   prepare() { return this.enqueue(() => this.prepareSelected()); }
   async prepareSelected() {
+    try {
+      const saved = await readFile(this.registryPath, 'utf8');
+      if (saved.length > 200000) throw fail('invalid-local-model', 'local model registry is too large');
+      const registry = JSON.parse(saved);
+      this.registered = new Set((registry.builtins ?? []).filter(id => MODEL_CATALOG.some(m => m.id === id)));
+      for (const item of (registry.models ?? []).slice(0, 32)) {
+        if (/^local-[0-9a-f-]{36}$/.test(item.id)) this.local.set(item.id, { ...item, languages: modelFor(item.family).languages, canSetLanguage: modelFor(item.family).canSetLanguage });
+      }
+    } catch (e) { if (e.code !== 'ENOENT') this.notice = 'local-model-unavailable'; }
     let selected = DEFAULT_MODEL_ID;
-    try { selected = JSON.parse(await readFile(this.selectionPath, 'utf8')).modelId; modelFor(selected); }
-    catch (error) { if (error.code !== 'ENOENT') this.notice = 'saved-model-unavailable'; selected = DEFAULT_MODEL_ID; }
+    try { selected = JSON.parse(await readFile(this.selectionPath, 'utf8')).modelId; this.definition(selected); }
+    catch (error) {
+      if (error.code !== 'ENOENT') this.notice = 'saved-model-unavailable';
+      // Legacy installations may already have the default files. Never download or silently
+      // replace an explicitly selected but unavailable model.
+      if (error.code !== 'ENOENT' || !(await modelStatus(this.modelsDir, filesForModel(DEFAULT_MODEL_ID))).ready) {
+        this.activeId = ''; return 'missing-model';
+      }
+      selected = DEFAULT_MODEL_ID;
+    }
     if (selected !== DEFAULT_MODEL_ID) {
       try {
         await this.verify(selected);
@@ -36,13 +58,18 @@ export class SpeechModels {
         if (await next.prepare() !== 'ready') throw fail('model-load-failed', 'speech model could not be loaded');
         this.current = next; this.activeId = selected;
         return 'ready';
-      } catch { this.notice = 'saved-model-unavailable'; }
+      } catch { this.notice = 'saved-model-unavailable'; this.activeId = ''; return 'missing-model'; }
     }
     return this.current.prepare();
   }
-  transcribe(audio, language) { return this.enqueue(() => this.current.transcribe(audio, language)); }
+  definition(id) { return this.local.get(id) ?? modelFor(id); }
+  transcribe(audio, language) { return this.enqueue(() => {
+    if (!this.activeId) throw fail('speech-not-ready', 'select a speech model first');
+    return this.current.transcribe(audio, language);
+  }); }
   snapshot() {
-    const model = modelFor(this.activeId);
+    if (!this.activeId) return { phase: 'missing-model', ready: false, modelId: '', modelName: '', languages: [], canSetLanguage: false, notice: this.notice, operation: this.operation };
+    const model = this.definition(this.activeId);
     const state = this.current.snapshot();
     if (!state.ready && this.operation?.modelId === this.activeId) {
       if (this.operation.phase === 'downloading') {
@@ -59,10 +86,23 @@ export class SpeechModels {
       id: model.id, name: model.name, modelBytes: model.modelBytes, sourceUrl: model.sourceUrl,
       licenseUrl: model.source, languages: model.languages, canSetLanguage: model.canSetLanguage,
       installed: (await modelStatus(this.modelsDir, filesForModel(model.id))).ready,
+      family: model.id, precision: model.precision ?? 'int8', category: model.id.startsWith('qwen3-asr-') ? 'primary' : 'other',
+      registered: this.registered.has(model.id), downloadable: model.id.startsWith('qwen3-asr-'),
     })));
-    return { activeModelId: this.activeId, models, operation: this.operation, notice: this.notice };
+    for (const [id, model] of this.local) models.push({ id, name: model.name, family: model.family, precision: 'local', category: 'other', registered: true, downloadable: false,
+      installed: Array.isArray(model.inventory) && (await modelStatus(model.directory, model.inventory)).ready,
+      modelBytes: model.modelBytes, languages: model.languages, canSetLanguage: model.canSetLanguage, sourceUrl: '', licenseUrl: '' });
+    return { activeModelId: this.activeId, models, operation: this.operation, notice: this.notice,
+      templates: LOCAL_MODEL_TEMPLATES,
+      series: [ { id: 'qwen3-asr-0.6b', name: 'Qwen3-ASR-0.6B', formats: ['int8'] },
+        { id: 'qwen3-asr-1.7b', name: 'Qwen3-ASR-1.7B', formats: ['fp16'] } ] };
   }
   async verify(id) {
+    if (this.local.has(id)) {
+      const saved = this.local.get(id);
+      const current = await inspectLocalModel({ name: saved.name, family: saved.family, directory: saved.directory, files: saved.files });
+      this.local.set(id, { ...current, id }); return;
+    }
     const files = filesForModel(id);
     if (!(await modelStatus(this.modelsDir, files)).ready) throw fail('model-not-installed', 'speech model is not installed');
     for (const file of files) {
@@ -71,7 +111,7 @@ export class SpeechModels {
     }
   }
   async activate(id, signal) {
-    modelFor(id);
+    this.definition(id);
     signal?.throwIfAborted();
     await this.beforeActivate(signal);
     return this.enqueue(async () => {
@@ -93,7 +133,8 @@ export class SpeechModels {
     });
   }
   start(id = DEFAULT_MODEL_ID, { endpoint, activate = true, download = true, fetchImpl } = {}) {
-    modelFor(id);
+    this.definition(id);
+    if (download && this.local.has(id)) throw fail('invalid-model', 'local models are imported, not downloaded');
     if (this.operation && ['downloading','loading','waiting'].includes(this.operation.phase)) {
       if (this.operation.modelId === id) return;
       throw fail('model-busy', 'another speech model operation is in progress');
@@ -119,9 +160,50 @@ export class SpeechModels {
   }
   downloadAndPrepare(options = {}) { this.start(DEFAULT_MODEL_ID, options); return this.job; }
   cancel(id) {
-    modelFor(id);
+    this.definition(id);
     if (!this.operation || this.operation.modelId !== id) return;
     if (this.operation.phase === 'loading') throw fail('model-busy', 'speech model is already loading');
     this.abort?.abort();
+  }
+  async saveRegistry() {
+    const models = [...this.local.values()].map(({ id, name, family, directory, files, modelBytes, inventory }) => ({ id, name, family, directory, files, modelBytes, inventory }));
+    await mkdir(dirname(this.registryPath), { recursive: true });
+    await writeFile(this.registryPath + '.tmp', JSON.stringify({ builtins: [...this.registered], models }) + '\n', { mode: 0o600 });
+    await rename(this.registryPath + '.tmp', this.registryPath);
+  }
+  async registerKnown(id) {
+    modelFor(id);
+    return this.enqueue(async () => {
+      await this.verify(id); this.registered.add(id);
+      try { await this.saveRegistry(); } catch (e) { this.registered.delete(id); throw e; }
+    });
+  }
+  async inspectLocal(input) { const m = await inspectLocalModel(input); return { name: m.name, family: m.family, modelBytes: m.modelBytes, dataTypes: m.dataTypes }; }
+  registerLocal(input) {
+    if (this.operation && ['downloading', 'loading', 'waiting'].includes(this.operation.phase)) throw fail('model-busy', 'another model operation is running');
+    if (this.local.size >= 32) throw fail('invalid-local-model', 'local model limit reached');
+    const id = 'local-' + randomUUID();
+    this.operation = { modelId: id, phase: 'loading', received: 0, total: 0, error: null };
+    this.job = this.enqueue(async () => {
+      let probe;
+      try {
+        await this.beforeActivate();
+        const model = { ...await inspectLocalModel(input), id };
+        probe = new LocalModelProcess(model); await probe.prepare();
+        this.local.set(id, model);
+        try { await this.saveRegistry(); } catch (e) { this.local.delete(id); throw e; }
+        this.operation.phase = 'complete';
+      } catch (e) { this.operation.phase = 'error'; this.operation.error = e.code ?? 'model-load-failed'; }
+      finally { await probe?.release(); }
+    });
+    return id;
+  }
+  async removeLocal(id) {
+    return this.enqueue(async () => {
+      if (id === this.activeId) throw fail('model-busy', 'switch models before removing the active registration');
+      const prior = this.local.get(id), registered = this.registered.has(id);
+      this.local.delete(id); this.registered.delete(id);
+      try { await this.saveRegistry(); } catch (e) { if (prior) this.local.set(id, prior); if (registered) this.registered.add(id); throw e; }
+    });
   }
 }

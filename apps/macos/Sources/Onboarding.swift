@@ -107,15 +107,7 @@ struct OnboardingView: View {
                             Button(L10n.text("已安装，请重试")) { model.actions?.restartService() }.buttonStyle(SecondaryButtonStyle())
                         }
                     }
-                    OnboardingCheck(done: model.speech?.ready == true, title: model.speech?.modelName ?? "SenseVoice Small",
-                                    detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("就绪") : AppDelegate.speechProblem(model.speech)) {
-                        if model.modelsMissing || model.speech?.phase == "error" {
-                            Button(L10n.text("下载")) { model.actions?.downloadModels() }.buttonStyle(PrimaryButtonStyle())
-                        } else if let fraction = model.speech?.downloadFraction {
-                            ProgressView(value: fraction).frame(width: 140)
-                        }
-                    }
-                    if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
+                    SpeechModelOptions()
                     OnboardingCheck(done: model.llmConfigured, title: L10n.text("整理模型（可稍后设置）"),
                                     detail: model.llmConfigured ? model.modelSummary : L10n.text("在「设置 → 整理」填 API Key。不填也能听写，但不整理。")) {
                         EmptyView()

@@ -10,6 +10,8 @@
  */
 
 const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/gu;
+import { missingNames } from './entity-guard.js';
+
 const LATIN = /[A-Za-z]/g;
 const WORD = /[A-Za-z0-9][A-Za-z0-9'\u2019_-]*/g;
 
@@ -217,7 +219,7 @@ export function factTokens(text) {
   const set = new Set();
   // Estimates ("三四个", "3 到 4 个") are ranges, recorded before anything reads
   // their digits as one number.
-  let source = stripListMarkers(text);
+  let source = stripListMarkers(text).replaceAll('兩', '两').replaceAll('點', '点').replaceAll('個', '个').replaceAll('號', '号');
   for (const estimate of approximateNumbers(source)) set.add(`A:${estimate.lo}-${estimate.hi}`);
   source = source.replace(APPROX, (m) => " ".repeat(m.length));
   source = source.replace(RANGE, (m, lo, hi) => { set.add(`A:${Number(lo)}-${Number(hi)}`); return " ".repeat(m.length); });
@@ -549,6 +551,13 @@ export function validateOutput(input) {
   metrics.unwrappedQuotes = unwrapped.unwrappedQuotes;
 
   if (text.length === 0) return { ok: false, reason: "empty-output", text, metrics };
+
+  // A short name swap is still a factual change. Check before the short-text bypass.
+  // Translation and Beta retain their existing independent contracts.
+  if (strength !== 'translate' && strength !== 'promptbeta') {
+    metrics.missingNames = missingNames(raw, text, input.termEvidence ?? []);
+    if (metrics.missingNames.length) return { ok: false, reason: 'entity-changed', text, metrics };
+  }
 
   const rawContent = contentLength(raw);
   // A very short utterance ("ok", "嗯") has no structure to validate.
