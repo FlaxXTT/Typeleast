@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TypeLeast · 说话自动成文</title>
-<meta name="description" content="免费的 Mac 和 Windows 听写工具，说话自动成文。">
+<title>TypeLeast · 说话，得到文字</title>
+<meta name="description" content="免费的 Mac 和 Windows 听写软件。你说话，TypeLeast 写出文字。">
 <meta name="theme-color" content="#ffffff">
 <meta name="color-scheme" content="light">
-<meta property="og:title" content="TypeLeast · 说话自动成文">
-<meta property="og:description" content="免费的 Mac 和 Windows 听写工具，说话自动成文。">
+<meta property="og:title" content="TypeLeast · 说话，得到文字">
+<meta property="og:description" content="免费的 Mac 和 Windows 听写软件。你说话，TypeLeast 写出文字。">
 <meta property="og:image" content="assets/promo-poster.jpg">
 <link rel="icon" href="assets/icon.png">
 <style>
@@ -227,13 +227,13 @@ footer a { color: var(--ink-2); }
   <div class="pin">
     <div class="hero-copy" id="hero-copy">
       <img class="icon" src="assets/icon.png" alt="">
-      <h1 data-i18n="hero.title"><span>说话</span><span class="sheen">自动成文</span></h1>
-      <p class="lead" data-i18n="hero.lead">按一下说，再按一下写入。</p>
+      <h1 data-i18n="hero.title"><span>说话，</span><span class="sheen">得到文字</span></h1>
+      <p class="lead" data-i18n="hero.lead">按一下，说话。再按一下，文字写到光标处。</p>
       <div class="actions">
         <a class="btn" id="hero-download" href="#download" data-i18n="hero.download">免费下载</a>
-        <a class="more" href="#prompt" data-i18n="hero.more">了解提示词</a>
+        <a class="more" href="#prompt" data-i18n="hero.more">提示词 Beta</a>
       </div>
-      <p class="fine" data-i18n="hero.fine">免费 · 无需注册 · Mac 和 Windows</p>
+      <p class="fine" data-i18n="hero.fine">免费 · 无需账号 · Mac 和 Windows</p>
     </div>
     <div class="film-wrap" id="film-wrap">
       <div class="glow"></div>
@@ -243,20 +243,20 @@ footer a { color: var(--ink-2); }
 </section>
 
 <section class="scene statement" data-scene="statement">
-  <div class="pin"><p id="statement" data-i18n="statement">删口头禅，认改口，补标点。</p></div>
+  <div class="pin"><p id="statement" data-i18n="statement">删除口头禅。保留改口。补上标点。</p></div>
 </section>
 
 <section id="prompt" class="prompt-head">
   <div class="wrap center">
     <div class="zoom" data-fx="zoom">
       <p class="eyebrow" data-i18n="prompt.eyebrow">提示词 Beta</p>
-      <h2 data-i18n="prompt.title">聊着写<br><span class="sheen">长提示词</span></h2>
-      <p class="lead" data-i18n="prompt.lead">补问细节，生成提示词。</p>
+      <h2 data-i18n="prompt.title">说出你的项目，<br><span class="sheen">得到长提示词</span></h2>
+      <p class="lead" data-i18n="prompt.lead">它问，你答，它写提示词。</p>
     </div>
     <div class="trio">
-      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="trio.1k">补问</div><h3 data-i18n="trio.1h">只问缺的</h3><p data-i18n="trio.1p">每轮最多 4 问。</p></div>
-      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="trio.2k">核对</div><h3 data-i18n="trio.2h">理解随时可见</h3><p data-i18n="trio.2p">不对就直接改口。</p></div>
-      <div class="card" data-fx="rise" data-depth="3"><div class="k" data-i18n="trio.3k">审查</div><h3 data-i18n="trio.3h">删多余，补遗漏</h3><p data-i18n="trio.3p">你没说的不保留。</p></div>
+      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="trio.1k">提问</div><h3 data-i18n="trio.1h">只问缺少的信息</h3><p data-i18n="trio.1p">每轮最多 4 个问题。</p></div>
+      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="trio.2k">核对</div><h3 data-i18n="trio.2h">查看它的理解</h3><p data-i18n="trio.2p">不对就直接说。</p></div>
+      <div class="card" data-fx="rise" data-depth="3"><div class="k" data-i18n="trio.3k">审查</div><h3 data-i18n="trio.3h">不添加内容</h3><p data-i18n="trio.3p">删除你没说过的内容。</p></div>
     </div>
   </div>
 </section>
@@ -265,11 +265,11 @@ footer a { color: var(--ink-2); }
   <div class="wrap">
     <div class="story" id="story">
       <div class="steps-col">
-        <div class="chapter"><div class="n" data-i18n="ch.1n">01</div><h3 data-i18n="ch.1h">随口说</h3><p data-i18n="ch.1p">忘词也没关系。</p></div>
-        <div class="chapter"><div class="n" data-i18n="ch.2n">02</div><h3 data-i18n="ch.2h">只问关键</h3><p data-i18n="ch.2p">不用填表。</p></div>
-        <div class="chapter"><div class="n" data-i18n="ch.3n">03</div><h3 data-i18n="ch.3h">你说好才生成</h3><p data-i18n="ch.3p">每轮更新理解。</p></div>
-        <div class="chapter"><div class="n" data-i18n="ch.4n">04</div><h3 data-i18n="ch.4h">完整提示词</h3><p data-i18n="ch.4p">未定的列入待确认。</p></div>
-        <div class="chapter"><div class="n" data-i18n="ch.5n">05</div><h3 data-i18n="ch.5h">再审一遍</h3><p data-i18n="ch.5p">对照原话删补。</p></div>
+        <div class="chapter"><div class="n" data-i18n="ch.1n">01</div><h3 data-i18n="ch.1h">说话</h3><p data-i18n="ch.1p">顺序不限。</p></div>
+        <div class="chapter"><div class="n" data-i18n="ch.2n">02</div><h3 data-i18n="ch.2h">回答关键问题</h3><p data-i18n="ch.2p">不用填表。</p></div>
+        <div class="chapter"><div class="n" data-i18n="ch.3n">03</div><h3 data-i18n="ch.3h">由你开始生成</h3><p data-i18n="ch.3p">每次回答后更新理解。</p></div>
+        <div class="chapter"><div class="n" data-i18n="ch.4n">04</div><h3 data-i18n="ch.4h">得到完整提示词</h3><p data-i18n="ch.4p">未定事项列入「待确认」。</p></div>
+        <div class="chapter"><div class="n" data-i18n="ch.5n">05</div><h3 data-i18n="ch.5h">二次检查</h3><p data-i18n="ch.5p">对照你的原话检查初稿。</p></div>
       </div>
       <div class="screen-col">
         <div class="screen" id="screen" aria-hidden="true">
@@ -280,15 +280,15 @@ footer a { color: var(--ink-2); }
             <div class="wave"><i style="animation-delay:-.1s"></i><i style="animation-delay:-.5s"></i><i style="animation-delay:-.3s"></i><i style="animation-delay:-.8s"></i><i style="animation-delay:-.2s"></i><i style="animation-delay:-.6s"></i><i style="animation-delay:-.4s"></i></div>
           </div>
           <div class="frame">
-            <div class="label" data-i18n="f.asks">待补充</div>
-            <ul class="list q"><li data-i18n="f.q1">场地费按报名还是到场人数分？</li><li data-i18n="f.q2">报名没来的怎么办？</li><li data-i18n="f.q3">用什么付款？</li></ul>
+            <div class="label" data-i18n="f.asks">缺少的信息</div>
+            <ul class="list q"><li data-i18n="f.q1">场地费按报名还是到场人数分？</li><li data-i18n="f.q2">报名没来的人怎么办？</li><li data-i18n="f.q3">用什么付款？</li></ul>
             <div class="label" style="margin-top:6px" data-i18n="f.you">你说</div>
             <div class="bubble" data-i18n="f.answer">按到场人数分，没来的排后面，用微信付。</div>
           </div>
           <div class="frame">
-            <div class="label" data-i18n="f.got">当前理解</div>
+            <div class="label" data-i18n="f.got">我的理解</div>
             <ul class="list ok"><li data-i18n="f.ok1">羽毛球群报名小程序</li><li data-i18n="f.ok2">场地费按到场人数分</li><li data-i18n="f.ok3">没来的下次排后面</li><li data-i18n="f.ok4">用微信付款</li><li data-i18n="f.ok5">操作要简单</li></ul>
-            <span class="go" data-i18n="f.go">结束并生成</span>
+            <span class="go" data-i18n="f.go">生成</span>
           </div>
           <div class="frame">
             <div class="label" data-i18n="f.draft">初稿</div>
@@ -298,18 +298,18 @@ footer a { color: var(--ink-2); }
             <div class="label" data-i18n="f.review">审查</div>
             <div class="diff">
               <div class="del"><s data-i18n="f.d1">加积分排行榜。</s><small data-i18n="f.d1w">你没说过 · 删除</small></div>
-              <div class="del"><s data-i18n="f.d2">每场最多 8 人。</s><small data-i18n="f.d2w">数字没说过 · 删除</small></div>
+              <div class="del"><s data-i18n="f.d2">每场最多 8 人。</s><small data-i18n="f.d2w">你没说过这个数字 · 删除</small></div>
               <div class="add"><span data-i18n="f.a1">+ 操作要简单。</span><small data-i18n="f.a1w">初稿漏了 · 补上</small></div>
             </div>
-            <div style="margin-top:auto;font-size:14px;color:var(--ink-2)" data-i18n="f.sent">✓ 已写入光标处。</div>
+            <div style="margin-top:auto;font-size:14px;color:var(--ink-2)" data-i18n="f.sent">✓ 文字已写到光标处。</div>
           </div>
         </div>
       </div>
     </div>
-    <p class="fine sample" data-i18n="sample">示意画面</p>
+    <p class="fine sample" data-i18n="sample">示例画面</p>
     <div class="pair">
-      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="pair.1k">精简整理</div><h3 data-i18n="pair.1h">说一次就行</h3><p data-i18n="pair.1p">只留要点，不追问。</p></div>
-      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="pair.2k">不编造</div><h3 data-i18n="pair.2h">没说的不写</h3><p data-i18n="pair.2p">都来自原话。</p></div>
+      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="pair.1k">精简整理</div><h3 data-i18n="pair.1h">说一次就行</h3><p data-i18n="pair.1p">只留要点，不提问。</p></div>
+      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="pair.2k">不编造</div><h3 data-i18n="pair.2h">只写你说过的</h3><p data-i18n="pair.2p">全部来自你的原话。</p></div>
     </div>
   </div>
 </section>
@@ -317,7 +317,7 @@ footer a { color: var(--ink-2); }
 <section id="film-long">
   <div class="wrap center">
     <h2 data-i18n="longfilm.title">完整演示</h2>
-    <p class="lead" data-i18n="longfilm.lead">72 秒看完。</p>
+    <p class="lead" data-i18n="longfilm.lead">72 秒。</p>
     <div class="long-film-frame" data-fx="rise">
       <video id="long-film-video" class="long-film-player" controls preload="metadata" playsinline poster="assets/film-long-poster.jpg" src="assets/film-long.mp4" aria-label="TypeLeast 72 秒完整宣传片" data-i18n-aria="longfilm.video">
         <track kind="subtitles" src="assets/film-long.en.vtt" srclang="en" label="English">
@@ -329,8 +329,8 @@ footer a { color: var(--ink-2); }
 <section id="how">
   <div class="wrap center">
     <div class="zoom" data-fx="zoom">
-      <h2 data-i18n="keys.title">一个键就够</h2>
-      <p class="lead" data-i18n="keys.lead">按一下开始，再按结束。</p>
+      <h2 data-i18n="keys.title">一个键</h2>
+      <p class="lead" data-i18n="keys.lead">按一下开始，再按一下结束。</p>
     </div>
     <div class="keys">
       <div class="key" data-fx="rise" data-depth="1"><b>Fn</b><span>Mac</span></div>
@@ -344,14 +344,14 @@ footer a { color: var(--ink-2); }
   <div class="pin">
     <div class="head"><h2 data-i18n="feat.title">主要功能</h2></div>
     <div class="track" id="track">
-      <div class="tile"><div class="big sheen" data-i18n="t1.big">任何 App</div><h3 data-i18n="t1.h">写到光标处</h3><p data-i18n="t1.p">换了窗口就只复制。</p></div>
+      <div class="tile"><div class="big sheen" data-i18n="t1.big">任何 App</div><h3 data-i18n="t1.h">写到光标处</h3><p data-i18n="t1.p">窗口变了就只复制。</p></div>
       <div class="tile"><div class="big" data-i18n="t2.big">10 种语言</div><h3 data-i18n="t2.h">翻译</h3><p data-i18n="t2.p">先整理，再翻译。</p></div>
-      <div class="tile"><div class="big" data-i18n="t3.big">3 种档位</div><h3 data-i18n="t3.h">整理档位</h3><p data-i18n="t3.p">自然、精简、提示词 Beta。</p></div>
-      <div class="tile"><div class="big" data-i18n="t4.big">词典</div><h3 data-i18n="t4.h">名字按你的写法</h3><p data-i18n="t4.p">德普西克 → DeepSeek。</p></div>
+      <div class="tile"><div class="big" data-i18n="t3.big">3 种模式</div><h3 data-i18n="t3.h">整理模式</h3><p data-i18n="t3.p">自然、精简、提示词 Beta。</p></div>
+      <div class="tile"><div class="big" data-i18n="t4.big">词典</div><h3 data-i18n="t4.h">名字按你的写法</h3><p data-i18n="t4.p">德普西克 → DeepSeek</p></div>
       <div class="tile"><div class="big" data-i18n="t5.big">4 个模型</div><h3 data-i18n="t5.h">本机识别</h3><p data-i18n="t5.p">中英混说、粤语、方言。</p></div>
-      <div class="tile"><div class="big" data-i18n="t6.big">繁 · 简</div><h3 data-i18n="t6.h">繁简切换</h3><p data-i18n="t6.p">简体、台湾繁体、香港繁体。</p></div>
-      <div class="tile"><div class="big" data-i18n="t7.big">你的 Key</div><h3 data-i18n="t7.h">自选模型</h3><p data-i18n="t7.p">支持 DeepSeek、Kimi、Ollama 等。</p></div>
-      <div class="tile"><div class="big sheen" data-i18n="t8.big">¥0</div><h3 data-i18n="t8.h">不收费</h3><p data-i18n="t8.p">不订阅，不限次数。</p></div>
+      <div class="tile"><div class="big" data-i18n="t6.big">繁 · 简</div><h3 data-i18n="t6.h">你的写法</h3><p data-i18n="t6.p">简体或繁体，美式或英式。</p></div>
+      <div class="tile"><div class="big" data-i18n="t7.big">你的 Key</div><h3 data-i18n="t7.h">你选的模型</h3><p data-i18n="t7.p">支持 DeepSeek、Kimi、Ollama 等。</p></div>
+      <div class="tile"><div class="big sheen" data-i18n="t8.big">¥0</div><h3 data-i18n="t8.h">免费</h3><p data-i18n="t8.p">不订阅，不限次数。</p></div>
     </div>
   </div>
 </section>
@@ -359,8 +359,8 @@ footer a { color: var(--ink-2); }
 <section id="gallery">
   <div class="wrap center">
     <div class="zoom" data-fx="zoom">
-      <h2 data-i18n="gal.title">原生界面</h2>
-      <p class="lead" data-i18n="gal.lead">支持浅色和深色模式。</p>
+      <h2 data-i18n="gal.title">原生应用</h2>
+      <p class="lead" data-i18n="gal.lead">浅色和深色模式。</p>
     </div>
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-tab="win">Windows</button>
@@ -376,7 +376,7 @@ footer a { color: var(--ink-2); }
       <figure data-fx="tilt" data-depth="1"><img src="assets/mac-home.png" alt="" loading="lazy"><figcaption data-i18n="gal.m1">首页</figcaption></figure>
       <figure data-fx="tilt" data-depth="2"><img src="assets/mac-history.png" alt="" loading="lazy"><figcaption data-i18n="gal.m2">历史</figcaption></figure>
       <figure data-fx="tilt" data-depth="1"><img src="assets/mac-settings.png" alt="" loading="lazy"><figcaption data-i18n="gal.m3">设置</figcaption></figure>
-      <figure data-fx="tilt" data-depth="2"><img src="assets/mac-dictionary-dark.png" alt="" loading="lazy"><figcaption data-i18n="gal.m4">词典 · 深色模式</figcaption></figure>
+      <figure data-fx="tilt" data-depth="2"><img src="assets/mac-dictionary-dark.png" alt="" loading="lazy"><figcaption data-i18n="gal.m4">词典 · 深色</figcaption></figure>
     </div>
   </div>
 </section>
@@ -385,16 +385,16 @@ footer a { color: var(--ink-2); }
   <div class="pin">
     <div class="zero" id="zero" data-i18n="priv.zero">0 字节</div>
     <div class="zero-sub" id="zero-sub" data-i18n="priv.sub">上传的录音</div>
-    <p class="zero-note" id="zero-note" data-i18n="priv.note">语音只在本机识别。</p>
+    <p class="zero-note" id="zero-note" data-i18n="priv.note">在你的电脑上识别。</p>
   </div>
 </section>
 
 <section style="padding-top:0">
   <div class="wrap">
     <div class="facts">
-      <div class="card" data-fx="rise" data-depth="1"><h3 data-i18n="pf.1h">录音不上传</h3><p data-i18n="pf.1p">5 分钟后自动删除。</p></div>
-      <div class="card" data-fx="rise" data-depth="2"><h3 data-i18n="pf.2h">Key 存在系统里</h3><p data-i18n="pf.2p">不写文件，不进日志。</p></div>
-      <div class="card" data-fx="rise" data-depth="3"><h3 data-i18n="pf.3h">历史加密</h3><p data-i18n="pf.3p">只存本机，可以关闭。</p></div>
+      <div class="card" data-fx="rise" data-depth="1"><h3 data-i18n="pf.1h">录音不上传</h3><p data-i18n="pf.1p">5 分钟后删除。</p></div>
+      <div class="card" data-fx="rise" data-depth="2"><h3 data-i18n="pf.2h">Key 存在系统里</h3><p data-i18n="pf.2p">不进文件，不进日志。</p></div>
+      <div class="card" data-fx="rise" data-depth="3"><h3 data-i18n="pf.3h">历史加密</h3><p data-i18n="pf.3p">只存本机，可关闭。</p></div>
     </div>
   </div>
 </section>
@@ -404,11 +404,11 @@ footer a { color: var(--ink-2); }
     <div class="zoom" data-fx="zoom">
       <p class="eyebrow" data-i18n="ext.eyebrow">插件扩展</p>
       <h2 data-i18n="ext.title">词库和<span class="sheen">风格</span></h2>
-      <p class="lead" data-i18n="ext.lead">专业词写对，格式随你定。</p>
+      <p class="lead" data-i18n="ext.lead">术语写对，格式由你定。</p>
     </div>
     <div class="trio">
-      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="ext.1k">词库</div><h3 data-i18n="ext.1h">专业词写对</h3><p data-i18n="ext.1p">如 Kubernetes</p></div>
-      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="ext.2k">风格</div><h3 data-i18n="ext.2h">固定格式</h3><p data-i18n="ext.2p">如工作邮件</p></div>
+      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="ext.1k">词库</div><h3 data-i18n="ext.1h">术语写对</h3><p data-i18n="ext.1p">例如 Kubernetes</p></div>
+      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="ext.2k">风格</div><h3 data-i18n="ext.2h">固定格式</h3><p data-i18n="ext.2p">例如工作邮件</p></div>
       <div class="card" data-fx="rise" data-depth="3"><div class="k" data-i18n="ext.3k">自己做</div><h3 data-i18n="ext.3h">一个文件</h3><p data-i18n="ext.3p">无需代码</p></div>
     </div>
     <p style="margin-top:40px"><a class="btn" href="extensions.html" data-i18n="ext.go">插件市场</a></p>
@@ -419,7 +419,7 @@ footer a { color: var(--ink-2); }
   <div class="wrap center">
     <div class="zoom" data-fx="zoom">
       <h2 data-i18n="dl.title">免费下载</h2>
-      <p class="lead" data-i18n="dl.lead">首次需下载模型，约 241 MB。</p>
+      <p class="lead" data-i18n="dl.lead">首次启动下载 241 MB 模型。</p>
     </div>
     <div class="dl">
       <div class="plat" data-platform="windows" data-fx="rise" data-depth="1">
@@ -433,7 +433,7 @@ footer a { color: var(--ink-2); }
         <ul><li data-i18n="dl.m1">macOS 13 及以上</li><li data-i18n="dl.m2">查看芯片： → 关于本机</li></ul>
       </div>
     </div>
-    <p class="fine" style="margin-top:22px" data-i18n="dl.all">所有版本见 <a data-link="releases" href="#">GitHub Releases</a></p>
+    <p class="fine" style="margin-top:22px" data-i18n="dl.all">所有版本：<a data-link="releases" href="#">GitHub Releases</a></p>
     <div class="author">
       <img data-avatar src="" alt="">
       <div><strong data-author-name></strong><p data-i18n="author">TypeLeast 作者。</p>
@@ -445,7 +445,7 @@ footer a { color: var(--ink-2); }
 <footer>
   <div class="wrap">
     <span data-i18n="foot.left">© <span data-year></span> TypeLeast · <a data-link="license" href="#">GPL-3.0</a> 开源 · 更新于 2026-10-25</span>
-    <span><a data-link="repo" href="#">GitHub</a> · <a data-link="bilibili" href="https://www.bilibili.com/video/BV1eQnH6zESN/" data-i18n="foot.bilibili">B 站讲解视频</a> · <a data-link="notices" href="#" data-i18n="foot.notices">第三方说明</a> · <a data-link="releases" href="#" data-i18n="foot.releases">所有版本</a></span>
+    <span><a data-link="repo" href="#">GitHub</a> · <a data-link="bilibili" href="https://www.bilibili.com/video/BV1eQnH6zESN/" data-i18n="foot.bilibili">B 站视频</a> · <a data-link="notices" href="#" data-i18n="foot.notices">第三方说明</a> · <a data-link="releases" href="#" data-i18n="foot.releases">所有版本</a></span>
   </div>
 </footer>
 
@@ -453,7 +453,7 @@ footer a { color: var(--ink-2); }
 <script>
 // Everything that changes with a release or a host lives here.
 const SITE = {
-  author: "FlaxXTT",
+  author: "TypeLeast author.",
   links: {
     profile: "https://github.com/FlaxXTT",
     repo: "https://github.com/FlaxXTT/Typeleast",
@@ -474,75 +474,75 @@ const SITE = {
 
 // English text. The Chinese text is the page itself, read once at start-up.
 const EN = {
-  "foot.bilibili": "Bilibili walkthrough",
+  "foot.bilibili": "Bilibili video",
   "longfilm.title": "Full demo",
   "longfilm.lead": "72 seconds.",
   "longfilm.video": "Full 72-second TypeLeast product film",
-  "title": "TypeLeast · Say it. It's written.",
-  "description": "A free dictation app for Mac and Windows. Speak, and it types.",
+  "title": "TypeLeast · Speak. Get text.",
+  "description": "Free dictation for Mac and Windows. You speak. TypeLeast writes the text.",
   "nav.prompt": "Prompts", "nav.features": "Features", "nav.privacy": "Privacy", "nav.ext": "Extensions", "nav.download": "Download",
   "ext.eyebrow": "Extensions", "ext.title": "Dictionary packs and <span class=\"sheen\">styles</span>",
-  "ext.lead": "Right terms, your format.",
-  "ext.1k": "Dictionary pack", "ext.1h": "Terms spelled right", "ext.1p": "Like Kubernetes",
-  "ext.2k": "Style", "ext.2h": "A set format", "ext.2p": "Like work email",
+  "ext.lead": "Correct terms. Your format.",
+  "ext.1k": "Dictionary pack", "ext.1h": "Correct terms", "ext.1p": "Example: Kubernetes",
+  "ext.2k": "Style", "ext.2h": "Fixed format", "ext.2p": "Example: work email",
   "ext.3k": "Make your own", "ext.3h": "One file", "ext.3p": "No code",
   "ext.go": "Plugin market",
-  "hero.title": "<span>Say it.</span> <span class=\"sheen\">It's written.</span>",
-  "hero.lead": "Press to talk, press again to type.",
-  "hero.download": "Download free", "hero.more": "See prompts", "hero.fine": "Free · No sign-up · Mac and Windows",
-  "hero.film": "TypeLeast product film",
-  "statement": "Fillers out. Corrections kept. Punctuation in.",
+  "hero.title": "<span>Speak.</span> <span class=\"sheen\">Get text.</span>",
+  "hero.lead": "Press the key and speak. Press again. The text goes to your cursor.",
+  "hero.download": "Free download", "hero.more": "Prompt Beta", "hero.fine": "Free · No account · Mac and Windows",
+  "hero.film": "TypeLeast film",
+  "statement": "Removes fillers. Keeps your corrections. Adds punctuation.",
   "prompt.eyebrow": "Prompt Beta",
-  "prompt.title": "Talk it through.<br><span class=\"sheen\">Get a long prompt.</span>",
-  "prompt.lead": "It asks, then writes the prompt.",
-  "trio.1k": "Asks", "trio.1h": "Only what's missing", "trio.1p": "Up to 4 questions a round.",
-  "trio.2k": "Check", "trio.2h": "See what it understood", "trio.2p": "Wrong? Just say so.",
-  "trio.3k": "Review", "trio.3h": "Cut extras, add what's missing", "trio.3p": "Nothing you didn't say.",
-  "ch.1n": "01", "ch.1h": "Just talk", "ch.1p": "Losing your place is fine.",
-  "ch.2n": "02", "ch.2h": "Only key questions", "ch.2p": "No forms.",
-  "ch.3n": "03", "ch.3h": "It writes when you say", "ch.3p": "Updated every round.",
-  "ch.4n": "04", "ch.4h": "A complete prompt", "ch.4p": "Open points listed.",
-  "ch.5n": "05", "ch.5h": "A second check", "ch.5p": "Checked against your words.",
+  "prompt.title": "Speak your project.<br><span class=\"sheen\">Get a long prompt.</span>",
+  "prompt.lead": "It asks. You answer. It writes the prompt.",
+  "trio.1k": "Ask", "trio.1h": "Only missing facts", "trio.1p": "4 questions maximum each round.",
+  "trio.2k": "Check", "trio.2h": "See what it understood", "trio.2p": "If it is wrong, say so.",
+  "trio.3k": "Review", "trio.3h": "No added facts", "trio.3p": "It removes text that you did not say.",
+  "ch.1n": "01", "ch.1h": "Speak", "ch.1p": "Any order.",
+  "ch.2n": "02", "ch.2h": "Answer key questions", "ch.2p": "No forms.",
+  "ch.3n": "03", "ch.3h": "You start the draft", "ch.3p": "The summary updates after each answer.",
+  "ch.4n": "04", "ch.4h": "Get a full prompt", "ch.4p": "Open items go to “To confirm”.",
+  "ch.5n": "05", "ch.5h": "Second check", "ch.5p": "It compares the draft with your words.",
   "f.app": "Prompt Beta", "f.sub": "Clarify", "f.you": "You said",
   "f.say": "I want a sign-up app for our badminton group that works out court fees. Many players are older.",
-  "f.asks": "To clarify",
-  "f.q1": "Split fees by sign-ups or by who shows up?", "f.q2": "What about no-shows?", "f.q3": "How do people pay?",
-  "f.answer": "By who shows up. No-shows go last. Pay by phone.",
-  "f.got": "Understanding",
+  "f.asks": "Missing information",
+  "f.q1": "Split fees by sign-ups or by who shows up?", "f.q2": "And people who do not come?", "f.q3": "How do people pay?",
+  "f.answer": "By who comes. People who do not come go last. Pay by phone.",
+  "f.got": "What I understand",
   "f.ok1": "Sign-up app for a badminton group", "f.ok2": "Fees split by who shows up",
   "f.ok3": "No-shows go last next time", "f.ok4": "Pay by phone", "f.ok5": "Keep it simple",
-  "f.go": "Finish and generate", "f.draft": "First draft",
+  "f.go": "Generate", "f.draft": "First draft",
   "f.doc": "<h4>## Background</h4><p>The group signs up in a chat; no-shows are common.</p><h4>## Goal</h4><p>A sign-up app that works out court fees; add a points leaderboard.</p><h4>## Requirements</h4><p>1. Split fees by who shows up.<br>2. No-shows go last next time.<br>3. Pay by phone.<br>4. At most 8 players a game.</p><h4>## To confirm</h4><p class=\"pend\">Games per week.</p>",
   "f.review": "Review",
-  "f.d1": "Add a points leaderboard.", "f.d1w": "You didn't say this · removed",
-  "f.d2": "At most 8 players a game.", "f.d2w": "Number not given · removed",
-  "f.a1": "+ Keep it simple.", "f.a1w": "Missed in the draft · added",
-  "f.sent": "✓ Written at your cursor.",
-  "sample": "Illustration",
-  "pair.1k": "Concise", "pair.1h": "Say it once", "pair.1p": "Key points only, no questions.",
-  "pair.2k": "No made-up facts", "pair.2h": "Nothing you didn't say", "pair.2p": "All from your words.",
-  "keys.title": "One key", "keys.lead": "Press to start, again to stop.",
+  "f.d1": "Add a points leaderboard.", "f.d1w": "You did not say this · removed",
+  "f.d2": "At most 8 players a game.", "f.d2w": "You did not give this number · removed",
+  "f.a1": "+ Keep it simple.", "f.a1w": "Missing in the draft · added",
+  "f.sent": "✓ The text is at your cursor.",
+  "sample": "Example screen",
+  "pair.1k": "Concise", "pair.1h": "Speak one time", "pair.1p": "Key points only. No questions.",
+  "pair.2k": "No made-up facts", "pair.2h": "Only what you said", "pair.2p": "All text comes from your words.",
+  "keys.title": "One key", "keys.lead": "Press to start. Press again to stop.",
   "keys.alt": "Right Alt", "keys.bar": "Recording bar", "feat.title": "Features",
-  "t1.big": "Any app", "t1.h": "Types at your cursor", "t1.p": "Switch windows and it only copies.",
-  "t2.big": "10 languages", "t2.h": "Translate", "t2.p": "Cleans up first, then translates.",
+  "t1.big": "Any app", "t1.h": "Text at your cursor", "t1.p": "If the window changes, it only copies.",
+  "t2.big": "10 languages", "t2.h": "Translate", "t2.p": "It cleans up, then translates.",
   "t3.big": "3 modes", "t3.h": "Cleanup modes", "t3.p": "Natural, Concise, Prompt Beta.",
-  "t4.big": "Dictionary", "t4.h": "Names your way", "t4.p": "“deep seek” → DeepSeek.",
-  "t5.big": "4 models", "t5.h": "On-device recognition", "t5.p": "Mixed Chinese–English, Cantonese, dialects.",
-  "t6.big": "US · UK", "t6.h": "Your spelling", "t6.p": "US or UK, Simplified or Traditional.",
+  "t4.big": "Dictionary", "t4.h": "Your spelling for names", "t4.p": "deep seek → DeepSeek",
+  "t5.big": "4 models", "t5.h": "Local recognition", "t5.p": "Mixed Chinese and English, Cantonese, dialects.",
+  "t6.big": "US · UK", "t6.h": "Your spelling", "t6.p": "US or UK. Simplified or Traditional.",
   "t7.big": "Your key", "t7.h": "Your model", "t7.p": "DeepSeek, Kimi, Ollama and more.",
-  "t8.big": "$0", "t8.h": "Free", "t8.p": "No subscription, no limits.",
+  "t8.big": "$0", "t8.h": "Free", "t8.p": "No subscription. No limits.",
   "gal.title": "Native apps", "gal.lead": "Light and dark mode.",
   "gal.w1": "Home", "gal.w2": "Settings", "gal.w3": "History", "gal.w4": "Light mode",
-  "gal.m1": "Home", "gal.m2": "History", "gal.m3": "Settings", "gal.m4": "Dictionary · dark mode",
-  "priv.zero": "0 bytes", "priv.sub": "of recordings uploaded", "priv.note": "Speech is recognized on your computer.",
-  "pf.1h": "Recordings stay local", "pf.1p": "Deleted after 5 minutes.",
-  "pf.2h": "Keys in the system", "pf.2p": "Never in files or logs.",
-  "pf.3h": "Encrypted history", "pf.3p": "Local only, can be turned off.",
-  "dl.title": "Free download", "dl.lead": "First launch downloads a 241 MB model.",
-  "dl.setup": "Installer", "dl.portable": "Portable", "dl.as": "Apple silicon", "dl.intel": "Intel (final 1.17.1)",
+  "gal.m1": "Home", "gal.m2": "History", "gal.m3": "Settings", "gal.m4": "Dictionary · dark",
+  "priv.zero": "0 bytes", "priv.sub": "of audio uploaded", "priv.note": "Recognition is on your computer.",
+  "pf.1h": "Audio stays local", "pf.1p": "Deleted after 5 minutes.",
+  "pf.2h": "Keys stay in the system", "pf.2p": "Not in files. Not in logs.",
+  "pf.3h": "Encrypted history", "pf.3p": "Local only. You can turn it off.",
+  "dl.title": "Free download", "dl.lead": "The first start downloads a 241 MB model.",
+  "dl.setup": "Installer", "dl.portable": "Portable", "dl.as": "Apple silicon", "dl.intel": "Intel (last version: 1.17.1)",
   "dl.w1": "Windows 10 1809 or later, 64-bit", "dl.w2": "SmartScreen: More info → Run anyway",
-  "dl.m1": "macOS 13 or later", "dl.m2": "Check your chip:  → About This Mac",
-  "dl.all": "All versions on <a data-link=\"releases\" href=\"#\">GitHub Releases</a>",
+  "dl.m1": "macOS 13 or later", "dl.m2": "Find your chip:  → About This Mac",
+  "dl.all": "All versions: <a data-link=\"releases\" href=\"#\">GitHub Releases</a>",
   "author": "Author of TypeLeast.", "author.profile": "GitHub profile", "author.repo": "Repository",
   "foot.left": "© <span data-year></span> TypeLeast · <a data-link=\"license\" href=\"#\">GPL-3.0</a> · Updated 2026-10-25",
   "foot.notices": "Third-party notices", "foot.releases": "All versions",

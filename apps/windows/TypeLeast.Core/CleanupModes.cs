@@ -17,11 +17,4 @@ public static class CleanupModes
         "promptbeta" => L10n.T("提示词 Beta"),
         _ => L10n.T("自然整理"),
     };
-
-    public static string Detail(string code) => code switch
-    {
-        "concise" => L10n.T("更短，只留要点"),
-        "promptbeta" => L10n.T("多轮补充后写成提示词"),
-        _ => L10n.T("去口头禅，改通顺"),
-    };
 }

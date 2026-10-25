@@ -644,7 +644,7 @@ do {
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
     check("…nor while dictating or Prompt Beta is open", !Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: true))
     check("asking by hand always offers", Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: true, busy: true))
-    checkEq("five steps", UpdateStage.steps, ["下载", "核对", "签名", "交接", "安装"])
+    checkEq("five steps", UpdateStage.steps, ["下载", "校验", "签名", "Key", "安装"])
     checkEq("each stage has its step", [UpdateStage.preparing, .downloading(received: 1, total: 2, source: "GitHub"), .verifying, .signing, .handingOver, .installing].map(\.step), [0, 0, 1, 2, 3, 4])
     checkEq("the amount under the percentage", UpdateStage.downloading(received: 33 << 20, total: 52 << 20, source: "GitHub").amount, "33.0 / 52.0 MB")
     checkEq("no amount outside the download", UpdateStage.signing.amount, nil)
@@ -871,7 +871,7 @@ do {
     checkEq("manual English overrides system", L10n.resolve("en", preferred: ["zh-CN"]), "en")
     checkEq("manual Chinese overrides system", L10n.resolve("zh-Hans", preferred: ["en-US"]), "zh-Hans")
     checkEq("translated label", L10n.render("设置", arguments: [], language: "en"), "Settings")
-    checkEq("content slots are not translated or expanded", L10n.render("常被识别成「{0}」", arguments: ["用户 {1}"], language: "en"), "Often recognized as “用户 {1}”")
+    checkEq("content slots are not translated or expanded", L10n.render("常被识别成「{0}」", arguments: ["用户 {1}"], language: "en"), "Heard as “用户 {1}”")
     let previous = Settings.shared.interfaceLanguage
     Settings.shared.interfaceLanguage = "en"
     checkEq("language preference persists", UserDefaults.standard.string(forKey: L10n.preferenceKey), "en")
@@ -904,7 +904,7 @@ do {
     let status = try JSONDecoder().decode(SpeechStatus.self, from: Data(#"{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}"#.utf8))
     checkEq("health identifies actual recognizer", status.modelName, "Fun-ASR-Nano")
     checkEq("health exposes language capabilities", status.languages, ["auto", "zh", "en", "ja"])
-    checkEq("natural cleanup English label", L10n.render("自然整理", arguments: [], language: "en"), "Natural cleanup")
+    checkEq("natural cleanup English label", L10n.render("自然整理", arguments: [], language: "en"), "Natural")
 } catch { check("speech model client contract", false, String(describing: error)) }
 
 // MARK: 23. Prompt Beta: questions come back with a session; the answer carries it
@@ -1445,15 +1445,15 @@ do {
     _ = try client.installCatalogPluginSync(id: "example.formal", enable: false, digest: "def")
     let sentInstall = state.lastRequest.flatMap { try? JSONSerialization.jsonObject(with: $0.body) as? [String: Any] }
     checkEq("a catalog install sends the fingerprint it showed", sentInstall?["digest"] as? String, "def")
-    checkEq("a changed plugin is explained", PluginController.describe(code: "plugin-changed"), L10n.text("插件内容变了，请重新查看后再安装"))
+    checkEq("a changed plugin is explained", PluginController.describe(code: "plugin-changed"), L10n.text("插件已变化。请重新查看后再安装"))
     _ = try client.removePluginSync(id: "example.dev-terms")
     checkEq("uninstall is a DELETE", state.lastRequest?.method, "DELETE")
     do { _ = try client.inspectPluginSync(Data("x".utf8)); check("an invalid file is refused", false) }
-    catch { checkEq("an invalid file is explained", PluginController.describe(error), L10n.text("这不是有效的插件文件")) }
+    catch { checkEq("an invalid file is explained", PluginController.describe(error), L10n.text("这不是插件文件")) }
     let catalog = try client.pluginCatalogSync(sources: "github")
     checkEq("the market follows the update source setting", state.lastRequest?.path, "/api/voice-polish/plugins/catalog?sources=github")
     checkEq("an offline market is reported, not an error", catalog.ok, false)
-    checkEq("…with a reason the page can show", PluginController.describe(code: catalog.code), L10n.text("连不上插件目录，请检查网络"))
+    checkEq("…with a reason the page can show", PluginController.describe(code: catalog.code), L10n.text("无法获取插件目录，请检查网络"))
     let style = PluginSummary(id: "example.formal", version: "1.0.0", type: "style", name: ["zh-Hans": "正式", "en": "Formal"],
                               description: ["zh-Hans": "正式。", "en": "Formal."], author: "Example", license: "CC0-1.0", instructions: "正式。")
     checkEq("a style's title follows the interface language", style.title, L10n.language == "en" ? "Formal" : "正式")

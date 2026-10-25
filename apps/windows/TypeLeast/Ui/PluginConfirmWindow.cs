@@ -23,12 +23,12 @@ internal sealed class PluginConfirmWindow : Window
         content.Children.Add(Theme.Text(installedVersion is null ? L10n.T("安装「{0}」？", plugin.Title) : L10n.T("把「{0}」更新到 {1}？", plugin.Title, plugin.Version), 18, bold: true));
         content.Children.Add(Spaced(Theme.Text(plugin.Summary, 13, Theme.Grey)));
         content.Children.Add(Spaced(Theme.Text("v" + plugin.Version + " · " + plugin.Author + " · " + plugin.License, 12, Theme.Grey)));
-        content.Children.Add(Spaced(Theme.Text(!fromCatalog ? "⚠ " + L10n.T("来自本地文件，未经审核。只安装你信任的人给的插件。")
-            : mirrored ? L10n.T("来自 TypeLeast 官方目录（经镜像获取），已审核。") : L10n.T("来自 TypeLeast 官方目录，已审核。"),
+        content.Children.Add(Spaced(Theme.Text(!fromCatalog ? "⚠ " + L10n.T("来自本地文件，未审核。只安装你信任的人提供的插件。")
+            : mirrored ? L10n.T("来自 TypeLeast 官方目录（镜像），已审核。") : L10n.T("来自 TypeLeast 官方目录，已审核。"),
             12.5, fromCatalog ? Theme.Ink : Theme.Warning)));
         if (plugin.IsStyle)
         {
-            content.Children.Add(Spaced(Theme.Text(L10n.T("会附加的说明："), 12.5, bold: true)));
+            content.Children.Add(Spaced(Theme.Text(L10n.T("附加的说明："), 12.5, bold: true)));
             content.Children.Add(new TextBox
             {
                 Text = plugin.Instructions ?? "", IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Height = 120,
@@ -54,8 +54,8 @@ internal sealed class PluginConfirmWindow : Window
             }
         }
         content.Children.Add(Spaced(Theme.Text(plugin.IsStyle
-            ? L10n.T("数据去向：选中后，这段说明会随每次自然、精简整理请求发给你选择的模型，影响写法和格式。不会多调用模型；翻译和提示词 Beta 不受影响。")
-            : L10n.T("数据去向：启用后，本次相关的术语和读音提示会随整理请求发给你选择的模型；无关的不发送。不会多调用模型。"), 12.5)));
+            ? L10n.T("数据去向：选中后，这段说明随每次自然和精简整理发给你的模型，影响用词和格式。不增加模型调用。翻译和提示词 Beta 不使用。")
+            : L10n.T("数据去向：启用后，与本次听写相关的词和读音提示随整理发给你的模型，其余留在本机。不增加模型调用。"), 12.5)));
         var buttons = Theme.Row(8,
             Theme.Secondary(L10n.T("取消"), Close),
             Theme.Secondary(L10n.T("仅安装"), () => { Choice = false; Close(); }),

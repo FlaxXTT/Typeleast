@@ -17,7 +17,7 @@ internal static class PreviewPanel
         var window = new Window { Title = L10n.T("预览"), Width = 540, Height = 360, MinWidth = 360, MinHeight = 280,
             Background = Theme.Background, WindowStartupLocation = WindowStartupLocation.CenterScreen };
         var content = Theme.Stack(12, editor, Theme.Row(8,
-            Theme.Primary(L10n.T("确认插入"), () => { completion.TrySetResult(editor.Text); window.Close(); }),
+            Theme.Primary(L10n.T("插入"), () => { completion.TrySetResult(editor.Text); window.Close(); }),
             Theme.Secondary(L10n.T("取消"), () => window.Close())));
         content.Margin = new Thickness(24); window.Content = content;
         var registration = ct.Register(() => window.Dispatcher.InvokeAsync(() => window.Close()));

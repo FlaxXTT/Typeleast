@@ -8,12 +8,12 @@ public static class SettingsGuide
 
     public static IReadOnlyList<Entry> Entries => new Entry[]
     {
-        new(L10n.T("整理档位"), L10n.T("左侧栏"), ""),
+        new(L10n.T("整理模式"), L10n.T("侧栏"), ""),
         new(L10n.T("API Key"), L10n.T("设置 › 整理"), "settings", 1),
         new(L10n.T("快捷键"), L10n.T("设置 › 听写"), "settings", 0),
         new(L10n.T("语音模型和下载镜像"), L10n.T("设置 › 服务与更新"), "settings", 4),
-        new(L10n.T("词典"), L10n.T("左侧栏 › 词典"), "dictionary"),
-        new(L10n.T("麦克风权限"), L10n.T("设置 › 隐私与权限"), "settings", 3),
+        new(L10n.T("词典"), L10n.T("侧栏 › 词典"), "dictionary"),
+        new(L10n.T("麦克风"), L10n.T("设置 › 隐私与权限"), "settings", 3),
     };
 }
 

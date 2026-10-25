@@ -38,7 +38,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
                 {
                     Available = newest;
                     changed();
-                    if (!settings.AutoUpdate) setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", newest.Version));
+                    if (!settings.AutoUpdate) setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」更新。", newest.Version));
                 }
             }
             catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { }
@@ -51,7 +51,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
                 offer.ShowDialog();
                 if (!offer.UpdateNow)
                 {
-                    setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」中更新。", update.Version));
+                    setHint(L10n.T("有新版本 {0}，可在「设置 → 服务与更新」更新。", update.Version));
                     return;
                 }
                 Log.Write("update.accept", update.Version);
@@ -69,9 +69,9 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
             var newest = await Updater.NewestAsync();
             Available = newest is not null && WindowsRelease.IsNewer(newest.Version, Updater.CurrentVersion) ? newest : null;
             changed();
-            return newest is null ? L10n.T("没有找到带 Windows 安装包的发布。")
-                : Available is not null ? L10n.T("有新版本 {0}。", newest.Version) + (newest.Summary.Length > 0 ? "\n" + L10n.T("本次更新") + "\n" + newest.Summary : "")
-                : L10n.T("已是最新的 Windows 版本（{0}）。", Updater.CurrentVersion);
+            return newest is null ? L10n.T("没有找到带 Windows 安装包的版本。")
+                : Available is not null ? L10n.T("有新版本 {0}。", newest.Version) + (newest.Summary.Length > 0 ? "\n" + L10n.T("更新内容") + "\n" + newest.Summary : "")
+                : L10n.T("已是最新版本（{0}）。", Updater.CurrentVersion);
         }
         catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
@@ -84,7 +84,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
     {
         if (Available is not { } release || Updating) return null;
         if (busyReason() is { } busy) return busy;
-        if (!Updater.IsInstalledCopy) { Shell.Open(release.PageUrl.Length > 0 ? release.PageUrl : "https://github.com/FlaxXTT/Typeleast/releases"); return L10n.T("便携版请在发布页下载新版本。"); }
+        if (!Updater.IsInstalledCopy) { Shell.Open(release.PageUrl.Length > 0 ? release.PageUrl : "https://github.com/FlaxXTT/Typeleast/releases"); return L10n.T("便携版请到发布页下载。"); }
         Updating = true;
         changed();
         var progress = new UpdateProgressWindow();
@@ -114,7 +114,7 @@ internal sealed class UpdateController(AppSettings settings, Dispatcher dispatch
         {
             progress.Close();
             Log.Write("update.fail", e.GetType().Name);
-            return e is InvalidOperationException ? e.Message : L10n.T("下载更新失败，请稍后再试。");
+            return e is InvalidOperationException ? e.Message : L10n.T("下载失败，请稍后重试。");
         }
         finally { Updating = false; changed(); }
     }

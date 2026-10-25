@@ -14,7 +14,7 @@ final class PreviewPanel {
             p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 200),
                         styleMask: [.titled, .closable, .nonactivatingPanel, .utilityWindow],
                         backing: .buffered, defer: false)
-            p.title = L10n.text("听写预览（已复制到剪贴板）")
+            p.title = L10n.text("预览（已复制）")
             p.isFloatingPanel = true
             p.level = .floating
             p.becomesKeyOnlyIfNeeded = true

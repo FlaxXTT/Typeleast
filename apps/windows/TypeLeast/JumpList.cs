@@ -24,11 +24,10 @@ internal static class JumpList
                 list.JumpItems.Add(new JumpTask
                 {
                     Title = (code == current ? "✓ " : "") + CleanupModes.Title(code),
-                    Description = CleanupModes.Detail(code),
                     ApplicationPath = exe,
                     IconResourcePath = exe,
                     Arguments = Argument + " " + code,
-                    CustomCategory = L10n.T("整理档位"),
+                    CustomCategory = L10n.T("整理模式"),
                 });
             System.Windows.Shell.JumpList.SetJumpList(app, list);
             list.Apply();

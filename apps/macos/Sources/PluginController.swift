@@ -81,7 +81,7 @@ final class PluginController: ObservableObject {
     func importFile(_ url: URL) {
         guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= 256 * 1024,
               let data = try? Data(contentsOf: url) else {
-            message = L10n.text("这不是有效的插件文件")
+            message = L10n.text("这不是插件文件")
             return
         }
         run({ try $0.inspectPluginSync(data) }) { [weak self] inspection in
@@ -93,7 +93,7 @@ final class PluginController: ObservableObject {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [UTType(filenameExtension: "typeleast-plugin"), .json].compactMap { $0 }
-        panel.message = L10n.text("选择 .typeleast-plugin 插件文件")
+        panel.message = L10n.text("选择 .typeleast-plugin 文件")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         importFile(url)
     }
@@ -145,20 +145,20 @@ final class PluginController: ObservableObject {
 
     static func describe(_ error: Error) -> String {
         if case .http(_, let code, _) = error as? ServiceError { return describe(code: code) }
-        return L10n.text("本地服务还没就绪，稍后再试")
+        return L10n.text("本地服务未就绪，请稍后重试")
     }
 
     static func describe(code: String?) -> String {
         switch code {
-        case "plugin-invalid": return L10n.text("这不是有效的插件文件")
-        case "plugin-terms-limit": return L10n.text("启用的词库加起来不能超过 10000 个词")
-        case "plugin-aliases-limit": return L10n.text("启用的读音提示不能超过 1000 条")
-        case "plugin-not-found": return L10n.text("找不到这个插件，请刷新")
-        case "plugin-changed": return L10n.text("插件内容变了，请重新查看后再安装")
-        case "market-protocol-unsupported": return L10n.text("插件目录格式不对，可能要更新 TypeLeast")
-        case "market-too-large": return L10n.text("插件目录太大，无法读取")
-        case "market-offline": return L10n.text("连不上插件目录，请检查网络")
-        default: return L10n.text("操作没有完成，请重试")
+        case "plugin-invalid": return L10n.text("这不是插件文件")
+        case "plugin-terms-limit": return L10n.text("已启用的词库合计最多 10000 个词")
+        case "plugin-aliases-limit": return L10n.text("已启用的读音提示合计最多 1000 条")
+        case "plugin-not-found": return L10n.text("找不到插件，请刷新")
+        case "plugin-changed": return L10n.text("插件已变化。请重新查看后再安装")
+        case "market-protocol-unsupported": return L10n.text("无法读取此目录，请更新 TypeLeast")
+        case "market-too-large": return L10n.text("插件目录太大")
+        case "market-offline": return L10n.text("无法获取插件目录，请检查网络")
+        default: return L10n.text("没有完成，请重试")
         }
     }
 }

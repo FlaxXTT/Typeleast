@@ -70,7 +70,7 @@ internal sealed class ServiceManager
                 if (serviceDir is null) { Set(Phase.NoService, L10n.T("缺少本地服务文件，请重新安装")); return; }
                 if (NodePath is null) FindNode(appDir, env);
                 ct.ThrowIfCancellationRequested();
-                if (NodePath is null || !ServiceLocator.IsSupported(NodeVersion)) { Set(Phase.NoNode, L10n.T("没有找到 Node.js（需要 22 或更新）")); NodePath = null; return; }
+                if (NodePath is null || !ServiceLocator.IsSupported(NodeVersion)) { Set(Phase.NoNode, L10n.T("找不到 Node.js（需要 22 或更新）")); NodePath = null; return; }
                 var start = new ProcessStartInfo(NodePath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, WorkingDirectory = serviceDir };
                 start.ArgumentList.Add("--expose-gc"); start.ArgumentList.Add(Path.Combine(serviceDir, "bin", "typeleast-service.mjs"));
                 start.ArgumentList.Add("--parent-pid"); start.ArgumentList.Add(Environment.ProcessId.ToString());
@@ -107,7 +107,7 @@ internal sealed class ServiceManager
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         catch (Exception e)
         {
-            if (!ct.IsCancellationRequested) { Log.Write("service.start.fail", e.GetType().Name); Set(Phase.Failed, L10n.T("本地服务启动失败，请检查 Node 和安装文件。")); }
+            if (!ct.IsCancellationRequested) { Log.Write("service.start.fail", e.GetType().Name); Set(Phase.Failed, L10n.T("本地服务启动失败。请检查 Node 和安装文件。")); }
         }
     }
     private void OnExit(Process p, Stopwatch uptime, CancellationToken ct)
@@ -118,7 +118,7 @@ internal sealed class ServiceManager
             if (process != p || ct.IsCancellationRequested) { p.Dispose(); return; }
             process = null; Port = 0; client.InvalidatePort();
             delay = recovery.Next(uptime.Elapsed);
-            Set(delay is null ? Phase.Failed : Phase.Starting, delay is null ? L10n.T("本地服务反复退出，请重试或重新安装。") : "");
+            Set(delay is null ? Phase.Failed : Phase.Starting, delay is null ? L10n.T("本地服务反复退出。请重试或重新安装。") : "");
         }
         p.Dispose(); Log.Write("service.exit");
         if (delay is not null) _ = RestartAfter(delay.Value, ct);

@@ -77,12 +77,12 @@ final class DictationController {
                 if granted {
                     self.beginCapture()
                 } else {
-                    self.setHint(L10n.text("需要麦克风权限才能录音"), warning: true)
+                    self.setHint(L10n.text("录音需要麦克风权限"), warning: true)
                     self.applyState()
                 }
             }
         case .denied, .restricted:
-            setHint(L10n.text("麦克风权限被拒绝 · 在设置里打开"), warning: true)
+            setHint(L10n.text("麦克风权限被拒绝，请在设置里打开"), warning: true)
             applyState()
             host.showSettings()
         default:
@@ -110,7 +110,7 @@ final class DictationController {
         }
         phase = .recording
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
-        if pendingTranslate == nil && betaPending != nil { beta.setBusy(L10n.text("正在听你补充，说完再按 {0}", model.hotkeyLabel)) }
+        if pendingTranslate == nil && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", model.hotkeyLabel)) }
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
@@ -156,7 +156,7 @@ final class DictationController {
         // a translation is not, and leaves the questions waiting.
         if translateTo == nil, strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
         let betaSession = translateTo == nil && strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
-        if betaSession != nil { beta.setBusy(L10n.text("正在根据你的补充更新…")) }
+        if betaSession != nil { beta.setBusy(L10n.text("正在更新…")) }
         do {
             let r = try recorder.finish()
             playSound(start: false)
@@ -193,7 +193,7 @@ final class DictationController {
             recordingBar.hide()
             pendingTranslate = nil
             if betaPending != nil { showBetaQuestions() }
-            setHint(L10n.text("已取消，录音已丢弃"))
+            setHint(L10n.text("已取消，录音已删除"))
             applyState()
             updateIdleBar()
         case .thinking:
@@ -229,7 +229,7 @@ final class DictationController {
             do {
                 let data = try HistorySeal.readAudio(audioURL)
                 if data.count > Wav.maxBytes {
-                    throw ServiceError.transport(L10n.text("录音超过 4 MiB 上限"))
+                    throw ServiceError.transport(L10n.text("录音超过 4 MiB"))
                 }
                 outcome = .success(try self.client.dictateSync(wav: data, language: effectiveLanguage,
                                                               appBundleId: appBundleId, strength: strength,
@@ -272,7 +272,7 @@ final class DictationController {
                             variants: variants, appBundleId: appBundleId, field: field)
                 recordingBar.hide()
                 showBetaQuestions()
-                setHint(L10n.text("提示词 Beta：可继续补充或结束生成"))
+                setHint(L10n.text("提示词 Beta：继续补充或生成"))
                 applyState()
                 return
             }
@@ -309,7 +309,7 @@ final class DictationController {
                 applyState()
                 return
             }
-            let failedHint = resp.translated != nil ? L10n.text("翻译没有成功，用了原文") : L10n.text("这次用了原文（整理没有成功）")
+            let failedHint = resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
             setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)
@@ -318,15 +318,15 @@ final class DictationController {
             } else {
                 Inserter.shared.setString(text)
                 recordingBar.showResult(text, warning: resp.fallback)
-                setHint(L10n.text("重试完成，结果已复制到剪贴板"))
+                setHint(L10n.text("重试完成，结果已复制"))
                 applyState()
             }
         case .failure(let error):
             let d = error as? ServiceError
             if case .http(410, _, _)? = d, betaPending != nil {
                 dropBeta(notify: false)
-                recordingBar.showResult(L10n.text("问题已过期，请重新说一遍需求"), warning: true)
-                setHint(L10n.text("问题已过期，请重新说一遍需求"), warning: true)
+                recordingBar.showResult(L10n.text("问题已过期，请重新说需求"), warning: true)
+                setHint(L10n.text("问题已过期，请重新说需求"), warning: true)
                 applyState()
                 return
             }
@@ -360,9 +360,9 @@ final class DictationController {
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
                 let paste = settings.hotkeyPasteLast
                 let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
-                recordingBar.showResult(key.isEmpty ? L10n.text("已切换应用，没有粘贴 · 在历史里") : L10n.text("已切换应用，没有粘贴 · 按 ") + key + L10n.text(" 贴到这里"),
+                recordingBar.showResult(key.isEmpty ? L10n.text("已切换应用，未粘贴 · 见历史") : L10n.text("已切换应用，未粘贴 · 按 ") + key + L10n.text(" 贴到这里"),
                                         warning: true)
-                setHint(L10n.text("你在整理时切换了应用，这次没有粘贴。") + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 可以贴到当前位置，历史里也有。")),
+                setHint(L10n.text("整理时切换了应用，未粘贴。") + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 贴到这里。历史里也有。")),
                         warning: true)
                 applyState()
                 return
@@ -383,14 +383,14 @@ final class DictationController {
         case .clipboardOnly:
             Inserter.shared.setString(text)
             recordingBar.showResult(text, warning: fallback)
-            setHint(L10n.text("已复制到剪贴板"))
+            setHint(L10n.text("已复制"))
             applyState()
         case .preview:
             Inserter.shared.setString(text)
             if previewPanel == nil { previewPanel = PreviewPanel() }
             previewPanel?.show(text: text)
             recordingBar.showResult(text, warning: fallback)
-            setHint(L10n.text("预览 · 已复制到剪贴板"))
+            setHint(L10n.text("预览 · 已复制"))
             applyState()
         }
     }

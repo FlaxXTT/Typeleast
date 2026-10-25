@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="560" viewBox="0 0 880 560" role="img" aria-label="提示词 Beta：你随口说项目，它只问缺的几个问题，你回答并核对它的理解，然后写成完整的长提示词，再审查一遍，删掉你没说过的内容。">
-<title>提示词 Beta：你随口说项目，它只问缺的几个问题，你回答并核对它的理解，然后写成完整的长提示词，再审查一遍，删掉你没说过的内容。</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="560" viewBox="0 0 880 560" role="img" aria-label="提示词 Beta：你说项目，它问缺少的信息，你回答并核对它的理解，它写出完整提示词，再删除你没说过的内容。">
+<title>提示词 Beta：你说项目，它问缺少的信息，你回答并核对它的理解，它写出完整提示词，再删除你没说过的内容。</title>
 <style>
 text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
 .ink { fill: #f5f5f7; } .gray { fill: #a1a1a6; } .faint { fill: #6e6e73; }
@@ -44,13 +44,13 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 .why { animation: whyK 12s ease-in-out infinite; } @keyframes whyK { 0%,76% { opacity: 0; } 80%,94% { opacity: 1; } 99%,100% { opacity: 0; } }</style>
 <rect width="880" height="560" rx="28" fill="#1c1c1e"/>
 <text x="36" y="56" font-size="15" font-weight="600" text-anchor="start" class="" fill="#a77bff">提示词 Beta</text>
-<text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >长提示词，聊着就写好了。</text>
-<text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >它问，你答。出稿前你核对，出稿后它再审一遍。</text>
+<text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >说出项目，得到长提示词。</text>
+<text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >它提问，你回答。你核对后生成，它再审查一遍。</text>
 <rect x="24" y="160" width="404" height="376" rx="20" fill="#2c2c2e"/>
 <g class="s1"><text x="44" y="190" font-size="12" font-weight="600" text-anchor="start" class="faint" >你说</text><rect x="64" y="202" width="344" height="62" rx="16" fill="#2997ff"/><text x="80" y="228" font-size="14" font-weight="500" text-anchor="start" class="" fill="#ffffff">我想给社区羽毛球群做个报名小程序，</text><text x="80" y="250" font-size="14" font-weight="500" text-anchor="start" class="" fill="#ffffff">接龙太乱，场地费也是我一个个收……</text></g>
-<g class="s2"><text x="44" y="286" font-size="12" font-weight="600" text-anchor="start" class="faint" >待补充的信息 · 每轮最多 4 问</text><rect x="44" y="296" width="364" height="28" rx="10" fill="#1c1c1e" stroke="#3a3a3c"/><text x="58" y="315" font-size="13" font-weight="700" text-anchor="start" class="" fill="#a77bff">？</text><text x="78" y="315" font-size="13" font-weight="400" text-anchor="start" class="ink" >场地费按报名人数还是到场人数分？</text><rect x="44" y="328" width="364" height="28" rx="10" fill="#1c1c1e" stroke="#3a3a3c"/><text x="58" y="347" font-size="13" font-weight="700" text-anchor="start" class="" fill="#a77bff">？</text><text x="78" y="347" font-size="13" font-weight="400" text-anchor="start" class="ink" >报了名没来的人，怎么处理？</text><rect x="44" y="360" width="364" height="28" rx="10" fill="#1c1c1e" stroke="#3a3a3c"/><text x="58" y="379" font-size="13" font-weight="700" text-anchor="start" class="" fill="#a77bff">？</text><text x="78" y="379" font-size="13" font-weight="400" text-anchor="start" class="ink" >大家平时用什么付款？</text></g>
+<g class="s2"><text x="44" y="286" font-size="12" font-weight="600" text-anchor="start" class="faint" >缺少的信息 · 每轮最多 4 个问题</text><rect x="44" y="296" width="364" height="28" rx="10" fill="#1c1c1e" stroke="#3a3a3c"/><text x="58" y="315" font-size="13" font-weight="700" text-anchor="start" class="" fill="#a77bff">？</text><text x="78" y="315" font-size="13" font-weight="400" text-anchor="start" class="ink" >场地费按报名人数还是到场人数分？</text><rect x="44" y="328" width="364" height="28" rx="10" fill="#1c1c1e" stroke="#3a3a3c"/><text x="58" y="347" font-size="13" font-weight="700" text-anchor="start" class="" fill="#a77bff">？</text><text x="78" y="347" font-size="13" font-weight="400" text-anchor="start" class="ink" >报了名没来的人，怎么处理？</text><rect x="44" y="360" width="364" height="28" rx="10" fill="#1c1c1e" stroke="#3a3a3c"/><text x="58" y="379" font-size="13" font-weight="700" text-anchor="start" class="" fill="#a77bff">？</text><text x="78" y="379" font-size="13" font-weight="400" text-anchor="start" class="ink" >大家平时用什么付款？</text></g>
 <g class="s3"><rect x="64" y="400" width="344" height="38" rx="14" fill="#2997ff"/><text x="80" y="424" font-size="13" font-weight="500" text-anchor="start" class="" fill="#ffffff">按到场人数平分；放鸽子的下次排后面；用微信。</text></g>
-<g class="s4"><text x="44" y="462" font-size="12" font-weight="600" text-anchor="start" class="faint" >当前理解，请核对</text><text x="44" y="484" font-size="13" font-weight="500" text-anchor="start" class="green" >✓ 报名小程序替代接龙　✓ 按到场人数平分</text><rect x="44" y="494" width="138" height="30" rx="15" fill="#a77bff"/><text x="113" y="514" font-size="13" font-weight="600" text-anchor="middle" class="" fill="#ffffff">结束补充并生成</text></g>
+<g class="s4"><text x="44" y="462" font-size="12" font-weight="600" text-anchor="start" class="faint" >我的理解，请核对</text><text x="44" y="484" font-size="13" font-weight="500" text-anchor="start" class="green" >✓ 报名小程序替代接龙　✓ 按到场人数平分</text><rect x="44" y="494" width="138" height="30" rx="15" fill="#a77bff"/><text x="113" y="514" font-size="13" font-weight="600" text-anchor="middle" class="" fill="#ffffff">生成</text></g>
 <rect x="444" y="160" width="412" height="376" rx="20" fill="#2c2c2e"/>
 <g class="s5"><text x="464" y="190" font-size="12" font-weight="600" text-anchor="start" class="faint" >写好的提示词</text></g>
 <g class="d0"><text x="464" y="218" font-size="14" font-weight="700" text-anchor="start" class="ink" >## 背景与现状</text></g>
@@ -63,5 +63,5 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <g class="d7"><text x="464" y="424" font-size="13" font-weight="400" text-anchor="start" class="gray" >三、微信付款　四、操作简单，适合中老年人</text></g>
 <g class="d8"><text x="464" y="456" font-size="14" font-weight="700" text-anchor="start" class="ink" >## 待确认</text></g>
 <g class="d9"><text x="464" y="486" font-size="13" font-weight="400" text-anchor="start" class="faint" >每周的场次尚未说明。</text></g>
-<g class="s6"><text x="464" y="514" font-size="13" font-weight="600" text-anchor="start" class="green" >✓ 审查完成：删掉没来源的，补回漏掉的。</text></g>
+<g class="s6"><text x="464" y="514" font-size="13" font-weight="600" text-anchor="start" class="green" >✓ 审查完成：删除你没说过的内容。</text></g>
 </svg>

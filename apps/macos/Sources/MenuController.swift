@@ -74,7 +74,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(toggleItem)
         cancelItem = item(L10n.text("取消听写"), #selector(onCancel))
         menu.addItem(cancelItem)
-        pasteItem = item(L10n.text("粘贴上一条转写"), #selector(onPasteLast))
+        pasteItem = item(L10n.text("粘贴上一条"), #selector(onPasteLast))
         menu.addItem(pasteItem)
         let modes = NSMenu()
         for strength in VoiceStrength.allCases {
@@ -83,7 +83,7 @@ final class MenuController: NSObject, NSMenuDelegate {
             modes.addItem(choice)
             modeItems.append(choice)
         }
-        let modeMenu = item(L10n.text("整理档位"), nil)
+        let modeMenu = item(L10n.text("整理模式"), nil)
         modeMenu.submenu = modes
         menu.addItem(modeMenu)
 
@@ -91,9 +91,9 @@ final class MenuController: NSObject, NSMenuDelegate {
         hintItem = item("", nil)
         hintItem.isEnabled = false
         menu.addItem(hintItem)
-        axItem = item(L10n.text("需要辅助功能权限才能自动粘贴 · 点此授权"), #selector(onAccessibility))
+        axItem = item(L10n.text("自动粘贴需要辅助功能权限，点此允许"), #selector(onAccessibility))
         menu.addItem(axItem)
-        launchItem = item(L10n.text("重新启动本地服务"), #selector(onLaunch))
+        launchItem = item(L10n.text("重启本地服务"), #selector(onLaunch))
         menu.addItem(launchItem)
 
         menu.addItem(.separator())
@@ -122,8 +122,8 @@ final class MenuController: NSObject, NSMenuDelegate {
             toggleItem.title = L10n.text("结束听写")
             setIcon("waveform.circle.fill")
         case .thinking:
-            statusLine.title = L10n.text("整理中…")
-            toggleItem.title = L10n.text("整理中…")
+            statusLine.title = L10n.text("正在整理…")
+            toggleItem.title = L10n.text("正在整理…")
             setIcon("ellipsis.circle")
         }
         for item in modeItems {
@@ -133,7 +133,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         toggleItem.keyEquivalent = ""
         toggleItem.isEnabled = s.phase != .thinking
         cancelItem.isHidden = s.phase != .recording
-        pasteItem.title = L10n.text("粘贴上一条转写") + (s.pasteLastSummary.isEmpty ? "" : "  " + s.pasteLastSummary)
+        pasteItem.title = L10n.text("粘贴上一条") + (s.pasteLastSummary.isEmpty ? "" : "  " + s.pasteLastSummary)
         pasteItem.isEnabled = s.hasLast && s.phase == .idle
         if let hint = s.hint, !hint.isEmpty {
             hintItem.title = (s.hintWarning ? "⚠︎ " : "") + shorten(hint, 52)
@@ -148,7 +148,7 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     /// A newer version was found: say so on the menu item (nil: back to "检查更新…").
     func setUpdateAvailable(_ version: String?) {
-        updateItem.title = version.map { L10n.text("有新版本 ") + $0 + L10n.text(" · 点此更新") } ?? L10n.text("检查更新…")
+        updateItem.title = version.map { L10n.text("新版本 ") + $0 + L10n.text(" · 点击更新") } ?? L10n.text("检查更新…")
     }
 
     private func setIcon(_ symbol: String) {

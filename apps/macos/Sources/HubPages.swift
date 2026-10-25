@@ -83,7 +83,7 @@ struct HomePage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                PageHeader(title: greeting, subtitle: L10n.text("说话，不用打字。在任何 App 里都能用。"))
+                PageHeader(title: greeting, subtitle: L10n.text("说话，不用打字。任何 App 都能用。"))
                 VStack(alignment: .leading, spacing: 18) {
                     HeroCard()
                     if !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceUp || !model.llmConfigured {
@@ -112,9 +112,9 @@ private struct HeroCard: View {
                     HStack(spacing: 8) {
                         Text(L10n.text("按")).font(.system(size: 17, weight: .semibold))
                         Keycap(label: model.hotkeyLabel, large: true)
-                        Text(L10n.text("开始听写，再按一次结束")).font(.system(size: 17, weight: .semibold))
+                        Text(L10n.text("开始，再按一次结束")).font(.system(size: 17, weight: .semibold))
                     }
-                    Text(L10n.text("文字会出现在光标处。按 Esc 取消。"))
+                    Text(L10n.text("文字写到光标处。按 Esc 取消。"))
                         .font(.system(size: 12.5))
                         .foregroundColor(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -136,16 +136,16 @@ private struct SetupCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(L10n.text("完成设置")).font(.system(size: 14, weight: .semibold))
                 SetupRow(done: model.micStatus == .authorized, title: L10n.text("麦克风"),
-                         detail: L10n.text("用来录下你说的话，音频只在本机转写。"),
+                         detail: "",
                          action: model.micStatus == .denied ? L10n.text("打开设置") : L10n.text("允许")) {
                     if model.micStatus == .denied { model.actions?.openMicrophoneSettings() } else { model.actions?.requestMicrophone() }
                 }
                 SetupRow(done: model.accessibilityTrusted, title: L10n.text("辅助功能"),
-                         detail: L10n.text("用来把文字粘贴到光标处，并识别 Fn 键。"), action: L10n.text("授权")) {
+                         detail: "", action: L10n.text("允许")) {
                     model.actions?.requestAccessibility()
                 }
                 SetupRow(done: model.serviceState.isRunning, title: L10n.text("本地服务（需要 Node.js 22+）"),
-                         detail: model.serviceState.isRunning ? L10n.text("已启动") : model.serviceSummary,
+                         detail: model.serviceState.isRunning ? L10n.text("运行中") : model.serviceSummary,
                          action: model.serviceState.needsNode ? L10n.text("下载 Node.js") : L10n.text("重新启动")) {
                     if model.serviceState.needsNode {
                         NSWorkspace.shared.open(URL(string: "https://nodejs.org/zh-cn/download")!)
@@ -154,14 +154,14 @@ private struct SetupCard: View {
                     }
                 }
                 SetupRow(done: model.speech?.ready == true, title: model.speech?.modelName ?? "SenseVoice Small",
-                         detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("已就绪，识别完全在本机进行") : AppDelegate.speechProblem(model.speech),
+                         detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("就绪，本机识别") : AppDelegate.speechProblem(model.speech),
                          action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("下载") : "") {
                     model.actions?.downloadModels()
                 }
                 if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
-                SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（自己的 API Key）"),
-                         detail: model.llmConfigured ? model.modelSummary : L10n.text("填了 Key 才会整理；不填只去口头禅。"),
-                         action: L10n.text("去设置")) {
+                SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
+                         detail: model.llmConfigured ? model.modelSummary : "",
+                         action: L10n.text("打开设置")) {
                     model.settingsCategory = 1
                     model.page = .settings
                 }
@@ -184,7 +184,9 @@ private struct SetupRow: View {
                 .foregroundColor(done ? Theme.success : Theme.tertiary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .medium))
-                Text(detail).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                if !detail.isEmpty {
+                    Text(detail).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                }
             }
             Spacer()
             if !done && !action.isEmpty {
@@ -200,9 +202,9 @@ private struct StatsRow: View {
     var body: some View {
         let saved = Formatters.duration(stats.savedSeconds)
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: L10n.language == "en" ? 2 : 4), alignment: .leading, spacing: 12) {
-            StatTile(value: Formatters.number(stats.words), unit: L10n.text("字"), label: L10n.text("听写总字数"))
+            StatTile(value: Formatters.number(stats.words), unit: L10n.text("字"), label: L10n.text("听写字数"))
             StatTile(value: saved.0, unit: saved.1, label: L10n.text("节省的时间"))
-            StatTile(value: Formatters.number(stats.wordsPerMinute), unit: L10n.text("字/分钟"), label: L10n.text("平均说话速度"))
+            StatTile(value: Formatters.number(stats.wordsPerMinute), unit: L10n.text("字/分钟"), label: L10n.text("说话速度"))
             StatTile(value: Formatters.number(stats.dictations), unit: L10n.text("次"), label: L10n.text("听写次数"))
         }
     }
@@ -245,7 +247,7 @@ private struct RecentCard: View {
             }
             if model.history.isEmpty {
                 Card {
-                    Text(L10n.text("还没有听写记录。按 {0} 说一句话试试。", model.hotkeyLabel))
+                    Text(L10n.text("没有听写记录。按 {0} 说一句。", model.hotkeyLabel))
                         .font(.system(size: 13))
                         .foregroundColor(Theme.secondary)
                 }
@@ -271,7 +273,7 @@ private struct EngineCard: View {
                 Text(L10n.text("引擎")).font(.system(size: 14, weight: .semibold))
                 EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: model.speechSummary)
                 EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: model.modelSummary)
-                EngineRow(symbol: "slider.horizontal.3", title: L10n.text("整理强度"),
+                EngineRow(symbol: "slider.horizontal.3", title: L10n.text("整理模式"),
                           value: (VoiceStrength(rawValue: model.settings.strength) ?? .prompt).label)
             }
         }
@@ -333,7 +335,7 @@ struct HistoryPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("历史"), subtitle: L10n.text("听写记录只保存在这台电脑上。")) {
+            PageHeader(title: L10n.text("历史"), subtitle: "") {
                 HStack(spacing: 10) {
                     Picker(L10n.text("保留"), selection: model.setting(\.historyRetention, then: {
                         HistoryStore.shared.applyRetention(Settings.shared.historyRetention)
@@ -354,7 +356,7 @@ struct HistoryPage: View {
                 }
             }
             HStack {
-                ChipPicker(options: [(HistoryFilter.all, L10n.text("全部")), (.polished, L10n.text("已整理")), (.raw, L10n.text("用了原文"))], selection: $filter)
+                ChipPicker(options: [(HistoryFilter.all, L10n.text("全部")), (.polished, L10n.text("已整理")), (.raw, L10n.text("已用原文"))], selection: $filter)
                 Spacer()
                 SearchField(text: $query)
             }
@@ -364,7 +366,7 @@ struct HistoryPage: View {
             if filtered.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(query.isEmpty ? L10n.text("还没有听写记录") : L10n.text("没有匹配的记录")).foregroundColor(Theme.secondary)
+                    Text(query.isEmpty ? L10n.text("没有听写记录") : L10n.text("没有匹配的记录")).foregroundColor(Theme.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -393,7 +395,7 @@ struct HistoryPage: View {
             Button(L10n.text("删除"), role: .destructive) { model.actions?.clearHistory() }
             Button(L10n.text("取消"), role: .cancel) {}
         } message: {
-            Text(L10n.text("将删除全部听写记录和录音，无法恢复。"))
+            Text(L10n.text("删除全部历史和录音，无法恢复。"))
         }
     }
 }
@@ -442,7 +444,7 @@ struct HistoryRow: View {
                 }
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary)
-                    if entry.fallback { Badge(text: L10n.text("用了原文"), tint: Theme.warning) }
+                    if entry.fallback { Badge(text: L10n.text("已用原文"), tint: Theme.warning) }
                     if copied { Badge(text: L10n.text("已复制"), tint: Theme.success) }
                 }
             }
@@ -452,7 +454,7 @@ struct HistoryRow: View {
                     if !compact {
                         IconButton(symbol: "text.quote", help: L10n.text("复制原话")) { copy(raw: true) }
                         if canRetry {
-                            IconButton(symbol: "arrow.clockwise", help: L10n.text("用同一段录音重试")) { model.actions?.retryEntry(id: entry.id) }
+                            IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试")) { model.actions?.retryEntry(id: entry.id) }
                         }
                         IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
                     }
@@ -500,7 +502,7 @@ struct DictionaryPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("人名、项目代号、术语。你改过的词会自动加进来。")) {
+            PageHeader(title: L10n.text("词典"), subtitle: "") {
                 HStack(spacing: 8) {
                     Button(L10n.text("导入 CSV")) { importCSV() }.buttonStyle(SecondaryButtonStyle())
                     Button {
@@ -531,7 +533,7 @@ struct DictionaryPage: View {
             if filtered.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(query.isEmpty ? L10n.text("词典是空的。加入常被认错的名字和术语。") : L10n.text("没有匹配的词"))
+                    Text(query.isEmpty ? L10n.text("词典是空的。") : L10n.text("没有匹配的词"))
                         .multilineTextAlignment(.center)
                         .foregroundColor(Theme.secondary)
                         .frame(maxWidth: 360)
@@ -569,7 +571,7 @@ struct DictionaryPage: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.commaSeparatedText, .plainText]
         panel.allowsMultipleSelection = false
-        panel.message = L10n.text("每行一个词；或者「常被识别成,正确写法」")
+        panel.message = L10n.text("每行一个词，或「识别成,正确写法」")
         guard panel.runModal() == .OK, let url = panel.url,
               let text = try? String(contentsOf: url, encoding: .utf8) else { return }
         let added = Settings.shared.importCSV(text)
@@ -586,13 +588,13 @@ private struct SuggestionList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.text("建议加入")).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
+            Text(L10n.text("建议")).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
             VStack(spacing: 0) {
                 ForEach(suggestions.prefix(8)) { s in
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(s.word).font(.system(size: 14, weight: .semibold))
-                            Text(L10n.text("整理时从「{0}」改成，出现 {1} 次", s.heardAs, s.count))
+                            Text(L10n.text("从「{0}」改过 {1} 次", s.heardAs, s.count))
                                 .font(.system(size: 11.5)).foregroundColor(Theme.secondary)
                         }
                         Spacer()
@@ -660,13 +662,9 @@ private struct WordEditor: View {
                 Text(L10n.text("常被识别成（可选）")).font(.system(size: 12, weight: .medium)).foregroundColor(Theme.secondary)
                 TextField(L10n.text("例如 得普西克"), text: $heardAs)
                     .textFieldStyle(.roundedBorder)
-                Text(L10n.text("识别成这个写法时，会改成上面的词。"))
-                    .font(.system(size: 11)).foregroundColor(Theme.tertiary)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.text("不发给模型"), isOn: $localOnly).toggleStyle(.checkbox)
-                Text(L10n.text("这个词不会出现在任何模型请求里。填了「常被识别成」时，在本机把它换成上面的写法。"))
-                    .font(.system(size: 11)).foregroundColor(Theme.tertiary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Spacer()

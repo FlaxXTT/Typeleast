@@ -158,7 +158,7 @@ internal sealed class MainWindow : Window
     private void Refresh()
     {
         badgeDot.Fill = host.ServiceUp ? Theme.Success : Theme.Warning;
-        badgeText.Text = host.ServiceUp ? L10n.T("本地服务已就绪") : host.ServiceSummary;
+        badgeText.Text = host.ServiceUp ? L10n.T("本地服务就绪") : host.ServiceSummary;
         if (pages.TryGetValue(current, out var view)) view.Refresh();
     }
 }
@@ -195,14 +195,13 @@ internal sealed class HomePage : IPage
         tryButton = Theme.Primary(L10n.T("试一下"), host.Toggle);
         var hero = Theme.Stack(8,
             heroTitle,
-            Theme.Text(L10n.T("在任何输入框按一下开始说话，再按一下结束，文字会出现在光标处。"), 13, Theme.Grey),
+            Theme.Text(L10n.T("在输入框按一下说话，再按一下结束。"), 13, Theme.Grey),
             Theme.Row(10, tryButton, hint));
         root.Children.Add(Theme.Card(hero, 24));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
         root.Children.Add(GuideViews.Card(host, window.Open));
         root.Children.Add(stats);
-        root.Children.Add(Theme.Text(L10n.T("按历史估算，假设打字每分钟 40 字。"), 11, Theme.Grey));
         root.Children.Insert(0, Theme.Text(L10n.T(DateTime.Now.Hour is >= 5 and < 12 ? "早上好" : DateTime.Now.Hour is >= 12 and < 18 ? "下午好" : "晚上好"), 28, bold: true));
         root.Children.Insert(1, keycaps);
         root.Children.Add(activityCard);
@@ -226,20 +225,20 @@ internal sealed class HomePage : IPage
         Action openNode = () => Shell.Open("https://nodejs.org/zh-cn/download");
         Action restart = host.RestartService;
         var serviceAction = host.Service.State == ServiceManager.Phase.NoNode ? (L10n.T("下载 Node.js"), openNode) : (L10n.T("重新启动"), restart);
-        checklist.Children.Add(Item(running, L10n.T("本地服务"), running ? L10n.T("已启动") : host.ServiceSummary, serviceAction));
+        checklist.Children.Add(Item(running, L10n.T("本地服务"), running ? L10n.T("运行中") : host.ServiceSummary, serviceAction));
         var speech = host.Speech;
         var problem = Messages.SpeechProblem(speech);
         Action startDownload = () => { _ = host.DownloadModels(); };
         (string, Action)? download = null;
-        if (speech is { ModelsMissing: true } or { Phase: "error" }) download = (L10n.T("下载（约 241 MB）"), startDownload);
-        checklist.Children.Add(Item(speech?.Ready == true, host.Speech?.ModelName ?? "SenseVoice Small", problem.Length == 0 ? L10n.T("已就绪，识别完全在本机进行") : problem, download));
+        if (speech is { ModelsMissing: true } or { Phase: "error" }) download = (L10n.T("下载（241 MB）"), startDownload);
+        checklist.Children.Add(Item(speech?.Ready == true, host.Speech?.ModelName ?? "SenseVoice Small", problem.Length == 0 ? L10n.T("就绪，本机识别") : problem, download));
         if (ModelMirror.NetworkFailure(speech)) checklist.Children.Add(GuideViews.MirrorHint(host, host.RetryModelDownload));
         Action openSettings = () => window.Open(SettingsGuide.Entries[1]);
         Action openPrivacy = () => Shell.Open("ms-settings:privacy-microphone");
-        checklist.Children.Add(Item(host.LlmConfigured, L10n.T("整理模型（自己的 API Key）"),
-            host.LlmConfigured ? host.ModelSummary : L10n.T("填了 Key 才会整理；不填只去口头禅。"),
-            (L10n.T("去设置"), openSettings)));
-        checklist.Children.Add(Item(host.MicrophoneReady == true, L10n.T("麦克风"), L10n.T("录不到声音？在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"),
+        checklist.Children.Add(Item(host.LlmConfigured, L10n.T("整理模型（你的 API Key）"),
+            host.LlmConfigured ? host.ModelSummary : "",
+            (L10n.T("打开设置"), openSettings)));
+        checklist.Children.Add(Item(host.MicrophoneReady == true, L10n.T("麦克风"), L10n.T("录不到声音？请在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"),
             (L10n.T("打开设置"), openPrivacy), showActionWhenDone: true));
         setupCard.Visibility = running && speech?.Ready == true && host.LlmConfigured && host.MicrophoneReady == true ? Visibility.Collapsed : Visibility.Visible;
 
@@ -247,17 +246,16 @@ internal sealed class HomePage : IPage
         stats.Children.Clear();
         foreach (var (title, value) in new[] { (L10n.T("听写字数"), chars.ToString("N0")),
             (L10n.T("估算节省时间"), Math.Max(0, chars / 40.0 - seconds / 60).ToString("F1") + " " + L10n.T("分钟")),
-            (L10n.T("平均说话速度"), (seconds > 0 ? chars * 60 / seconds : 0).ToString("F0") + " " + L10n.T("字/分钟")),
+            (L10n.T("说话速度"), (seconds > 0 ? chars * 60 / seconds : 0).ToString("F0") + " " + L10n.T("字/分钟")),
             (L10n.T("听写次数"), count.ToString("N0")) })
         {
             var tile = Theme.Card(Theme.Stack(8, Theme.Text(title, 12, Theme.Grey), Theme.Text(value, 21, bold: true)));
             stats.Children.Add(tile);
         }
         LayoutStats();
-        stats.ToolTip = L10n.T("按历史估算，假设打字每分钟 40 字。");
         recent.Children.Clear();
         foreach (var entry in host.History.Entries.Take(3)) recent.Children.Add(Theme.Text(entry.Time.ToLocalTime().ToString("g", L10n.Culture) + "  " + entry.Text, 13));
-        if (recent.Children.Count == 0) recent.Children.Add(Theme.Text(L10n.T("还没有听写记录。"), 13, Theme.Grey));
+        if (recent.Children.Count == 0) recent.Children.Add(Theme.Text(L10n.T("没有听写记录。"), 13, Theme.Grey));
         activityCard.Child = ActivityView.Build(host.Activity, DateTime.Now);
     }
 

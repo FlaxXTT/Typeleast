@@ -92,23 +92,23 @@ struct OnboardingView: View {
         switch step {
         case .welcome:
             StepView(symbol: nil, title: L10n.text("说话，不用打字"),
-                     text: L10n.text("在任何 App 里按 Fn 开始说话，再按一下结束。整理好的文字会出现在光标处。")) {
+                     text: L10n.text("在任何 App 里按 Fn 说话，再按一下结束。文字写到光标处。")) {
                 AppMarkView(size: 72)
             }
         case .localService:
             StepView(symbol: "cpu", title: L10n.text("本地识别"),
-                     text: L10n.text("语音在本机识别，不上传。首次要下载语音模型（约 241 MB）。")) {
+                     text: "") {
                 VStack(alignment: .leading, spacing: 12) {
                     OnboardingCheck(done: model.serviceState.isRunning, title: L10n.text("本地服务"),
-                                    detail: model.serviceState.isRunning ? L10n.text("已启动") : model.serviceSummary) {
+                                    detail: model.serviceState.isRunning ? L10n.text("运行中") : model.serviceSummary) {
                         if model.serviceState.needsNode {
                             Button(L10n.text("下载 Node.js")) { NSWorkspace.shared.open(URL(string: "https://nodejs.org/zh-cn/download")!) }
                                 .buttonStyle(SecondaryButtonStyle())
-                            Button(L10n.text("已安装，重试")) { model.actions?.restartService() }.buttonStyle(SecondaryButtonStyle())
+                            Button(L10n.text("已安装，请重试")) { model.actions?.restartService() }.buttonStyle(SecondaryButtonStyle())
                         }
                     }
                     OnboardingCheck(done: model.speech?.ready == true, title: model.speech?.modelName ?? "SenseVoice Small",
-                                    detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("已就绪") : AppDelegate.speechProblem(model.speech)) {
+                                    detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("就绪") : AppDelegate.speechProblem(model.speech)) {
                         if model.modelsMissing || model.speech?.phase == "error" {
                             Button(L10n.text("下载")) { model.actions?.downloadModels() }.buttonStyle(PrimaryButtonStyle())
                         } else if let fraction = model.speech?.downloadFraction {
@@ -117,15 +117,15 @@ struct OnboardingView: View {
                     }
                     if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
                     OnboardingCheck(done: model.llmConfigured, title: L10n.text("整理模型（可稍后设置）"),
-                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("在「设置 → 整理」填 API Key。不填也能听写，只是不整理。")) {
+                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("在「设置 → 整理」填 API Key。不填也能听写，但不整理。")) {
                         EmptyView()
                     }
                 }
                 .frame(width: 440)
             }
         case .microphone:
-            StepView(symbol: "mic.fill", title: L10n.text("允许使用麦克风"),
-                     text: L10n.text("录音只在这台电脑上转写，不会上传。")) {
+            StepView(symbol: "mic.fill", title: L10n.text("允许麦克风"),
+                     text: L10n.text("音频不出本机。")) {
                 permissionState(granted: model.micStatus == .authorized,
                                 denied: model.micStatus == .denied || model.micStatus == .restricted,
                                 ask: { model.actions?.requestMicrophone() },
@@ -133,24 +133,24 @@ struct OnboardingView: View {
             }
         case .accessibility:
             StepView(symbol: "accessibility", title: L10n.text("允许辅助功能"),
-                     text: L10n.text("用来粘贴文字和识别 Fn 键。在系统设置里打开 TypeLeast。")) {
+                     text: L10n.text("请在系统设置里打开 TypeLeast。")) {
                 permissionState(granted: model.accessibilityTrusted, denied: false,
                                 ask: { model.actions?.requestAccessibility() }, open: nil)
             }
         case .globeKey:
-            StepView(symbol: "globe", title: L10n.text("把 🌐 键设为「无操作」"),
-                     text: L10n.text("在「系统设置 › 键盘」把「按下 🌐 键时」改为「无操作」，否则 Fn 会弹出表情或切换输入法。")) {
+            StepView(symbol: "globe", title: L10n.text("把 🌐 设为「无操作」"),
+                     text: L10n.text("在「系统设置 › 键盘」把「按下 🌐 键时」设为「无操作」。否则 Fn 会打开表情或切换输入法。")) {
                 VStack(spacing: 12) {
                     Button(L10n.text("打开键盘设置")) { model.actions?.openKeyboardSettings() }.buttonStyle(SecondaryButtonStyle())
-                    Toggle(L10n.text("我已经改好了"), isOn: $globeConfirmed).toggleStyle(.checkbox)
+                    Toggle(L10n.text("已改好"), isOn: $globeConfirmed).toggleStyle(.checkbox)
                 }
             }
         case .micTest:
             StepView(symbol: "waveform", title: L10n.text("试试麦克风"),
-                     text: L10n.text("点「开始测试」说句话，条变蓝就是听到了。{0} 秒后自动关闭。", Int(MicMeter.maxSeconds))) {
+                     text: L10n.text("点「开始测试」并说话，条变蓝表示听到了。{0} 秒后关闭。", Int(MicMeter.maxSeconds))) {
                 VStack(spacing: 14) {
                     LevelBars(level: meter.level, count: 18).scaleEffect(1.3)
-                    Text(meter.heardVoice ? L10n.text("听到你了 ✓") : (meter.running ? L10n.text("等你说话…") : L10n.text("麦克风未打开")))
+                    Text(meter.heardVoice ? L10n.text("听到了 ✓") : (meter.running ? L10n.text("等待说话…") : L10n.text("麦克风未打开")))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(meter.heardVoice ? Theme.success : Theme.secondary)
                     Button(meter.running ? L10n.text("停止测试") : L10n.text("开始测试")) {
@@ -162,7 +162,7 @@ struct OnboardingView: View {
             }
         case .tryIt:
             StepView(symbol: "keyboard", title: L10n.text("说一句试试"),
-                     text: L10n.text("点下面的输入框，按 {0} 说一句话（比如「第一要快，第二要准」），再按 {1} 结束。", model.hotkeyLabel, model.hotkeyLabel)) {
+                     text: L10n.text("点下面的输入框，按 {0} 说话，再按 {1} 结束。", model.hotkeyLabel, model.hotkeyLabel)) {
                 VStack(spacing: 10) {
                     TextEditor(text: $tryText)
                         .font(.system(size: 14))
@@ -173,21 +173,21 @@ struct OnboardingView: View {
                     if model.phase == .recording {
                         Text(L10n.text("正在听…")).font(.system(size: 12)).foregroundColor(Theme.accent)
                     } else if model.phase == .thinking {
-                        Text(L10n.text("整理中…")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                        Text(L10n.text("正在整理…")).font(.system(size: 12)).foregroundColor(Theme.secondary)
                     } else if !model.serviceUp {
-                        Text(model.serviceProblem.isEmpty ? L10n.text("本地服务还没就绪，回到「本地识别」那一步看看。") : model.serviceProblem)
+                        Text(model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪，请回到「本地识别」一步。") : model.serviceProblem)
                             .font(.system(size: 12)).foregroundColor(Theme.warning)
                     }
                 }
             }
         case .guide:
-            StepView(symbol: "map", title: L10n.text("设置在哪"),
-                     text: L10n.text("首页也有这张表，点一下就能过去。")) {
+            StepView(symbol: "map", title: L10n.text("设置位置"),
+                     text: "") {
                 GuideList().frame(width: 400)
             }
         case .done:
             StepView(symbol: "checkmark.circle", title: L10n.text("准备好了"),
-                     text: L10n.text("在任何 App 里按 {0} 开始听写。左侧栏可切换整理档位、看历史、改词典。", model.hotkeyLabel)) {
+                     text: L10n.text("在任何 App 里按 {0} 听写。", model.hotkeyLabel)) {
                 Keycap(label: model.hotkeyLabel, large: true)
             }
         }
@@ -196,12 +196,12 @@ struct OnboardingView: View {
     @ViewBuilder
     private func permissionState(granted: Bool, denied: Bool, ask: @escaping () -> Void, open: (() -> Void)?) -> some View {
         if granted {
-            Label(L10n.text("已授权"), systemImage: "checkmark.circle.fill")
+            Label(L10n.text("已允许"), systemImage: "checkmark.circle.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Theme.success)
         } else if denied, let open = open {
             VStack(spacing: 8) {
-                Text(L10n.text("之前拒绝过，请在系统设置里打开。")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(L10n.text("之前已拒绝，请在系统设置里打开。")).font(.system(size: 12)).foregroundColor(Theme.secondary)
                 Button(L10n.text("打开系统设置"), action: open).buttonStyle(PrimaryButtonStyle())
             }
         } else {

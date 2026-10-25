@@ -87,7 +87,7 @@ class P
             })
             {
                 var window = new UpdateProgressWindow();
-                window.SetVersion("1.19.0", "• " + L10n.T("自然整理") + " / " + L10n.T("精简整理") + "\n• " + L10n.T("更短，只留要点"));
+                window.SetVersion("1.19.0", "• " + L10n.T("自然整理") + " / " + L10n.T("精简整理") + "\n• " + L10n.T("提示词 Beta"));
                 window.Report(stage, received, total, source);
                 var content = (FrameworkElement)window.Content; window.Content = null;
                 var card = new Border { Background = Theme.CardFill, Child = content };
@@ -95,7 +95,7 @@ class P
                 Save(card, Path.Combine(dir, $"update-{name}-{mode}-{L10n.Language}.png"), 360, card.DesiredSize.Height);
             }
             // The offer that comes before any download: 立即更新 or 稍后.
-            var release = new WindowsReleaseInfo("1.20.1", "v1.20.1", "", Summary: "• " + L10n.T("自然整理") + "\n• " + L10n.T("经镜像获取"));
+            var release = new WindowsReleaseInfo("1.20.1", "v1.20.1", "", Summary: "• " + L10n.T("自然整理") + "\n• " + L10n.T("来自镜像"));
             var offer = new UpdateOfferWindow(release, "1.20.0", installedCopy: true);
             var offerContent = (FrameworkElement)offer.Content; offer.Content = null;
             var offerCard = new Border { Background = Theme.Background, Child = offerContent };

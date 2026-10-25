@@ -190,7 +190,7 @@ final class ServiceManager {
             if integrityProblem != nil { DiagnosticsLog.write("integrity.fail", ["code": "signature"]) }
         }
         if integrityProblem != nil {
-            state = .failed(L10n.text("TypeLeast 的文件被改动过，本地服务没有启动。请重新安装。"))
+            state = .failed(L10n.text("TypeLeast 文件被改动，本地服务未启动。请重新安装。"))
             return
         }
 

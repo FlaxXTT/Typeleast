@@ -66,7 +66,7 @@ final class DictionaryController {
         toast.show(word: word) { [weak self] in
             guard let self else { return }
             self.settings.removeWord(id: id)
-            self.setHint(L10n.text("已从词典移除「{0}」", word))
+            self.setHint(L10n.text("已从词典删除「{0}」", word))
             self.changed()
         }
         changed()

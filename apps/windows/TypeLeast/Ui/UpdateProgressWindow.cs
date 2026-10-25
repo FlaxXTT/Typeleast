@@ -86,7 +86,7 @@ internal sealed class UpdateProgressWindow : Window
     public void SetVersion(string version, string notes = "")
     {
         title.Text = L10n.T("正在更新到 {0}", version);
-        summary.Text = notes.Length > 0 ? L10n.T("本次更新") + "\n" + notes : "";
+        summary.Text = notes.Length > 0 ? L10n.T("更新内容") + "\n" + notes : "";
         summary.Visibility = notes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 

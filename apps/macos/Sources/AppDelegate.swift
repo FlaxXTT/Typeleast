@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             guard let self else { return nil }
             if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
             // Restarting would drop the questions and the answers given so far.
-            if self.betaPending != nil { return (L10n.text("提示词 Beta 还没结束"), L10n.text("生成或取消这次提示词 Beta 后再更新。")) }
+            if self.betaPending != nil { return (L10n.text("提示词 Beta 未结束"), L10n.text("更新前，请先生成或取消提示词 Beta。")) }
             return nil
         },
         setHint: { [weak self] in self?.setHint($0) },
@@ -355,7 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             if FnTapGate.shouldStart(sourceAtPress: sourceAtPress, sourceAfter: InputSourceProbe.currentID()) {
                 self.hotkeyPressed()
             } else {
-                self.setHint(L10n.text("按 🌐 切换了输入法，没有听写。可在系统设置把「按下 🌐 键时」改为「无操作」"))
+                self.setHint(L10n.text("🌐 切换了输入法，未听写。请把「按下 🌐 键时」设为「无操作」"))
                 self.applyState()
             }
         }
@@ -425,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let trusted = AXIsProcessTrusted()
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
-            if trusted, let h = hint, h.contains(L10n.text("辅助功能")) { setHint(L10n.text("辅助功能已授权，可以自动粘贴了")) }
+            if trusted, let h = hint, h.contains(L10n.text("辅助功能")) { setHint(L10n.text("辅助功能已允许，可以自动粘贴")) }
             applyState()
         }
     }
@@ -450,7 +450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func setHint(_ text: String?, warning: Bool = false) {
-        let text = text ?? (HistoryStore.shared.persistenceProblem == nil ? nil : L10n.text("历史记录读写失败，原文件已保留。请检查文件权限。"))
+        let text = text ?? (HistoryStore.shared.persistenceProblem == nil ? nil : L10n.text("历史无法读写，文件已保留。请检查文件权限。"))
         hint = text
         hintWarning = warning
         model.hint = text ?? ""
@@ -499,12 +499,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     static func speechProblem(_ speech: SpeechStatus?) -> String {
         switch speech?.phase ?? "" {
         case "ready": return ""
-        case "missing-model": return L10n.text("语音模型还没下载（约 241 MB，只需一次）")
+        case "missing-model": return L10n.text("语音模型未下载（241 MB，只需一次）")
         case "downloading":
             return L10n.text("正在下载语音模型") + (speech?.downloadFraction.map { "：" + String(Int($0 * 100)) + "%" } ?? "…")
-        case "loading": return L10n.text("语音模型加载中…")
-        case "error": return L10n.text("语音模型出错：") + (speech?.error ?? L10n.text("未知原因"))
-        default: return L10n.text("语音识别还在准备")
+        case "loading": return L10n.text("正在加载语音模型…")
+        case "error": return L10n.text("语音模型出错：") + (speech?.error ?? L10n.text("原因未知"))
+        default: return L10n.text("语音识别未就绪")
         }
     }
 
@@ -529,7 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         manager.nodePathOverride = settings.nodePath
         manager.modelMirror = settings.modelMirror
         serviceUp = false
-        setHint(L10n.text("正在重新启动本地服务…"))
+        setHint(L10n.text("正在重启本地服务…"))
         manager.restart()
         applyState()
     }
@@ -554,7 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// Let the user point at a Node.js binary (for unusual installs).
     func chooseNode() {
         let panel = NSOpenPanel()
-        panel.title = L10n.text("选择 Node.js（node 可执行文件）")
+        panel.title = L10n.text("选择 Node.js（node 程序）")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -599,7 +599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func retryEntry(id: String) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }),
               let path = e.audioPath, FileManager.default.fileExists(atPath: path) else {
-            setHint(L10n.text("原录音已删除（保留 5 分钟）"), warning: true)
+            setHint(L10n.text("录音已删除（保留 5 分钟）"), warning: true)
             applyState()
             return
         }
@@ -625,11 +625,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let trusted = Inserter.requestAccessibilityPrompt()
         model.accessibilityTrusted = trusted
         if trusted {
-            setHint(L10n.text("辅助功能已授权，可以自动粘贴了"))
+            setHint(L10n.text("辅助功能已允许，可以自动粘贴"))
             FnKeyMonitor.shared.stop()
             registerHotKeys()
         } else {
-            setHint(reset ? L10n.text("请在「辅助功能」里打开 TypeLeast 的开关") : L10n.text("请手动在「辅助功能」里打开 TypeLeast"), warning: true)
+            setHint(reset ? L10n.text("请在「辅助功能」里打开 TypeLeast") : L10n.text("请手动在「辅助功能」里打开 TypeLeast"), warning: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { Inserter.openAccessibilitySettings() }
         }
         applyState()
@@ -669,8 +669,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         guard phase == .idle, VoiceStrength(rawValue: code) != nil, code != settings.strength else { return }
         if betaPending != nil && code != "promptbeta" {
             let alert = NSAlert()
-            alert.messageText = L10n.text("结束本次信息补充？")
-            alert.informativeText = L10n.text("切换会结束这次 Beta，未生成的内容不会插入。")
+            alert.messageText = L10n.text("结束这次提示词 Beta？")
+            alert.informativeText = L10n.text("切换会结束这次 Beta，未生成的文字不会插入。")
             alert.addButton(withTitle: L10n.text("取消"))
             alert.addButton(withTitle: L10n.text("切换模式"))
             guard alert.runModal() == .alertSecondButtonReturn else { return }

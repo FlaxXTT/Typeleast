@@ -66,7 +66,7 @@ final class HistoryTextView: NSTextView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
         if let word = selectedWord {
-            let item = NSMenuItem(title: L10n.text("加入词典「{0}」", word), action: #selector(addWord), keyEquivalent: "")
+            let item = NSMenuItem(title: L10n.text("把「{0}」加入词典", word), action: #selector(addWord), keyEquivalent: "")
             item.target = self
             menu.insertItem(item, at: 0)
             menu.insertItem(.separator(), at: 1)

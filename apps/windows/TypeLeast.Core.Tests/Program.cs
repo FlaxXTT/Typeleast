@@ -264,15 +264,15 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("no style is sent as null", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"id\":null}");
     await client.InstallCatalogPluginAsync("example.formal", false, "def");
     Eq("a catalog install sends the fingerprint it showed", JsonSerializer.Deserialize<JsonElement>(stub.LastBody).GetProperty("digest").GetString(), "def");
-    Eq("a changed plugin is explained", PluginMessages.Describe("plugin-changed"), L10n.T("插件内容变了，请重新查看后再安装"));
+    Eq("a changed plugin is explained", PluginMessages.Describe("plugin-changed"), L10n.T("插件已变化。请重新查看后再安装"));
     await client.RemovePluginAsync("example.dev-terms");
     Eq("uninstall is a DELETE", stub.LastMethod, "DELETE");
     stub.Reply = (400, "{\"error\":\"not a valid plugin\",\"code\":\"plugin-invalid\",\"issues\":[]}");
     try { await client.InspectPluginAsync(new byte[] { 1 }); Check("an invalid file is refused", false); }
-    catch (ServiceException e) { Eq("an invalid file is explained", PluginMessages.Describe(e), L10n.T("这不是有效的插件文件")); }
+    catch (ServiceException e) { Eq("an invalid file is explained", PluginMessages.Describe(e), L10n.T("这不是插件文件")); }
     stub.Reply = (200, "{\"ok\":false,\"code\":\"market-offline\",\"source\":null,\"fetchedAt\":null,\"plugins\":[]}");
     var market = await client.GetPluginCatalogAsync();
-    Check("an offline market is reported, not an error", !market.Ok && PluginMessages.Describe(market.Code) == L10n.T("连不上插件目录，请检查网络"));
+    Check("an offline market is reported, not an error", !market.Ok && PluginMessages.Describe(market.Code) == L10n.T("无法获取插件目录，请检查网络"));
     Eq("the market follows the update source setting", stub.LastPath, "/api/voice-polish/plugins/catalog?sources=auto");
     stub.Reply = (200, "{\"ok\":true,\"source\":\"fastly.jsdelivr.net\",\"mirrored\":true,\"fetchedAt\":null,\"plugins\":[]}");
     var mirrored = await client.GetPluginCatalogAsync("mirror");
@@ -362,7 +362,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     var modelStatus = JsonSerializer.Deserialize<SpeechStatus>("""{"modelId":"fun-asr-nano","modelName":"Fun-ASR-Nano","ready":true,"canSetLanguage":true,"languages":["auto","zh","en","ja"]}""", Json.Options)!;
     Eq("health identifies actual recognizer", modelStatus.ModelName, "Fun-ASR-Nano");
     Eq("health language capabilities", string.Join(",", modelStatus.Languages!), "auto,zh,en,ja");
-    Eq("natural cleanup English label", L10n.Render("自然整理", "en"), "Natural cleanup");
+    Eq("natural cleanup English label", L10n.Render("自然整理", "en"), "Natural");
 
     stub.Stop();
     var dead = new ServiceClient(dir);
@@ -402,7 +402,7 @@ Console.WriteLine();
     Eq("manual English overrides system", L10n.Resolve("en", "zh-CN"), "en");
     Eq("manual Chinese overrides system", L10n.Resolve("zh-Hans", "en-US"), "zh-Hans");
     Eq("translated label", L10n.Render("设置", "en"), "Settings");
-    Eq("content slots remain verbatim", L10n.Render("已听写 {0} 次 · 共 {1} 字 · 说了 {2} 分钟", "en", "用户 {1}", 2, 3), "用户 {1} dictations · 2 characters · 3 minutes of speech");
+    Eq("content slots remain verbatim", L10n.Render("听写 {0} 次 · {1} 字 · {2} 分钟", "en", "用户 {1}", 2, 3), "用户 {1} dictations · 2 characters · 3 minutes");
     Check("URL credentials rejected", !LlmPreset.IsAllowedBaseUrl("https://someone:fake@api.example.com/v1"));
     Check("URL query credentials rejected", !LlmPreset.IsAllowedBaseUrl("https://api.example.com/v1?key=fake"));
     Check("no paste after focus change", !PasteTarget.Matches(new IntPtr(1), new IntPtr(2)));
@@ -890,7 +890,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("a half ends at 6 o'clock", Math.Abs(half.X - 50) < 1e-9 && Math.Abs(half.Y - 60) < 1e-9);
     Check("a full ring stops just short of closing", RingGeometry.ArcEnd(1, 10, 50, 50).X < 50);
     Check("the large arc only past half", !RingGeometry.IsLargeArc(0.5) && RingGeometry.IsLargeArc(0.51));
-    Eq("steps: download, check, install", string.Join(",", UpdatePolicy.Steps), "下载,核对,安装");
+    Eq("steps: download, check, install", string.Join(",", UpdatePolicy.Steps), "下载,校验,安装");
     Eq("verifying is the second step", UpdatePolicy.Step(UpdateStage.Verifying), 1);
     var newer = new WindowsReleaseInfo("1.18.0", "v1.18.0", "");
     Check("a found update is offered when all is clear", UpdatePolicy.ShouldOffer(newer, true, null, false));

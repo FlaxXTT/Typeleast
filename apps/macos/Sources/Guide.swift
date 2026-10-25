@@ -17,12 +17,12 @@ enum SettingsGuide {
 
     static var entries: [Entry] {
         [
-            Entry(title: L10n.text("整理档位"), place: L10n.text("左侧栏"), page: nil),
+            Entry(title: L10n.text("整理模式"), place: L10n.text("侧栏"), page: nil),
             Entry(title: L10n.text("API Key"), place: L10n.text("设置 › 整理"), page: .settings, category: 1),
             Entry(title: L10n.text("快捷键"), place: L10n.text("设置 › 听写"), page: .settings, category: 0),
             Entry(title: L10n.text("语音模型和下载镜像"), place: L10n.text("设置 › 服务与更新"), page: .settings, category: 4),
-            Entry(title: L10n.text("词典"), place: L10n.text("左侧栏 › 词典"), page: .dictionary),
-            Entry(title: L10n.text("麦克风和辅助功能权限"), place: L10n.text("设置 › 隐私与权限"), page: .settings, category: 3),
+            Entry(title: L10n.text("词典"), place: L10n.text("侧栏 › 词典"), page: .dictionary),
+            Entry(title: L10n.text("麦克风和辅助功能"), place: L10n.text("设置 › 隐私与权限"), page: .settings, category: 3),
         ]
     }
 
@@ -61,9 +61,9 @@ struct GuideCard: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(L10n.text("设置在哪")).font(.system(size: 14, weight: .semibold))
+                    Text(L10n.text("设置位置")).font(.system(size: 14, weight: .semibold))
                     Spacer()
-                    Button(L10n.text("知道了")) { model.dismissGuide() }
+                    Button(L10n.text("好")) { model.dismissGuide() }
                         .buttonStyle(.plain).font(.system(size: 12.5)).foregroundColor(Theme.secondary)
                 }
                 GuideList { SettingsGuide.open($0, in: model) }
@@ -95,7 +95,7 @@ struct MirrorHint: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.text("下载不了？可能是网络连不上 Hugging Face，换个镜像试试："))
+            Text(L10n.text("下载失败？网络可能连不上 Hugging Face，请用镜像："))
                 .font(.system(size: 12.5)).foregroundColor(Theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {

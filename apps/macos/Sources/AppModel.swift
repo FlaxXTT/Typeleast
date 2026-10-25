@@ -167,8 +167,8 @@ final class AppModel: ObservableObject {
 
     var modelSummary: String {
         let preset = LLMPreset.find(settings.llmPresetID)
-        guard settings.llmRouteReady else { return L10n.text("未设置整理模型（只去口头禅）") }
-        return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（自己的 Key）"))
+        guard settings.llmRouteReady else { return L10n.text("没有整理模型（只去口头禅）") }
+        return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（你的 Key）"))
     }
 
     /// Whether cleanup is configured: a model and (except for local servers) a key.
@@ -180,7 +180,7 @@ final class AppModel: ObservableObject {
 
     var speechSummary: String {
         let name = speech?.modelName ?? "SenseVoice Small"
-        return name + " · " + (speech?.ready == true ? L10n.text("已就绪") : L10n.text("准备中"))
+        return name + " · " + (speech?.ready == true ? L10n.text("就绪") : L10n.text("准备中"))
     }
 
     /// One line about the local service, for the window and settings.
@@ -188,10 +188,10 @@ final class AppModel: ObservableObject {
         switch serviceState {
         case .running: return L10n.text("本地服务运行中")
         case .starting: return L10n.text("本地服务启动中…")
-        case .stopped: return L10n.text("本地服务未启动")
+        case .stopped: return L10n.text("本地服务已停止")
         case .noNode(let found):
-            return found.map { L10n.text("Node.js 版本过低：") + $0 + L10n.text("，需要 22 或更新") } ?? L10n.text("没有找到 Node.js（需要 22 或更新）")
-        case .noService: return L10n.text("App 里缺少本地服务文件，请重新构建 App")
+            return found.map { L10n.text("Node.js 版本太旧：") + $0 + L10n.text("，需要 22 或更新") } ?? L10n.text("找不到 Node.js（需要 22 或更新）")
+        case .noService: return L10n.text("缺少本地服务文件，请重新构建")
         case .failed(let why): return why
         }
     }

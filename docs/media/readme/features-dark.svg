@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="亮点：自然整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。">
-<title>亮点：自然整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1130" viewBox="0 0 880 1130" role="img" aria-label="功能：自然整理；音频不出电脑；写到任何输入框；精简整理；四个本机识别模型；你的 Key。">
+<title>功能：自然整理；音频不出电脑；写到任何输入框；精简整理；四个本机识别模型；你的 Key。</title>
 <style>
 text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
 .ink { fill: #f5f5f7; } .gray { fill: #a1a1a6; } .faint { fill: #6e6e73; }
@@ -31,8 +31,8 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 @keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
 </style>
 <g transform="translate(0,0)"><rect width="880" height="310" rx="28" fill="#1c1c1e"/><text x="36" y="58" font-size="15" font-weight="600" text-anchor="start" class="blue" >自然整理</text>
-<text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >随口说，它来整理。</text>
-<text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >口头禅去掉，改口照办，标点补好。不编造你没说的内容。</text>
+<text x="36" y="98" font-size="32" font-weight="700" text-anchor="start" class="ink" >你说话，它整理。</text>
+<text x="36" y="132" font-size="16" font-weight="400" text-anchor="start" class="gray" >删除口头禅，保留改口，补上标点。不编造内容。</text>
 <rect x="24" y="162" width="832" height="56" rx="16" fill="#2c2c2e"/>
 <g class="fade"><text x="48" y="196" font-size="18" font-weight="400" text-anchor="start" class="faint" >嗯那个，</text></g>
 <rect class="left cut" x="48" y="190" width="72" height="1.8" rx="0.9" fill="#ff453a"/>
@@ -42,11 +42,11 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <g class="fade"><text x="390" y="196" font-size="18" font-weight="400" text-anchor="start" class="faint" >然后</text></g>
 <rect class="left cut" x="390" y="190" width="36" height="1.8" rx="0.9" fill="#ff453a"/>
 <g class=""><text x="426" y="196" font-size="18" font-weight="400" text-anchor="start" class="ink" >会前把报告发给大家</text></g>
-<g class="result"><rect x="24" y="228" width="832" height="56" rx="16" fill="#2997ff" fill-opacity="0.10"/><text x="48" y="262" font-size="18" font-weight="600" text-anchor="start" class="ink" >后天下午三点开会，会前把报告发给大家。</text><text x="832" y="262" font-size="13" font-weight="600" text-anchor="end" class="blue" >写进去的</text></g></g>
+<g class="result"><rect x="24" y="228" width="832" height="56" rx="16" fill="#2997ff" fill-opacity="0.10"/><text x="48" y="262" font-size="18" font-weight="600" text-anchor="start" class="ink" >后天下午三点开会，会前把报告发给大家。</text><text x="832" y="262" font-size="13" font-weight="600" text-anchor="end" class="blue" >写入的</text></g></g>
 <g transform="translate(0,326)"><rect width="432.0" height="290" rx="28" fill="#1c1c1e"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="green" >本机识别</text>
 <text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >音频不出电脑。</text>
-<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >语音在你自己的电脑上识别，</text>
-<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >录音不上传，模型下载一次后离线可用。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >语音在你的电脑上识别。</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >录音不上传。模型下载一次，之后离线。</text>
 <circle class="grow pulse" cx="216.0" cy="218" r="50" fill="#30d158" fill-opacity="0.16"/>
 <circle cx="216.0" cy="218" r="40" fill="#30d158"/>
 <rect class="grow lb0" x="194.6" y="213.1" width="3.9" height="9.7" rx="2.0" fill="#ffffff"/>
@@ -56,33 +56,33 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <rect class="grow lb4" x="220.5" y="206.0" width="3.9" height="24.0" rx="2.0" fill="#ffffff"/>
 <rect class="grow lb5" x="227.0" y="209.6" width="3.9" height="16.9" rx="2.0" fill="#ffffff"/>
 <rect class="grow lb6" x="233.5" y="213.1" width="3.9" height="9.7" rx="2.0" fill="#ffffff"/></g>
-<g transform="translate(448.0,326)"><rect width="432.0" height="290" rx="28" fill="#1c1c1e"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >随处可用</text>
-<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >任何输入框，直接写入。</text>
-<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >Mac 单按 fn，Windows 单按右 Alt。</text>
-<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >说话时切换了窗口，就只放进剪贴板。</text>
+<g transform="translate(448.0,326)"><rect width="432.0" height="290" rx="28" fill="#1c1c1e"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >任何 App</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >写到任何输入框。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >Mac 按 fn，Windows 按右 Alt。</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >窗口变了就只复制。</text>
 <g><rect x="32" y="176" width="56" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="60.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >微信</text></g>
 <g><rect x="98" y="176" width="56" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="126.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >邮件</text></g>
 <g><rect x="164" y="176" width="70" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="199.0" y="198" font-size="14" font-weight="500" text-anchor="middle" class="ink" >浏览器</text></g>
 <g><rect x="32" y="220" width="62" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="62.8" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >Word</text></g>
 <g><rect x="104" y="220" width="87" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="147.0" y="242" font-size="14" font-weight="500" text-anchor="middle" class="ink" >VS Code</text></g></g>
 <g transform="translate(0,632)"><rect width="432.0" height="290" rx="28" fill="#1c1c1e"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >精简整理</text>
-<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >说得多，留得少。</text>
-<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >一次说完，只留要点和条件，</text>
-<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >不加你没提的要求。</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >只留要点。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >说一次，保留要点和条件。</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >不添加要求。</text>
 <rect x="24" y="160" width="384.0" height="106" rx="16" fill="#2c2c2e"/>
 <g class="pl p0"><text x="44" y="190" font-size="14" font-weight="500" text-anchor="start" class="ink" >请写本周周报，发给老板，篇幅简短。</text></g>
 <g class="pl p1"><text x="44" y="220" font-size="14" font-weight="500" text-anchor="start" class="ink" >1. 完成登录页改版。</text></g>
 <g class="pl p2"><text x="44" y="250" font-size="14" font-weight="500" text-anchor="start" class="ink" >2. 修复了几个 bug。</text></g></g>
 <g transform="translate(448.0,632)"><rect width="432.0" height="290" rx="28" fill="#1c1c1e"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >识别模型</text>
-<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >四个本机模型，随时切换。</text>
-<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >默认小而快；中文方言、中英混说、</text>
-<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >多语言都有更大的模型可选。</text>
+<text x="32" y="88" font-size="26" font-weight="700" text-anchor="start" class="ink" >四个本机模型。</text>
+<text x="32" y="118" font-size="15" font-weight="400" text-anchor="start" class="gray" >默认模型小而快。</text>
+<text x="32" y="140" font-size="15" font-weight="400" text-anchor="start" class="gray" >方言、中英混说、多语言可选。</text>
 <g class="m0"><rect x="32" y="176" width="106" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="85.0" y="198" font-size="13" font-weight="500" text-anchor="middle" class="ink" >SenseVoice</text></g>
 <g class="m1"><rect x="148" y="176" width="114" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="204.9" y="198" font-size="13" font-weight="500" text-anchor="middle" class="ink" >FireRedASR2</text></g>
 <g class="n0"><rect x="32" y="220" width="122" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="92.8" y="242" font-size="13" font-weight="500" text-anchor="middle" class="ink" >Fun-ASR-Nano</text></g>
 <g class="n1"><rect x="164" y="220" width="98" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="212.7" y="242" font-size="13" font-weight="500" text-anchor="middle" class="ink" >Qwen3-ASR</text></g></g>
 <g transform="translate(0,938)"><rect width="880" height="192" rx="28" fill="#1c1c1e"/><text x="32" y="52" font-size="15" font-weight="600" text-anchor="start" class="blue" >你的模型</text>
-<text x="32" y="92" font-size="22" font-weight="700" text-anchor="start" class="ink" >用你自己的 Key。Key 只存在钥匙串 / 凭据管理器里。</text>
+<text x="32" y="92" font-size="22" font-weight="700" text-anchor="start" class="ink" >你的 Key，只存在钥匙串或凭据管理器里。</text>
 <g><rect x="32" y="128" width="95" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="79.6" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >DeepSeek</text></g>
 <g><rect x="137" y="128" width="90" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="182.0" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >智谱 GLM</text></g>
 <g><rect x="237" y="128" width="62" height="34" rx="17" fill="#2c2c2e" stroke="#3a3a3c"/><text x="267.59999999999997" y="150" font-size="14" font-weight="500" text-anchor="middle" class="ink" >Kimi</text></g>

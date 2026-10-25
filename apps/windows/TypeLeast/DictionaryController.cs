@@ -112,7 +112,7 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
         toast.Show(L10n.T("已把「{0}」加入词典", word), () =>
         {
             RemoveWord(entry.Id);
-            setHint(L10n.T("已从词典移除「{0}」", word));
+            setHint(L10n.T("已从词典删除「{0}」", word));
         });
     }
 }

@@ -78,7 +78,7 @@ internal sealed class DictationController
         beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers());
         recorder.AudioStarted += OnAudioStarted;
         recorder.LimitReached += () => dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
-        recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风断开或录音出错，请重选设备再试。")); });
+        recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风断开或录音出错，请重新选择设备。")); });
     }
     public void Shutdown() { recorder.Cancel(); }
 
@@ -87,7 +87,7 @@ internal sealed class DictationController
         if (Phase != DictationPhase.Idle || operations.TryBegin() is not { } operation) return false;
         Dictionary.StopWatching();
         try { micClock.Restart(); LastMicrophoneStartMs = null; recorder.Start(Settings.MicrophoneDevice); MicrophoneReady = true; IsMicrophoneTesting = true; Phase = DictationPhase.Recording; hook.SwallowEscape = true; Raise(); return true; }
-        catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("打不开麦克风，请检查设备和麦克风权限。")); return false; }
+        catch (InvalidOperationException) { operations.Complete(operation); MicrophoneReady = false; SetHint(L10n.T("打不开麦克风。请检查设备和权限。")); return false; }
     }
 
     public void EndMicrophoneTest() { if (IsMicrophoneTesting) Cancel(); }
@@ -123,7 +123,7 @@ internal sealed class DictationController
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
         catch (Exception e) when (e is ServiceException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
-        { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("重试失败，原始记录已保留"), true); }
+        { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("重试失败，原记录保留"), true); }
         finally { if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav); if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; } operations.Complete(operation); Raise(); }
     }
 
@@ -135,8 +135,8 @@ internal sealed class DictationController
     {
         if (!CleanupModes.IsKnown(code) || Phase != DictationPhase.Idle) return;
         if (beta.Session is not null && code != "promptbeta") {
-            if (MessageBox.Show(L10n.T("切换会结束这次 Beta，未生成的内容不会插入。"),
-                L10n.T("结束本次信息补充？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            if (MessageBox.Show(L10n.T("切换会结束这次 Beta，未生成的文字不会插入。"),
+                L10n.T("结束这次提示词 Beta？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
             DropBeta();
         }
         if (Settings.Strength != code)
@@ -145,7 +145,7 @@ internal sealed class DictationController
             if (!SaveSettings()) return;
             JumpList.Update(Settings.Strength);
         }
-        if (announce && Phase == DictationPhase.Idle) bar.ShowResult(L10n.T("整理档位：") + CleanupModes.Title(code), warning: false);
+        if (announce && Phase == DictationPhase.Idle) bar.ShowResult(L10n.T("整理模式：") + CleanupModes.Title(code), warning: false);
     }
 
     private void Toggle(string? translateTo)
@@ -167,7 +167,7 @@ internal sealed class DictationController
         if (quitting) return;
         if (!ServiceUp || Speech?.Ready != true)
         {
-            bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务还没就绪"), warning: true);
+            bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务未就绪"), warning: true);
             return;
         }
         var operation = operations.TryBegin();
@@ -187,12 +187,12 @@ internal sealed class DictationController
             operations.Complete(operation);
             ducking.Dispose(); MicrophoneReady = false;
             Log.Write("mic.fail", e.GetType().Name);
-            bar.ShowResult(L10n.T("打不开麦克风：请在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"), warning: true);
+            bar.ShowResult(L10n.T("打不开麦克风。请在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"), warning: true);
             return;
         }
         Phase = DictationPhase.Recording;
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
-        if (translating is null && beta.Session is not null) beta.SetBusy(L10n.T("正在听你补充，说完再按 {0}", HotkeyLabel));
+        if (translating is null && beta.Session is not null) beta.SetBusy(L10n.T("正在听。说完按 {0}。", HotkeyLabel));
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target
             ? L10n.T("翻译") + " →" + target.ToUpperInvariant()
@@ -266,10 +266,10 @@ internal sealed class DictationController
         // a translation is not, and leaves the questions waiting.
         if (translateTo is null && options.Strength != "promptbeta" && beta.Session is not null) DropBeta();
         var answering = translateTo is null && options.Strength == "promptbeta" ? beta.Session : null;
-        if (answering is not null) beta.SetBusy(L10n.T("正在根据你的补充更新…"));
+        if (answering is not null) beta.SetBusy(L10n.T("正在更新…"));
         Phase = DictationPhase.Thinking;
         hook.SwallowEscape = true;
-        bar.ShowThinking(translateTo is null ? CleanupModes.Title(options.Strength) : L10n.T("翻译中…"));
+        bar.ShowThinking(translateTo is null ? CleanupModes.Title(options.Strength) : L10n.T("正在翻译…"));
         Raise();
         targetField = await Within(targetFieldTask, 300);
         recordingContext = await Within(recordingContextTask, 300);
@@ -297,7 +297,7 @@ internal sealed class DictationController
         {
             if (!operations.IsCurrent(operation)) return;
             DropBeta();
-            bar.ShowResult(L10n.T("问题已过期，请重新说一遍需求"), warning: true);
+            bar.ShowResult(L10n.T("问题已过期，请重新说需求"), warning: true);
         }
         catch (ServiceException e)
         {
@@ -357,14 +357,14 @@ internal sealed class DictationController
                 if (wav is not null && Settings.KeepAudio24h && Settings.HistoryRetention != "never" && options.Strength != "promptbeta")
                 {
                     try { RetainedAudio.Save(entry.Id, wav); entry.AudioId = entry.Id; }
-                    catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { SetHint(L10n.T("录音未能安全保留，文字结果仍可使用。")); }
+                    catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { SetHint(L10n.T("录音未能保留，文字仍可用。")); }
                 }
                 History.Add(entry); PruneAudio();
                 // Terms the cleanup model corrected become suggestions on the Dictionary page.
                 if (!result.Fallback && options.TranslateTo is null) Dictionary.Received(result.Suggestions);
                 if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && targetField is { } field)
                     Dictionary.Pasted(field, text);
-                if (History.LastError is not null) SetHint(L10n.T("历史记录读写失败，原文件已保留。请检查文件权限。"));
+                if (History.LastError is not null) SetHint(L10n.T("历史无法读写，文件已保留。请检查文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);
                 var done = Paster.Message(outcome);
@@ -376,7 +376,7 @@ internal sealed class DictationController
     private bool ShowBetaQuestions(DictateResponse result, DictationOptions options)
     {
         if (!beta.Show(result, options, targetWindow, targetApp, targetField, HotkeyLabel)) return false;
-        bar.ShowResult(L10n.T("提示词 Beta：可继续补充或结束生成"), warning: false);
+        bar.ShowResult(L10n.T("提示词 Beta：继续补充或生成"), warning: false);
         return true;
     }
 
@@ -403,7 +403,7 @@ internal sealed class DictationController
         {
             if (operations.IsCurrent(operation)) {
                 if (e.Status == 410) ClearBeta(); else beta.Resume();
-                bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说一遍需求") : L10n.T("生成失败，请重试"), true);
+                bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说需求") : L10n.T("生成失败，请重试"), true);
             }
         }
         finally

@@ -66,7 +66,7 @@ struct UpdateProgressView: View {
             UpdateStepTrail(current: model.stage.step)
             if !model.summary.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text("本次更新")).font(.system(size: 12, weight: .semibold))
+                    Text(L10n.text("更新内容")).font(.system(size: 12, weight: .semibold))
                     Text(model.summary).font(.system(size: 12)).foregroundColor(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }.frame(maxWidth: .infinity, alignment: .leading)

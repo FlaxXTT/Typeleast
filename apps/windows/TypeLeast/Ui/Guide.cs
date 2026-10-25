@@ -40,13 +40,13 @@ internal static class GuideViews
     public static Border Card(AppHost host, Action<SettingsGuide.Entry> open)
     {
         Border card = null!;
-        var dismiss = Theme.Secondary(L10n.T("知道了"), () =>
+        var dismiss = Theme.Secondary(L10n.T("好"), () =>
         {
             host.Settings.GuideDismissed = true;
             host.SaveSettings();
             card.Visibility = Visibility.Collapsed;
         });
-        card = Theme.Card(Theme.Stack(10, Theme.SettingRow(L10n.T("设置在哪"), null, dismiss), List(open)));
+        card = Theme.Card(Theme.Stack(10, Theme.SettingRow(L10n.T("设置位置"), null, dismiss), List(open)));
         card.Visibility = host.Settings.GuideDismissed ? Visibility.Collapsed : Visibility.Visible;
         return card;
     }
@@ -70,7 +70,7 @@ internal static class GuideViews
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(12),
             Margin = new Thickness(0, 4, 0, 4),
-            Child = Theme.Stack(8, Theme.Text(L10n.T("下载不了？可能是网络连不上 Hugging Face，换个镜像试试："), 12.5), Theme.Row(8, url, copy, use)),
+            Child = Theme.Stack(8, Theme.Text(L10n.T("下载失败？网络可能连不上 Hugging Face，请用镜像："), 12.5), Theme.Row(8, url, copy, use)),
         };
     }
 }

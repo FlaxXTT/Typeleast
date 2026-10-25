@@ -175,22 +175,22 @@ footer a { color: var(--ink-2); }
   <div class="wrap">
     <p class="eyebrow" data-i18n="hero.eyebrow">扩展</p>
     <h1 data-i18n="hero.title"><span class="sheen">词库和风格</span></h1>
-    <p class="lead" data-i18n="hero.lead">专业词写对，格式随你定。</p>
+    <p class="lead" data-i18n="hero.lead">术语写对，格式由你定。</p>
     <div class="actions">
       <a class="btn" href="#market" data-i18n="hero.browse">浏览插件</a>
-      <a class="more" href="#make" data-i18n="hero.make">制作扩展</a>
+      <a class="more" href="#make" data-i18n="hero.make">制作插件</a>
     </div>
     <div class="kinds">
       <div class="kind">
         <div class="k" data-i18n="kind.dk">词库</div>
-        <h3 data-i18n="kind.dh">专业词写对</h3>
+        <h3 data-i18n="kind.dh">术语写对</h3>
         <p data-i18n="kind.dp">只发相关词</p>
         <div class="eg"><span>Kubernetes</span><span>TypeScript</span><span>GitHub</span><span>Node.js</span></div>
       </div>
       <div class="kind">
         <div class="k" data-i18n="kind.sk">风格</div>
         <h3 data-i18n="kind.sh">固定格式</h3>
-        <p data-i18n="kind.sp">同时只用一个</p>
+        <p data-i18n="kind.sp">每次只用一个</p>
         <div class="eg"><span data-i18n="kind.s1">正式书面语</span><span data-i18n="kind.s2">工作邮件</span><span data-i18n="kind.s3">编号列表</span></div>
       </div>
     </div>
@@ -213,9 +213,9 @@ footer a { color: var(--ink-2); }
     <div class="grid" id="grid" aria-live="polite"></div>
     <div class="state" id="state" data-i18n="market.loading">正在读取…</div>
     <div class="steps">
-      <div class="step"><h4 data-i18n="inst.1h">打开扩展</h4><p data-i18n="inst.1p">左栏 → 扩展 → 插件市场</p></div>
+      <div class="step"><h4 data-i18n="inst.1h">打开扩展</h4><p data-i18n="inst.1p">侧栏 → 扩展 → 插件市场</p></div>
       <div class="step"><h4 data-i18n="inst.2h">确认安装</h4><p data-i18n="inst.2p">先看全部内容</p></div>
-      <div class="step"><h4 data-i18n="inst.3h">随时开关</h4><p data-i18n="inst.3p">启用或停用</p></div>
+      <div class="step"><h4 data-i18n="inst.3h">启用或停用</h4><p data-i18n="inst.3p">随时</p></div>
     </div>
     <p class="fine" style="margin-top:16px" data-i18n="market.file">也可下载后导入。</p>
   </div>
@@ -230,11 +230,11 @@ footer a { color: var(--ink-2); }
       <div>
         <h3 data-i18n="make.stepsH">步骤</h3>
         <ol>
-          <li data-i18n="make.s1">选类型：词库或风格。</li>
+          <li data-i18n="make.s1">选择类型：词库或风格。</li>
           <li data-i18n="make.s2">复制模板，填写信息。</li>
-          <li data-i18n="make.s3">写词条或风格说明。</li>
+          <li data-i18n="make.s3">填写词条或风格说明。</li>
           <li data-i18n="make.s4">存为 <code>&lt;id&gt;.typeleast-plugin</code>。</li>
-          <li data-i18n="make.s5">在 App 里导入试用。</li>
+          <li data-i18n="make.s5">在 App 里导入测试。</li>
         </ol>
       </div>
 
@@ -244,7 +244,7 @@ footer a { color: var(--ink-2); }
           <div class="code"><div class="name" data-i18n="make.tplDict">词库</div><button class="copy" type="button" data-copy="dict" data-i18n="make.copy">复制</button><pre><code id="tpl-dict"></code></pre></div>
           <div class="code"><div class="name" data-i18n="make.tplStyle">风格</div><button class="copy" type="button" data-copy="style" data-i18n="make.copy">复制</button><pre><code id="tpl-style"></code></pre></div>
         </div>
-        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">无读音提示：删 <code>aliases</code>，版本写 <code>1</code>。</p>
+        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">不要读音提示：删除 <code>aliases</code>，版本写 <code>1</code>。</p>
       </div>
 
       <div>
@@ -253,15 +253,15 @@ footer a { color: var(--ink-2); }
           <thead><tr><th data-i18n="tbl.field">字段</th><th data-i18n="tbl.rule">规则</th></tr></thead>
           <tbody>
             <tr><td><code>id</code></td><td data-i18n="tbl.id">发布者.名字，小写</td></tr>
-            <tr><td><code>version</code></td><td data-i18n="tbl.version">如 1.0.0，更新时调大</td></tr>
+            <tr><td><code>version</code></td><td data-i18n="tbl.version">例如 1.0.0，每次更新调大。</td></tr>
             <tr><td><code>name</code> / <code>description</code></td><td data-i18n="tbl.name">中英文都要写</td></tr>
-            <tr><td><code>license</code></td><td data-i18n="tbl.license">如 CC0-1.0、MIT</td></tr>
+            <tr><td><code>license</code></td><td data-i18n="tbl.license">例如 CC0-1.0、MIT</td></tr>
             <tr><td><code>terms</code></td><td data-i18n="tbl.terms">最多 2000 个词</td></tr>
             <tr><td><code>aliases</code></td><td data-i18n="tbl.aliases">可选，读音提示</td></tr>
             <tr><td><code>instructions</code></td><td data-i18n="tbl.instructions">风格说明，最多 8 KiB</td></tr>
           </tbody>
         </table></div>
-        <p class="fine" style="margin-top:10px" data-i18n="make.fieldsFine">完整规则见<a data-link="spec" href="#">插件规范</a>。</p>
+        <p class="fine" style="margin-top:10px" data-i18n="make.fieldsFine">完整规则：<a data-link="spec" href="#">插件规范</a>。</p>
       </div>
 
       <div class="two">
@@ -270,7 +270,7 @@ footer a { color: var(--ink-2); }
           <ul>
             <li data-i18n="make.dt1">只收易错的专有名词。</li>
             <li data-i18n="make.dt2">大小写按官方写法。</li>
-            <li data-i18n="make.dt3">读音提示要配语境词。</li>
+            <li data-i18n="make.dt3">每条读音提示配语境词。</li>
           </ul>
         </div>
         <div>
@@ -309,7 +309,7 @@ footer a { color: var(--ink-2); }
           <h3 data-i18n="submit.reqH">要求</h3>
           <ul class="checks">
             <li data-i18n="submit.r1">通过检查脚本。</li>
-            <li data-i18n="submit.r2">中英文名称齐全。</li>
+            <li data-i18n="submit.r2">有中英文名称。</li>
             <li data-i18n="submit.r3">许可允许再分发。</li>
             <li data-i18n="submit.r4">不含隐私或密钥。</li>
             <li data-i18n="submit.r5">一个插件一个用途。</li>
@@ -326,7 +326,7 @@ footer a { color: var(--ink-2); }
             <li data-i18n="submit.h5">审核后上线。</li>
           </ol>
           <div class="actions" style="margin-top:20px">
-            <a class="btn" data-link="market" href="#" data-i18n="submit.go">去 GitHub 提交</a>
+            <a class="btn" data-link="market" href="#" data-i18n="submit.go">在 GitHub 提交</a>
             <a class="more" data-link="marketReadme" href="#" data-i18n="submit.readme">提交说明</a>
             <a class="more" data-link="spec" href="#" data-i18n="submit.spec">完整规范</a>
           </div>
@@ -334,7 +334,7 @@ footer a { color: var(--ink-2); }
       </div>
       <div class="upload">
         <div>
-          <h3><span data-i18n="upload.h">官网上传</span><span class="soon" data-i18n="upload.soon">即将开放</span></h3>
+          <h3><span data-i18n="upload.h">本站上传</span><span class="soon" data-i18n="upload.soon">即将开放</span></h3>
           <p data-i18n="upload.p">暂用 GitHub 提交。</p>
         </div>
         <button class="btn" type="button" disabled data-i18n="upload.btn">上传插件</button>
@@ -343,8 +343,8 @@ footer a { color: var(--ink-2); }
     <div class="faq">
       <div><h4 data-i18n="faq.1h">安全吗？</h4><p data-i18n="faq.1p">只是数据，不运行代码。</p></div>
       <div><h4 data-i18n="faq.2h">会多花钱吗？</h4><p data-i18n="faq.2p">不额外调用模型。</p></div>
-      <div><h4 data-i18n="faq.3h">看不到插件市场？</h4><p data-i18n="faq.3p">请升级到 1.20。</p></div>
-      <div><h4 data-i18n="faq.4h">只给自己用？</h4><p data-i18n="faq.4p">直接导入文件即可。</p></div>
+      <div><h4 data-i18n="faq.3h">看不到插件市场？</h4><p data-i18n="faq.3p">请更新到 1.20 或更新版本。</p></div>
+      <div><h4 data-i18n="faq.4h">只给自己用？</h4><p data-i18n="faq.4p">直接导入文件。</p></div>
     </div>
   </div>
 </section>
@@ -384,66 +384,66 @@ const TEMPLATES = {
 
 const EN = {
   title: "TypeLeast Extensions · Dictionary packs and styles",
-  description: "The TypeLeast plugin market: dictionary packs and styles, plus how to make and submit one.",
+  description: "The TypeLeast plugin market. Dictionary packs and styles. How to make and submit a plugin.",
   "nav.features": "Features", "nav.ext": "Extensions", "nav.make": "Make", "nav.submit": "Submit", "nav.download": "Download",
   "hero.eyebrow": "Extensions",
   "hero.title": "<span class=\"sheen\">Dictionary packs and styles</span>",
-  "hero.lead": "Right terms, your format.",
-  "hero.browse": "Browse plugins", "hero.make": "Make one",
-  "kind.dk": "Dictionary pack", "kind.dh": "Terms spelled right",
-  "kind.dp": "Only relevant terms sent",
-  "kind.sk": "Style", "kind.sh": "Set formats",
-  "kind.sp": "One at a time",
+  "hero.lead": "Correct terms. Your format.",
+  "hero.browse": "Browse plugins", "hero.make": "Make a plugin",
+  "kind.dk": "Dictionary pack", "kind.dh": "Correct terms",
+  "kind.dp": "Sends only related terms",
+  "kind.sk": "Style", "kind.sh": "Fixed format",
+  "kind.sp": "One style at a time",
   "kind.s1": "Formal writing", "kind.s2": "Work email", "kind.s3": "Numbered lists",
   "market.eyebrow": "Plugin market", "market.title": "Official plugins",
   "market.lead": "Same as in the app.",
   "market.tabs": "Plugin type", "market.all": "All", "market.dict": "Dictionary packs", "market.style": "Styles",
   "market.loading": "Loading…",
-  "market.file": "Or download and import.",
+  "market.file": "You can also download and import.",
   "inst.1h": "Open Extensions", "inst.1p": "Sidebar → Extensions → Plugin market",
-  "inst.2h": "Confirm", "inst.2p": "See everything first",
-  "inst.3h": "On or off", "inst.3p": "Any time",
+  "inst.2h": "Confirm", "inst.2p": "Read all content first",
+  "inst.3h": "Turn on or off", "inst.3p": "Any time",
   "make.eyebrow": "Make an extension", "make.title": "One JSON file",
   "make.lead": "No code.",
   "make.stepsH": "Steps",
-  "make.s1": "Pick a type: dictionary pack or style.",
-  "make.s2": "Copy a template and fill it in.",
-  "make.s3": "Add terms or style instructions.",
+  "make.s1": "Select a type: dictionary pack or style.",
+  "make.s2": "Copy a template. Fill it in.",
+  "make.s3": "Add terms or style text.",
   "make.s4": "Save as <code>&lt;id&gt;.typeleast-plugin</code>.",
-  "make.s5": "Import it in the app to try.",
+  "make.s5": "Import it in the app. Test it.",
   "make.tplH": "Templates", "make.tplDict": "Dictionary pack", "make.tplStyle": "Style", "make.copy": "Copy",
-  "make.tplNote": "No hints: drop <code>aliases</code>, set version <code>1</code>.",
-  "make.fieldsH": "Key fields", "make.fieldsFine": "Full rules in the <a data-link=\"spec\" href=\"#\">plugin specification</a>.",
+  "make.tplNote": "No hints: remove <code>aliases</code>, set version <code>1</code>.",
+  "make.fieldsH": "Main fields", "make.fieldsFine": "All rules: <a data-link=\"spec\" href=\"#\">plugin specification</a>.",
   "tbl.field": "Field", "tbl.rule": "Rule",
   "tbl.id": "publisher.name, lowercase",
-  "tbl.version": "Like 1.0.0; raise it on updates",
+  "tbl.version": "Example: 1.0.0. Increase it for each update.",
   "tbl.name": "Chinese and English",
-  "tbl.license": "Like CC0-1.0 or MIT",
-  "tbl.terms": "Up to 2,000 terms",
-  "tbl.aliases": "Optional pronunciation hints",
-  "tbl.instructions": "Style text, up to 8 KiB",
+  "tbl.license": "Example: CC0-1.0, MIT",
+  "tbl.terms": "2,000 terms maximum",
+  "tbl.aliases": "Optional. Pronunciation hints",
+  "tbl.instructions": "Style text. 8 KiB maximum",
   "make.dictTipsH": "Dictionary tips",
-  "make.dt1": "Only names that are often misheard.",
-  "make.dt2": "Use official capitalisation.",
-  "make.dt3": "Give each hint context words.",
+  "make.dt1": "Only names that are often wrong.",
+  "make.dt2": "Use the official capital letters.",
+  "make.dt3": "Give context words for each hint.",
   "make.styleTipsH": "Style tips",
   "make.st1": "Format and tone only.",
   "make.st2": "Keep it short.",
-  "make.st3": "No links or user data.",
-  "make.dataH": "What the model gets",
+  "make.st3": "Do not ask for links or data.",
+  "make.dataH": "Data sent to the model",
   "data.kind": "Type", "data.sent": "Sent", "data.cost": "Extra cost",
-  "data.dict": "Dictionary pack", "data.dictSent": "Relevant terms only", "data.dictCost": "No extra calls",
-  "data.style": "Style", "data.styleSent": "With every cleanup", "data.styleCost": "A few more tokens",
-  "make.dataNote": "<strong>Plugins run no code.</strong>",
-  "submit.eyebrow": "Submit an extension", "submit.title": "Get into the <span class=\"sheen\">official catalog</span>",
-  "submit.lead": "Reviewed by hand, then published.",
+  "data.dict": "Dictionary pack", "data.dictSent": "Only related terms", "data.dictCost": "No extra calls",
+  "data.style": "Style", "data.styleSent": "With each cleanup", "data.styleCost": "Some more tokens",
+  "make.dataNote": "<strong>Plugins do not run code.</strong>",
+  "submit.eyebrow": "Submit an extension", "submit.title": "Add to the <span class=\"sheen\">official catalog</span>",
+  "submit.lead": "A person reviews it. Then it is published.",
   "submit.reqH": "Requirements",
   "submit.r1": "Passes the check script.",
-  "submit.r2": "Chinese and English names.",
-  "submit.r3": "A license that allows redistribution.",
+  "submit.r2": "Has Chinese and English names.",
+  "submit.r3": "License allows redistribution.",
   "submit.r4": "No private data or secrets.",
-  "submit.r5": "One purpose per plugin.",
-  "submit.r6": "Raise the version on updates.",
+  "submit.r5": "One purpose for each plugin.",
+  "submit.r6": "Increase the version for each update.",
   "submit.howH": "Steps",
   "submit.h1": "Fork the <a data-link=\"repo\" href=\"#\">repository</a>.",
   "submit.h2": "Add it to <code>market/plugins/</code>.",
@@ -451,13 +451,13 @@ const EN = {
   "submit.h4": "Open a pull request.",
   "submit.h5": "Published after review.",
   "submit.go": "Submit on GitHub", "submit.readme": "Submission guide", "submit.spec": "Full specification",
-  "upload.h": "Upload here", "upload.soon": "Coming soon",
-  "upload.p": "Use GitHub for now.",
+  "upload.h": "Upload on this site", "upload.soon": "Coming soon",
+  "upload.p": "Use GitHub now.",
   "upload.btn": "Upload plugin",
-  "faq.1h": "Is it safe?", "faq.1p": "Data only, no code.",
+  "faq.1h": "Is it safe?", "faq.1p": "Data only. No code.",
   "faq.2h": "Does it cost more?", "faq.2p": "No extra model calls.",
-  "faq.3h": "No Plugin market?", "faq.3p": "Update to 1.20.",
-  "faq.4h": "Just for me?", "faq.4p": "Import the file directly.",
+  "faq.3h": "No Plugin market?", "faq.3p": "Update to 1.20 or later.",
+  "faq.4h": "Only for you?", "faq.4p": "Import the file.",
   "foot.left": "© <span data-year></span> TypeLeast · <a data-link=\"license\" href=\"#\">GPL-3.0</a>",
   "foot.home": "Home", "foot.spec": "Plugin specification", "foot.releases": "All releases",
 };

@@ -30,9 +30,9 @@ struct ActivityCard: View {
                 .frame(height: monthRow + 7 * (cell + gap))
                 HStack(spacing: 4) {
                     Spacer()
-                    Text(L10n.text("更少")).font(.system(size: 10.5)).foregroundColor(Theme.tertiary)
+                    Text(L10n.text("少")).font(.system(size: 10.5)).foregroundColor(Theme.tertiary)
                     ForEach(0..<5) { level in square(level) }
-                    Text(L10n.text("更多")).font(.system(size: 10.5)).foregroundColor(Theme.tertiary)
+                    Text(L10n.text("多")).font(.system(size: 10.5)).foregroundColor(Theme.tertiary)
                 }
             }
         }
