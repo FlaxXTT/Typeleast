@@ -72,10 +72,10 @@ internal sealed class SpeechModelsPanel
         if (!string.IsNullOrEmpty(m.SourceUrl)) tools.Children.Add(Theme.Secondary(L10n.T("模型来源与下载"), () => Shell.Open(m.SourceUrl)));
         tools.Children.Add(progress); tools.Children.Add(cancel);
         if (m.Registered && host.SpeechCatalog?.ActiveModelId != id) tools.Children.Add(Theme.Secondary(L10n.T("移除登记"), () => _ = LocalAction("local/remove", id)));
-        var card = Theme.Stack(6, Theme.SettingRow(m.Name, state, action));
+        var card = Theme.Stack(6, Theme.SettingRow(m.Name, null, action));
         if (m.Category == "primary" || id == "qwen3-asr-0.6b") card.Children.Add(Theme.Text(id.Contains("1.7b") ? L10n.T("多语种 · 中英混说 · 较大容量") : L10n.T("多语种 · 中英混说 · 较小体积"), 12, Theme.Grey));
         else card.Children.Add(Theme.Text(id switch { "sensevoice-small" => L10n.T("轻量 · 快速 · 五语种"), "fireredasr2-ctc" => L10n.T("中文 · 方言 · CTC"), "fun-asr-nano" => L10n.T("中英日 · 混说 · 口音"), _ => L10n.T("兼容导入 · 本地识别") }, 12, Theme.Grey));
-        card.Children.Add(tools); target.Children.Add(Theme.Card(card));
+        card.Children.Add(state); card.Children.Add(tools); target.Children.Add(Theme.Card(card));
         if (m.Precision == "fp16") card.Children.Add(Theme.Text(L10n.T("Mac 实测加载峰值约 12.5 GiB；不同环境会变化。"), 12, Theme.Grey));
         rows[id] = (state, action, cancel, progress);
     }

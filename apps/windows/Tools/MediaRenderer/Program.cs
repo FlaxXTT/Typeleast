@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -115,6 +117,13 @@ class P
         foreach (var mode in new[] { "light", "dark" }) {
             Theme.Apply(mode);
             var panel = new SpeechModelsPanel(host); panel.Refresh();
+            var notes = new List<string>();
+            void Gather(DependencyObject node) {
+                if (node is TextBlock text) notes.Add(text.Text);
+                foreach (var child in LogicalTreeHelper.GetChildren(node)) if (child is DependencyObject d) Gather(d);
+            }
+            Gather(panel.View);
+            if (!notes.Any(t => t.Contains("4.73 GB") && t.Contains("FP16"))) throw new InvalidOperationException("Model precision and size must be present in the actual UI tree.");
             Save(new Border { Background = Theme.Background, Padding = new Thickness(20), Child = panel.View },
                 Path.Combine(dir, $"speech-models-{mode}-{language}.png"), 500, 700);
         }

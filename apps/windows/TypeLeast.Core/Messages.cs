@@ -51,6 +51,7 @@ public static class Messages
         "model-timeout" => L10n.T("整理超时，已插入原话"),
         "model-max-tokens" => L10n.T("模型输出过长，已插入原话"),
         "output-format" => L10n.T("无法解析模型回复，已插入原话"),
+        "entity-changed" => L10n.T("名称改写缺少依据，已保留识别原文。"),
         "model-error:HTTP_401" or "model-error:HTTP_403" => L10n.T("Key 被拒绝，已插入原话"),
         "model-error:NETWORK" => L10n.T("网络出错，已插入原话"),
         "cancelled" => L10n.T("已取消"),

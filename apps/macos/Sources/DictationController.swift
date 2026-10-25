@@ -316,7 +316,7 @@ final class DictationController {
                 applyState()
                 return
             }
-            let failedHint = resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
+            let failedHint = resp.fallbackReason == "entity-changed" ? L10n.text("名称改写缺少依据，已保留识别原文。") : resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
             setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)

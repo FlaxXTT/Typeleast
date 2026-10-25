@@ -180,7 +180,7 @@ internal sealed class SettingsPage : IPage
         appearance.SelectedIndex = Array.IndexOf(appearances, s.Appearance);
         appearance.SelectionChanged += (_, _) => { if (appearance.SelectedIndex >= 0) { s.Appearance = appearances[appearance.SelectedIndex]; host.SaveSettings(); } };
 
-        downloadButton = Theme.Primary(L10n.T("下载（241 MB）"), () => _ = host.DownloadModels());
+        downloadButton = Theme.Primary(L10n.T("选择语音模型"), () => _ = host.DownloadModels());
         mirror.Text = s.ModelMirror;
         mirror.LostFocus += (_, _) => { s.ModelMirror = mirror.Text.Trim(); host.SaveSettings(); };
         var useMirror = Theme.Secondary(L10n.T("使用 hf-mirror.com"), () => { mirror.Text = s.ModelMirror = ModelMirror.Suggested; host.SaveSettings(); });

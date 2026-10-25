@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { inspectLocalModel } from '../lib/local-models.js';
 import { LocalModelProcess } from '../lib/local-recognizer.js';
-const { values } = parseArgs({ options: { 'baseline-dir': { type: 'string' }, 'candidate-dir': { type: 'string' }, 'samples-dir': { type: 'string' } } });
+const { values } = parseArgs({ options: { 'baseline-dir': { type: 'string' }, 'candidate-dir': { type: 'string' }, 'samples-dir': { type: 'string' }, 'sample-file': { type: 'string' }, language: { type: 'string' } } });
 if (!values['baseline-dir'] || !values['candidate-dir'] || !values['samples-dir']) throw new Error('Explicit baseline, candidate and public sample directories are required');
 const sherpa = createRequire(import.meta.url)('sherpa-onnx-node');
 for (const [name, directory, encoder, decoder] of [
@@ -17,10 +17,12 @@ for (const [name, directory, encoder, decoder] of [
   const worker = new LocalModelProcess(description);
   try {
     const started = performance.now(); await worker.prepare(); const loadMs = Math.round(performance.now() - started);
-    for (const language of ['zh', 'en']) {
-      const wave = sherpa.readWave(join(values['samples-dir'], `public-${language}.wav`));
+    for (const language of values['sample-file'] ? [values.language ?? 'zh'] : ['zh', 'en']) {
+      const wave = sherpa.readWave(values['sample-file'] ?? join(values['samples-dir'], `public-${language}.wav`));
       if (wave.sampleRate !== 16000) throw new Error('public samples must be 16 kHz');
-      const samples = wave.samples.subarray(0, 16000 * 8), wav = Buffer.alloc(44 + samples.length * 2);
+      const samples = values['sample-file'] ? wave.samples : wave.samples.subarray(0, 16000 * 8);
+      if (!samples.length || samples.length > 16000 * 120 || !samples.some(s => Math.abs(s) > 0.01)) throw new Error('sample must contain 0–120 seconds of audible public/synthetic speech');
+      const wav = Buffer.alloc(44 + samples.length * 2);
       wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16);
       wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28);
       wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples.length * 2, 40);

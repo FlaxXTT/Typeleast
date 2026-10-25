@@ -251,6 +251,7 @@ enum L10n {
         "中文 · 方言 · CTC": "Chinese · Dialects · CTC",
         "中英日 · 混说 · 口音": "Chinese/English/Japanese · Mixed speech · Accents",
         "兼容导入 · 本地识别": "Compatible import · Local recognition",
+        "名称改写缺少依据，已保留识别原文。": "Unsupported name change. The recognized text was kept.",
         "语音模型": "Speech model",
         "所选模型不可用，正在尝试默认模型。": "The saved model is not available. Trying the default model.",
         "使用中": "In use",

@@ -162,7 +162,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
 
 {
     Eq("ready speech has no problem", Messages.SpeechProblem(new SpeechStatus { Phase = "ready", Ready = true }), "");
-    Check("missing models are explained", Messages.SpeechProblem(new SpeechStatus { Phase = "missing-model" }).Contains("241 MB"));
+    Eq("missing models ask for an explicit choice", Messages.SpeechProblem(new SpeechStatus { Phase = "missing-model" }), L10n.T("请选择并安装语音模型。"));
     var downloading = JsonSerializer.Deserialize<HealthResponse>(
         "{\"ok\":false,\"service\":\"typeleast\",\"speech\":{\"phase\":\"downloading\",\"download\":{\"received\":60000000,\"total\":240000000}}}", Json.Options)!;
     Eq("health names the service", downloading.Service, "typeleast");
