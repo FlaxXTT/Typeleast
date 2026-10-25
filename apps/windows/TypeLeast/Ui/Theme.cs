@@ -45,7 +45,7 @@ internal static class Theme
     }
     public static readonly SolidColorBrush Background = Token("#FFFFFF"), Sidebar = Token("#F6F6F5"), CardFill = Token("#F4F4F3"),
         Line = Token("#E7E7E5"), Ink = Token("#141313"), InkInverse = Token("#FFFFFF"), Grey = Token("#6E6D6B"),
-        Tertiary = Token("#A3A29F"), Accent = Token("#3E9BE9"), Success = Token("#2E9E5B"), Warning = Token("#D9822B"),
+        Tertiary = Token("#A3A29F"), Accent = Token("#3E9BE9"), Style = Token("#8A5CD8"), Success = Token("#2E9E5B"), Warning = Token("#D9822B"),
         Selected = Token("#E9E9E7"), Pill = Token("#E61C1B1B");
     /// <summary>True while the dark palette is applied (read by the WinForms tray menu).</summary>
     public static bool IsDark { get; private set; }
@@ -57,9 +57,9 @@ internal static class Theme
         {
             try { dark = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) is int value && value == 0; } catch (System.Exception) { }
         }
-        var tokens = new[] { Background, Sidebar, CardFill, Line, Ink, InkInverse, Grey, Tertiary, Accent, Success, Warning, Selected };
-        var values = dark ? new[] { "#1C1B1B", "#151414", "#262525", "#333232", "#F4F3F3", "#141313", "#9C9B99", "#6E6D6B", "#62BBF3", "#4CC27A", "#F0A04B", "#2F2E2E" }
-            : new[] { "#FFFFFF", "#F6F6F5", "#F4F4F3", "#E7E7E5", "#141313", "#FFFFFF", "#6E6D6B", "#A3A29F", "#3E9BE9", "#2E9E5B", "#D9822B", "#E9E9E7" };
+        var tokens = new[] { Background, Sidebar, CardFill, Line, Ink, InkInverse, Grey, Tertiary, Accent, Style, Success, Warning, Selected };
+        var values = dark ? new[] { "#1C1B1B", "#151414", "#262525", "#333232", "#F4F3F3", "#141313", "#9C9B99", "#6E6D6B", "#62BBF3", "#B591F2", "#4CC27A", "#F0A04B", "#2F2E2E" }
+            : new[] { "#FFFFFF", "#F6F6F5", "#F4F4F3", "#E7E7E5", "#141313", "#FFFFFF", "#6E6D6B", "#A3A29F", "#3E9BE9", "#8A5CD8", "#2E9E5B", "#D9822B", "#E9E9E7" };
         IsDark = dark;
         for (var i = 0; i < tokens.Length; i++) Colors[tokens[i]].Value = (Color)ColorConverter.ConvertFromString(values[i]);
         if (Application.Current is { } app)
@@ -412,6 +412,15 @@ internal static class Theme
     }
 
     /// <summary>A rounded choice button (settings tabs, cleanup modes); SetPillSelected marks the chosen one.</summary>
+    /// <summary>A small coloured label, like the Mac Badge: the text in the colour on a light tint of it.</summary>
+    public static Border Badge(string text, SolidColorBrush tint)
+    {
+        var fill = new SolidColorBrush { Opacity = 0.12 };
+        System.Windows.Data.BindingOperations.SetBinding(fill, SolidColorBrush.ColorProperty, new System.Windows.Data.Binding(nameof(SolidColorBrush.Color)) { Source = tint });
+        return new Border { Background = fill, CornerRadius = new CornerRadius(8), Padding = new Thickness(7, 1, 7, 2),
+            VerticalAlignment = VerticalAlignment.Center, Child = Text(text, 11, tint, bold: true, wrap: false) };
+    }
+
     public static Button PillButton(string text, Action onClick)
     {
         var button = new Button

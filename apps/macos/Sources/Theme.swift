@@ -29,6 +29,8 @@ enum Theme {
     static let selection = dynamic(hex(0xE9E9E7), hex(0x2F2E2E))
     /// The blue for "your microphone is heard".
     static let accent = dynamic(hex(0x3E9BE9), hex(0x62BBF3))
+    /// Style plugins; dictionary packs use `accent`.
+    static let style = dynamic(hex(0x8A5CD8), hex(0xB591F2))
     static let success = dynamic(hex(0x2E9E5B), hex(0x4CC27A))
     static let warning = dynamic(hex(0xD9822B), hex(0xF0A04B))
 
