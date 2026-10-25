@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TypeLeast 扩展 · 词库和风格</title>
+<meta name="description" content="TypeLeast 插件市场：词库教它写对专有名词，风格告诉它按什么格式写。这里也说明如何制作扩展、如何提交到官方目录。">
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="assets/icon.png">
+<style>
+/* Same tokens as index.html: white page, one surface grey, three text greys, one blue for actions. */
+:root {
+  --bg: #fff; --tile: #f5f5f7; --tile-2: #e8e8ed; --ink: #1d1d1f; --ink-2: #6e6e73; --ink-3: #86868b; --line: #d2d2d7;
+  --link: #0066cc; --button: #0071e3; --green: #248a3d; --amber: #b25000; --violet: #8944ab;
+  --sheen: linear-gradient(100deg, #0071e3 0%, #7a4cff 40%, #e0457b 72%, #f0782a 100%);
+  --radius: 24px; --max: 1024px; --nav: 48px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--nav) + 16px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); line-height: 1.5; -webkit-font-smoothing: antialiased; overflow-x: clip; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { display: block; max-width: 100%; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 22px; }
+section { padding: 96px 0; }
+section + section { padding-top: 24px; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.02em; }
+h2 { font-size: clamp(32px, 5vw, 52px); line-height: 1.08; }
+h3 { font-size: 22px; line-height: 1.2; }
+.eyebrow { font-size: clamp(17px, 2vw, 21px); font-weight: 600; color: var(--ink-2); margin: 0 0 10px; }
+.lead { font-size: clamp(18px, 2vw, 21px); line-height: 1.45; color: var(--ink-2); max-width: 720px; margin: 18px 0 0; }
+.sheen { background: var(--sheen); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.fine { font-size: 13px; color: var(--ink-3); }
+p { margin: 0; }
+
+nav { position: fixed; inset: 0 0 auto; z-index: 50; height: var(--nav); background: rgba(255,255,255,.8); box-shadow: 0 1px 0 rgba(0,0,0,.08);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+nav .wrap { display: flex; align-items: center; gap: 26px; height: 100%; max-width: 1080px; }
+nav .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; font-size: 16px; }
+nav .brand img { width: 22px; height: 22px; }
+nav .brand:hover { text-decoration: none; }
+.lang { font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--tile-2); border: 0; border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.lang:hover { color: var(--ink); }
+nav .spacer { margin-right: auto; }
+nav a.link { color: var(--ink-2); font-size: 13px; }
+nav a.link:hover, nav a.link[aria-current] { color: var(--ink); text-decoration: none; }
+@media (max-width: 700px) { nav a.link { display: none; } nav a.link[aria-current] { display: inline; } nav .wrap { gap: 14px; } }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 999px; padding: 10px 20px; font: inherit; font-size: 15px;
+  background: var(--button); color: #fff; border: 0; cursor: pointer; transition: background .2s; }
+.btn:hover { text-decoration: none; background: #0077ed; }
+.btn.small { font-size: 12px; padding: 4px 12px; }
+.btn.plain { background: transparent; color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.btn.plain:hover { background: rgba(0,102,204,.06); }
+.btn[disabled] { background: var(--tile-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; }
+.more::after { content: " ›"; }
+.actions { display: flex; gap: 14px 22px; align-items: center; flex-wrap: wrap; margin-top: 28px; }
+
+/* hero */
+.hero { padding: calc(var(--nav) + 88px) 0 40px; }
+.hero h1 { font-size: clamp(44px, 7.4vw, 84px); line-height: 1.04; letter-spacing: -.035em; max-width: 900px; }
+.hero .fine { margin-top: 18px; max-width: 720px; }
+.kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 56px; }
+.kind { background: var(--tile); border-radius: var(--radius); padding: 28px 28px 30px; }
+.kind .k { font-size: 13px; font-weight: 600; color: var(--violet); }
+.kind h3 { margin: 8px 0 10px; font-size: 26px; }
+.kind p { color: var(--ink-2); font-size: 16px; }
+.kind .eg { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.kind .eg span { font-size: 13px; background: #fff; border-radius: 999px; padding: 4px 11px; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+@media (max-width: 760px) { .kinds { grid-template-columns: 1fr; } }
+
+/* market */
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 34px; }
+.tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--tile); }
+.tabs button { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--ink-2); padding: 6px 18px; border-radius: 999px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.source { font-size: 13px; color: var(--ink-3); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; margin-top: 22px; }
+.plugin { border-radius: 20px; padding: 24px 24px 20px; box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.plugin .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.badge { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; background: var(--tile-2); color: var(--ink-2); }
+.badge.dictionary { background: #e8f1fd; color: #0058b0; }
+.badge.style { background: #f3ebfa; color: var(--violet); }
+.plugin h3 { font-size: 21px; }
+.plugin .desc { color: var(--ink-2); font-size: 15px; }
+.plugin .meta { font-size: 13px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.plugin details { font-size: 14px; }
+.plugin summary { cursor: pointer; color: var(--link); list-style: none; }
+.plugin summary::-webkit-details-marker { display: none; }
+.plugin summary::after { content: " ›"; }
+.plugin details[open] summary::after { content: " ‹"; }
+.plugin .content { margin-top: 10px; background: var(--tile); border-radius: 12px; padding: 12px 14px; color: var(--ink-2); max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.plugin .chips { display: flex; flex-wrap: wrap; gap: 6px; white-space: normal; }
+.plugin .chips span { background: #fff; border-radius: 8px; padding: 2px 8px; font-size: 13px; color: var(--ink); }
+.plugin .foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--tile-2); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.plugin .where { font-size: 13px; color: var(--ink-2); }
+.state { margin-top: 22px; padding: 28px; border-radius: 20px; background: var(--tile); color: var(--ink-2); text-align: center; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 40px; counter-reset: step; }
+.step { background: var(--tile); border-radius: 20px; padding: 22px 22px 24px; }
+.step::before { counter-increment: step; content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.step h4 { font-size: 17px; margin-bottom: 6px; }
+.step p { font-size: 14.5px; color: var(--ink-2); }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+
+/* guide */
+.doc { margin-top: 40px; display: grid; gap: 44px; }
+.doc h3 { font-size: 26px; margin-bottom: 14px; }
+.doc p, .doc li { font-size: 16.5px; color: var(--ink-2); }
+.doc p + p { margin-top: 10px; }
+.doc ol, .doc ul { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+.doc strong { color: var(--ink); font-weight: 600; }
+code { font-family: var(--mono); font-size: .9em; background: var(--tile); border-radius: 6px; padding: 1px 6px; color: var(--ink); }
+.code { position: relative; margin-top: 14px; }
+.code pre { margin: 0; background: var(--tile); border-radius: 16px; padding: 18px 20px; overflow: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; color: var(--ink);
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.code pre code { background: none; padding: 0; font-size: inherit; }
+.code .copy { position: absolute; top: 10px; right: 10px; font: inherit; font-size: 12px; border: 0; border-radius: 999px; padding: 4px 11px; background: #fff; color: var(--ink-2);
+  box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
+.code .copy:hover { color: var(--ink); }
+.code .name { font-size: 13px; color: var(--ink-3); margin-bottom: 6px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.doc > *, .two > * { min-width: 0; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+.table { overflow-x: auto; margin-top: 14px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 560px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 16px; border-bottom: 1px solid var(--tile-2); }
+th { font-weight: 600; color: var(--ink); background: var(--tile); font-size: 13px; }
+td { color: var(--ink-2); }
+td:first-child { white-space: nowrap; color: var(--ink); }
+tr:last-child td { border-bottom: 0; }
+.note { background: var(--tile); border-radius: 16px; padding: 16px 18px; font-size: 15px; color: var(--ink-2); margin-top: 14px; }
+.note strong { color: var(--ink); }
+
+/* submit */
+.checks { list-style: none; padding: 0 !important; }
+.checks li { position: relative; padding-left: 28px; }
+.checks li::before { content: "✓"; position: absolute; left: 4px; color: var(--green); font-weight: 700; }
+.upload { margin-top: 18px; border-radius: var(--radius); padding: 28px; box-shadow: inset 0 0 0 1px var(--line); display: flex; gap: 22px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: repeating-linear-gradient(135deg, #fff 0 14px, #fafafc 14px 28px); }
+.upload h3 { font-size: 22px; margin-bottom: 6px; }
+.upload p { color: var(--ink-2); font-size: 15px; max-width: 560px; }
+.soon { font-size: 12px; font-weight: 600; color: var(--amber); background: #fdf1e5; border-radius: 999px; padding: 2px 9px; margin-left: 8px; vertical-align: 3px; }
+.faq { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 30px; }
+.faq div { background: var(--tile); border-radius: 20px; padding: 22px; }
+.faq h4 { font-size: 17px; margin-bottom: 6px; }
+.faq p { font-size: 15px; color: var(--ink-2); }
+@media (max-width: 760px) { .faq { grid-template-columns: 1fr; } }
+
+footer { padding: 22px 0 46px; margin-top: 60px; color: var(--ink-3); font-size: 12px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; }
+footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt="">TypeLeast</a>
+    <button class="lang" id="lang" type="button" aria-label="Switch language">EN</button>
+    <span class="spacer"></span>
+    <a class="link" href="index.html#features" data-i18n="nav.features">功能</a>
+    <a class="link" href="extensions.html" aria-current="page" data-i18n="nav.ext">扩展</a>
+    <a class="link" href="#make" data-i18n="nav.make">制作</a>
+    <a class="link" href="#submit" data-i18n="nav.submit">提交</a>
+    <a class="link" data-link="repo" href="#">GitHub</a>
+    <a class="btn small" href="index.html#download" data-i18n="nav.download">下载</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="hero.eyebrow">扩展</p>
+    <h1 data-i18n="hero.title">让 TypeLeast<br><span class="sheen">更懂你的领域。</span></h1>
+    <p class="lead" data-i18n="hero.lead">词库教它写对专有名词，风格告诉它按什么格式写。插件只是数据，不运行代码，也不会多调用模型。</p>
+    <div class="actions">
+      <a class="btn" href="#market" data-i18n="hero.browse">浏览插件市场</a>
+      <a class="more" href="#make" data-i18n="hero.make">制作自己的扩展</a>
+    </div>
+    <p class="fine" data-i18n="hero.fine">需要 TypeLeast 1.20 或更新。App 左侧栏「扩展」→「插件市场」里看到的，就是本页列出的同一份官方目录。</p>
+    <div class="kinds">
+      <div class="kind">
+        <div class="k" data-i18n="kind.dk">词库 · dictionary</div>
+        <h3 data-i18n="kind.dh">名字，写对。</h3>
+        <p data-i18n="kind.dp">一组术语的正确写法，可选附带受语境限制的读音提示。只有本次话语相关的词，才会随整理请求发给模型。</p>
+        <div class="eg"><span>Kubernetes</span><span>TypeScript</span><span>GitHub</span><span>Node.js</span></div>
+      </div>
+      <div class="kind">
+        <div class="k" data-i18n="kind.sk">风格 · style</div>
+        <h3 data-i18n="kind.sh">格式，照你的习惯。</h3>
+        <p data-i18n="kind.sp">一段写法和格式说明，附加在自然整理和精简整理上。同时只用一个风格，可以随时切换或关闭。</p>
+        <div class="eg"><span data-i18n="kind.s1">正式书面语</span><span data-i18n="kind.s2">工作邮件</span><span data-i18n="kind.s3">编号列表</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="market">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="market.eyebrow">插件市场</p>
+    <h2 data-i18n="market.title">官方目录，人工审核。</h2>
+    <p class="lead" data-i18n="market.lead">App 和本页读的是同一个文件。这里能看到的插件，在 App 的「插件市场」里都能一键安装。</p>
+    <div class="bar">
+      <div class="tabs" role="tablist" aria-label="插件类型" data-i18n-aria="market.tabs">
+        <button role="tab" aria-selected="true" data-filter="all" data-i18n="market.all">全部</button>
+        <button role="tab" aria-selected="false" data-filter="dictionary" data-i18n="market.dict">词库</button>
+        <button role="tab" aria-selected="false" data-filter="style" data-i18n="market.style">风格</button>
+      </div>
+      <span class="source" id="source"></span>
+    </div>
+    <div class="grid" id="grid" aria-live="polite"></div>
+    <div class="state" id="state" data-i18n="market.loading">正在读取插件目录…</div>
+    <div class="steps">
+      <div class="step"><h4 data-i18n="inst.1h">打开「扩展」</h4><p data-i18n="inst.1p">在 TypeLeast 左侧栏点「扩展」，切到「插件市场」。目录只在打开或刷新时读取一次。</p></div>
+      <div class="step"><h4 data-i18n="inst.2h">看清楚再装</h4><p data-i18n="inst.2p">安装前会显示作者、版本、许可、全部内容和数据去向。可以选「仅安装」或「安装并启用」。</p></div>
+      <div class="step"><h4 data-i18n="inst.3h">按需开关</h4><p data-i18n="inst.3p">词库在「已安装」里逐个开关；风格在左侧栏整理档位下方选择，同时只用一个。</p></div>
+    </div>
+    <p class="fine" style="margin-top:16px" data-i18n="market.file">也可以下载插件文件，在 App 的「扩展」里点「导入插件文件…」安装。从文件导入的插件会标为「本地导入，未审核」。</p>
+  </div>
+</section>
+
+<section id="make">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="make.eyebrow">制作扩展</p>
+    <h2 data-i18n="make.title">一个 JSON 文件，就是一个扩展。</h2>
+    <p class="lead" data-i18n="make.lead">不用写代码。用任何文本编辑器写好，先在自己的 App 里试装，满意了再提交到官方目录。</p>
+    <div class="doc">
+      <div>
+        <h3 data-i18n="make.stepsH">五步做好</h3>
+        <ol>
+          <li data-i18n="make.s1"><strong>选类型，起 id。</strong>词库还是风格？id 写成 <code>发布者.名字</code>，例如 <code>yourname.web-terms</code>。</li>
+          <li data-i18n="make.s2"><strong>复制下面的模板。</strong>填好中英文名字和说明、作者、许可。</li>
+          <li data-i18n="make.s3"><strong>写内容。</strong>词库写 <code>terms</code>（需要时加 <code>aliases</code>）；风格写 <code>instructions</code>。</li>
+          <li data-i18n="make.s4"><strong>保存为 <code>&lt;id&gt;.typeleast-plugin</code>。</strong>UTF-8 编码，最大 256 KiB。</li>
+          <li data-i18n="make.s5"><strong>在 App 里试装。</strong>「扩展」→「导入插件文件…」，看安装前的预览，再实际听写几句，确认效果。</li>
+        </ol>
+      </div>
+
+      <div>
+        <h3 data-i18n="make.tplH">模板</h3>
+        <div class="two">
+          <div class="code"><div class="name" data-i18n="make.tplDict">词库（第 2 版，带读音提示）</div><button class="copy" type="button" data-copy="dict" data-i18n="make.copy">复制</button><pre><code id="tpl-dict"></code></pre></div>
+          <div class="code"><div class="name" data-i18n="make.tplStyle">风格</div><button class="copy" type="button" data-copy="style" data-i18n="make.copy">复制</button><pre><code id="tpl-style"></code></pre></div>
+        </div>
+        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">两个模板都能通过 App 的检查。不需要读音提示时，把词库的 <code>formatVersion</code> 写成 <code>1</code> 并删掉 <code>aliases</code>。</p>
+      </div>
+
+      <div>
+        <h3 data-i18n="make.fieldsH">字段规则</h3>
+        <p data-i18n="make.fieldsP">不接受未知字段；超过限制会被直接拒绝，不会截断。</p>
+        <div class="table"><table>
+          <thead><tr><th data-i18n="tbl.field">字段</th><th data-i18n="tbl.rule">规则</th></tr></thead>
+          <tbody>
+            <tr><td><code>format</code> / <code>formatVersion</code></td><td data-i18n="tbl.format">固定写 <code>"typeleast-plugin"</code>；版本为 <code>1</code>，或带读音提示的词库用 <code>2</code>。</td></tr>
+            <tr><td><code>id</code></td><td data-i18n="tbl.id"><code>发布者.名字</code>，小写字母、数字和连字符，每段 1–32 个字符。官方目录里的文件名必须是 <code>&lt;id&gt;.typeleast-plugin</code>。</td></tr>
+            <tr><td><code>version</code></td><td data-i18n="tbl.version"><code>主.次.修订</code>，如 <code>1.2.0</code>，不带前导零。每次更新都要调大。</td></tr>
+            <tr><td><code>type</code></td><td data-i18n="tbl.type"><code>"dictionary"</code>（词库）或 <code>"style"</code>（风格）。</td></tr>
+            <tr><td><code>name</code> / <code>description</code></td><td data-i18n="tbl.name">都要有 <code>zh-Hans</code> 和 <code>en</code> 两种语言。名字最多 40 字，说明最多 200 字，都只能一行。</td></tr>
+            <tr><td><code>author</code></td><td data-i18n="tbl.author">显示名，最多 60 字。</td></tr>
+            <tr><td><code>license</code></td><td data-i18n="tbl.license">SPDX 标识，如 <code>CC0-1.0</code>、<code>MIT</code>、<code>CC-BY-4.0</code>，或 <code>LicenseRef-…</code>。</td></tr>
+            <tr><td><code>homepage</code></td><td data-i18n="tbl.homepage">可选，只接受 <code>https://</code> 开头的地址，最多 200 字符。</td></tr>
+            <tr><td><code>terms</code></td><td data-i18n="tbl.terms">词库专用。1–2000 个，每个最多 120 字，不分大小写不能重复。只写正确写法，不能写「听成=写法」。看起来像密钥的内容会被拒绝。</td></tr>
+            <tr><td><code>aliases</code></td><td data-i18n="tbl.aliases">仅第 2 版词库，可选，最多 200 条。每条有 <code>heard</code>（被听错的写法，最多 80 字）、<code>term</code>（必须和 <code>terms</code> 里某一项完全一致）、<code>cues</code>（1–8 个语境词），可选 <code>blockers</code>（最多 8 个排除词）。语境词每个最多 40 字。</td></tr>
+            <tr><td><code>instructions</code></td><td data-i18n="tbl.instructions">风格专用。非空纯文本，最多 8 KiB。</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="two">
+        <div>
+          <h3 data-i18n="make.dictTipsH">写词库的要点</h3>
+          <ul>
+            <li data-i18n="make.dt1">只收真实、常用、容易被识别错的写法。普通词不用放。</li>
+            <li data-i18n="make.dt2">大小写按官方写法：<code>GitHub</code>、<code>macOS</code>、<code>Node.js</code>。</li>
+            <li data-i18n="make.dt3">读音提示只是候选：当前这句话里出现 <code>heard</code>，同一句还出现某个 <code>cues</code>，且没有 <code>blockers</code> 时，才会提示模型。</li>
+            <li data-i18n="make.dt4">语境词要具体。和普通英语词同形的专名（如 <code>cloud</code> 和 <code>Claude</code>），要用 <code>blockers</code> 排除普通用法，或干脆不加提示。</li>
+            <li data-i18n="make.dt5">用户自己的词典永远优先；所有启用的词库合计最多 10000 个词、1000 条读音提示。</li>
+          </ul>
+        </div>
+        <div>
+          <h3 data-i18n="make.styleTipsH">写风格的要点</h3>
+          <ul>
+            <li data-i18n="make.st1">只写写法和格式：语气、段落、列表、标点、称呼。</li>
+            <li data-i18n="make.st2">越短越好。选中后，每次自然整理和精简整理请求都会带上这段说明。</li>
+            <li data-i18n="make.st3">风格不能添加事实、删掉说话内容或改变输出格式；整理结果仍会经过原有的事实校验，不通过就退回原来的结果。</li>
+            <li data-i18n="make.st4">不要求输出链接、命令、联系方式或用户数据，也不要求忽略原有规则。</li>
+            <li data-i18n="make.st5">翻译和提示词 Beta 不使用风格。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+        <h3 data-i18n="make.dataH">发给模型的是什么</h3>
+        <div class="table"><table>
+          <thead><tr><th data-i18n="data.kind">类型</th><th data-i18n="data.sent">随整理请求发送</th><th data-i18n="data.cost">额外费用</th></tr></thead>
+          <tbody>
+            <tr><td data-i18n="data.dict">词库</td><td data-i18n="data.dictSent">只有和本次话语相关的术语和读音提示；无关的留在本机。</td><td data-i18n="data.dictCost">不多调用模型。</td></tr>
+            <tr><td data-i18n="data.style">风格</td><td data-i18n="data.styleSent">选中后，整段说明随每次自然整理、精简整理请求发送。</td><td data-i18n="data.styleCost">不多调用模型；每次请求多一些 token。</td></tr>
+          </tbody>
+        </table></div>
+        <p class="note" data-i18n="make.dataNote"><strong>插件不运行代码。</strong>它不能联网、不能读文件，也不改变本机的语音识别；只是给整理模型多一些写法上的参考。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="submit">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="submit.eyebrow">提交扩展</p>
+    <h2 data-i18n="submit.title">放进官方目录，<br><span class="sheen">让更多人用上。</span></h2>
+    <p class="lead" data-i18n="submit.lead">每个提交都由维护者人工审核。合并后官网自动部署，几分钟内就会出现在所有人的插件市场里。</p>
+    <div class="doc">
+      <div class="two">
+        <div>
+          <h3 data-i18n="submit.reqH">提交要求</h3>
+          <ul class="checks">
+            <li data-i18n="submit.r1">文件能通过检查：在仓库根目录运行 <code>node market/build-catalog.mjs</code> 不报错。</li>
+            <li data-i18n="submit.r2">中英文名字和说明齐全，作者和许可写清楚；许可必须允许再分发。</li>
+            <li data-i18n="submit.r3">一个插件只做一件事，名字和说明如实描述内容。</li>
+            <li data-i18n="submit.r4">不含人名、内部项目名、联系方式、密钥或任何不该公开的内容。</li>
+            <li data-i18n="submit.r5">词库：词是真实、常用的写法；读音提示有依据，语境词足够具体。</li>
+            <li data-i18n="submit.r6">风格：只涉及写法和格式；不要求输出链接、命令、联系方式或用户数据，不要求忽略原有规则。</li>
+            <li data-i18n="submit.r7">更新已收录的插件时，调大 <code>version</code>。</li>
+          </ul>
+        </div>
+        <div>
+          <h3 data-i18n="submit.howH">提交方式</h3>
+          <ol>
+            <li data-i18n="submit.h1">Fork <a data-link="repo" href="#">GitHub 仓库</a>。</li>
+            <li data-i18n="submit.h2">把文件放进 <code>market/plugins/</code>，文件名用插件的 <code>id</code>。</li>
+            <li data-i18n="submit.h3">在仓库根目录运行 <code>node market/build-catalog.mjs</code>，它会检查文件并重新生成 <code>catalog.json</code>。</li>
+            <li data-i18n="submit.h4">开一个 PR，写明用途、内容来源和许可。</li>
+            <li data-i18n="submit.h5">维护者审阅后合并；官网部署完成，插件就会出现在 App 的插件市场里。</li>
+          </ol>
+          <div class="actions" style="margin-top:20px">
+            <a class="btn" data-link="market" href="#" data-i18n="submit.go">在 GitHub 上提交</a>
+            <a class="more" data-link="marketReadme" href="#" data-i18n="submit.readme">提交说明</a>
+            <a class="more" data-link="spec" href="#" data-i18n="submit.spec">完整规范</a>
+          </div>
+        </div>
+      </div>
+      <div class="upload">
+        <div>
+          <h3><span data-i18n="upload.h">在官网直接上传</span><span class="soon" data-i18n="upload.soon">即将开放</span></h3>
+          <p data-i18n="upload.p">以后可以在这里直接选择插件文件提交审核。在此之前，请通过 GitHub 提交。</p>
+        </div>
+        <button class="btn" type="button" disabled data-i18n="upload.btn">上传插件</button>
+      </div>
+    </div>
+    <div class="faq">
+      <div><h4 data-i18n="faq.1h">插件安全吗？</h4><p data-i18n="faq.1p">插件只是数据，不运行代码。安装前会显示全部内容；官方目录里的插件经过人工审核，从文件导入的会标为未审核。</p></div>
+      <div><h4 data-i18n="faq.2h">会多花钱吗？</h4><p data-i18n="faq.2p">不会多调用模型。风格说明会让每次整理请求多一些 token；词库只发送本次相关的词。</p></div>
+      <div><h4 data-i18n="faq.3h">为什么我的 App 里没有插件市场？</h4><p data-i18n="faq.3p">插件从 TypeLeast 1.20 开始支持。请到首页下载最新版本。</p></div>
+      <div><h4 data-i18n="faq.4h">可以只给自己用吗？</h4><p data-i18n="faq.4p">可以。做好的文件直接在 App 里「导入插件文件…」，不用提交。也可以发给同事，他们同样从文件导入。</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span data-i18n="foot.left">© <span data-year></span> TypeLeast · 免费软件，以 <a data-link="license" href="#">GPL-3.0</a> 许可开源</span>
+    <span><a href="index.html" data-i18n="foot.home">首页</a> · <a data-link="repo" href="#">GitHub</a> · <a data-link="spec" href="#" data-i18n="foot.spec">插件规范</a> · <a data-link="releases" href="#" data-i18n="foot.releases">所有版本</a></span>
+  </div>
+</footer>
+
+<script>
+const SITE = {
+  links: {
+    repo: "https://github.com/FlaxXTT/Typeleast",
+    market: "https://github.com/FlaxXTT/Typeleast/tree/main/market",
+    marketReadme: "https://github.com/FlaxXTT/Typeleast/blob/main/market/README.md",
+    spec: "https://github.com/FlaxXTT/Typeleast/blob/main/docs/%E6%8F%92%E4%BB%B6%E8%A7%84%E8%8C%83.md",
+    releases: "https://github.com/FlaxXTT/Typeleast/releases",
+    license: "https://github.com/FlaxXTT/Typeleast/blob/main/LICENSE",
+  },
+  // The same catalog the apps read (market/catalog.json, published with the site).
+  catalog: "market/catalog.json",
+};
+
+// Plugin file templates; each passes the apps' check.
+const TEMPLATES = {
+  "zh": {
+    "dict": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 2,\n  \"id\": \"yourname.web-terms\",\n  \"version\": \"1.0.0\",\n  \"type\": \"dictionary\",\n  \"name\": { \"zh-Hans\": \"前端常用术语\", \"en\": \"Web terms\" },\n  \"description\": { \"zh-Hans\": \"前端开发里常被听错的英文名词。\", \"en\": \"English names from web development that are often misheard.\" },\n  \"author\": \"你的名字\",\n  \"license\": \"CC0-1.0\",\n  \"homepage\": \"https://example.com\",\n  \"terms\": [\"JSON\", \"GraphQL\", \"Kubernetes\", \"Tailwind CSS\"],\n  \"aliases\": [\n    { \"heard\": \"杰森\", \"term\": \"JSON\", \"cues\": [\"格式\", \"解析\", \"字段\"] },\n    { \"heard\": \"库伯内蒂斯\", \"term\": \"Kubernetes\", \"cues\": [\"集群\", \"部署\"] }\n  ]\n}",
+    "style": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 1,\n  \"id\": \"yourname.work-email\",\n  \"version\": \"1.0.0\",\n  \"type\": \"style\",\n  \"name\": { \"zh-Hans\": \"工作邮件\", \"en\": \"Work email\" },\n  \"description\": { \"zh-Hans\": \"整理成礼貌、简洁的工作邮件语气。\", \"en\": \"A polite, concise work-email tone.\" },\n  \"author\": \"你的名字\",\n  \"license\": \"CC0-1.0\",\n  \"instructions\": \"用礼貌、简洁的书面语。每段只讲一件事；有两个以上事项时用编号列表。保留说话人提到的称呼，不另加问候语和署名。\"\n}"
+  },
+  "en": {
+    "dict": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 2,\n  \"id\": \"yourname.web-terms\",\n  \"version\": \"1.0.0\",\n  \"type\": \"dictionary\",\n  \"name\": { \"zh-Hans\": \"前端常用术语\", \"en\": \"Web terms\" },\n  \"description\": { \"zh-Hans\": \"前端开发里常被听错的英文名词。\", \"en\": \"English names from web development that are often misheard.\" },\n  \"author\": \"Your Name\",\n  \"license\": \"CC0-1.0\",\n  \"homepage\": \"https://example.com\",\n  \"terms\": [\"JSON\", \"GraphQL\", \"Kubernetes\", \"Tailwind CSS\"],\n  \"aliases\": [\n    { \"heard\": \"杰森\", \"term\": \"JSON\", \"cues\": [\"格式\", \"解析\", \"字段\"] },\n    { \"heard\": \"库伯内蒂斯\", \"term\": \"Kubernetes\", \"cues\": [\"集群\", \"部署\"] }\n  ]\n}",
+    "style": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 1,\n  \"id\": \"yourname.work-email\",\n  \"version\": \"1.0.0\",\n  \"type\": \"style\",\n  \"name\": { \"zh-Hans\": \"工作邮件\", \"en\": \"Work email\" },\n  \"description\": { \"zh-Hans\": \"整理成礼貌、简洁的工作邮件语气。\", \"en\": \"A polite, concise work-email tone.\" },\n  \"author\": \"Your Name\",\n  \"license\": \"CC0-1.0\",\n  \"instructions\": \"Use polite, concise written language. One topic per paragraph; use a numbered list for two or more items. Keep any greeting the speaker used, and add no greeting or signature of your own.\"\n}"
+  }
+};
+
+const EN = {
+  title: "TypeLeast Extensions · Dictionary packs and styles",
+  description: "The TypeLeast plugin market: dictionary packs teach it the right spelling for names, styles tell it how to format. How to make an extension and submit it to the official catalog.",
+  "nav.features": "Features", "nav.ext": "Extensions", "nav.make": "Make", "nav.submit": "Submit", "nav.download": "Download",
+  "hero.eyebrow": "Extensions",
+  "hero.title": "Teach TypeLeast<br><span class=\"sheen\">your field.</span>",
+  "hero.lead": "Dictionary packs teach it the right spelling for names. Styles tell it how to format. Plugins are data only: they run no code and add no model calls.",
+  "hero.browse": "Browse the plugin market", "hero.make": "Make your own",
+  "hero.fine": "Needs TypeLeast 1.20 or later. The Plugin market under Extensions in the app shows the same official catalog as this page.",
+  "kind.dk": "Dictionary pack · dictionary", "kind.dh": "Names, spelled right.",
+  "kind.dp": "Correct spellings for a set of terms, optionally with context-limited pronunciation hints. Only terms relevant to what you just said go to the model with the cleanup request.",
+  "kind.sk": "Style · style", "kind.sh": "Formatting, your way.",
+  "kind.sp": "A short note on wording and layout, added to Natural and Concise cleanup. One style at a time; switch or turn it off whenever you like.",
+  "kind.s1": "Formal writing", "kind.s2": "Work email", "kind.s3": "Numbered lists",
+  "market.eyebrow": "Plugin market", "market.title": "One official catalog. Reviewed by hand.",
+  "market.lead": "The app and this page read the same file. Every plugin you see here installs in one click from the app's Plugin market.",
+  "market.tabs": "Plugin type", "market.all": "All", "market.dict": "Dictionary packs", "market.style": "Styles",
+  "market.loading": "Reading the plugin catalog…",
+  "market.file": "You can also download a plugin file and install it with Import plugin file… under Extensions. Plugins imported from a file are marked Imported, not reviewed.",
+  "inst.1h": "Open Extensions", "inst.1p": "Click Extensions in the TypeLeast sidebar and switch to Plugin market. The catalog is read once, when you open or refresh it.",
+  "inst.2h": "Look before you install", "inst.2p": "Before installing you see the author, version, license, the full contents and where the data goes. Choose Install only or Install and turn on.",
+  "inst.3h": "Turn on what you need", "inst.3p": "Turn dictionary packs on or off under Installed. Pick a style below the cleanup modes in the sidebar; one at a time.",
+  "make.eyebrow": "Make an extension", "make.title": "One JSON file is one extension.",
+  "make.lead": "No code needed. Write it in any text editor, try it in your own app, and submit it to the official catalog when you're happy with it.",
+  "make.stepsH": "Five steps",
+  "make.s1": "<strong>Pick a type and an id.</strong> Dictionary pack or style? Write the id as <code>publisher.name</code>, for example <code>yourname.web-terms</code>.",
+  "make.s2": "<strong>Copy a template below.</strong> Fill in the Chinese and English name and description, the author and the license.",
+  "make.s3": "<strong>Add the content.</strong> A dictionary pack has <code>terms</code> (plus <code>aliases</code> if needed); a style has <code>instructions</code>.",
+  "make.s4": "<strong>Save it as <code>&lt;id&gt;.typeleast-plugin</code>.</strong> UTF-8, at most 256 KiB.",
+  "make.s5": "<strong>Try it in the app.</strong> Extensions → Import plugin file…, check the preview, then dictate a few sentences to see the effect.",
+  "make.tplH": "Templates", "make.tplDict": "Dictionary pack (version 2, with pronunciation hints)", "make.tplStyle": "Style", "make.copy": "Copy",
+  "make.tplNote": "Both templates pass the app's check. Without pronunciation hints, set the pack's <code>formatVersion</code> to <code>1</code> and remove <code>aliases</code>.",
+  "make.fieldsH": "Field rules", "make.fieldsP": "Unknown fields are refused, and anything over a limit is rejected, never trimmed.",
+  "tbl.field": "Field", "tbl.rule": "Rule",
+  "tbl.format": "Always <code>\"typeleast-plugin\"</code>; version <code>1</code>, or <code>2</code> for a dictionary pack with pronunciation hints.",
+  "tbl.id": "<code>publisher.name</code>: lowercase letters, digits and hyphens, 1–32 characters per part. In the official catalog the file name must be <code>&lt;id&gt;.typeleast-plugin</code>.",
+  "tbl.version": "<code>major.minor.patch</code>, such as <code>1.2.0</code>, with no leading zeros. Raise it on every update.",
+  "tbl.type": "<code>\"dictionary\"</code> or <code>\"style\"</code>.",
+  "tbl.name": "Both need <code>zh-Hans</code> and <code>en</code>. Name up to 40 characters, description up to 200, each on one line.",
+  "tbl.author": "Display name, up to 60 characters.",
+  "tbl.license": "An SPDX identifier such as <code>CC0-1.0</code>, <code>MIT</code> or <code>CC-BY-4.0</code>, or <code>LicenseRef-…</code>.",
+  "tbl.homepage": "Optional. <code>https://</code> addresses only, up to 200 characters.",
+  "tbl.terms": "Dictionary packs only. 1–2000 terms, each up to 120 characters, no duplicates ignoring case. Correct spellings only, never \"heard=written\" rules. Anything that looks like a secret is refused.",
+  "tbl.aliases": "Version 2 dictionary packs only, optional, up to 200. Each has <code>heard</code> (the misheard form, up to 80 characters), <code>term</code> (exactly one of the <code>terms</code>), <code>cues</code> (1–8 context words) and optional <code>blockers</code> (up to 8 words that rule it out). Each context word is up to 40 characters.",
+  "tbl.instructions": "Styles only. Plain text, not empty, up to 8 KiB.",
+  "make.dictTipsH": "Writing a dictionary pack",
+  "make.dt1": "Include real, common spellings that speech recognition gets wrong. Ordinary words don't need to be there.",
+  "make.dt2": "Use the official capitalisation: <code>GitHub</code>, <code>macOS</code>, <code>Node.js</code>.",
+  "make.dt3": "Pronunciation hints are only candidates: the model is told about one only when <code>heard</code> appears in what was just said, one of its <code>cues</code> appears in the same sentence, and none of its <code>blockers</code> does.",
+  "make.dt4": "Make context words specific. For a name that is also an everyday English word (<code>cloud</code> and <code>Claude</code>), use <code>blockers</code> to rule out the everyday meaning, or leave the hint out.",
+  "make.dt5": "The user's own dictionary always wins. All enabled packs together hold at most 10,000 terms and 1,000 pronunciation hints.",
+  "make.styleTipsH": "Writing a style",
+  "make.st1": "Cover wording and layout only: tone, paragraphs, lists, punctuation, forms of address.",
+  "make.st2": "Keep it short. When selected, it goes with every Natural and Concise cleanup request.",
+  "make.st3": "A style can't add facts, drop what was said or change the output format. The result still goes through the usual fact check and falls back if it fails.",
+  "make.st4": "Don't ask for links, commands, contact details or user data, and don't ask the model to ignore its rules.",
+  "make.st5": "Translation and Prompt Beta don't use styles.",
+  "make.dataH": "What goes to the model",
+  "data.kind": "Type", "data.sent": "Sent with the cleanup request", "data.cost": "Extra cost",
+  "data.dict": "Dictionary pack", "data.dictSent": "Only the terms and hints relevant to what you just said; the rest stays on your computer.", "data.dictCost": "No extra model calls.",
+  "data.style": "Style", "data.styleSent": "When selected, the whole note goes with every Natural and Concise cleanup request.", "data.styleCost": "No extra model calls; a few more tokens per request.",
+  "make.dataNote": "<strong>Plugins run no code.</strong> They can't reach the network, read files or change on-device speech recognition; they only give the cleanup model more to go on.",
+  "submit.eyebrow": "Submit an extension", "submit.title": "Put it in the official catalog,<br><span class=\"sheen\">for everyone.</span>",
+  "submit.lead": "Every submission is reviewed by a maintainer. Once merged, the site deploys by itself and the plugin shows up in everyone's Plugin market within minutes.",
+  "submit.reqH": "Requirements",
+  "submit.r1": "The file passes the check: <code>node market/build-catalog.mjs</code> runs without errors from the repository root.",
+  "submit.r2": "Chinese and English name and description, a clear author and license; the license must allow redistribution.",
+  "submit.r3": "One plugin, one purpose, with a name and description that say what it contains.",
+  "submit.r4": "No personal names, internal project names, contact details, secrets or anything else that shouldn't be public.",
+  "submit.r5": "Dictionary packs: real, common spellings; pronunciation hints backed by evidence, with specific context words.",
+  "submit.r6": "Styles: wording and layout only; no links, commands, contact details or user data, and no asking the model to ignore its rules.",
+  "submit.r7": "When updating a plugin already in the catalog, raise <code>version</code>.",
+  "submit.howH": "How to submit",
+  "submit.h1": "Fork the <a data-link=\"repo\" href=\"#\">GitHub repository</a>.",
+  "submit.h2": "Put the file in <code>market/plugins/</code>, named after the plugin's <code>id</code>.",
+  "submit.h3": "From the repository root, run <code>node market/build-catalog.mjs</code>. It checks the file and regenerates <code>catalog.json</code>.",
+  "submit.h4": "Open a pull request that says what it is for, where the content comes from and its license.",
+  "submit.h5": "A maintainer reviews and merges it; once the site deploys, the plugin appears in the app's Plugin market.",
+  "submit.go": "Submit on GitHub", "submit.readme": "Submission guide", "submit.spec": "Full specification",
+  "upload.h": "Upload on this site", "upload.soon": "Coming soon",
+  "upload.p": "Later you will be able to choose a plugin file here and submit it for review. Until then, please submit through GitHub.",
+  "upload.btn": "Upload plugin",
+  "faq.1h": "Are plugins safe?", "faq.1p": "Plugins are data and run no code. You see the full contents before installing; plugins in the official catalog are reviewed by hand, and ones imported from a file are marked as not reviewed.",
+  "faq.2h": "Do they cost more?", "faq.2p": "No extra model calls. A style adds a few tokens to each cleanup request; a dictionary pack only sends the terms relevant to what you said.",
+  "faq.3h": "Why is there no Plugin market in my app?", "faq.3p": "Plugins arrived in TypeLeast 1.20. Download the latest version from the home page.",
+  "faq.4h": "Can I keep one to myself?", "faq.4p": "Yes. Install your file with Import plugin file… in the app; no submission needed. Colleagues can import the same file.",
+  "foot.left": "© <span data-year></span> TypeLeast · Free software, open source under <a data-link=\"license\" href=\"#\">GPL-3.0</a>",
+  "foot.home": "Home", "foot.spec": "Plugin specification", "foot.releases": "All releases",
+};
+const ZH = { title: document.title, description: document.querySelector('meta[name="description"]').content };
+for (const el of document.querySelectorAll("[data-i18n]")) ZH[el.dataset.i18n] = el.innerHTML;
+for (const el of document.querySelectorAll("[data-i18n-aria]")) ZH[el.dataset.i18nAria] = el.getAttribute("aria-label");
+
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const asked = new URLSearchParams(location.search).get("lang");
+let lang = asked === "en" || asked === "zh" ? asked : store.get("lang") || (/^zh/i.test((navigator.languages || [navigator.language])[0] || "") ? "zh" : "en");
+const t = (zh, en) => lang === "en" ? en : zh;
+
+let catalog = null, failed = false, filter = "all";
+
+function fillLinks() {
+  for (const a of document.querySelectorAll("[data-link]")) a.href = SITE.links[a.dataset.link];
+  for (const s of document.querySelectorAll("[data-year]")) s.textContent = new Date().getFullYear();
+}
+
+function applyLang(next) {
+  lang = next;
+  const T = lang === "en" ? EN : ZH;
+  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+  document.title = T.title;
+  document.querySelector('meta[name="description"]').content = T.description;
+  for (const el of document.querySelectorAll("[data-i18n]")) if (T[el.dataset.i18n] != null) el.innerHTML = T[el.dataset.i18n];
+  for (const el of document.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", T[el.dataset.i18nAria]);
+  const button = document.getElementById("lang");
+  button.textContent = lang === "en" ? "中文" : "EN";
+  button.setAttribute("aria-label", lang === "en" ? "切换到中文" : "Switch to English");
+  document.getElementById("tpl-dict").textContent = TEMPLATES[lang].dict;
+  document.getElementById("tpl-style").textContent = TEMPLATES[lang].style;
+  fillLinks();
+  renderMarket();
+}
+document.getElementById("lang").addEventListener("click", () => { const next = lang === "en" ? "zh" : "en"; store.set("lang", next); applyLang(next); });
+
+for (const button of document.querySelectorAll("[data-copy]")) {
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(TEMPLATES[lang][button.dataset.copy]);
+      button.textContent = t("已复制", "Copied");
+    } catch {
+      button.textContent = t("请手动复制", "Copy it by hand");
+    }
+    setTimeout(() => { button.innerHTML = (lang === "en" ? EN : ZH)["make.copy"]; }, 1600);
+  });
+}
+
+for (const tab of document.querySelectorAll("[data-filter]")) {
+  tab.addEventListener("click", () => {
+    filter = tab.dataset.filter;
+    for (const other of document.querySelectorAll("[data-filter]")) other.setAttribute("aria-selected", String(other === tab));
+    renderMarket();
+  });
+}
+
+// ---- market --------------------------------------------------------------------------------
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+const local = (text) => (text && (lang === "en" ? text.en : text["zh-Hans"])) || "";
+
+function pluginCard(p) {
+  const card = el("article", "plugin");
+  const top = el("div", "top");
+  top.append(el("span", "badge " + p.type, p.type === "style" ? t("风格", "Style") : t("词库", "Dictionary pack")));
+  top.append(el("span", "fine", "v" + p.version));
+  card.append(top, el("h3", null, local(p.name)), el("p", "desc", local(p.description)));
+
+  const meta = el("div", "meta");
+  meta.append(el("span", null, t("作者 ", "By ") + p.author), el("span", null, t("许可 ", "License ") + p.license));
+  if (p.type === "dictionary") {
+    meta.append(el("span", null, t(`${p.terms.length} 个词`, `${p.terms.length} terms`)));
+    if (Array.isArray(p.aliases) && p.aliases.length) meta.append(el("span", null, t(`${p.aliases.length} 条读音提示`, `${p.aliases.length} pronunciation hints`)));
+  }
+  card.append(meta);
+
+  const details = el("details");
+  details.append(el("summary", null, p.type === "style" ? t("查看风格说明", "Show the instructions") : t("查看全部词条", "Show all terms")));
+  const content = el("div", "content");
+  if (p.type === "style") content.textContent = p.instructions;
+  else {
+    const chips = el("div", "chips");
+    for (const term of p.terms) chips.append(el("span", null, term));
+    content.append(chips);
+    if (Array.isArray(p.aliases) && p.aliases.length) {
+      const hints = el("p", null);
+      hints.style.marginTop = "10px";
+      hints.textContent = t("读音提示（语境明确时才使用）：", "Pronunciation hints (used only in context): ")
+        + p.aliases.slice(0, 12).map((a) => `${a.heard} → ${a.term}`).join(t("；", "; "))
+        + (p.aliases.length > 12 ? t(" 等", " …") : "");
+      content.append(hints);
+    }
+  }
+  details.append(content);
+  card.append(details);
+
+  const foot = el("div", "foot");
+  foot.append(el("span", "where", t("App 里：扩展 → 插件市场", "In the app: Extensions → Plugin market")));
+  const file = el("a", "btn plain small", t("下载文件", "Download file"));
+  file.href = `market/plugins/${encodeURIComponent(p.id)}.typeleast-plugin`;
+  file.setAttribute("download", `${p.id}.typeleast-plugin`);
+  foot.append(file);
+  card.append(foot);
+  if (p.homepage) {
+    const home = el("a", null, t("主页", "Homepage"));
+    home.href = p.homepage; home.rel = "noopener noreferrer";
+    meta.append(home);
+  }
+  return card;
+}
+
+function renderMarket() {
+  const grid = document.getElementById("grid"), state = document.getElementById("state"), source = document.getElementById("source");
+  grid.replaceChildren();
+  if (failed) {
+    state.hidden = false;
+    state.innerHTML = "";
+    state.append(t("暂时读不到插件目录。", "The plugin catalog can't be read right now. "));
+    const link = el("a", null, t("在 GitHub 上查看", "See it on GitHub"));
+    link.href = SITE.links.market;
+    state.append(link);
+    source.textContent = "";
+    return;
+  }
+  if (!catalog) return;
+  const shown = catalog.plugins.filter((p) => filter === "all" || p.type === filter);
+  state.hidden = shown.length > 0;
+  if (!shown.length) state.textContent = t("这个分类里还没有插件。", "No plugins of this type yet.");
+  for (const p of shown) grid.append(pluginCard(p));
+  source.textContent = t(`共 ${catalog.plugins.length} 个插件 · 来源 market/catalog.json`, `${catalog.plugins.length} plugins · from market/catalog.json`);
+}
+
+async function loadCatalog() {
+  try {
+    const response = await fetch(SITE.catalog, { cache: "no-cache" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const value = await response.json();
+    if (value?.format !== "typeleast-catalog" || !Array.isArray(value.plugins)) throw new Error("not a catalog");
+    catalog = { plugins: value.plugins.filter((p) => p && typeof p.id === "string" && (p.type === "dictionary" || p.type === "style")) };
+  } catch {
+    failed = true;
+  }
+  renderMarket();
+}
+
+applyLang(lang);
+loadCatalog();
+</script>
+</body>
+</html>

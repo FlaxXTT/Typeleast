@@ -1,6 +1,6 @@
 # TypeLeast 插件官方目录
 
-App 的「插件市场」读的就是这里生成的 `catalog.json`。插件格式见 [插件规范](../docs/插件规范.md)。
+App 的「插件市场」读的就是这里生成的 `catalog.json`。插件格式见 [插件规范](../docs/插件规范.md)。官网的[扩展页](https://typeleast.promptking.workers.dev/extensions)列出同一份目录，并有面向作者的制作和提交说明。
 
 ## 提交一个插件
 

@@ -22,7 +22,7 @@ async function frames(browser, lang, dir) {
   const page = await browser.newPage({ viewport: { width: W, height: H } });
   await page.setContent(`<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000}</style>
 <div id="f" style="width:${W}px"></div><script>${film}</script>
-<script>window.f = TypeLeastFilm.mount(document.getElementById("f"), "${lang}");</script>`);
+<script>window.f = TypeLeastFilm.mount(document.getElementById("f"), "${lang}", { theme: "dark" });</script>`);
   await page.evaluate(() => document.fonts.ready);
   const length = await page.evaluate(() => window.f.length);
   for (let i = 0; i < length * FPS; i++) {
