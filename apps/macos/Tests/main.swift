@@ -43,7 +43,11 @@ if CommandLine.arguments.contains("--dictionary-ui") {
     let model = AppModel()
     let hub = HubWindowController(model: model)
     hub.show(page: .dictionary)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 180) { app.stop(nil) }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 180) {
+        settings.words = oldWords
+        settings.wordSuggestions = oldSuggestions
+        exit(0)
+    }
     app.run()
     settings.words = oldWords
     settings.wordSuggestions = oldSuggestions
