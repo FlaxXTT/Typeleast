@@ -6,7 +6,9 @@
  * Each model runs in a separate child so native memory is released before the next model.
  */
 import { parseArgs } from 'node:util';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+import { totalmem } from 'node:os';
+import { skipForMemory } from './asr-test-policy.mjs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -18,6 +20,7 @@ const { values } = parseArgs({ options: {
   'models-dir': { type: 'string' }, 'state-dir': { type: 'string' },
   'sample-file': { type: 'string' }, 'model-id': { type: 'string' },
   download: { type: 'boolean', default: false }, worker: { type: 'boolean', default: false },
+  'allow-resource-skip': { type: 'boolean', default: false },
 } });
 if (!values['models-dir'] || !values['state-dir']) throw new Error('Explicit --models-dir and --state-dir are required');
 const modelsDir = resolve(values['models-dir']), stateDir = resolve(values['state-dir']);
@@ -45,6 +48,14 @@ if (!values.worker) {
   }
   console.log(JSON.stringify({ sample: values['sample-file'] ? 'explicit public/synthetic file' : sampleSource }));
   for (const id of ids) {
+    if (skipForMemory({ id, platform: process.platform, memoryBytes: totalmem(), allowed: values['allow-resource-skip'] })) {
+      const report = { id, status: 'skipped', reason: 'host-below-test-memory-budget', memoryGiB: Math.round(totalmem() / 1024 ** 3), testBudgetGiB: 14,
+        evidence: 'Mac local load and recognition: docs/语音模型与精度.md; not executed on this cloud host' };
+      console.log(JSON.stringify(report));
+      if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY,
+        `\n**Resource skip:** ${id} was NOT run on this Mac host (${report.memoryGiB} GiB RAM; test budget 14 GiB). Mac local evidence is recorded separately in docs/语音模型与精度.md.\n`);
+      continue;
+    }
     if (values.download) {
       let last = -1;
       await downloadModels({ modelsDir, files: filesForModel(id), onProgress: ({received,total}) => {

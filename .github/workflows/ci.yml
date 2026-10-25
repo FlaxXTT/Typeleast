@@ -64,7 +64,10 @@ jobs:
           path: ${{ runner.temp }}/typeleast-asr-models
           key: asr-v1-${{ runner.os }}-${{ hashFiles('service/lib/asr-catalog.json', 'service/lib/models.js') }}
       - name: Download, verify, load and recognize with each model in order
-        run: node scripts/check-asr-models.mjs --download --models-dir "${{ runner.temp }}/typeleast-asr-models" --state-dir "${{ runner.temp }}/typeleast-asr-state"
+        # Standard Mac ARM runners have 7 GB RAM. Explicitly report the large FP16
+        # model as skipped there; its Mac evidence comes from isolated local tests.
+        # Windows/Linux still load every model. No skips without this explicit flag.
+        run: node scripts/check-asr-models.mjs --download --allow-resource-skip --models-dir "${{ runner.temp }}/typeleast-asr-models" --state-dir "${{ runner.temp }}/typeleast-asr-state"
 
   windows:
     name: Windows app (tests and build)
