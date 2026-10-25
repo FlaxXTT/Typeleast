@@ -161,6 +161,7 @@ internal sealed class AppHost : IDictationHost
             Settings.LaunchAtLogin = startsWithWindows;
             SaveSettings();
         }
+        Dictionary.Received(Array.Empty<SuggestionCandidate>());
         if (!Settings.OnboardingDone || !autostart) ShowWindow(MainWindow.Page.Home);
         if (!Settings.OnboardingDone) ShowOnboarding();
         UpdateIdleBar();

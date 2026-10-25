@@ -120,7 +120,7 @@ public sealed class SuggestionListConverter : JsonConverter<List<SuggestionCandi
             if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("word", out var word) ||
                 word.ValueKind != JsonValueKind.String || !item.TryGetProperty("heardAs", out var heard) || heard.ValueKind != JsonValueKind.String) continue;
             var w = word.GetString()!; var h = heard.GetString()!;
-            if (w.Length is >= 2 and <= 30 && h.Length is >= 1 and <= 30 && !w.Any(char.IsControl) && !h.Any(char.IsControl) && !string.IsNullOrWhiteSpace(w) && !string.IsNullOrWhiteSpace(h))
+            if (WordSuggestions.ValidCandidate(w, h))
                 result.Add(new(w, h));
         }
         return result;

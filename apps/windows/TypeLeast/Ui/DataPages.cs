@@ -104,23 +104,12 @@ internal sealed class DictionaryPage : IPage
     }
     public void Refresh()
     {
-        var key = string.Join("\n", host.Settings.DictionaryEntries.Select(e => e.Id + e.ServiceValue + e.Source))
-            + "|" + string.Join("\n", host.Settings.WordSuggestions.Select(w => w.Word + w.Count));
+        var key = string.Join("\n", host.Settings.DictionaryEntries.Select(e => e.Id + e.ServiceValue + e.Source));
         if (key != shown) { shown = key; Render(); }
     }
     private void Render()
     {
         list.Children.Clear();
-        if (search.Text.Length == 0 && host.Settings.WordSuggestions.Count > 0)
-        {
-            list.Children.Add(Theme.SectionTitle(L10n.T("建议")));
-            foreach (var suggestion in host.Settings.WordSuggestions.Take(8).ToList())
-                list.Children.Add(Theme.Card(Theme.Stack(8, Theme.Text(suggestion.Word, 16, bold: true),
-                    Theme.Text(L10n.T("从「{0}」改过 {1} 次", suggestion.HeardAs, suggestion.Count), 12, Theme.Grey),
-                    Theme.Row(8, Theme.Primary(L10n.T("加入"), () => host.Dictionary.AcceptSuggestion(suggestion)),
-                        Theme.Secondary(L10n.T("忽略"), () => host.Dictionary.DismissSuggestion(suggestion))))));
-            list.Children.Add(Theme.SectionTitle(L10n.T("词典")));
-        }
         foreach (var entry in host.Settings.DictionaryEntries.Where(e => (filter.SelectedIndex != 1 || e.Source == "auto")
             && (filter.SelectedIndex != 2 || e.Source != "auto") && (e.Word.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase) || e.HeardAs.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase))))
         {

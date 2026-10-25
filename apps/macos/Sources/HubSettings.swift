@@ -78,7 +78,7 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("学习我的更正"), detail: nil,
+            ToggleRow(title: L10n.text("自动学词"), detail: L10n.text("整理中的术语自动加入词典；删除后不再自动加入。"),
                       isOn: model.setting(\.autoLearn))
             ToggleRow(title: L10n.text("列表按列表粘贴"), detail: nil,
                       isOn: model.setting(\.richTextLists))

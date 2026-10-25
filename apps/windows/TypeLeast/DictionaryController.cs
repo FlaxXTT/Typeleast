@@ -32,6 +32,7 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
     public bool SaveWord(WordEntry entry)
     {
         if (WordEntry.Parse(entry.Word, entry.HeardAs, entry.Source) is null) return false;
+        if (entry.Source == "auto" && settings.DismissedSuggestions.Contains(entry.Word, StringComparer.OrdinalIgnoreCase)) return false;
         if (settings.DictionaryEntries.Any(e => e.Id != entry.Id && string.Equals(e.ServiceValue, entry.ServiceValue, StringComparison.OrdinalIgnoreCase)))
         { setHint(L10n.T("词条已存在或输入无效")); return false; }
         var previous = settings.DictionaryEntries.ToList();
@@ -44,8 +45,11 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
     public void RemoveWord(string entry)
     {
         var previous = settings.DictionaryEntries.ToList();
+        var dismissed = settings.DismissedSuggestions.ToList();
+        var removed = settings.DictionaryEntries.Where(e => e.Id == entry || e.ServiceValue == entry).ToList();
         settings.DictionaryEntries.RemoveAll(e => e.Id == entry || e.ServiceValue == entry);
-        if (!save()) settings.DictionaryEntries = previous;
+        WordSuggestions.RememberDeletion(settings, removed);
+        if (!save()) { settings.DictionaryEntries = previous; settings.DismissedSuggestions = dismissed; }
     }
 
     /// <summary>A paste landed in <paramref name="field"/>: watch it for a fix of <paramref name="text"/>.</summary>
@@ -60,35 +64,13 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
     /// <summary>Stop watching (microphone test, cancel, learning switched off).</summary>
     public void StopWatching() => learner.Stop();
 
-    /// <summary>Terms the cleanup model corrected become suggestions on the Dictionary page.</summary>
+    /// <summary>Service-filtered terms are learned automatically; the dictionary remains editable.</summary>
     public void Received(System.Collections.Generic.IEnumerable<SuggestionCandidate> candidates)
     {
-        if (!settings.LearnCorrections) return;
-        var known = settings.DictionaryEntries.Select(e => e.Word.ToLowerInvariant()).ToHashSet();
-        var dismissed = settings.DismissedSuggestions.ToHashSet();
-        var list = settings.WordSuggestions;
-        foreach (var candidate in candidates.Take(8))
-            list = WordSuggestions.Merge(list, candidate.Word, candidate.HeardAs, DateTime.UtcNow, known, dismissed);
-        if (list.Count == settings.WordSuggestions.Count && list.Zip(settings.WordSuggestions).All(p => ReferenceEquals(p.First, p.Second) && p.First.Count == p.Second.Count)) return;
-        settings.WordSuggestions = list;
-        save();
-    }
-
-    /// <summary>Add a suggestion to the dictionary, with the spelling it was heard as.</summary>
-    public void AcceptSuggestion(WordSuggestion suggestion)
-    {
-        settings.WordSuggestions = settings.WordSuggestions.Where(s => s != suggestion).ToList();
-        if (WordEntry.Parse(suggestion.Word, suggestion.HeardAs, "auto") is { } entry
-            && !settings.DictionaryEntries.Any(e => e.Word.Equals(entry.Word, StringComparison.OrdinalIgnoreCase))) SaveWord(entry);
-        else save();
-    }
-
-    /// <summary>Never suggest this word again.</summary>
-    public void DismissSuggestion(WordSuggestion suggestion)
-    {
-        settings.WordSuggestions = settings.WordSuggestions.Where(s => s != suggestion).ToList();
-        settings.DismissedSuggestions = settings.DismissedSuggestions.Append(suggestion.Word.ToLowerInvariant()).TakeLast(200).ToList();
-        save();
+        var previousEntries = settings.DictionaryEntries.ToList();
+        var previousPending = settings.WordSuggestions.ToList();
+        if (!WordSuggestions.ApplyAutomatic(settings, candidates)) return;
+        if (!save()) { settings.DictionaryEntries = previousEntries; settings.WordSuggestions = previousPending; }
     }
 
     /// <summary>A word the user selected in History: added to the dictionary by hand.</summary>

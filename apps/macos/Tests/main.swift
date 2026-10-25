@@ -36,8 +36,8 @@ if CommandLine.arguments.contains("--dictionary-ui") {
     let settings = Settings.shared
     let oldWords = settings.words
     let oldSuggestions = settings.wordSuggestions
-    settings.words = (1...60).map { LocalWord(id: "fixture-\($0)", word: "示例术语 \($0)", heardAs: "示例读音 \($0)", source: .manual, addedAt: Date()) }
-    settings.wordSuggestions = (1...8).map { WordSuggestion(word: "Example\($0)", heardAs: "示例 \($0)", count: 2, lastSeen: Date()) }
+    settings.words = (1...68).map { LocalWord(id: "fixture-\($0)", word: "示例术语 \($0)", heardAs: "示例读音 \($0)", source: $0 <= 8 ? .auto : .manual, addedAt: Date()) }
+    settings.wordSuggestions = []
     let app = NSApplication.shared
     app.setActivationPolicy(.regular)
     let model = AppModel()
@@ -1566,6 +1566,37 @@ do {
     checkEq("…and the hint says so", hints.last, L10n.text("「{0}」已在词典里", "deepseek"))
     dictionary.addFromHistory(" 飞书 ")
     checkEq("a new word from History is added", settings.words.map(\.word), ["飞书", "DeepSeek"])
+}
+
+// Shared client contract: automatic learning, migration, opt-out and explicit deletion.
+do {
+    let defaults = UserDefaults.standard
+    let keys = ["voice.words.v2", "voice.wordSuggestions", "voice.dismissedSuggestions", "voice.autoLearn"]
+    let old = keys.map { defaults.object(forKey: $0) }
+    defer { for (key, value) in zip(keys, old) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+    let path = ProcessInfo.processInfo.environment["TYPELEAST_DICTIONARY_CONTRACT"]!
+    let root = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
+    let settings = Settings.shared
+    for item in root["cases"] as! [[String: Any]] {
+        let id = item["id"] as! String
+        settings.words = (item["initial"] as? [String] ?? []).map { LocalWord(id: $0, word: $0, source: .manual, addedAt: Date()) }
+        settings.wordSuggestions = []
+        settings.autoLearn = item["enabled"] as! Bool
+        defaults.set(item["ignored"] as? [String] ?? [], forKey: "voice.dismissedSuggestions")
+        let pending = item["pending"] as! [[String: String]]
+        settings.wordSuggestions = pending.map { WordSuggestion(word: $0["word"]!, heardAs: $0["heardAs"]!, count: 1, lastSeen: Date()) }
+        let data = try! JSONSerialization.data(withJSONObject: item["incoming"]!)
+        let incoming = try! JSONDecoder().decode([SuggestionCandidate].self, from: data)
+        settings.learnSuggestions(incoming)
+        checkEq("automatic dictionary: " + id, settings.words.map(\.word).sorted(), (item["expected"] as! [String]).sorted())
+        checkEq("pending dictionary: " + id, settings.wordSuggestions.count, item["pendingCount"] as! Int)
+        if let entry = settings.words.first(where: { $0.source == .auto }) {
+            let same = try! JSONDecoder().decode([SuggestionCandidate].self, from: JSONSerialization.data(withJSONObject: [["word": entry.word, "heardAs": entry.heardAs ?? ""]]))
+            settings.removeWord(id: entry.id)
+            Settings().learnSuggestions(same)
+            check("deleted dictionary term stays removed: " + id, !settings.words.contains { $0.word == entry.word })
+        }
+    }
 }
 
 server.stop()

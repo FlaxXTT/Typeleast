@@ -275,7 +275,11 @@ final class Settings {
     /// Add a word to the dictionary when the user corrects it right after a dictation.
     var autoLearn: Bool {
         get { bool("voice.autoLearn", default: true) }
-        set { d.set(newValue, forKey: "voice.autoLearn"); changed() }
+        set {
+            d.set(newValue, forKey: "voice.autoLearn")
+            if newValue { learnSuggestions() }
+            changed()
+        }
     }
 
     /// Paste numbered lists as real lists in rich-text apps (Notes, Mail, Pages, Word).
@@ -414,6 +418,7 @@ final class Settings {
         let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !w.isEmpty else { return false }
+        if source == .auto && dismissedSuggestions.contains(w.lowercased()) { return false }
         var list = words
         // Auto-learning never overrides what the user typed in by hand.
         if source == .auto, list.contains(where: { $0.word.caseInsensitiveCompare(w) == .orderedSame }) { return false }
@@ -435,7 +440,26 @@ final class Settings {
     }
 
     func removeWord(id: String) {
+        if let removed = words.first(where: { $0.id == id }) {
+            dismissedSuggestions = dismissedSuggestions.filter { $0 != removed.word.lowercased() } + [removed.word.lowercased()]
+            wordSuggestions = wordSuggestions.filter { $0.id != removed.word.lowercased() }
+        }
         words = words.filter { $0.id != id }
+    }
+
+    /// Existing service-filtered candidates go straight into the dictionary. User deletions win.
+    @discardableResult
+    func learnSuggestions(_ candidates: [SuggestionCandidate] = []) -> Int {
+        guard autoLearn else { return 0 }
+        let pending = Array(wordSuggestions.prefix(WordSuggestions.limit)) + candidates.prefix(8).map {
+            WordSuggestion(word: $0.word, heardAs: $0.heardAs, count: 1, lastSeen: Date())
+        }
+        var added = 0
+        for suggestion in pending where WordSuggestions.validCandidate(word: suggestion.word, heardAs: suggestion.heardAs) {
+            if addWord(suggestion.word, heardAs: suggestion.heardAs, source: .auto) { added += 1 }
+        }
+        if !wordSuggestions.isEmpty { wordSuggestions = [] }
+        return added
     }
 
     // MARK: dictionary suggestions (from what the cleanup model corrected)
@@ -453,26 +477,7 @@ final class Settings {
 
     private var dismissedSuggestions: [String] {
         get { d.stringArray(forKey: "voice.dismissedSuggestions") ?? [] }
-        set { d.set(Array(newValue.suffix(200)), forKey: "voice.dismissedSuggestions") }
-    }
-
-    func suggest(word: String, heardAs: String) {
-        let known = Set(words.map { $0.word.lowercased() })
-        let next = WordSuggestions.merge(wordSuggestions, word: word, heardAs: heardAs, at: Date(),
-                                         known: known, dismissed: Set(dismissedSuggestions))
-        if next != wordSuggestions { wordSuggestions = next }
-    }
-
-    /// Add a suggestion to the dictionary, with the spelling it was heard as.
-    func acceptSuggestion(_ suggestion: WordSuggestion) {
-        addWord(suggestion.word, heardAs: suggestion.heardAs, source: .auto)
-        wordSuggestions = wordSuggestions.filter { $0.id != suggestion.id }
-    }
-
-    /// Never suggest this word again.
-    func dismissSuggestion(_ suggestion: WordSuggestion) {
-        dismissedSuggestions.append(suggestion.id)
-        wordSuggestions = wordSuggestions.filter { $0.id != suggestion.id }
+        set { d.set(Array(Set(newValue.map { $0.lowercased() })), forKey: "voice.dismissedSuggestions") }
     }
 
     /// Import a CSV: one entry per line, "word" or "heard,word".

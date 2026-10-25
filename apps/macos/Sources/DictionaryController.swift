@@ -17,6 +17,7 @@ final class DictionaryController {
         self.setHint = setHint
         self.changed = changed
         watcher.onLearn = { [weak self] word in self?.learned(word) }
+        settings.learnSuggestions()
     }
 
     /// The entries sent with a dictation ("word" or "heard=word").
@@ -39,12 +40,9 @@ final class DictionaryController {
         if let watched = watcher.watchedBundleId, bundleId != watched { watcher.check() }
     }
 
-    /// Terms the cleanup model corrected become suggestions on the Dictionary page.
+    /// The service has already filtered these pairs; learn them without a confirmation step.
     func received(_ candidates: [SuggestionCandidate]) {
-        guard settings.autoLearn else { return }
-        for pair in candidates.prefix(8) where pair.isValid {
-            settings.suggest(word: pair.word, heardAs: pair.heardAs)
-        }
+        if settings.learnSuggestions(candidates) > 0 { changed() }
     }
 
     /// A word the user selected in History: added by hand. One already in the dictionary is

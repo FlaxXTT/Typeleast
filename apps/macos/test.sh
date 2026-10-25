@@ -25,4 +25,5 @@ echo "compile: ${CMD[*]}"
 "${CMD[@]}"
 echo "run: $BIN"
 TYPELEAST_SUGGESTION_RESPONSES="$ROOT/../../service/test/fixtures/suggestion-responses.json" \
+TYPELEAST_DICTIONARY_CONTRACT="$ROOT/../../tests/conformance/automatic-dictionary-v1.json" \
 TYPELEAST_CLIENT_CONTRACT="$ROOT/../../tests/conformance/client-v1.json" "$BIN"

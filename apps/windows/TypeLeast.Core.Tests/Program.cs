@@ -957,6 +957,38 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     Eq("the suggested mirror", ModelMirror.Suggested, "https://hf-mirror.com");
 }
 
+using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "automatic-dictionary-v1.json"))))
+{
+    foreach (var item in contract.RootElement.GetProperty("cases").EnumerateArray())
+    {
+        var id = item.GetProperty("id").GetString()!;
+        var settings = new AppSettings { LearnCorrections = item.GetProperty("enabled").GetBoolean() };
+        if (item.TryGetProperty("initial", out var initial))
+            settings.DictionaryEntries = initial.EnumerateArray().Select(v => WordEntry.Parse(v.GetString()!)!).ToList();
+        if (item.TryGetProperty("ignored", out var ignored)) settings.DismissedSuggestions = ignored.EnumerateArray().Select(v => v.GetString()!).ToList();
+        settings.WordSuggestions = item.GetProperty("pending").EnumerateArray().Select(v => new WordSuggestion { Word = v.GetProperty("word").GetString()!, HeardAs = v.GetProperty("heardAs").GetString()! }).ToList();
+        var incoming = item.GetProperty("incoming").EnumerateArray().Select(v => new SuggestionCandidate(v.GetProperty("word").GetString()!, v.GetProperty("heardAs").GetString()!)).ToArray();
+        WordSuggestions.ApplyAutomatic(settings, incoming);
+        Eq("automatic dictionary: " + id, string.Join(",", settings.DictionaryEntries.Select(e => e.Word).Order()), string.Join(",", item.GetProperty("expected").EnumerateArray().Select(e => e.GetString()!).Order()));
+        Eq("pending dictionary: " + id, settings.WordSuggestions.Count, item.GetProperty("pendingCount").GetInt32());
+        if (settings.DictionaryEntries.FirstOrDefault(e => e.Source == "auto") is { } entry)
+        {
+            WordSuggestions.RememberDeletion(settings, [entry]);
+            settings.DictionaryEntries.Remove(entry);
+            var path = Path.Combine(Path.GetTempPath(), "typeleast-auto-dictionary-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                settings.LearningDefaults = 1;
+                settings.Save(path);
+                settings = AppSettings.Load(path);
+            }
+            finally { File.Delete(path); }
+            WordSuggestions.ApplyAutomatic(settings, [new(entry.Word, entry.HeardAs)]);
+            Check("deleted dictionary term stays removed: " + id, !settings.DictionaryEntries.Any(e => e.Word == entry.Word));
+        }
+    }
+}
+
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

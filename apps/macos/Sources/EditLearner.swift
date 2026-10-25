@@ -145,6 +145,13 @@ struct WordSuggestion: Codable, Equatable, Identifiable {
 enum WordSuggestions {
     static let limit = 30
 
+    static func validCandidate(word: String, heardAs: String) -> Bool {
+        (2...30).contains(word.utf16.count) && (1...30).contains(heardAs.utf16.count) &&
+        !(word + heardAs).unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) &&
+        !word.contains("=") && !heardAs.contains("=") &&
+        !word.trimmingCharacters(in: .whitespaces).isEmpty && !heardAs.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     /// Add one sighting: words already in the dictionary or ignored are left out; the newest first.
     static func merge(_ list: [WordSuggestion], word: String, heardAs: String, at now: Date,
                       known: Set<String>, dismissed: Set<String>) -> [WordSuggestion] {

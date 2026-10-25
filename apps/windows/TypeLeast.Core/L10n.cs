@@ -207,6 +207,8 @@ public static class L10n
         ["按一下开始，再按一下结束。右 Alt 在部分键盘上是 AltGr，请换键。"] = "Press to start. Press again to stop. Right Alt is AltGr on some keyboards. Then select a different key.",
         ["参考输入框内容"] = "Use field text",
         ["学习更正"] = "Learn corrections",
+        ["自动学词"] = "Automatic term learning",
+        ["整理中的术语自动加入词典；删除后不再自动加入。"] = "Adds terms from cleanup to the dictionary. Deleted terms stay removed.",
         ["编号列表"] = "Numbered lists",
         ["提示音"] = "Sounds",
         ["听写时静音"] = "Mute other audio",

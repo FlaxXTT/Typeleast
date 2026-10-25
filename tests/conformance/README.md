@@ -2,7 +2,7 @@
 
 这套用例只给开发者运行。它保存在源码仓库的 `tests/conformance/`，不复制进 Mac 或 Windows 安装包，也不在应用界面中提供入口。发布包只包含应用与本地服务运行文件。
 
-这组测试从进程外检查 TypeLeast 本地服务。运行器不导入服务源码。重写者可以用任何语言实现服务，再用同一批 JSON 用例验收。`v1.json` 定义 HTTP 行为；`client-v1.json` 由 Mac 和 Windows 测试共同读取。
+这组测试从进程外检查 TypeLeast 本地服务。运行器不导入服务源码。重写者可以用任何语言实现服务，再用同一批 JSON 用例验收。`v1.json` 定义 HTTP 行为；`client-v1.json` 由 Mac 和 Windows 测试共同读取。`automatic-dictionary-v1.json` 供双端开发测试检查自动学词、旧建议迁移、手工写法优先和删除后不再自动加入；它也不进入安装包。
 
 ## 运行
 

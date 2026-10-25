@@ -526,11 +526,6 @@ struct DictionaryPage: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    if !model.suggestions.isEmpty, query.isEmpty {
-                        SuggestionList(suggestions: model.suggestions, onAdd: { suggestion in
-                            Settings.shared.acceptSuggestion(suggestion)
-                        }, onDismiss: { Settings.shared.dismissSuggestion($0) })
-                    }
                     if filtered.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
@@ -574,37 +569,6 @@ struct DictionaryPage: View {
         let added = Settings.shared.importCSV(text)
         importNote = L10n.text("已导入 {0} 个词", added)
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { importNote = "" }
-    }
-}
-
-/// Terms the cleanup model corrected: added only when the user says so.
-private struct SuggestionList: View {
-    let suggestions: [WordSuggestion]
-    let onAdd: (WordSuggestion) -> Void
-    let onDismiss: (WordSuggestion) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.text("建议")).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
-            VStack(spacing: 0) {
-                ForEach(suggestions.prefix(8)) { s in
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(s.word).font(.system(size: 14, weight: .semibold))
-                            Text(L10n.text("从「{0}」改过 {1} 次", s.heardAs, s.count))
-                                .font(.system(size: 11.5)).foregroundColor(Theme.secondary)
-                        }
-                        Spacer()
-                        Button(L10n.text("忽略")) { onDismiss(s) }.buttonStyle(SecondaryButtonStyle())
-                        Button(L10n.text("加入")) { onAdd(s) }.buttonStyle(PrimaryButtonStyle())
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    if s.id != suggestions.prefix(8).last?.id { Divider().padding(.leading, 16) }
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
-        }
     }
 }
 

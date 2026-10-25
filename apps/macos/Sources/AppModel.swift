@@ -72,7 +72,6 @@ final class AppModel: ObservableObject {
     /// Bumped when the per-day activity changes; the heatmap reads ActivityLog.shared.
     @Published private(set) var activityRevision = 0
     @Published private(set) var words: [LocalWord] = []
-    @Published private(set) var suggestions: [WordSuggestion] = []
 
     @Published var phase: AppPhase = .idle
     @Published var serviceUp = false
@@ -120,7 +119,6 @@ final class AppModel: ObservableObject {
 
     func reloadWords() {
         words = settings.words
-        suggestions = settings.wordSuggestions
     }
 
     func refreshPermissions() {

@@ -529,6 +529,8 @@ enum L10n {
         "继续": "Continue",
         "编辑": "Edit",
         "学习我的更正": "Learn my corrections",
+        "自动学词": "Automatic term learning",
+        "整理中的术语自动加入词典；删除后不再自动加入。": "Adds terms from cleanup to the dictionary. Deleted terms stay removed.",
         "自动检测": "Automatic",
         "自动添加": "Automatic",
         "自动粘贴到光标处": "Paste at cursor",
