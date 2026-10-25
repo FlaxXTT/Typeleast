@@ -54,7 +54,7 @@ test("the service listens on loopback, publishes its port, and serves the contra
   await withDir(async (dir) => {
     const handle = await startService({ stateDir: dir, modelsDir: join(dir, "models"), logger: quiet, recognizer });
     try {
-      assert.equal(handle.service.pluginState().plugins.some(p => p.id === 'typeleast.tech-terms'), false, 'fresh installs stay general');
+      assert.equal(handle.service.extension.state().plugins.some(p => p.id === 'typeleast.tech-terms'), false, 'fresh installs stay general');
       const runtime = JSON.parse(await readFile(join(dir, "runtime.json"), "utf8"));
       assert.equal(runtime.port, handle.port);
       assert.equal(runtime.host, "127.0.0.1");
@@ -104,14 +104,31 @@ test('an existing state gets bundled terminology once without a market request',
     await writeFile(join(dir, 'api-token'), 'a'.repeat(64) + '\n');
     const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
     try {
-      const pack = handle.service.pluginState().plugins.find(p => p.id === 'typeleast.tech-terms');
+      const pack = handle.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms');
       assert.equal(pack?.enabled, true);
       assert.equal(pack?.source, 'bundled');
-      await handle.service.plugins.setEnabled(pack.id, false);
+      await handle.service.extension.store.setEnabled(pack.id, false);
     } finally { await handle.close(); }
     const again = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
-    try { assert.equal(again.service.pluginState().plugins.find(p => p.id === 'typeleast.tech-terms')?.enabled, false); }
+    try { assert.equal(again.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms')?.enabled, false); }
     finally { await again.close(); }
+  });
+});
+
+test('core dictation starts and answers with the extension module disabled', async () => {
+  await withDir(async dir => {
+    const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer, extensions: false });
+    try {
+      assert.equal(handle.service.extension, null);
+      await assert.rejects(stat(join(dir, 'plugins')), 'no extension state is created');
+      const token = (await readFile(join(dir, 'api-token'), 'utf8')).trim();
+      const headers = { host: `127.0.0.1:${handle.port}`, authorization: `Bearer ${token}` };
+      const plugins = await raw(handle.port, { path: '/api/voice-polish/plugins', headers });
+      assert.deepEqual([plugins.status, plugins.json.code], [503, 'plugins-unavailable']);
+      const dictated = await raw(handle.port, { method: 'POST', path: '/api/voice-polish/dictate',
+        headers: { ...headers, 'content-type': 'audio/wav' }, body: wav(0.5) });
+      assert.deepEqual([dictated.status, dictated.json.text], [200, '我们周三把报告发出去。']);
+    } finally { await handle.close(); }
   });
 });
 

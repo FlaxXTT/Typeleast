@@ -20,9 +20,7 @@
  */
 import { wordSuggestions } from "./word-suggestions.js";
 import { relevantEntries } from "./dictionary-relevance.js";
-import { relevantAliases, safePackTerms } from "./term-hints.js";
 import { spelledWords } from "./spelling.js";
-import { CATALOG_SOURCE_MODES, fetchCatalog, pluginDigest, summarize } from "./plugins.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { redactFieldContext, redactSecrets } from "./context.js";
@@ -31,7 +29,7 @@ import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
-import { normalizeTermCase, tidy } from "./tidy.js";
+import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
@@ -66,10 +64,8 @@ export class VoicePolishService {
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
     this.suggestionEngine = options.suggestionEngine ?? wordSuggestions;
-    /** Installed plugins (plugins.js); null in tests and before the store loads. */
-    this.plugins = options.plugins ?? null;
-    /** The catalog last read from an official address, for installing from the market. */
-    this.catalog = null;
+    /** Optional extension port. Core dictation works when it is absent. */
+    this.extension = options.extension ?? null;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
     this.pending = 0;
     this.queue = 0;
@@ -178,6 +174,8 @@ export class VoicePolishService {
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
     const context = await this.buildContext(request, rawText);
+    let style = null;
+    try { style = this.extension?.style() ?? null; } catch { /* Optional extensions never stop cleanup. */ }
     // Generic cleanup rules, plus relevant dictionary and optional pronunciation hints.
     const system = systemPromptFor({
       dictionary: context.dictionary,
@@ -185,7 +183,7 @@ export class VoicePolishService {
       fieldContext: context.fieldContext ?? null,
       spellings: context.spellings,
       strength,
-      style: this.plugins?.activeStyle()?.instructions ?? null,
+      style,
     }) + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
@@ -521,14 +519,11 @@ export class VoicePolishService {
    * @returns {Promise<object>} the same result.
    */
   async recordAndReturn(request, result) {
-    // Only an enabled pack may supply brand spelling. Ordinary English words are excluded.
-    let caseTerms = [];
-    try { caseTerms = this.plugins?.activeCaseTerms() ?? []; } catch { /* Optional plugins cannot stop dictation. */ }
-    if (!Array.isArray(caseTerms)) caseTerms = [];
-    const userSpellings = new Set(dictionaryFrom(this.dictionary, request.dictionary)
-      .map(entry => entry.slice(entry.indexOf('=') + 1).trim().toLowerCase()));
-    caseTerms = caseTerms.filter(term => typeof term === 'string' && !userSpellings.has(term.toLowerCase()));
-    result.text = normalizeTermCase(result.text, caseTerms);
+    // A failed optional extension must not change or stop dictation.
+    try {
+      const changed = this.extension?.normalizeText(result.text, dictionaryFrom(this.dictionary, request.dictionary));
+      if (typeof changed === "string") result.text = changed;
+    } catch { /* Core output stays intact. */ }
     // Entries the user keeps from the model: their heard-as spellings are corrected here.
     result.text = applyLocalEntries(result.text, localEntriesFrom(request.dictionary));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
@@ -626,53 +621,6 @@ export class VoicePolishService {
     return { text: String(spoken.text ?? "").trim(), language: spoken.language ?? language, ms: Date.now() - started };
   }
 
-  /** The installed plugins and the selected style, for the Extensions page. */
-  pluginState() {
-    return { plugins: this.plugins?.list() ?? [], style: this.plugins?.state.style ?? null, problems: this.plugins?.problems ?? [] };
-  }
-
-  /**
-   * Read the official catalog once: the user opened the market or pressed refresh. On
-   * failure the last catalog read is shown with the error.
-   */
-  /** `mode` is the app's 更新来源 setting: auto, github (official addresses only) or mirror. */
-  async refreshCatalog(mode = "auto") {
-    try {
-      this.catalog = await fetchCatalog({ fetchImpl: this.fetchImpl ?? globalThis.fetch, version: this.version,
-        mode: CATALOG_SOURCE_MODES.includes(mode) ? mode : "auto" });
-      await this.plugins?.saveCatalog(this.catalog).catch(() => {});
-      return this.catalogView(true, null);
-    } catch (error) {
-      this.catalog ??= (await this.plugins?.loadCatalog()) ?? null;
-      return this.catalogView(false, error.code ?? "market-offline");
-    }
-  }
-
-  catalogView(ok, code) {
-    const installed = new Map((this.plugins?.list() ?? []).map((plugin) => [plugin.id, plugin.version]));
-    return {
-      ok, ...(code ? { code } : {}),
-      source: this.catalog?.source ?? null, mirrored: this.catalog?.mirrored === true,
-      fetchedAt: this.catalog?.fetchedAt ?? null, rejected: this.catalog?.rejected ?? 0,
-      plugins: (this.catalog?.plugins ?? []).map((plugin) => ({ ...summarize(plugin), installedVersion: installed.get(plugin.id) ?? null })),
-    };
-  }
-
-  /**
-   * Install the catalog plugin the user confirmed: `digest` is the fingerprint of what the
-   * confirmation showed. If the catalog has changed since, nothing is installed and the
-   * user has to look again.
-   */
-  async installFromCatalog(id, enable, digest) {
-    const plugin = this.catalog?.plugins.find((entry) => entry.id === id);
-    if (!plugin || !this.plugins) throw Object.assign(new Error("not in the catalog"), { code: "plugin-not-found" });
-    if (typeof digest !== "string" || pluginDigest(plugin) !== digest) {
-      throw Object.assign(new Error("the plugin changed after it was shown"), { code: "plugin-changed" });
-    }
-    await this.plugins.install(plugin, { enable, source: "catalog" });
-    return this.pluginState();
-  }
-
   /**
    * Assemble bounded, redacted context for one call. Of the dictionary, only the entries
    * this dictation (or the field the user let it read) mentions go to the model.
@@ -685,8 +633,9 @@ export class VoicePolishService {
     let entries;
     let aliases = [];
     try {
-      entries = await relevantEntries(withPackTerms(own, safePackTerms(this.plugins?.activeTerms() ?? [])), texts);
-      aliases = relevantAliases(this.plugins?.activeAliases() ?? [], rawText, own);
+      const extensionContext = await this.extension?.context(own, texts, rawText);
+      entries = extensionContext?.entries ?? await relevantEntries(own, texts);
+      aliases = extensionContext?.aliases ?? [];
     } catch {
       // A damaged optional pack must never take down speech or a user's own dictionary.
       entries = await relevantEntries(own, texts);
@@ -778,21 +727,6 @@ export function applyLocalEntries(text, pairs) {
   for (const [heard, word] of pairs) {
     if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(heard)) out = out.split(heard).join(word);
     else out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${heard.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "giu"), () => word);
-  }
-  return out;
-}
-
-/**
- * The enabled dictionary packs' terms after the user's own entries, without repeating a
- * word the user already has (their spelling and "heard=word" rules come first).
- */
-export function withPackTerms(entries, terms) {
-  if (!terms.length) return entries;
-  const known = new Set(entries.map((entry) => entry.slice(entry.indexOf("=") + 1).trim().toLowerCase()));
-  const out = [...entries];
-  for (const term of terms) {
-    const key = term.toLowerCase();
-    if (!known.has(key)) { known.add(key); out.push(term); }
   }
   return out;
 }

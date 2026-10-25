@@ -5,6 +5,7 @@ import { parsePlugin } from '../lib/plugins.js';
 import { relevantAliases, safePackTerms } from '../lib/term-hints.js';
 import { wordSuggestions } from '../lib/word-suggestions.js';
 import { VoicePolishService } from '../lib/service.js';
+import { PluginRuntime } from '../lib/plugin-runtime.js';
 
 const bundled = parsePlugin(await readFile(new URL('../lib/bundled/typeleast.tech-terms.typeleast-plugin', import.meta.url), 'utf8'));
 assert.equal(bundled.ok, true);
@@ -36,7 +37,7 @@ test('common words need context in the same utterance and clause', () => {
 test('a disabled pack gives no hints, and a bad suggestion cannot change dictation', async () => {
   const stub = enabled => new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) },
-    plugins: { activeTerms: () => enabled ? pack.terms : [], activeAliases: () => enabled ? pack.aliases : [], activeCaseTerms: () => enabled ? ['GitHub'] : [] },
+    extension: new PluginRuntime({ activeTerms: () => enabled ? pack.terms : [], activeAliases: () => enabled ? pack.aliases : [], activeCaseTerms: () => enabled ? ['GitHub'] : [], activeStyle: () => null }),
     config: { dictionary: [], redactSecrets: true },
   });
   const off = await stub(false).buildContext({ dictionary: [] }, '把 prompt 发到 cloud 模型');
@@ -56,7 +57,7 @@ test('only a supported alias reaches the provider in the existing model call', a
   const calls = [];
   const service = new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) },
-    plugins: { activeTerms: () => pack.terms, activeAliases: () => pack.aliases, activeCaseTerms: () => [], activeStyle: () => null },
+    extension: new PluginRuntime({ activeTerms: () => pack.terms, activeAliases: () => pack.aliases, activeCaseTerms: () => [], activeStyle: () => null }),
     config: { dictionary: [], redactSecrets: true, maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt' },
     fetchImpl: async (_, init) => {
       calls.push(JSON.parse(init.body).messages[0].content);
@@ -76,11 +77,11 @@ test('only a supported alias reaches the provider in the existing model call', a
 test('optional terminology failures leave the dictation path usable', async () => {
   const broken = new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) },
-    plugins: {
+    extension: new PluginRuntime({
       activeTerms: () => { throw new Error('bad plugin'); },
       activeCaseTerms: () => { throw new Error('bad plugin'); },
       activeStyle: () => null,
-    },
+    }),
     config: { dictionary: [], redactSecrets: true, maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt' },
     fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '{"status":"ok","text":"今天开会。","reason":"补标点。"}' }, finish_reason: 'stop' }] }) }),
   });
@@ -89,4 +90,16 @@ test('optional terminology failures leave the dictation path usable', async () =
   assert.equal(result.text, '今天开会。');
   const raw = await broken.polish({ rawText: '今天开会', strength: 'off' });
   assert.equal(raw.text, '今天开会');
+});
+
+test('an extension that fails while choosing a style cannot stop cleanup', async () => {
+  const service = new VoicePolishService({
+    recognizer: { snapshot: () => ({ ready: true }) },
+    extension: { style: () => { throw new Error('bad style'); }, context: () => { throw new Error('bad pack'); },
+      normalizeText: () => { throw new Error('bad case terms'); } },
+    config: { dictionary: [], redactSecrets: true, maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt' },
+    fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '{"status":"ok","text":"今天开会。","reason":"补标点。"}' }, finish_reason: 'stop' }] }) }),
+  });
+  const result = await service.polish({ rawText: '今天开会', llm: { baseURL: 'https://api.example.com/v1', model: 'test', apiKey: 'sk-test-123456789012' } });
+  assert.deepEqual([result.fallback, result.text], [false, '今天开会。']);
 });

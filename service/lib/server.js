@@ -19,7 +19,6 @@ import { createHandler } from "./http.js";
 import { defaultModelsDir, defaultStateDir } from "./paths.js";
 import { publishRuntime, withdrawRuntime } from "./runtime.js";
 import { VoicePolishService } from "./service.js";
-import { PluginStore } from "./plugins.js";
 import { ensureToken } from "./token.js";
 
 export const VERSION = "0.2.0";
@@ -51,14 +50,26 @@ export async function startService(options = {}) {
   // the apps own both now, so the leftovers are removed.
   for (const leftover of ["history.jsonl", "dictionary.json"]) await rm(join(stateDir, leftover), { force: true }).catch(() => {});
   const recognizer = options.recognizer ?? new SpeechModels({ modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads, language: config.language, logger });
-  // Installed plugins; a damaged plugin folder only turns plugins off, never the service.
-  const plugins = new PluginStore(join(stateDir, "plugins"));
-  await plugins.load().catch((error) => logger.warn?.("plugins could not be read (%s)", error?.code ?? "error"));
-  await plugins.migrateTechnicalPack(existingInstallation).catch(() => logger.warn?.("bundled terminology could not be installed"));
+  // This is the one composition point for the optional extension module.
+  // A stripped or disabled build can omit it without changing dictation.
+  let extension = null;
+  if (options.extensions !== false) {
+    try {
+      const [{ PluginStore }, { PluginRuntime }] = await Promise.all([
+        import("./plugins.js"), import("./plugin-runtime.js"),
+      ]);
+      const plugins = new PluginStore(join(stateDir, "plugins"));
+      await plugins.load();
+      await plugins.migrateTechnicalPack(existingInstallation).catch(() => logger.warn?.("bundled terminology could not be installed"));
+      extension = new PluginRuntime(plugins, { version: VERSION });
+    } catch (error) {
+      logger.warn?.("plugins could not be read (%s)", error?.code ?? "error");
+    }
+  }
   const service = new VoicePolishService({
     recognizer,
     config,
-    plugins,
+    extension,
     logger,
     version: VERSION,
   });
