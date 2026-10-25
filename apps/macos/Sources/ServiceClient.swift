@@ -64,11 +64,11 @@ struct SpeechModelOperation: Codable, Equatable {
     var problem: String {
         switch error {
         case "checksum-mismatch": return L10n.text("文件校验失败，请重新下载。")
-        case "download-failed": return L10n.text("下载失败，请检查网络或镜像后重试。")
+        case "download-failed": return L10n.text("下载失败。请检查网络或镜像后重试。")
         case "model-not-installed": return L10n.text("模型文件不完整，请重新下载。")
-        case "model-load-failed": return L10n.text("模型加载失败，请重试或使用其他模型。")
-        case "ENOSPC": return L10n.text("磁盘空间不足，请释放空间后重试。")
-        case "EACCES", "EPERM": return L10n.text("无法保存模型设置，请检查文件访问权限。")
+        case "model-load-failed": return L10n.text("模型加载失败。请重试或换一个模型。")
+        case "ENOSPC": return L10n.text("磁盘空间不足。请释放空间后重试。")
+        case "EACCES", "EPERM": return L10n.text("无法保存模型设置。请检查文件权限。")
         default: return L10n.text("模型操作失败，请重试。当前模型保留。")
         }
     }
@@ -880,10 +880,10 @@ struct LearnedWordResult: Codable, Equatable {
 enum BetaMessages {
     static func notice(_ code: String) -> String {
         switch code {
-        case "empty-transcript": return L10n.text("没有听到有效补充，请再说一次；已有信息保留。")
-        case "beta-input-limit": return L10n.text("这次补充太长，没有收到。请说短一些，或先生成。")
+        case "empty-transcript": return L10n.text("没听清，请再说一次。之前的回答保留。")
+        case "beta-input-limit": return L10n.text("太长了。说短一些，或现在生成。")
         case "beta-validation": return L10n.text("结果没通过检查，未插入。可继续补充或重新生成。")
-        default: return L10n.text("这一轮没完成，已有信息保留。请重说或重新生成。")
+        default: return L10n.text("这一轮没完成，之前的回答保留。请重说或生成。")
         }
     }
 }

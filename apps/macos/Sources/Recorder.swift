@@ -14,11 +14,11 @@ enum RecorderError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .busy: return L10n.text("已经在录音中")
-        case .noInputDevice: return L10n.text("找不到可用的麦克风输入")
+        case .busy: return L10n.text("正在录音")
+        case .noInputDevice: return L10n.text("找不到麦克风")
         case .permissionDenied: return L10n.text("麦克风权限被拒绝")
-        case .permissionNotDetermined: return L10n.text("尚未授予麦克风权限")
-        case .converterUnavailable: return L10n.text("无法创建 16kHz 单声道转换器")
+        case .permissionNotDetermined: return L10n.text("没有麦克风权限")
+        case .converterUnavailable: return L10n.text("无法创建 16 kHz 单声道转换器")
         case .engineFailed(let m): return L10n.text("音频引擎启动失败：") + m
         case .tooShort(let s): return String(format: L10n.text("录音太短（%.2f 秒）"), s)
         }

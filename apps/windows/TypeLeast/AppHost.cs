@@ -29,7 +29,7 @@ internal sealed class AppHost : IDictationHost
     private string? UpdateBlocker() =>
         Phase != DictationPhase.Idle ? L10n.T("听写结束后再更新。")
         // Quitting would drop the questions and the answers given so far.
-        : dictation.HasBeta ? L10n.T("生成或取消这次提示词 Beta 后再更新。") : null;
+        : dictation.HasBeta ? L10n.T("更新前，请先生成或取消提示词 Beta。") : null;
     public LocalHistory History { get; }
     public ActivityLog Activity { get; }
     public ServiceClient Client { get; } = new();
@@ -92,9 +92,9 @@ internal sealed class AppHost : IDictationHost
         bar = new RecordingBar(this);
         dictation = new DictationController(this, app.Dispatcher, hook, bar);
         bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
-        if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件读不了，原文件已保留，暂不保存。");
-        if (Activity.LastError is not null) Hint = L10n.T("活动统计文件读不了，原文件已保留。");
-        if (History.LastError is not null) Hint = L10n.T("历史记录读写失败，原文件已保留。请检查文件权限。");
+        if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件无法读取，文件已保留，暂不覆盖。");
+        if (Activity.LastError is not null) Hint = L10n.T("活动文件无法读取，文件已保留。");
+        if (History.LastError is not null) Hint = L10n.T("历史无法读写，文件已保留。请检查文件权限。");
     }
 
     public bool ServiceUp => Health?.Ok == true && Health.Service == "typeleast";
@@ -108,17 +108,17 @@ internal sealed class AppHost : IDictationHost
     {
         get
         {
-            if (!LlmConfigured) return L10n.T("未设置整理模型（只去口头禅）");
+            if (!LlmConfigured) return L10n.T("没有整理模型（只去口头禅）");
             var preset = Settings.Preset;
-            return preset.Name + " · " + Settings.LlmModel + (preset.Id == "ollama" ? L10n.T("（本机）") : L10n.T("（自己的 Key）"));
+            return preset.Name + " · " + Settings.LlmModel + (preset.Id == "ollama" ? L10n.T("（本机）") : L10n.T("（你的 Key）"));
         }
     }
 
     public string ServiceSummary => Service.State switch
     {
-        ServiceManager.Phase.Running => ServiceUp ? L10n.T("本地服务已就绪") : (Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务运行中")),
+        ServiceManager.Phase.Running => ServiceUp ? L10n.T("本地服务就绪") : (Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务运行中")),
         ServiceManager.Phase.Starting => L10n.T("本地服务启动中…"),
-        ServiceManager.Phase.Stopped => L10n.T("本地服务未启动"),
+        ServiceManager.Phase.Stopped => L10n.T("本地服务已停止"),
         _ => Service.Detail,
     };
 
@@ -145,7 +145,7 @@ internal sealed class AppHost : IDictationHost
         hook.TranslateTapped += () => app.Dispatcher.InvokeAsync(() => ToggleTranslate());
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
         HotkeyReady = hook.Install();
-        if (HotkeyReady != true) Hint = L10n.T("无法注册快捷键，可以用托盘菜单开始听写");
+        if (HotkeyReady != true) Hint = L10n.T("无法注册快捷键，请用托盘菜单听写");
 
         tray = new Tray(this);
         JumpList.Update(Settings.Strength);
@@ -223,8 +223,8 @@ internal sealed class AppHost : IDictationHost
         catch (Exception e) {
             var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(savedSettingsJson, Json.Options)!;
             foreach (var property in typeof(AppSettings).GetProperties().Where(p => p.SetMethod?.IsPublic == true && !p.IsDefined(typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), true))) property.SetValue(Settings, property.GetValue(restored));
-            SettingsSaveError = L10n.T("设置未能保存，请检查文件权限和可用空间。");
-            Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未能保存，请检查文件权限和可用空间。")); return false; }
+            SettingsSaveError = L10n.T("设置未保存。请检查文件权限和磁盘空间。");
+            Log.Write("settings.save.fail", e.GetType().Name); SetHint(L10n.T("设置未保存。请检查文件权限和磁盘空间。")); return false; }
         SettingsSaveError = null;
         Theme.Apply(Settings.Appearance);
         if (window is not null) window.ShowInTaskbar = Settings.ShowInTaskbar;
@@ -280,7 +280,7 @@ internal sealed class AppHost : IDictationHost
         Service.NodePathOverride = Settings.NodePath;
         Service.ModelMirror = Settings.ModelMirror;
         Service.Restart();
-        SetHint(L10n.T("正在重新启动本地服务…"));
+        SetHint(L10n.T("正在重启本地服务…"));
     }
 
     public async Task DownloadModels()
@@ -310,7 +310,7 @@ internal sealed class AppHost : IDictationHost
     private void PruneAudio()
     {
         try { RetainedAudio.Prune(Settings.KeepAudio24h && Settings.HistoryRetention != "never" ? History.Entries.Select(e => e.AudioId).OfType<string>() : Array.Empty<string>()); }
-        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { SetHint(L10n.T("保留录音无法清理，请检查文件权限。")); }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { SetHint(L10n.T("无法删除保留的录音。请检查文件权限。")); }
     }
     public void DeleteHistory(string id) { History.Remove(id); PruneAudio(); Raise(); }
     public bool CanRetry(HistoryEntry entry)
@@ -335,7 +335,7 @@ internal sealed class AppHost : IDictationHost
     public void ClearHistory()
     {
         History.Clear();
-        if (History.LastError is not null) { SetHint(L10n.T("历史记录读写失败，原文件已保留。请检查文件权限。")); return; }
+        if (History.LastError is not null) { SetHint(L10n.T("历史无法读写，文件已保留。请检查文件权限。")); return; }
         Activity.Clear();
         PruneAudio();
         Raise();

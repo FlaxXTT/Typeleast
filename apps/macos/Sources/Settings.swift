@@ -9,8 +9,8 @@ enum InsertionMode: String, CaseIterable {
     var label: String {
         switch self {
         case .autoPaste: return L10n.text("自动粘贴到光标处")
-        case .clipboardOnly: return L10n.text("仅复制到剪贴板")
-        case .preview: return L10n.text("先预览（不粘贴）")
+        case .clipboardOnly: return L10n.text("仅复制")
+        case .preview: return L10n.text("预览（不粘贴）")
         }
     }
 }
@@ -79,14 +79,6 @@ enum VoiceStrength: String, CaseIterable {
         case .prompt: return L10n.text("自然整理")
         case .concise: return L10n.text("精简整理")
         case .promptbeta: return L10n.text("提示词 Beta")
-        }
-    }
-
-    var shortDetail: String {
-        switch self {
-        case .prompt: return L10n.text("去口头禅，改通顺")
-        case .concise: return L10n.text("更短，只留要点")
-        case .promptbeta: return L10n.text("多轮补充后写成提示词")
         }
     }
 

@@ -107,10 +107,10 @@ public static class UpdateProgressText
 {
     public static string Describe(UpdateStage stage, long received = 0, long? total = null, string source = "GitHub") => stage switch
     {
-        UpdateStage.Downloading when total is > 0 => L10n.T("正在从 {0} 下载 {1} / {2} MB", source, Mb(received), Mb(total.Value)),
-        UpdateStage.Downloading => L10n.T("正在从 {0} 下载 {1} MB", source, Mb(received)),
-        UpdateStage.Verifying => L10n.T("正在核对校验值…"),
-        _ => L10n.T("正在安装，TypeLeast 会自动重新打开…"),
+        UpdateStage.Downloading when total is > 0 => L10n.T("正在从 {0} 下载：{1} / {2} MB", source, Mb(received), Mb(total.Value)),
+        UpdateStage.Downloading => L10n.T("正在从 {0} 下载：{1} MB", source, Mb(received)),
+        UpdateStage.Verifying => L10n.T("正在校验文件…"),
+        _ => L10n.T("正在安装，TypeLeast 会重新打开…"),
     };
 
     /// <summary>0…1 while the size is known; null shows a moving bar.</summary>
@@ -155,7 +155,7 @@ public static class UpdatePolicy
         available is not null && remind && offeredVersion != available.Version && !busy;
 
     /// <summary>The ring's three steps (下载 · 核对 · 安装), and which one a stage is.</summary>
-    public static readonly string[] Steps = ["下载", "核对", "安装"];
+    public static readonly string[] Steps = ["下载", "校验", "安装"];
 
     public static int Step(UpdateStage stage) => stage switch { UpdateStage.Downloading => 0, UpdateStage.Verifying => 1, _ => 2 };
 }

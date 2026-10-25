@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="免费：整套框架免费使用，没有订阅，不用注册，不限次数。本机识别不花钱；整理用你自己的 Key 按用量计费；用本机 Ollama 一分钱都不花。">
-<title>免费：整套框架免费使用，没有订阅，不用注册，不限次数。本机识别不花钱；整理用你自己的 Key 按用量计费；用本机 Ollama 一分钱都不花。</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="免费：不订阅，不注册，不限次数。本机识别免费；整理按你的服务商计费；用 Ollama 完全免费。">
+<title>免费：不订阅，不注册，不限次数。本机识别免费；整理按你的服务商计费；用 Ollama 完全免费。</title>
 <style>
 text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; }
 .ink { fill: #f5f5f7; } .gray { fill: #a1a1a6; } .faint { fill: #6e6e73; }
@@ -12,17 +12,17 @@ text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro
 <text x="440.0" y="64" font-size="15" font-weight="600" text-anchor="middle" class="blue" >免费</text>
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox"><stop offset="0" stop-color="#2997ff"/><stop offset="0.5" stop-color="#af52de"/><stop offset="1" stop-color="#2997ff"/><animateTransform attributeName="gradientTransform" type="translate" values="-0.5 0; 0.5 0; -0.5 0" dur="6s" repeatCount="indefinite"/></linearGradient></defs>
 <text x="440.0" y="132" font-size="72" font-weight="700" text-anchor="middle" fill="url(#g)" letter-spacing="-1">¥0</text>
-<text x="440.0" y="166" font-size="17" font-weight="400" text-anchor="middle" class="gray" >整套框架免费使用：没有订阅，不用注册，不限次数。</text>
+<text x="440.0" y="166" font-size="17" font-weight="400" text-anchor="middle" class="gray" >不订阅，不注册，不限次数。</text>
 <rect x="32" y="198" width="261" height="104" rx="20" fill="#2c2c2e"/>
 <text x="162.66666666666666" y="234" font-size="17" font-weight="600" text-anchor="middle" class="ink" >本机识别</text>
-<text x="162.66666666666666" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >不花钱，</text>
-<text x="162.66666666666666" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >模型下载一次后离线可用。</text>
+<text x="162.66666666666666" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >免费。</text>
+<text x="162.66666666666666" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >模型下载一次，之后离线。</text>
 <rect x="309" y="198" width="261" height="104" rx="20" fill="#2c2c2e"/>
 <text x="440.0" y="234" font-size="17" font-weight="600" text-anchor="middle" class="ink" >文字整理</text>
-<text x="440.0" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >用你自己的 Key，</text>
+<text x="440.0" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >用你的 Key，</text>
 <text x="440.0" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >按服务商用量计费。</text>
 <rect x="587" y="198" width="261" height="104" rx="20" fill="#2c2c2e"/>
 <text x="717.3333333333333" y="234" font-size="17" font-weight="600" text-anchor="middle" class="ink" >本机 Ollama</text>
 <text x="717.3333333333333" y="262" font-size="14" font-weight="400" text-anchor="middle" class="gray" >整理也在本机，</text>
-<text x="717.3333333333333" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >一分钱都不花。</text>
+<text x="717.3333333333333" y="284" font-size="14" font-weight="400" text-anchor="middle" class="gray" >完全免费。</text>
 </svg>

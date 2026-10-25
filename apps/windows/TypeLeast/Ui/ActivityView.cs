@@ -62,9 +62,9 @@ internal static class ActivityView
             }
         }
 
-        var legend = Theme.Row(4, Theme.Text(L10n.T("更少"), 11, Theme.Tertiary, wrap: false));
+        var legend = Theme.Row(4, Theme.Text(L10n.T("少"), 11, Theme.Tertiary, wrap: false));
         for (var level = 0; level < 5; level++) legend.Children.Add(Square(level));
-        legend.Children.Add(Theme.Text(L10n.T("更多"), 11, Theme.Tertiary, wrap: false));
+        legend.Children.Add(Theme.Text(L10n.T("多"), 11, Theme.Tertiary, wrap: false));
         return Theme.Stack(10, header, canvas, legend);
     }
 

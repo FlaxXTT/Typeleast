@@ -85,8 +85,8 @@ def hero(t):
     body.append(f'<rect x="392" y="22" width="96" height="96" rx="23" fill="{t["icon"]}" stroke="{t["iconEdge"]}"/>')
     body.append(icon_bars(440, 70, 1.0, "#ffffff", True, "hb"))
     body.append(text(440, 188, "TypeLeast", 62, "ink", 700, "middle", 'letter-spacing="-1.5"'))
-    body.append(text(440, 240, "说出来，就写好了。", 32, "ink", 600, "middle", 'letter-spacing="0.5"'))
-    body.append(text(440, 276, "按一下说话，再按一下——整理好的文字直接出现在光标处。", 17, "gray", 400, "middle"))
+    body.append(text(440, 240, "说话，得到文字。", 32, "ink", 600, "middle", 'letter-spacing="0.5"'))
+    body.append(text(440, 276, "按一下，说话。再按一下，文字写到光标处。", 17, "gray", 400, "middle"))
 
     # The text field the user is typing into.
     body.append(f'<rect x="{card_x}" y="314" width="{card_w}" height="124" rx="24" fill="{t["card"]}"/>')
@@ -108,7 +108,7 @@ def hero(t):
     final_size = 21
     body.append('<g class="final">')
     body.append(text(x, y + 1, FINAL, final_size, "ink", 500))
-    body.append(text(card_x + card_w - 28, 346, "写进去的", 13, "blue", 600, "end"))
+    body.append(text(card_x + card_w - 28, 346, "写入的", 13, "blue", 600, "end"))
     body.append('</g>')
     caret_x = x + len(FINAL) * final_size + 3
     body.append(f'<rect class="caret" x="{caret_x}" y="{y - 19}" width="2" height="24" rx="1" fill="{t["blue"]}"/>')
@@ -133,7 +133,7 @@ def hero(t):
         think.append(f'<circle class="grow dot d{i}" cx="{421 + i * 19}" cy="{py}" r="5" fill="#ffffff"/>')
     think.append('</g>')
     body.extend(think)
-    body.append(f'<g class="done">{text(440, py + 6, "已写入光标处", 15, "gray", 500, "middle")}</g>')
+    body.append(f'<g class="done">{text(440, py + 6, "已写到光标处", 15, "gray", 500, "middle")}</g>')
 
     css = bar_css("hb", 1.1) + """
 .wv { animation: wave 0.9s ease-in-out infinite; }
@@ -161,7 +161,7 @@ def hero(t):
 @keyframes caret0 { 0%,3% { opacity: 1; } 3.01%,100% { opacity: 0; } }
 """
     return svg(W, H, "\n".join(body), css, t,
-               "TypeLeast：说出来，就写好了。按一下说话，再按一下，整理好的文字直接出现在光标处。")
+               "TypeLeast：说话，得到文字。按一下说话，再按一下，文字写到光标处。")
 
 
 # ---------------------------------------------------------------- feature grid
@@ -187,8 +187,8 @@ def features(t):
 
     # 1. Standard cleanup (full width).
     inner = [text(36, 58, "自然整理", 15, "blue", 600),
-             text(36, 98, "随口说，它来整理。", 32, "ink", 700),
-             text(36, 132, "口头禅去掉，改口照办，标点补好。不编造你没说的内容。", 16, "gray")]
+             text(36, 98, "你说话，它整理。", 32, "ink", 700),
+             text(36, 132, "删除口头禅，保留改口，补上标点。不编造内容。", 16, "gray")]
     by, x0, size = 196, 36, 18
     inner.append(f'<rect x="24" y="162" width="{W - 48}" height="56" rx="16" fill="{t["card2"]}"/>')
     cx = x0 + 12
@@ -200,15 +200,15 @@ def features(t):
         cx += len(chunk) * size
     inner.append(f'<g class="result"><rect x="24" y="228" width="{W - 48}" height="56" rx="16" fill="{t["blue"]}" fill-opacity="0.10"/>'
                  + text(48, 262, "后天下午三点开会，会前把报告发给大家。", 18, "ink", 600)
-                 + text(W - 48, 262, "写进去的", 13, "blue", 600, "end") + '</g>')
+                 + text(W - 48, 262, "写入的", 13, "blue", 600, "end") + '</g>')
     body.append(tile(0, 0, W, 310, t, "\n".join(inner)))
 
     # 2. Local recognition.
     y2 = 310 + G
     lock = [text(32, 52, "本机识别", 15, "green", 600),
             text(32, 88, "音频不出电脑。", 26, "ink", 700),
-            text(32, 118, "语音在你自己的电脑上识别，", 15, "gray"),
-            text(32, 140, "录音不上传，模型下载一次后离线可用。", 15, "gray"),
+            text(32, 118, "语音在你的电脑上识别。", 15, "gray"),
+            text(32, 140, "录音不上传。模型下载一次，之后离线。", 15, "gray"),
             f'<circle class="grow pulse" cx="{half / 2}" cy="218" r="50" fill="{t["green"]}" fill-opacity="0.16"/>',
             f'<circle cx="{half / 2}" cy="218" r="40" fill="{t["green"]}"/>',
             icon_bars(half / 2, 218, 0.56, "#ffffff", True, "lb")]
@@ -218,10 +218,10 @@ def features(t):
     apps = ["微信", "邮件", "浏览器", "Word", "VS Code"]
     row, _ = chips(32, 176, apps[:3], t)
     row2, _ = chips(32, 220, apps[3:], t)
-    anywhere = [text(32, 52, "随处可用", 15, "blue", 600),
-                text(32, 88, "任何输入框，直接写入。", 26, "ink", 700),
-                text(32, 118, "Mac 单按 fn，Windows 单按右 Alt。", 15, "gray"),
-                text(32, 140, "说话时切换了窗口，就只放进剪贴板。", 15, "gray"),
+    anywhere = [text(32, 52, "任何 App", 15, "blue", 600),
+                text(32, 88, "写到任何输入框。", 26, "ink", 700),
+                text(32, 118, "Mac 按 fn，Windows 按右 Alt。", 15, "gray"),
+                text(32, 140, "窗口变了就只复制。", 15, "gray"),
                 row, row2]
     body.append(tile(half + G, y2, half, ROW, t, "\n".join(anywhere)))
 
@@ -229,9 +229,9 @@ def features(t):
     y3 = y2 + ROW + G
     lines = ["请写本周周报，发给老板，篇幅简短。", "1. 完成登录页改版。", "2. 修复了几个 bug。"]
     prompt = [text(32, 52, "精简整理", 15, "blue", 600),
-              text(32, 88, "说得多，留得少。", 26, "ink", 700),
-              text(32, 118, "一次说完，只留要点和条件，", 15, "gray"),
-              text(32, 140, "不加你没提的要求。", 15, "gray")]
+              text(32, 88, "只留要点。", 26, "ink", 700),
+              text(32, 118, "说一次，保留要点和条件。", 15, "gray"),
+              text(32, 140, "不添加要求。", 15, "gray")]
     prompt.append(f'<rect x="24" y="160" width="{half - 48}" height="106" rx="16" fill="{t["card2"]}"/>')
     for i, line in enumerate(lines):
         prompt.append(f'<g class="pl p{i}">{text(44, 190 + i * 30, line, 14, "ink", 500)}</g>')
@@ -242,9 +242,9 @@ def features(t):
     m1, _ = chips(32, 176, models[:2], t, 13, cls_prefix="m")
     m2, _ = chips(32, 220, models[2:], t, 13, cls_prefix="n")
     asr = [text(32, 52, "识别模型", 15, "blue", 600),
-           text(32, 88, "四个本机模型，随时切换。", 26, "ink", 700),
-           text(32, 118, "默认小而快；中文方言、中英混说、", 15, "gray"),
-           text(32, 140, "多语言都有更大的模型可选。", 15, "gray"), m1, m2]
+           text(32, 88, "四个本机模型。", 26, "ink", 700),
+           text(32, 118, "默认模型小而快。", 15, "gray"),
+           text(32, 140, "方言、中英混说、多语言可选。", 15, "gray"), m1, m2]
     body.append(tile(half + G, y3, half, ROW, t, "\n".join(asr)))
 
     # 6. Your model, your key.
@@ -252,7 +252,7 @@ def features(t):
     providers = ["DeepSeek", "智谱 GLM", "Kimi", "通义千问", "OpenRouter", "OpenAI", "本机 Ollama"]
     prow, _ = chips(32, 128, providers, t, 14, 10)
     key = [text(32, 52, "你的模型", 15, "blue", 600),
-           text(32, 92, "用你自己的 Key。Key 只存在钥匙串 / 凭据管理器里。", 22, "ink", 700), prow]
+           text(32, 92, "你的 Key，只存在钥匙串或凭据管理器里。", 22, "ink", 700), prow]
     body.append(tile(0, y4, W, 192, t, "\n".join(key)))
     H = y4 + 192
 
@@ -273,7 +273,7 @@ def features(t):
 @keyframes pick { 0%,22% { opacity: 1; } 27%,95% { opacity: .5; } 100% { opacity: 1; } }
 """
     return svg(W, H, "\n".join(body), css, t,
-               "亮点：自然整理；音频不出电脑；任何输入框直接写入；精简整理；四个本机识别模型；用你自己的 Key。")
+               "功能：自然整理；音频不出电脑；写到任何输入框；精简整理；四个本机识别模型；你的 Key。")
 
 
 # ---------------------------------------------------------------- prompt Beta
@@ -284,8 +284,8 @@ def prompt_story(t):
     violet = "#8e5cf0" if t is THEMES["light"] else "#a77bff"
     body = [f'<rect width="{W}" height="{H}" rx="28" fill="{t["card"]}"/>',
             text(36, 56, "提示词 Beta", 15, "", 600, extra=f'fill="{violet}"'),
-            text(36, 98, "长提示词，聊着就写好了。", 32, "ink", 700),
-            text(36, 132, "它问，你答。出稿前你核对，出稿后它再审一遍。", 16, "gray")]
+            text(36, 98, "说出项目，得到长提示词。", 32, "ink", 700),
+            text(36, 132, "它提问，你回答。你核对后生成，它再审查一遍。", 16, "gray")]
     # Left: the conversation.
     L, LW, top = 24, 404, 160
     body.append(f'<rect x="{L}" y="{top}" width="{LW}" height="{H - top - 24}" rx="20" fill="{t["card2"]}"/>')
@@ -294,7 +294,7 @@ def prompt_story(t):
                 + text(L + 56, top + 68, "我想给社区羽毛球群做个报名小程序，", 14, "", 500, extra='fill="#ffffff"')
                 + text(L + 56, top + 90, "接龙太乱，场地费也是我一个个收……", 14, "", 500, extra='fill="#ffffff"') + '</g>')
     qs = ["场地费按报名人数还是到场人数分？", "报了名没来的人，怎么处理？", "大家平时用什么付款？"]
-    q = [f'<g class="s2">{text(L + 20, top + 126, "待补充的信息 · 每轮最多 4 问", 12, "faint", 600)}']
+    q = [f'<g class="s2">{text(L + 20, top + 126, "缺少的信息 · 每轮最多 4 个问题", 12, "faint", 600)}']
     for i, line in enumerate(qs):
         y = top + 136 + i * 32
         q.append(f'<rect x="{L + 20}" y="{y}" width="{LW - 40}" height="28" rx="10" fill="{t["card"]}" stroke="{t["line"]}"/>'
@@ -302,10 +302,10 @@ def prompt_story(t):
     body.append("".join(q) + '</g>')
     body.append(f'<g class="s3"><rect x="{L + 40}" y="{top + 240}" width="{LW - 60}" height="38" rx="14" fill="{t["blue"]}"/>'
                 + text(L + 56, top + 264, "按到场人数平分；放鸽子的下次排后面；用微信。", 13, "", 500, extra='fill="#ffffff"') + '</g>')
-    body.append(f'<g class="s4">{text(L + 20, top + 302, "当前理解，请核对", 12, "faint", 600)}'
+    body.append(f'<g class="s4">{text(L + 20, top + 302, "我的理解，请核对", 12, "faint", 600)}'
                 + text(L + 20, top + 324, "✓ 报名小程序替代接龙　✓ 按到场人数平分", 13, "green", 500)
                 + f'<rect x="{L + 20}" y="{top + 334}" width="138" height="30" rx="15" fill="{violet}"/>'
-                + text(L + 89, top + 354, "结束补充并生成", 13, "", 600, "middle", 'fill="#ffffff"') + '</g>')
+                + text(L + 89, top + 354, "生成", 13, "", 600, "middle", 'fill="#ffffff"') + '</g>')
     # Right: the long prompt, then the review.
     R, RW = L + LW + 16, W - (L + LW + 16) - 24
     body.append(f'<rect x="{R}" y="{top}" width="{RW}" height="{H - top - 24}" rx="20" fill="{t["card2"]}"/>')
@@ -328,7 +328,7 @@ def prompt_story(t):
         y += 30 if head else 26
         if not head and i + 1 < len(doc) and doc[i + 1][1] is True:
             y += 6
-    body.append(f'<g class="s6">{text(R + 20, H - 46, "✓ 审查完成：删掉没来源的，补回漏掉的。", 13, "green", 600)}</g>')
+    body.append(f'<g class="s6">{text(R + 20, H - 46, "✓ 审查完成：删除你没说过的内容。", 13, "green", 600)}</g>')
 
     def show(name, start):
         return (f'.{name} {{ animation: {name}K 12s ease-in-out infinite; }}\n'
@@ -343,7 +343,7 @@ def prompt_story(t):
     css.append(".why { animation: whyK 12s ease-in-out infinite; } "
                "@keyframes whyK { 0%,76% { opacity: 0; } 80%,94% { opacity: 1; } 99%,100% { opacity: 0; } }")
     return svg(W, H, "\n".join(body), "\n".join(css), t,
-               "提示词 Beta：你随口说项目，它只问缺的几个问题，你回答并核对它的理解，然后写成完整的长提示词，再审查一遍，删掉你没说过的内容。")
+               "提示词 Beta：你说项目，它问缺少的信息，你回答并核对它的理解，它写出完整提示词，再删除你没说过的内容。")
 
 
 # ---------------------------------------------------------------- free
@@ -356,9 +356,9 @@ def free(t):
             f'<animateTransform attributeName="gradientTransform" type="translate" values="-0.5 0; 0.5 0; -0.5 0" dur="6s" repeatCount="indefinite"/>'
             f'</linearGradient></defs>',
             f'<text x="{W / 2}" y="132" font-size="72" font-weight="700" text-anchor="middle" fill="url(#g)" letter-spacing="-1">¥0</text>',
-            text(W / 2, 166, "整套框架免费使用：没有订阅，不用注册，不限次数。", 17, "gray", 400, "middle")]
-    cols = [("本机识别", "不花钱，", "模型下载一次后离线可用。"), ("文字整理", "用你自己的 Key，", "按服务商用量计费。"),
-            ("本机 Ollama", "整理也在本机，", "一分钱都不花。")]
+            text(W / 2, 166, "不订阅，不注册，不限次数。", 17, "gray", 400, "middle")]
+    cols = [("本机识别", "免费。", "模型下载一次，之后离线。"), ("文字整理", "用你的 Key，", "按服务商用量计费。"),
+            ("本机 Ollama", "整理也在本机，", "完全免费。")]
     cw = (W - 64 - 2 * 16) / 3
     for i, (title, a, b) in enumerate(cols):
         x = 32 + i * (cw + 16)
@@ -368,7 +368,7 @@ def free(t):
         body.append(text(x + cw / 2, 284, b, 14, "gray", 400, "middle"))
     css = ""
     return svg(W, H, "\n".join(body), css, t,
-               "免费：整套框架免费使用，没有订阅，不用注册，不限次数。本机识别不花钱；整理用你自己的 Key 按用量计费；用本机 Ollama 一分钱都不花。")
+               "免费：不订阅，不注册，不限次数。本机识别免费；整理按你的服务商计费；用 Ollama 完全免费。")
 
 
 # ---------------------------------------------------------------- buttons
@@ -387,7 +387,7 @@ def main():
         for name, make in [("hero", hero), ("prompt", prompt_story), ("features", features), ("free", free)]:
             (OUT / f"{name}-{mode}.svg").write_text(make(t), encoding="utf-8")
         (OUT / f"button-download-{mode}.svg").write_text(button("下载最新版", t, True), encoding="utf-8")
-        (OUT / f"button-more-{mode}.svg").write_text(button("看它怎么用 ›", t, False), encoding="utf-8")
+        (OUT / f"button-more-{mode}.svg").write_text(button("看演示 ›", t, False), encoding="utf-8")
     print("written to", OUT)
 
 

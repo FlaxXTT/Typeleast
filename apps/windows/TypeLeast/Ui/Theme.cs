@@ -358,7 +358,7 @@ internal static class Theme
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var left = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
         left.Children.Add(Text(title, 13.5, bold: true));
-        if (detail is not null)
+        if (detail is not null && detail.Text.Length > 0)
         {
             detail.Margin = new Thickness(0, 2, 0, 0);
             left.Children.Add(detail);

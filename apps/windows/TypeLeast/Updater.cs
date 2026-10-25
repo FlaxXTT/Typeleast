@@ -46,7 +46,7 @@ internal static class Updater
     public static async Task<string> DownloadAsync(WindowsReleaseInfo release, CancellationToken ct = default,
         Action<UpdateStage, long, long?, string>? progress = null, string mode = "auto")
     {
-        if (release.SetupUrl is null || release.SumsUrl is null) throw new InvalidOperationException(L10n.T("这个发布没有可校验的 Windows 安装包。"));
+        if (release.SetupUrl is null || release.SumsUrl is null) throw new InvalidOperationException(L10n.T("此版本没有可校验的 Windows 安装包。"));
         var folder = Path.Combine(Path.GetTempPath(), "TypeLeast-update-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         using var client = MakeClient(Timeout.InfiniteTimeSpan);
@@ -57,7 +57,7 @@ internal static class Updater
             sums = await client.GetStringAsync(release.SumsUrl, sumsTimeout.Token).ConfigureAwait(false);
         }
         var expected = WindowsRelease.Checksum(release.SetupName, sums)
-            ?? throw new InvalidOperationException(L10n.T("发布的校验文件里没有这个安装包。"));
+            ?? throw new InvalidOperationException(L10n.T("校验文件里没有这个安装包。"));
         var setup = Path.Combine(folder, release.SetupName);
         foreach (var (url, source) in UpdateSources.For(release.SetupUrl, mode))
         {
@@ -79,7 +79,7 @@ internal static class Updater
             Log.Write("update.source.mismatch", source);
         }
         try { Directory.Delete(folder, true); } catch (IOException) { }
-        throw new InvalidOperationException(L10n.T("所有下载线路都失败了，请检查网络后重试。"));
+        throw new InvalidOperationException(L10n.T("所有下载线路都失败了。请检查网络后重试。"));
     }
 
     /// <summary>One source: no response or no new data for UpdateSources.Stall gives up on it.</summary>

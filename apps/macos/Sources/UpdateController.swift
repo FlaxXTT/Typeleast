@@ -30,8 +30,8 @@ final class UpdateController {
     func check(interactive: Bool) {
         guard !Updater.intelDiscontinued() else {
             if interactive {
-                alert(L10n.text("Intel Mac 已停止更新"),
-                      L10n.text("Intel Mac 已停止更新，最终版 1.17.1 可继续使用。"))
+                alert(L10n.text("Intel Mac 不再更新"),
+                      L10n.text("Intel Mac 不再更新。1.17.1 是最终版，可继续使用。"))
             }
             return
         }
@@ -53,7 +53,7 @@ final class UpdateController {
                     }
                 case .success:
                     self.host.showAvailable(nil)
-                    if interactive { self.alert(L10n.text("已经是最新版本"), L10n.text("当前版本 ") + Updater.currentVersion + "。") }
+                    if interactive { self.alert(L10n.text("已是最新版本"), L10n.text("当前版本 ") + Updater.currentVersion + "。") }
                 case .failure(let error):
                     if interactive { self.alert(L10n.text("检查更新失败"), error.localizedDescription) }
                 }
@@ -73,9 +73,9 @@ final class UpdateController {
     private func offer(_ version: String) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = L10n.text("有新版本 ") + version
-        var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新后自动重启，权限和 Key 都会保留。")
-        if !summary.isEmpty { detail = L10n.text("本次更新") + "\n" + summary + "\n\n" + detail }
+        alert.messageText = L10n.text("新版本 ") + version
+        var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新后 TypeLeast 重启，权限和 Key 保留。")
+        if !summary.isEmpty { detail = L10n.text("更新内容") + "\n" + summary + "\n\n" + detail }
         if !Updater.hasSigningIdentity() {
             detail += "\n\n" + L10n.text("首次更新要输入一次登录密码，请选「始终允许」。之后可能要重新允许麦克风和辅助功能。")
         }
@@ -112,7 +112,7 @@ final class UpdateController {
                     do {
                         try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
                                                      newApp: ready.app, installed: Bundle.main.bundleURL, work: ready.work)
-                        self.host.setHint(L10n.text("正在安装更新，TypeLeast 会自动重新打开…"))
+                        self.host.setHint(L10n.text("正在安装更新，TypeLeast 会重新打开…"))
                         self.progress.update(.installing)
                         self.host.willQuit()
                         NSApp.terminate(nil)

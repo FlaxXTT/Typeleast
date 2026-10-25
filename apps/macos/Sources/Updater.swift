@@ -20,12 +20,12 @@ enum UpdateError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreachable: return L10n.text("连不上发布页，各下载线路都失败了。请检查网络。")
-        case .checksum: return L10n.text("安装包校验不一致，已取消更新。")
-        case .badBundle(let detail): return L10n.text("下载的安装包不对：") + detail
-        case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书，已放弃更新。")
-        case .sign(let detail): return L10n.text("用本机证书签名失败：") + detail
-        case .requirementChanged: return L10n.text("新版本签名不匹配，安装会丢失权限，已取消更新。")
+        case .unreachable: return L10n.text("无法获取更新，所有下载线路都失败了。请检查网络。")
+        case .checksum: return L10n.text("文件校验失败，更新已取消。")
+        case .badBundle(let detail): return L10n.text("更新文件错误：") + detail
+        case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书。更新已停止。")
+        case .sign(let detail): return L10n.text("本机证书签名失败：") + detail
+        case .requirementChanged: return L10n.text("新版本签名不同，安装会丢失权限。更新已取消。")
         }
     }
 }
@@ -290,7 +290,7 @@ enum Updater {
             }
             let app = unpacked.appendingPathComponent("TypeLeast.app")
             let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
-            guard info?["CFBundleIdentifier"] as? String == bundleID else { throw UpdateError.badBundle(L10n.text("不是 TypeLeast")) }
+            guard info?["CFBundleIdentifier"] as? String == bundleID else { throw UpdateError.badBundle(L10n.text("这不是 TypeLeast")) }
             guard info?["CFBundleShortVersionString"] as? String == version else { throw UpdateError.badBundle(L10n.text("版本号不是 ") + version) }
 
             stage?(.signing)
@@ -355,17 +355,17 @@ enum UpdateStage: Equatable {
         case .preparing: return L10n.text("正在准备…")
         case .downloading(let received, let total, let source):
             let mb = { (bytes: Int64) in String(format: "%.1f", Double(bytes) / 1_048_576) }
-            if let total { return L10n.text("正在从 {0} 下载 {1} / {2} MB", source, mb(received), mb(total)) }
-            return L10n.text("正在从 {0} 下载 {1} MB", source, mb(received))
-        case .verifying: return L10n.text("正在核对校验值…")
+            if let total { return L10n.text("正在从 {0} 下载：{1} / {2} MB", source, mb(received), mb(total)) }
+            return L10n.text("正在从 {0} 下载：{1} MB", source, mb(received))
+        case .verifying: return L10n.text("正在校验文件…")
         case .signing: return L10n.text("正在用本机证书签名…")
-        case .handingOver: return L10n.text("正在交接钥匙串里的 Key…")
-        case .installing: return L10n.text("正在安装，TypeLeast 会自动重新打开…")
+        case .handingOver: return L10n.text("正在转移钥匙串里的 Key…")
+        case .installing: return L10n.text("正在安装，TypeLeast 会重新打开…")
         }
     }
 
     /// The steps the progress window shows, in order.
-    static let steps = ["下载", "核对", "签名", "交接", "安装"]
+    static let steps = ["下载", "校验", "签名", "Key", "安装"]
 
     /// Which of `steps` this stage is.
     var step: Int {

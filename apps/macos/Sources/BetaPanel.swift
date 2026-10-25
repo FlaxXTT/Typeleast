@@ -70,18 +70,18 @@ struct BetaQuestionsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("提示词 Beta · 第 {0} 轮", info.round ?? 1))
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
-            Text(info.ready == true ? L10n.text("信息已清楚，可继续补充或生成。") : L10n.text("先把信息说清楚"))
+            Text(info.ready == true ? L10n.text("已清楚。可继续补充或生成。") : L10n.text("先说清信息"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if let confirmed = info.confirmed, !confirmed.isEmpty {
-                        Text(L10n.text("当前理解，请核对")).font(.system(size: 12, weight: .semibold))
+                        Text(L10n.text("我的理解，请核对")).font(.system(size: 12, weight: .semibold))
                         ForEach(Array(confirmed.enumerated()), id: \.offset) { _, text in
                             Text("• " + text).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     if let questions = info.questions, !questions.isEmpty {
-                        Text(L10n.text("待补充的信息")).font(.system(size: 12, weight: .semibold)).padding(.top, 4)
+                        Text(L10n.text("缺少的信息")).font(.system(size: 12, weight: .semibold)).padding(.top, 4)
                         ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
                             Text(String(index + 1) + ". " + question).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
                         }
@@ -98,7 +98,7 @@ struct BetaQuestionsView: View {
             HStack {
                 Button(L10n.text("取消"), action: cancel).buttonStyle(SecondaryButtonStyle())
                 Spacer()
-                Button(L10n.text("结束补充并生成"), action: skip).buttonStyle(PrimaryButtonStyle())
+                Button(L10n.text("生成"), action: skip).buttonStyle(PrimaryButtonStyle())
             }.disabled(busy != nil)
         }
         .padding(EdgeInsets(top: 30, leading: 20, bottom: 18, trailing: 20))

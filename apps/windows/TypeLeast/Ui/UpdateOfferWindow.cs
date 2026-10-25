@@ -22,11 +22,11 @@ internal sealed class UpdateOfferWindow : Window
         var content = new StackPanel { Margin = new Thickness(24) };
         content.Children.Add(Theme.Text(L10n.T("有新版本 {0}", release.Version), 18, bold: true));
         content.Children.Add(Spaced(Theme.Text(installedCopy
-            ? L10n.T("当前版本 {0}。更新后自动重新打开，设置和 Key 都会保留。", currentVersion)
-            : L10n.T("当前版本 {0}。便携版请在发布页下载新版本。", currentVersion), 13, Theme.Grey)));
+            ? L10n.T("当前版本 {0}。更新后重新打开，设置和 Key 保留。", currentVersion)
+            : L10n.T("当前版本 {0}。便携版请到发布页下载。", currentVersion), 13, Theme.Grey)));
         if (release.Summary.Length > 0)
         {
-            content.Children.Add(Spaced(Theme.Text(L10n.T("本次更新"), 12.5, bold: true)));
+            content.Children.Add(Spaced(Theme.Text(L10n.T("更新内容"), 12.5, bold: true)));
             content.Children.Add(new TextBox
             {
                 Text = release.Summary, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 160,

@@ -42,7 +42,7 @@ internal sealed class BetaPanel : Window
         hint.Margin = new Thickness(0, 10, 0, 12);
         var buttons = new DockPanel { LastChildFill = false };
         cancelButton = Theme.Secondary(L10n.T("取消"), cancel);
-        skipButton = Theme.Primary(L10n.T("结束补充并生成"), skip);
+        skipButton = Theme.Primary(L10n.T("生成"), skip);
         DockPanel.SetDock(cancelButton, Dock.Left);
         DockPanel.SetDock(skipButton, Dock.Right);
         buttons.Children.Add(cancelButton);
@@ -83,15 +83,15 @@ internal sealed class BetaPanel : Window
     {
         list.Children.Clear();
         roundLabel.Text = "  " + L10n.T("第 {0} 轮", info.Round ?? 1);
-        list.Children.Add(Theme.Text(info.Ready == true ? L10n.T("信息已清楚，可继续补充或生成。") : L10n.T("先把信息说清楚"), 12, Theme.Grey));
+        list.Children.Add(Theme.Text(info.Ready == true ? L10n.T("已清楚。可继续补充或生成。") : L10n.T("先说清信息"), 12, Theme.Grey));
         if (info.Confirmed is { Count: > 0 })
         {
-            list.Children.Add(Theme.Text(L10n.T("当前理解，请核对"), 12, bold: true));
+            list.Children.Add(Theme.Text(L10n.T("我的理解，请核对"), 12, bold: true));
             foreach (var item in info.Confirmed) list.Children.Add(Theme.Text("• " + item, 12.5, Theme.Ink));
         }
         if (info.Questions is { Count: > 0 })
         {
-            list.Children.Add(Theme.Text(L10n.T("待补充的信息"), 12, bold: true));
+            list.Children.Add(Theme.Text(L10n.T("缺少的信息"), 12, bold: true));
             for (var i = 0; i < info.Questions.Count; i++)
             {
                 var line = Theme.Text((i + 1) + ".  " + info.Questions[i], 13.5, Theme.Ink);

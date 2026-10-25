@@ -138,12 +138,12 @@ private struct ServiceBadge: View {
     @EnvironmentObject var model: AppModel
 
     private var badgeText: String {
-        if model.serviceUp { return L10n.text("本地服务已就绪") }
+        if model.serviceUp { return L10n.text("本地服务就绪") }
         if model.modelsDownloading {
-            return L10n.text("下载模型 ") + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
+            return L10n.text("正在下载模型 ") + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
         }
         if model.modelsMissing { return L10n.text("语音模型未下载") }
-        if case .running = model.serviceState { return L10n.text("语音模型加载中") }
+        if case .running = model.serviceState { return L10n.text("正在加载语音模型") }
         return L10n.text("本地服务未就绪")
     }
 
@@ -185,7 +185,7 @@ struct PageHeader<Trailing: View>: View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.system(size: 26, weight: .bold))
-                if let subtitle = subtitle {
+                if let subtitle = subtitle, !subtitle.isEmpty {
                     Text(subtitle).font(.system(size: 13)).foregroundColor(Theme.secondary)
                 }
             }
@@ -212,7 +212,7 @@ struct SidebarModes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(L10n.text("整理档位"))
+            Text(L10n.text("整理模式"))
                 .font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 4)
             ForEach(VoiceStrength.allCases, id: \.self) { strength in
@@ -256,10 +256,6 @@ private struct ModeRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(strength.label).font(.system(size: 13, weight: selected ? .semibold : .regular))
                         .foregroundColor(selected ? Theme.ink : Theme.secondary)
-                    if selected {
-                        Text(strength.shortDetail).font(.system(size: 11)).foregroundColor(Theme.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
                 Spacer(minLength: 0)
             }

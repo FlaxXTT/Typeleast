@@ -21,11 +21,11 @@ public sealed class SpeechModelOperation
     public string? Error { get; set; }
     [JsonIgnore] public string Problem => Error switch {
         "checksum-mismatch" => L10n.T("文件校验失败，请重新下载。"),
-        "download-failed" => L10n.T("下载失败，请检查网络或镜像后重试。"),
+        "download-failed" => L10n.T("下载失败。请检查网络或镜像后重试。"),
         "model-not-installed" => L10n.T("模型文件不完整，请重新下载。"),
-        "model-load-failed" => L10n.T("模型加载失败，请重试或使用其他模型。"),
-        "ENOSPC" => L10n.T("磁盘空间不足，请释放空间后重试。"),
-        "EACCES" or "EPERM" => L10n.T("无法保存模型设置，请检查文件访问权限。"),
+        "model-load-failed" => L10n.T("模型加载失败。请重试或换一个模型。"),
+        "ENOSPC" => L10n.T("磁盘空间不足。请释放空间后重试。"),
+        "EACCES" or "EPERM" => L10n.T("无法保存模型设置。请检查文件权限。"),
         _ => L10n.T("模型操作失败，请重试。当前模型保留。"),
     };
     [JsonIgnore] public bool Running => Phase is "downloading" or "waiting" or "loading";
@@ -241,19 +241,19 @@ public static class PluginMessages
 {
     public static string Describe(string? code) => code switch
     {
-        "plugin-invalid" => L10n.T("这不是有效的插件文件"),
-        "plugin-terms-limit" => L10n.T("启用的词库加起来不能超过 10000 个词"),
-        "plugin-aliases-limit" => L10n.T("启用的读音提示不能超过 1000 条"),
-        "plugin-not-found" => L10n.T("找不到这个插件，请刷新"),
-        "plugin-changed" => L10n.T("插件内容变了，请重新查看后再安装"),
-        "market-protocol-unsupported" => L10n.T("插件目录格式不对，可能要更新 TypeLeast"),
-        "market-too-large" => L10n.T("插件目录太大，无法读取"),
-        "market-offline" => L10n.T("连不上插件目录，请检查网络"),
-        _ => L10n.T("操作没有完成，请重试"),
+        "plugin-invalid" => L10n.T("这不是插件文件"),
+        "plugin-terms-limit" => L10n.T("已启用的词库合计最多 10000 个词"),
+        "plugin-aliases-limit" => L10n.T("已启用的读音提示合计最多 1000 条"),
+        "plugin-not-found" => L10n.T("找不到插件，请刷新"),
+        "plugin-changed" => L10n.T("插件已变化。请重新查看后再安装"),
+        "market-protocol-unsupported" => L10n.T("无法读取此目录，请更新 TypeLeast"),
+        "market-too-large" => L10n.T("插件目录太大"),
+        "market-offline" => L10n.T("无法获取插件目录，请检查网络"),
+        _ => L10n.T("没有完成，请重试"),
     };
 
     public static string Describe(ServiceException error) =>
-        error.Kind == ServiceErrorKind.Http ? Describe(error.Code) : L10n.T("本地服务还没就绪，稍后再试");
+        error.Kind == ServiceErrorKind.Http ? Describe(error.Code) : L10n.T("本地服务未就绪，请稍后重试");
 }
 
 public sealed class ApiErrorBody

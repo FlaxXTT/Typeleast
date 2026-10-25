@@ -12,7 +12,7 @@ struct ExtensionsPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("扩展"), subtitle: L10n.text("词库和风格。安装前会告诉你数据会发到哪里。")) {
+            PageHeader(title: L10n.text("扩展"), subtitle: "") {
                 Button(L10n.text("导入插件文件…")) { plugins.chooseFile() }.buttonStyle(SecondaryButtonStyle())
             }
             HStack {
@@ -45,9 +45,9 @@ struct ExtensionsPage: View {
         if plugins.state.plugins.isEmpty {
             VStack(spacing: 10) {
                 Image(systemName: "puzzlepiece.extension").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                Text(L10n.text("还没有插件")).foregroundColor(Theme.secondary)
+                Text(L10n.text("没有插件")).foregroundColor(Theme.secondary)
                 HStack(spacing: 8) {
-                    Button(L10n.text("浏览插件市场")) { tab = .market }.buttonStyle(PrimaryButtonStyle())
+                    Button(L10n.text("打开插件市场")) { tab = .market }.buttonStyle(PrimaryButtonStyle())
                     Button(L10n.text("导入插件文件…")) { plugins.chooseFile() }.buttonStyle(SecondaryButtonStyle())
                 }
             }
@@ -61,7 +61,7 @@ struct ExtensionsPage: View {
                               remove: { plugins.remove(plugin.id) })
             }
             if let problems = plugins.state.problems, !problems.isEmpty {
-                Text(L10n.text("有 {0} 个插件文件损坏，已停用：{1}", problems.count, problems.joined(separator: "、")))
+                Text(L10n.text("{0} 个插件文件已损坏并停用：{1}", problems.count, problems.joined(separator: "、")))
                     .font(.system(size: 12)).foregroundColor(Theme.warning)
             }
         }
@@ -76,7 +76,7 @@ private struct PluginMeta: View {
             Badge(text: plugin.isStyle ? L10n.text("风格") : L10n.text("词库"), tint: Theme.accent)
             Text("v" + plugin.version + " · " + plugin.author).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
             if let source = plugin.source {
-                Text(source == "bundled" ? L10n.text("随应用提供") : (source == "catalog" ? L10n.text("官方目录") : L10n.text("本地导入，未审核")))
+                Text(source == "bundled" ? L10n.text("随应用提供") : (source == "catalog" ? L10n.text("官方目录") : L10n.text("本地导入，未审核。")))
                     .font(.system(size: 11.5)).foregroundColor(source == "file" ? Theme.warning : Theme.secondary)
             }
         }
@@ -109,7 +109,7 @@ private struct InstalledCard: View {
                 VStack(alignment: .trailing, spacing: 8) {
                     if plugin.isStyle {
                         let using = selectedStyle == plugin.id
-                        Button(using ? L10n.text("停用") : L10n.text("设为当前风格")) { selectStyle(!using) }
+                        Button(using ? L10n.text("停用") : L10n.text("使用此风格")) { selectStyle(!using) }
                             .buttonStyle(SecondaryButtonStyle())
                     } else {
                         Toggle("", isOn: Binding(get: { plugin.enabled == true }, set: setEnabled))
@@ -134,8 +134,8 @@ struct MarketList: View {
                     ProgressView().controlSize(.small)
                     Text(L10n.text("正在读取插件目录…")).font(.system(size: 12)).foregroundColor(Theme.secondary)
                 } else if let catalog = plugins.catalog, let time = catalog.fetchedAt {
-                    Text((catalog.ok ? L10n.text("目录更新于 ") : L10n.text("离线，显示上次的目录：")) + Self.time(time)
-                         + (catalog.mirrored == true ? " · " + L10n.text("经镜像获取") : ""))
+                    Text((catalog.ok ? L10n.text("目录更新于 ") : L10n.text("离线。目录来自：")) + Self.time(time)
+                         + (catalog.mirrored == true ? " · " + L10n.text("来自镜像") : ""))
                         .font(.system(size: 12)).foregroundColor(Theme.secondary)
                 }
                 Spacer()
@@ -143,7 +143,7 @@ struct MarketList: View {
             }
             if let catalog = plugins.catalog {
                 if catalog.plugins.isEmpty {
-                    Text(L10n.text("目录里还没有插件")).foregroundColor(Theme.secondary).padding(.top, 40).frame(maxWidth: .infinity)
+                    Text(L10n.text("目录里没有插件")).foregroundColor(Theme.secondary).padding(.top, 40).frame(maxWidth: .infinity)
                 }
                 ForEach(catalog.plugins) { plugin in
                     Card {
@@ -197,12 +197,12 @@ struct InstallSheet: View {
                 .font(.system(size: 17, weight: .bold))
             Text(plugin.summary).font(.system(size: 13)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             Text("v" + plugin.version + " · " + plugin.author + " · " + plugin.license).font(.system(size: 12)).foregroundColor(Theme.secondary)
-            Label(!pending.fromCatalog ? L10n.text("来自本地文件，未经审核。只安装你信任的人给的插件。")
-                  : pending.mirrored ? L10n.text("来自 TypeLeast 官方目录（经镜像获取），已审核。") : L10n.text("来自 TypeLeast 官方目录，已审核。"),
+            Label(!pending.fromCatalog ? L10n.text("来自本地文件，未审核。只安装你信任的人提供的插件。")
+                  : pending.mirrored ? L10n.text("来自 TypeLeast 官方目录（镜像），已审核。") : L10n.text("来自 TypeLeast 官方目录，已审核。"),
                   systemImage: pending.fromCatalog ? "checkmark.seal" : "exclamationmark.triangle")
                 .font(.system(size: 12.5)).foregroundColor(pending.fromCatalog ? Theme.ink : Theme.warning)
             if plugin.isStyle {
-                Text(L10n.text("会附加的说明：")).font(.system(size: 12.5, weight: .semibold))
+                Text(L10n.text("附加的说明：")).font(.system(size: 12.5, weight: .semibold))
                 ScrollView {
                     Text(plugin.instructions ?? "").font(.system(size: 12.5)).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -226,8 +226,8 @@ struct InstallSheet: View {
                 }
             }
             Text(plugin.isStyle
-                 ? L10n.text("数据去向：选中后，这段说明会随每次自然、精简整理请求发给你选择的模型，影响写法和格式。不会多调用模型；翻译和提示词 Beta 不受影响。")
-                 : L10n.text("数据去向：启用后，本次相关的术语和读音提示会随整理请求发给你选择的模型；无关的不发送。不会多调用模型。"))
+                 ? L10n.text("数据去向：选中后，这段说明随每次自然和精简整理发给你的模型，影响用词和格式。不增加模型调用。翻译和提示词 Beta 不使用。")
+                 : L10n.text("数据去向：启用后，与本次听写相关的词和读音提示随整理发给你的模型，其余留在本机。不增加模型调用。"))
                 .font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
