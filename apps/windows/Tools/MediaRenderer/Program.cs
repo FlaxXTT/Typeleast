@@ -107,8 +107,8 @@ class P
         Check(!host.IsMicrophoneTesting, "ending an idle microphone test opens no device");
         host.Cancel();
         Check(host.Phase == DictationPhase.Idle, "cancel idle remains idle");
-        host.SetStrength("off");
-        Check(host.Settings.Strength == "off", "mode routed through controller");
+        host.SetStrength("concise");
+        Check(host.Settings.Strength == "concise", "mode routed through controller");
         var beta = new BetaController(new ServiceClient(), () => { });
         var options = new DictationOptions("zh", "promptbeta", null, null, null, true, "clipboardOnly", false, false);
         var first = new DictateResponse { Beta = new BetaInfo { SessionId = "round1" } };
