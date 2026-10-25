@@ -117,9 +117,16 @@ final class DictationController {
         recordingBar.showRecording(destination: pendingAppBundleId,
                                    badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
                                        ?? VoiceStrength.stored(settings.strength).label)
-        if settings.muteWhileDictating { OutputMuter.shared.muteIfNeeded() }
         setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
         playSound(start: true)
+        if settings.muteWhileDictating {
+            // The chime plays on the same output device: mute only after it (0.24 s) has played.
+            let started = recordingStartedAt
+            DispatchQueue.main.asyncAfter(deadline: .now() + (settings.soundEnabled ? 0.3 : 0)) { [weak self] in
+                guard let self, self.phase == .recording, self.recordingStartedAt == started else { return }
+                OutputMuter.shared.muteIfNeeded()
+            }
+        }
         registerEscape()
         startTick()
         applyState()

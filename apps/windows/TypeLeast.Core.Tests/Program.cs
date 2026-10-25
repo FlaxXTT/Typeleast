@@ -136,6 +136,11 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Check("the key is never written to the settings file", !File.ReadAllText(file).Contains("sk-test"));
     File.WriteAllText(file, "{ broken");
     Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
+    File.WriteAllText(file, "{\"PasteLastShortcut\":\"CtrlShiftV\"}");
+    Eq("the old Ctrl+Shift+V default moves once", AppSettings.Load(file).PasteLastShortcut, "CtrlShiftAltV");
+    File.WriteAllText(file, "{\"PasteLastShortcut\":\"CtrlShiftV\",\"PasteShortcutDefaults\":1}");
+    Eq("a Ctrl+Shift+V chosen after the move stays", AppSettings.Load(file).PasteLastShortcut, "CtrlShiftV");
+    Eq("new settings do not take Ctrl+Shift+V", new AppSettings().PasteLastShortcut, "CtrlShiftAltV");
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
     Eq("an old strength reads as natural cleanup", AppSettings.Load(file).Strength, "prompt");
     foreach (var retired in new[] { "promptbrief", "promptify" })
@@ -391,6 +396,10 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Directory.Delete(dir, true);
 
     Eq("an oversized context header is dropped", ServiceClient.EncodeContextHeader(new byte[ServiceClient.MaxContextHeaderBytes]), null);
+    var chinese = new string('字', 800);
+    var context = ServiceClient.ContextJson(chinese, new string('词', 400), new string('句', 300));
+    Check("a full Chinese field context fits the header", ServiceClient.EncodeContextHeader(context) is not null);
+    Check("context JSON keeps CJK as UTF-8, not \\u escapes", !System.Text.Encoding.UTF8.GetString(context).Contains("\\u"));
     Eq("no route means no header", ServiceClient.EncodeRouteHeader(null), null);
 }
 

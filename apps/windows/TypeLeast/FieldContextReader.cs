@@ -1,5 +1,5 @@
 using System;
-using System.Text.Json;
+using TypeLeast.Core;
 using System.Windows.Automation;
 using System.Windows.Automation.Text;
 
@@ -24,7 +24,7 @@ internal static class FieldContextReader
             var before = selected.Clone(); before.MoveEndpointByRange(TextPatternRangeEndpoint.End, selected, TextPatternRangeEndpoint.Start); before.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, -800);
             var after = selected.Clone(); after.MoveEndpointByRange(TextPatternRangeEndpoint.Start, selected, TextPatternRangeEndpoint.End); after.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 300);
             // Shared service performs its existing bounded context normalization and redaction.
-            return JsonSerializer.SerializeToUtf8Bytes(new { before = before.GetText(800), selected = selected.GetText(400), after = after.GetText(300) });
+            return ServiceClient.ContextJson(before.GetText(800), selected.GetText(400), after.GetText(300));
         }
         catch (Exception) { return null; }
     }

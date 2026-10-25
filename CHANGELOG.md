@@ -2,6 +2,17 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.21.1（2026-10-25）
+
+发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 26，Intel 版保持 1.17.1。
+
+- 修复：选台湾或香港繁体时，日文和译成其他语言的结果不再被转换（「会社」不再变成「會社」）。
+- 修复（Mac）：开启「听写时静音」后，开始提示音先播完再静音。
+- 修复（Mac）：清空 API Key 输入框后可以点「删除」，删除钥匙串里的 Key。
+- 修复（Windows）：中文输入框较长时，「参考输入框内容」不再被丢弃。上下文按 UTF-8 发送，不再转义成 \uXXXX。
+- 修复（Windows）：插入方式为「先预览」时，在预览中取消后显示「已取消」，「整理中」悬浮条不再一直转。
+- 修复（Windows）：「粘贴上一条」默认快捷键改为 Ctrl + Shift + Alt + V，不再占用终端和浏览器里的 Ctrl + Shift + V。原来使用默认值的设置自动迁移一次；之后手动选回 Ctrl + Shift + V 会保留。
+
 ## 1.21.0（2026-10-25）
 
 发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 25，Intel 版保持 1.17.1。

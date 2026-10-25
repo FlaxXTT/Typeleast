@@ -43,10 +43,13 @@ async function converter(target) {
   return converters.get(target);
 }
 
-/** Convert Chinese text to the chosen variant; Simplified (the default) is returned unchanged. */
+/**
+ * Convert Chinese text to the chosen variant; Simplified (the default) is returned unchanged.
+ * Japanese is left alone: kanji are not Chinese, and 会社 must not become 會社.
+ */
 export async function applyVariants(text, variants) {
   const value = String(text ?? "");
-  if (!value || !variants || variants.zh === "hans" || !/[一-鿿]/.test(value)) return value;
+  if (!value || !variants || variants.zh === "hans" || !/[一-鿿]/.test(value) || /[\u3040-\u30ff]/.test(value)) return value;
   // Taiwan gets Taiwanese phrasing too (软件 → 軟體), Hong Kong its own characters.
   const convert = await converter(variants.zh === "tw" ? "twp" : "hk");
   return convert(value);

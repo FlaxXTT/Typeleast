@@ -164,7 +164,7 @@ Windows code signing via SignPath Foundation is currently pending approval.
 |---|---|---|
 | 开始 / 结束 | **Fn（🌐）** 或 ⌥Space | **右 Alt**（可换右 Ctrl、Caps Lock、F8） |
 | 取消 | Esc | Esc |
-| 粘贴上一条 | ⌃⌘V | Ctrl + Shift + V |
+| 粘贴上一条 | ⌃⌘V | Ctrl + Shift + Alt + V |
 | 翻译 | ⇧⌥Space | 在设置里选一个键 |
 | 切换整理模式 | 侧栏、菜单栏 | 侧栏、托盘、任务栏右键 |
 
