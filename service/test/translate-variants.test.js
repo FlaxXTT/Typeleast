@@ -177,6 +177,9 @@ test("繁体只用于中文：日文汉字和译成其他语言的结果不转�
     ? JSON.stringify({ status: "ok", text: "周四下午三点开会。", reason: "改口" }) : "这个软件周四更新。");
   const chinese = await makeService(toChinese).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "zh", variants: "zh=tw" });
   assert.equal(chinese.text, "這個軟體週四更新。");
+  // Recognised as Japanese: no kana does not make it Chinese (企画書 must not become 企畫書).
+  const kanjiOnly = await makeService(provider('{"status":"ok","text":"企画書。"}').fetchImpl).polish({ rawText: "企画書", language: "ja", variants: "zh=tw" });
+  assert.match(kanjiOnly.text, /^企画書/);
 });
 
 test("变体对整理结果和无模型回退都生效；英式拼写写进系统提示词", async () => {

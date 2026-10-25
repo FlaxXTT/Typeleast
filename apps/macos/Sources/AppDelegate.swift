@@ -317,21 +317,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         guard !skipGlobalHotkeys else { return }
         let centre = HotKeyCentre.shared
         var fnWanted = false
+        var problems: [String: String] = [:]
+        var taken = Set<String>()
+        // A combination already used by an earlier slot, or refused by macOS (another app has it),
+        // is shown beside that shortcut instead of failing silently.
+        func register(_ slot: String, _ binding: HotKeyBinding, _ action: @escaping () -> Void) {
+            let combo = String(binding.keyCode) + "-" + String(binding.modifiers)
+            if binding.enabled && taken.contains(combo) {
+                centre.unregister(slot: slot)
+                problems[slot] = L10n.text("和其他快捷键重复")
+                return
+            }
+            if centre.register(slot: slot, binding: binding, action: action) { taken.insert(combo) }
+            else if binding.enabled { problems[slot] = L10n.text("被占用，请换一个") }
+        }
         for (slot, binding) in [("main", settings.hotkeyMain), ("alt", settings.hotkeyAlt)] {
             if binding.isFn {
                 centre.unregister(slot: slot)
                 fnWanted = fnWanted || binding.enabled
             } else {
-                centre.register(slot: slot, binding: binding) { [weak self] in self?.hotkeyPressed() }
+                register(slot, binding) { [weak self] in self?.hotkeyPressed() }
             }
         }
         if fnWanted { FnKeyMonitor.shared.start() } else { FnKeyMonitor.shared.stop() }
-        centre.register(slot: "pasteLast", binding: settings.hotkeyPasteLast) { [weak self] in self?.pasteLast() }
+        register("pasteLast", settings.hotkeyPasteLast) { [weak self] in self?.pasteLast() }
         // Fn is reserved for dictation; a translate binding of Fn is ignored.
         let translate = settings.hotkeyTranslate
         if translate.isFn { centre.unregister(slot: "translate") } else {
-            centre.register(slot: "translate", binding: translate) { [weak self] in self?.translateHotkeyPressed() }
+            register("translate", translate) { [weak self] in self?.translateHotkeyPressed() }
         }
+        model.hotkeyProblems = problems
     }
 
     /// Fn or a shortcut: toggle (press to start, press to stop).
@@ -597,7 +612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func retryEntry(id: String) {
-        guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }),
+        guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }), e.strength != "promptbeta",
               let path = e.audioPath, FileManager.default.fileExists(atPath: path) else {
             setHint(L10n.text("录音已删除（保留 5 分钟）"), warning: true)
             applyState()

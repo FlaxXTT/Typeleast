@@ -335,7 +335,8 @@ public sealed class ServiceClient
     public Task<bool> DownloadModelsAsync(string? endpoint, CancellationToken ct = default) =>
         WithPortRetry(async () =>
         {
-            var json = string.IsNullOrWhiteSpace(endpoint) ? "{}" : JsonSerializer.Serialize(new { endpoint });
+            // Always sent: an empty mirror means huggingface.co, so clearing it needs no service restart.
+            var json = JsonSerializer.Serialize(new { endpoint = endpoint?.Trim() ?? "" });
             var (status, body) = await SendAsync(HttpMethod.Post, "/models/download", new StringContent(json, Encoding.UTF8, "application/json"),
                 null, ShortTimeout, ct).ConfigureAwait(false);
             if (status is not (HttpStatusCode.Accepted or HttpStatusCode.OK)) throw HttpError(status, body);

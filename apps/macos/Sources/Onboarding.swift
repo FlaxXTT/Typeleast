@@ -220,6 +220,8 @@ struct OnboardingView: View {
             }
             .buttonStyle(PrimaryButtonStyle())
             .keyboardShortcut(.defaultAction)
+            // 「已改好」 is what lets this step continue; 跳过 is still there.
+            .disabled(step == .globeKey && !globeConfirmed)
         }
     }
 

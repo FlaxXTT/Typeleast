@@ -54,7 +54,7 @@ internal sealed class ExtensionsPage : IPage
         var plugins = host.Plugins;
         message.Text = plugins.Message ?? "";
         message.Visibility = message.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        var key = market + "|" + plugins.CatalogLoading + "|" + string.Join(",", plugins.State.Plugins.Select(p => p.Id + p.Version + p.Enabled)) + "|" + plugins.State.Style
+        var key = market + "|" + plugins.Revision + "|" + plugins.CatalogLoading + "|" + string.Join(",", plugins.State.Plugins.Select(p => p.Id + p.Version + p.Enabled)) + "|" + plugins.State.Style
             + "|" + string.Join(",", (plugins.Catalog?.Plugins ?? new()).Select(p => p.Id + p.Version + p.InstalledVersion)) + plugins.Catalog?.FetchedAt;
         if (key == shown) return;
         shown = key;

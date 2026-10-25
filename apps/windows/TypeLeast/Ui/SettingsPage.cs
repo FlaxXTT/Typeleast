@@ -89,7 +89,7 @@ internal sealed class SettingsPage : IPage
         var languageRows = new UIElement[]
         {
             Theme.SettingRow(L10n.T("听写语言"), null, dictationLanguage),
-            Theme.SettingRow(L10n.T("翻译成"), null, translateTarget),
+            Theme.SettingRow(L10n.T("翻译成"), Theme.Text(L10n.T("不用风格插件。"), 12, Theme.Grey), translateTarget),
             Theme.SettingRow(L10n.T("中文字形"), null, zhVariant),
             Theme.SettingRow(L10n.T("英文拼写"), null, enVariant),
         };
@@ -223,7 +223,7 @@ internal sealed class SettingsPage : IPage
         AddTab(L10n.T("隐私与权限"),
             Section(L10n.T("隐私与数据"),
                 Theme.SettingRow(L10n.T("历史保留"), null, Controls.Retention(host)),
-                Theme.SettingRow(L10n.T("保留录音用于重试"), null, Theme.Toggle(s.KeepAudio24h, v => { s.KeepAudio24h = v; host.SaveSettings(); })),
+                Theme.SettingRow(L10n.T("保留录音 5 分钟"), null, Theme.Toggle(s.KeepAudio24h, v => { s.KeepAudio24h = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("删除全部记录"), null, Theme.Secondary(L10n.T("清空历史与活动"), () => { if (MessageBox.Show(L10n.T("删除全部历史、统计和录音？无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory(); }))),
             Section(L10n.T("权限"),
                 Theme.SettingRow(L10n.T("麦克风"), microphoneStatus, Theme.Secondary(L10n.T("打开系统权限"), () => Shell.Open("ms-settings:privacy-microphone"))),

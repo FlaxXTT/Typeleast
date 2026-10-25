@@ -136,10 +136,14 @@ internal sealed class DictionaryPage : IPage
         var word = Theme.Input(original?.Word ?? "", 300); var heard = Theme.Input(original?.HeardAs ?? "", 300);
         var localOnly = new CheckBox { Content = L10n.T("不发给模型"), IsChecked = original?.LocalOnly == true, Foreground = Theme.Ink };
         var error = Theme.Text("", 12, Theme.Warning);
+        var caseOnly = Theme.Text(L10n.T("没填识别成时，只修正英文大小写。"), 12, Theme.Grey);
+        void ShowCaseOnly() => caseOnly.Visibility = localOnly.IsChecked == true && heard.Text.Trim().Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        localOnly.Checked += (_, _) => ShowCaseOnly(); localOnly.Unchecked += (_, _) => ShowCaseOnly(); heard.TextChanged += (_, _) => ShowCaseOnly();
+        ShowCaseOnly();
         var dialog = new Window { Title = L10n.T(original is null ? "新增词条" : "编辑词条"), Width = 420, SizeToContent = SizeToContent.Height,
             Background = Theme.Background, WindowStartupLocation = WindowStartupLocation.CenterScreen };
         var form = Theme.Stack(12, Theme.Text(L10n.T("正确写法")), word, Theme.Text(L10n.T("识别成（可选）")), heard,
-            localOnly, error,
+            localOnly, caseOnly, error,
             Theme.Row(8, Theme.Primary(L10n.T("保存"), () =>
             {
                 var entry = WordEntry.Parse(word.Text, heard.Text, original?.Source ?? "manual");
