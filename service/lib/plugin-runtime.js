@@ -1,7 +1,4 @@
 /** Optional extension boundary. The core service only calls the methods on this object. */
-import { relevantEntries } from "./dictionary-relevance.js";
-import { relevantAliases, safePackTerms } from "./term-hints.js";
-import { normalizeTermCase } from "./tidy.js";
 import { CATALOG_SOURCE_MODES, fetchCatalog, parsePlugin, pluginDigest, PLUGIN_LIMITS, summarize } from "./plugins.js";
 
 export class PluginRuntime {
@@ -12,31 +9,15 @@ export class PluginRuntime {
     this.catalog = null;
   }
 
-  style() {
-    try { return this.store.activeStyle()?.instructions ?? null; }
-    catch { return null; }
-  }
-
-  async context(own, texts, rawText) {
-    const terms = safePackTerms(this.store.activeTerms() ?? []);
-    const known = new Set(own.map(entry => entry.slice(entry.indexOf("=") + 1).trim().toLowerCase()));
-    const entries = [...own];
-    for (const term of terms) {
-      const key = term.toLowerCase();
-      if (!known.has(key)) { known.add(key); entries.push(term); }
+  referenceData() {
+    const terms=[], aliases=[];
+    for(const plugin of this.store.plugins?.values?.() ?? []) {
+      if(!this.store.state.plugins[plugin.id]?.enabled || plugin.type!=='dictionary')continue;
+      for(const term of plugin.terms)terms.push({word:term,sourceId:plugin.id,label:plugin.name});
+      for(const alias of plugin.aliases??[])aliases.push({...alias,sourceId:plugin.id,label:plugin.name});
     }
-    return {
-      entries: await relevantEntries(entries, texts),
-      aliases: relevantAliases(this.store.activeAliases?.() ?? [], rawText, own),
-    };
-  }
-
-  normalizeText(text, own) {
-    try {
-      const spellings = new Set(own.map(entry => entry.slice(entry.indexOf("=") + 1).trim().toLowerCase()));
-      const terms = (this.store.activeCaseTerms?.() ?? []).filter(term => typeof term === "string" && !spellings.has(term.toLowerCase()));
-      return normalizeTermCase(text, terms);
-    } catch { return text; }
+    const active=this.store.activeStyle?.();
+    return {terms,aliases,style:active?{instructions:active.instructions,sourceId:active.id,label:active.name}:null};
   }
 
   state() {

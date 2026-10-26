@@ -63,13 +63,13 @@ function wavOfSilence(seconds = 0.2) {
   return buffer;
 }
 
-test('dictation returns local suggestions without an additional model call', async () => {
+test('dictation never learns model guesses and uses no additional model call', async () => {
   const model = fakeModel('用 JSON 传输。');
   const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
   const result = await service.transcribeAndPolish({ audio: wavOfSilence(), strength: 'prompt', llm: ROUTE });
   assert.equal(result.fallback, false);
   assert.equal(result.text, '用 JSON 传输。');
-  assert.deepEqual(result.suggestions, [{ word: 'JSON', heardAs: '杰森' }]);
+  assert.deepEqual(result.suggestions, []);
   assert.equal(model.calls.length, 1);
 });
 
@@ -101,8 +101,8 @@ test('suggestions are skipped for fallback, translation and pending Beta', async
   }
   assert.equal(calls, 0);
   const final = await service.recordAndReturn({ strength: 'promptbeta' }, { raw: '杰森', text: 'JSON', fallback: false, beta: { reviewed: true } });
-  assert.equal(final.suggestions[0].word, 'JSON');
-  assert.equal(calls, 1);
+  assert.deepEqual(final.suggestions, []);
+  assert.equal(calls, 0);
 });
 
 test("a clean transcript is polished with the user's own route", async () => {
@@ -358,7 +358,7 @@ test("the app's dictionary comes with each request and joins config.json's", asy
   const service = makeService({ model, recognizer: fakeRecognizer("send the typeleast report to deep seek on wednesday"), config: { dictionary: ["TypeLeast"] } });
   await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["DeepSeek", "得普=DeepSeek", "TypeLeast", "  ", 42] });
   const system = model.calls[0].body.messages[0].content;
-  for (const entry of ["TypeLeast", "DeepSeek", "得普=DeepSeek"]) assert.ok(system.includes(entry), entry);
+  for (const entry of ["TypeLeast", "DeepSeek"]) assert.ok(system.includes(entry), entry);
   // Nothing is kept between requests.
   assert.deepEqual(service.dictionary, ["TypeLeast"]);
   await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE });
@@ -382,21 +382,21 @@ test("only the dictionary entries this dictation mentions reach the model", asyn
   assert.equal(entriesLine(model.calls[2]), "Kubernetes");
 });
 
-test("entries marked 「不发给模型」 never reach the model; their heard-as spellings are fixed locally", async () => {
+test("legacy local entries never reach the model or gain explicit replacement privileges", async () => {
   const model = fakeModel("请把报告发给张为。");
   const service = makeService({ model, recognizer: fakeRecognizer("请把报告发给张为") });
   const result = await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["报告", { local: "张为=章伟" }, { local: "内部代号凤凰" }] });
   const request = JSON.stringify(model.calls[0].body);
   for (const secret of ["章伟", "张为=", "凤凰"]) assert.ok(!request.includes(secret), secret);
-  assert.equal(result.text, "请把报告发给章伟。");
+  assert.equal(result.text, "请把报告发给张为。");
   // A local rule also applies when no model route is configured.
   const withoutRoute = await service.polish({ rawText: "发给张为", strength: "prompt", dictionary: [{ local: "张为=章伟" }] });
-  assert.equal(withoutRoute.text, "发给章伟");
+  assert.equal(withoutRoute.text, "发给张为");
   const { applyLocalEntries } = await import("../lib/service.js");
   assert.equal(applyLocalEntries("Use deep seek, not deep seeker.", [["deep seek", "DeepSeek"]]), "Use DeepSeek, not deep seeker.");
   // A marked entry with no heard-as form still fixes the case of a Latin word.
   const spelled = await service.polish({ rawText: "ask acmecorp about it", strength: "prompt", dictionary: [{ local: "AcmeCorp" }] });
-  assert.equal(spelled.text, "ask AcmeCorp about it");
+  assert.equal(spelled.text, "ask acmecorp about it");
 });
 
 test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {

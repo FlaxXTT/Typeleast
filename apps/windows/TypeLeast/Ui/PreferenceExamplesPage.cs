@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using TypeLeast.Core;
@@ -12,29 +13,32 @@ internal sealed class DictionaryPage : IPage
     private readonly AppHost host;
     private readonly ManualDictionaryPage manual;
     private readonly StackPanel root = new(), content = new();
-    private readonly ComboBox tabs = Theme.Choice(260);
+    private readonly ComboBox tabs = Theme.Choice(460);
+    private readonly ComboBoxItem examplesTab = new();
     private readonly Dictionary<string,string> drafts = new();
     private long revision = -1;
     private int pendingCount;
+    private string shownWords="",wordDraft="",heardDraft="",excludeDraft="";
+    private Action? undo;
     public UIElement View => root;
     public DictionaryPage(AppHost host)
     {
         this.host = host; manual = new ManualDictionaryPage(host);
-        tabs.Items.Add(L10n.T("偏好示例")); tabs.Items.Add(L10n.T("手工词典")); tabs.SelectedIndex=0;
+        examplesTab.Content=L10n.T("表达示例（{0}）",0); tabs.Items.Add(examplesTab); tabs.Items.Add(L10n.T("个人词汇")); tabs.Items.Add(L10n.T("排除与高级规则")); tabs.SelectedIndex=0;
         root.Children.Add(tabs); root.Children.Add(content);
         tabs.SelectionChanged += (_,_)=>Render(); Render();
     }
     public void Refresh()
     {
-        if (pendingCount != host.Preferences.Pending.Count && host.Preferences.Pending.Count>0) tabs.SelectedIndex=0;
-        if (revision != host.Preferences.Revision) Render();
-        if (tabs.SelectedIndex==1) manual.Refresh();
+        if (revision != host.Preferences.Revision || shownWords!=JsonSerializer.Serialize(host.Settings.DictionaryEntries)) Render();
     }
     private void Render()
     {
         revision=host.Preferences.Revision; pendingCount=host.Preferences.Pending.Count;
+        shownWords=JsonSerializer.Serialize(host.Settings.DictionaryEntries);
+        examplesTab.Content=L10n.T("表达示例（{0}）",pendingCount);
         content.Children.Clear();
-        if (tabs.SelectedIndex==1) { content.Children.Add(manual.View); manual.Refresh(); return; }
+        if (tabs.SelectedIndex>0) { RenderRules(tabs.SelectedIndex==2); return; }
         content.Children.Add(Theme.Text(L10n.T("偏好示例"),28,bold:true));
         content.Children.Add(Theme.Text(L10n.T("保存真实识别与用户确认的修改，不自动训练模型。"),13,Theme.Grey));
         content.Children.Add(MarkerPicker(host));
@@ -70,11 +74,50 @@ internal sealed class DictionaryPage : IPage
         }
     }
     private static Expander Details(string text) => new() { Header=L10n.T("处理结果（供对照）"),Content=Theme.Text(text,12,Theme.Grey) };
+    private void RenderRules(bool advanced)
+    {
+        var preferences=host.Preferences;
+        content.Children.Add(Theme.Text(L10n.T(advanced?"排除与高级规则":"个人词汇"),26,bold:true));
+        content.Children.Add(Theme.Text(L10n.T(advanced?"不再参考会暂停所有来源对该词的推荐和替换，不禁止你当次说出它。扩展更新不会恢复这些影响。":"词汇只帮助理解，不强制替换。旧自动词汇保留为停用资料，需要你确认后才能参考。"),12,Theme.Grey));
+        if(advanced) {
+            var exclude=Theme.Input(excludeDraft,220);exclude.TextChanged+=(_,_)=>excludeDraft=exclude.Text;
+            content.Children.Add(Theme.Row(8,exclude,Theme.Secondary(L10n.T("不再参考"),()=>{var word=excludeDraft;if(preferences.Exclude(word)){excludeDraft="";undo=()=>preferences.Restore(word);}Render();})));
+            foreach(var term in preferences.Excluded.ToArray())content.Children.Add(Theme.Row(8,Theme.Text(term,13),Theme.Secondary(L10n.T("恢复参考"),()=>{preferences.Restore(term);undo=()=>preferences.Exclude(term);Render();})));
+            content.Children.Add(Theme.Text(L10n.T("高级显式替换"),18,bold:true));
+            content.Children.Add(Theme.Text(L10n.T("旧替换保留但默认停用，需逐条开启。当前明确改口、条件和事实校验优先；不会保证每次替换。"),12,Theme.Grey));
+        }
+        var spelling=Theme.Input(wordDraft,220);spelling.TextChanged+=(_,_)=>wordDraft=spelling.Text;
+        var heard=Theme.Input(heardDraft,220);heard.TextChanged+=(_,_)=>heardDraft=heard.Text;
+        if(advanced){content.Children.Add(Theme.Text(L10n.T("识别成"),12));content.Children.Add(heard);}
+        content.Children.Add(Theme.Text(L10n.T(advanced?"正确写法":"新词"),12));content.Children.Add(spelling);
+        content.Children.Add(Theme.Secondary(L10n.T(advanced?"保存为停用规则":"添加"),()=>{
+            if(advanced&&(string.IsNullOrWhiteSpace(heardDraft)||heardDraft==wordDraft))return;
+            if(WordEntry.Parse(wordDraft,advanced?heardDraft:"") is {} word && host.Dictionary.SaveWord(word)) {
+                undo=()=>host.Dictionary.RemoveWord(word.Id);wordDraft="";heardDraft="";Render();
+            }
+        }));
+        foreach(var word in host.Settings.DictionaryEntries.Where(x=>advanced?x.ReplacementHeard is not null:x.ReplacementHeard is null).ToArray()) {
+            var toggle=Theme.Toggle(advanced?preferences.Replaces(word):preferences.References(word),value=>{
+                var old=advanced?preferences.Replaces(word):preferences.References(word);
+                if(advanced)preferences.SetRule(word,value);else preferences.SetReference(word.Id,value);
+                undo=()=>{if(advanced)preferences.SetRule(word,old);else preferences.SetReference(word.Id,old);};Render();
+            });
+            toggle.IsEnabled=!preferences.IsExcluded(word.Word)&&(advanced?!preferences.IsExcluded(word.ReplacementHeard??""):!word.LocalOnly);
+            content.Children.Add(Theme.Card(Theme.Stack(8,Theme.Text(advanced?word.ReplacementHeard+" → "+word.Word:word.Word,14),
+                Theme.SettingRow(L10n.T(advanced?"启用本机替换":"作为相关参考"),null,toggle),
+                Theme.Row(8,Theme.Secondary(L10n.T("不再参考"),()=>{preferences.Exclude(word.Word);undo=()=>preferences.Restore(word.Word);Render();}),
+                    Theme.Secondary(L10n.T("删除"),()=>{host.Dictionary.RemoveWord(word.Id);undo=()=>host.Dictionary.SaveWord(word);Render();})))));
+        }
+        if(preferences.Problem is not null)content.Children.Add(Theme.Text(L10n.T("偏好资料无法保存或已达上限，原资料已保留。"),12,Theme.Warning));
+        if(undo is not null)content.Children.Add(Theme.Secondary(L10n.T("撤销上次变更"),()=>{var action=undo;undo=null;action?.Invoke();Render();}));
+        if(!advanced)content.Children.Add(new Expander {Header=L10n.T("导入与旧资料管理"),Content=new ManualDictionaryPage(host).View});
+    }
+
     public static UIElement MarkerPicker(AppHost host)
     {
         var choice=Theme.Choice(400);choice.Width=double.NaN;choice.MaxWidth=400;choice.HorizontalAlignment=HorizontalAlignment.Stretch;choice.Items.Add(new ComboBoxItem {Content=L10n.T("关闭"),Tag=""});
-        foreach(var id in ExplanationMarkers.Ids)choice.Items.Add(new ComboBoxItem {Content=ExplanationMarkers.Label(id),Tag=id});
-        choice.SelectedIndex=Array.IndexOf(ExplanationMarkers.Ids,host.Settings.ExplanationMarkers)+1;
+        foreach(var id in ExplanationMarkers.VisibleIds)choice.Items.Add(new ComboBoxItem {Content=ExplanationMarkers.Label(id),Tag=id});
+        choice.SelectedIndex=Array.IndexOf(ExplanationMarkers.VisibleIds,host.Settings.ExplanationMarkers)+1;
         choice.SelectionChanged+=(_,_)=>{ if(choice.SelectedItem is ComboBoxItem {Tag:string id}) {host.Settings.ExplanationMarkers=id;host.SaveSettings();} };
         return Theme.Card(Theme.Stack(8,Theme.Text(L10n.T("解释触发词"),14,bold:true),choice,
             Theme.Text(L10n.T("仅用于 AI 整理。开始词与结束词之间的内容只作本次解释，不写入结果，也不成为永久替换规则。"),12,Theme.Grey)));

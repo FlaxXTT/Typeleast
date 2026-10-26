@@ -27,6 +27,10 @@ func checkEq<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     check(name, got == want, "got=" + String(describing: got) + " want=" + String(describing: want))
 }
 
+if let index = CommandLine.arguments.firstIndex(of: "--personalization-ui-render"), CommandLine.arguments.count > index+1 {
+    try renderPersonalizationFixtures(output: CommandLine.arguments[index+1]); exit(0)
+}
+
 // Isolated visual regression fixture. It never loads the daily history or opens a service.
 if let index = CommandLine.arguments.firstIndex(of: "--history-ui-render"), CommandLine.arguments.count > index + 1 {
     let output = CommandLine.arguments[index + 1]
@@ -1551,6 +1555,8 @@ do {
 
 // MARK: entries marked 「不发给模型」 stay out of the ordinary dictionary
 do {
+    let savedSealedVocabulary = UserDefaults.standard.data(forKey: VocabularyStorage.key)
+    defer { if let savedSealedVocabulary { UserDefaults.standard.set(savedSealedVocabulary, forKey: VocabularyStorage.key) } else { UserDefaults.standard.removeObject(forKey: VocabularyStorage.key) } }
     let saved = UserDefaults.standard.data(forKey: "voice.words.v2")
     defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.words.v2") } else { UserDefaults.standard.removeObject(forKey: "voice.words.v2") } }
     let settings = Settings()
@@ -1616,6 +1622,8 @@ do {
 
 // MARK: dictionary: a word picked in History never replaces its entry
 do {
+    let savedSealedVocabulary = UserDefaults.standard.data(forKey: VocabularyStorage.key)
+    defer { if let savedSealedVocabulary { UserDefaults.standard.set(savedSealedVocabulary, forKey: VocabularyStorage.key) } else { UserDefaults.standard.removeObject(forKey: VocabularyStorage.key) } }
     let saved = UserDefaults.standard.data(forKey: "voice.words.v2")
     defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.words.v2") } else { UserDefaults.standard.removeObject(forKey: "voice.words.v2") } }
     let settings = Settings()
@@ -1633,7 +1641,7 @@ do {
 // Shared client contract: automatic learning, migration, opt-out and explicit deletion.
 do {
     let defaults = UserDefaults.standard
-    let keys = ["voice.words.v2", "voice.wordSuggestions", "voice.dismissedSuggestions", "voice.autoLearn"]
+    let keys = [VocabularyStorage.key, "voice.words.v2", "voice.wordSuggestions", "voice.dismissedSuggestions", "voice.autoLearn"]
     let old = keys.map { defaults.object(forKey: $0) }
     defer { for (key, value) in zip(keys, old) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
     let path = ProcessInfo.processInfo.environment["TYPELEAST_DICTIONARY_CONTRACT"]!
@@ -1686,6 +1694,7 @@ do {
 }
 
 contextPreferencesTests()
+personalizationPolicyTests()
 
 server.stop()
 print("")

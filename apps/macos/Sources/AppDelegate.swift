@@ -602,6 +602,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         Inserter.shared.setString(text)
     }
 
+    func retryEntryWithoutPersonalization(id: String) {
+        guard !settings.needsPractice else { showOnboarding(); return }
+        guard let entry = HistoryStore.shared.entries.first(where: { $0.id == id }) else { return }
+        dictation.retryWithoutPersonalization(entry)
+    }
     func retryEntry(id: String) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }), e.strength != "promptbeta",
               let path = e.audioPath, FileManager.default.fileExists(atPath: path) else {
@@ -614,6 +619,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         dictation.sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
                      strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false,
                      translateTo: e.translated, explanationMarkers: e.explanationMarkers ?? "")
+    }
+
+    func undoEntryReplacement(id: String) {
+        guard let entry = HistoryStore.shared.entries.first(where: { $0.id == id }), let original = entry.personalization?.beforeReplacements else { return }
+        HistoryStore.shared.update(id: id) { $0.text = original; $0.personalization?.beforeReplacements = nil; $0.personalization?.restored = true }
+        Inserter.shared.setString(original)
+        setHint(L10n.text("已恢复历史结果并复制；其他程序中已粘贴的文字需自行替换。"))
     }
 
     func deleteEntry(id: String) {

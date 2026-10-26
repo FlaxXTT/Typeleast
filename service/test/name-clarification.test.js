@@ -82,8 +82,8 @@ test('automatic dictionary entries cannot authorise replacing a valid different 
   assert.deepEqual(dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG=ROG', source: 'manual' }]), []);
   assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', auto), ['LG']);
   const manual = dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG', source: 'manual' }]);
-  assert.deepEqual(manual, ['LG=ROG']);
-  assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', manual), []);
+  assert.deepEqual(manual, ['ROG']);
+  assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', manual), ['LG']);
 });
 
 test('continuation metadata is bounded, unique, and excluded from dictionary hints', () => {

@@ -16,6 +16,7 @@ public sealed class HistoryEntry
     public bool Inserted { get; set; }
     public HistoryRequest? Request { get; set; }
     public string? AudioId { get; set; }
+    public PersonalizationTrace? Personalization { get; set; }
 }
 
 public sealed record HistoryRequest(string Language, string Strength, string? TranslateTo, string? Variants, string? ExplanationMarkers = null);

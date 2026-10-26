@@ -53,6 +53,7 @@ public sealed class AppSettings
     public bool PracticeGateRequired { get; set; } = true;
     [System.Text.Json.Serialization.JsonIgnore] public bool NeedsPractice => PracticeGateRequired && !OnboardingDone;
     public string ExplanationMarkers { get; set; } = "";
+    public bool ShortMarkersMigrated { get; set; }
     /// <summary>The home page's 「设置在哪」 card was dismissed with 知道了.</summary>
     public bool GuideDismissed { get; set; }
     /// <summary>-1 = the system default microphone.</summary>
@@ -122,7 +123,7 @@ public sealed class AppSettings
         return new LlmRoute(LlmBaseUrl, LlmModel, key);
     }
 
-    public static AppSettings Load(string path)
+    public static AppSettings Load(string path, IHistoryProtection? protection = null)
     {
         try
         {
@@ -133,6 +134,11 @@ public sealed class AppSettings
                     if (!document.RootElement.EnumerateObject().Any(x => string.Equals(x.Name, "PracticeGateRequired", StringComparison.OrdinalIgnoreCase)))
                         loaded.PracticeGateRequired = false;
                 }
+                if(!loaded.ShortMarkersMigrated) {
+                    if(new[]{"background","explanation","aside"}.Contains(loaded.ExplanationMarkers))loaded.ExplanationMarkers="note";
+                    loaded.ShortMarkersMigrated=true;
+                }
+                using(var document=JsonDocument.Parse(File.ReadAllText(path)))VocabularyStorage.Decode(document.RootElement,loaded,protection);
                 loaded.Strength = CleanupModes.Stored(loaded.Strength);
                 loaded.ApplyAICleanupDefault();
                 loaded.LlmBaseUrls ??= new();
@@ -153,7 +159,7 @@ public sealed class AppSettings
                 if (!new[] { "system", "light", "dark" }.Contains(loaded.Appearance)) loaded.Appearance = "system";
                 if (!UpdateSources.Modes.Contains(loaded.UpdateSource)) loaded.UpdateSource = "auto";
                 loaded.InterfaceLanguage = L10n.Normalize(loaded.InterfaceLanguage);
-                if (!new[] { "background", "explanation", "aside" }.Contains(loaded.ExplanationMarkers)) loaded.ExplanationMarkers = "";
+                if (!new[] { "note", "background", "explanation", "aside" }.Contains(loaded.ExplanationMarkers)) loaded.ExplanationMarkers = "";
                 if (!new[] { "auto", "zh", "en", "yue", "ja", "ko" }.Contains(loaded.Language)) loaded.Language = "auto";
                 if (!TranslateTargets.Contains(loaded.TranslateTarget)) loaded.TranslateTarget = "en";
                 if (!ZhVariants.Contains(loaded.ZhVariant)) loaded.ZhVariant = "hans";
@@ -172,7 +178,7 @@ public sealed class AppSettings
             }
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { var fresh = new AppSettings(); fresh.ApplyAICleanupDefault(); return fresh; }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or PlatformNotSupportedException)
         {
             return new AppSettings { PersistenceBlocked = true };
         }
@@ -180,7 +186,7 @@ public sealed class AppSettings
     }
 
     /// <summary>Atomic write: a crash never leaves a half-written file.</summary>
-    public void Save(string path)
+    public void Save(string path, IHistoryProtection? protection = null)
     {
         if (PersistenceBlocked) throw new IOException("Existing settings could not be read; retained without replacement");
         // Settings written by this version already contain the user's current choice.
@@ -188,7 +194,7 @@ public sealed class AppSettings
         AiCleanupDefaultApplied = true;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(this, Json.Options));
+        File.WriteAllText(temp, VocabularyStorage.Encode(this, protection));
         File.Move(temp, path, overwrite: true);
     }
 }

@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "add-without-confirmation",
+      "enabled": true,
+      "pending": [],
+      "incoming": [
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        }
+      ],
+      "expected": [],
+      "pendingCount": 0
+    },
+    {
+      "id": "migrate-old-pending",
+      "enabled": true,
+      "pending": [
+        {
+          "word": "GitHub",
+          "heardAs": "get hub"
+        }
+      ],
+      "incoming": [],
+      "expected": [],
+      "pendingCount": 1
+    },
+    {
+      "id": "manual-spelling-wins",
+      "enabled": true,
+      "initial": [
+        "deepseek"
+      ],
+      "pending": [],
+      "incoming": [
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        }
+      ],
+      "expected": [
+        "deepseek"
+      ],
+      "pendingCount": 0
+    },
+    {
+      "id": "ignored-word-stays-ignored",
+      "enabled": true,
+      "ignored": [
+        "github"
+      ],
+      "pending": [
+        {
+          "word": "GitHub",
+          "heardAs": "get hub"
+        }
+      ],
+      "incoming": [
+        {
+          "word": "GitHub",
+          "heardAs": "get hub"
+        }
+      ],
+      "expected": [],
+      "pendingCount": 1
+    },
+    {
+      "id": "disabled-keeps-pending",
+      "enabled": false,
+      "pending": [
+        {
+          "word": "GitHub",
+          "heardAs": "get hub"
+        }
+      ],
+      "incoming": [
+        {
+          "word": "DeepSeek",
+          "heardAs": "德普西克"
+        }
+      ],
+      "expected": [],
+      "pendingCount": 1
+    },
+    {
+      "id": "reject-invalid-and-deduplicate",
+      "enabled": true,
+      "pending": [
+        {
+          "word": "Bad=Entry",
+          "heardAs": "bad"
+        }
+      ],
+      "incoming": [
+        {
+          "word": "GitHub",
+          "heardAs": "get hub"
+        },
+        {
+          "word": "github",
+          "heardAs": "git hub"
+        },
+        {
+          "word": "Empty",
+          "heardAs": ""
+        },
+        {
+          "word": "Bad\nWord",
+          "heardAs": "bad"
+        }
+      ],
+      "expected": [],
+      "pendingCount": 1
+    }
+  ],
+  "description": "Personalization policy: no automatic learning; old pending data remains stored.",
+  "vocabularyCases": [
+    {
+      "id": "manual-term",
+      "source": "manual",
+      "heard": "",
+      "reference": true,
+      "replacement": false
+    },
+    {
+      "id": "automatic-term",
+      "source": "auto",
+      "heard": "fake-heard",
+      "reference": false,
+      "replacement": false
+    },
+    {
+      "id": "manual-rule",
+      "source": "manual",
+      "heard": "fake-heard",
+      "reference": false,
+      "replacement": false
+    },
+    {
+      "id": "automatic-plain",
+      "source": "auto",
+      "heard": "",
+      "reference": false,
+      "replacement": false
+    }
+  ]
+}

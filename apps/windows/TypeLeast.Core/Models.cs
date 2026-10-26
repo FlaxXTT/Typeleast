@@ -145,6 +145,7 @@ public sealed class NameClarification
     [JsonPropertyName("evidence")] public string Evidence { get; set; } = "";
     [JsonPropertyName("target")] public string? Target { get; set; }
     [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("personalizationDisabled")] public bool? PersonalizationDisabled { get; set; }
     [JsonPropertyName("markerId")] public string? MarkerId { get; set; }
 }
 
@@ -167,6 +168,7 @@ public sealed class DictateResponse
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
     [JsonPropertyName("contextOnly")] public bool ContextOnly { get; set; }
     [JsonPropertyName("explanation")] public ExplanationReceipt? Explanation { get; set; }
+    [JsonPropertyName("personalization")] public PersonalizationTrace? Personalization { get; set; }
     [JsonPropertyName("clarification")] public NameClarification? Clarification { get; set; }
     [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
     [JsonPropertyName("suggestions"), JsonConverter(typeof(SuggestionListConverter))]

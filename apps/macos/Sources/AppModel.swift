@@ -14,7 +14,7 @@ enum HubPage: String, CaseIterable, Identifiable {
         switch self {
         case .home: return L10n.text("首页")
         case .history: return L10n.text("历史")
-        case .dictionary: return L10n.text("偏好资料")
+        case .dictionary: return L10n.text("个人偏好")
         case .extensions: return L10n.text("扩展")
         case .settings: return L10n.text("设置")
         }
@@ -40,6 +40,8 @@ protocol AppActions: AnyObject {
     func pasteLast()
     func copyEntry(id: String, raw: Bool)
     func retryEntry(id: String)
+    func retryEntryWithoutPersonalization(id: String)
+    func undoEntryReplacement(id: String)
     func deleteEntry(id: String)
     func clearHistory()
     func requestAccessibility()
@@ -196,4 +198,9 @@ final class AppModel: ObservableObject {
         case .failed(let why): return why
         }
     }
+}
+
+extension AppActions {
+    func retryEntryWithoutPersonalization(id: String) {}
+    func undoEntryReplacement(id: String) {}
 }

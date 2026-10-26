@@ -79,3 +79,18 @@ test('unknown and prototype names are inert and punctuation does not become a bo
  assert.equal(r.contextOnly,true);assert.equal(f.calls.length,0);
  assert.ok(splitExplanation('正文补充背景开始。补充背景结束','background').issue);
 });
+
+test('short memo markers are scoped, punctuation-tolerant and ordinary mentions remain literal',()=>{
+ const raw='我想买电脑。备注：设备用于剪辑，说完了。预算一万元。';
+ const result=splitExplanation(raw,'note');assert.equal(result.used,true);assert.ok(result.text.includes('预算'));assert.ok(!result.text.includes('剪辑'));
+ for(const text of ['我已经说完了。','请在备注里写预算。','这是一条备注。','请写“备注”两个字。'])assert.equal(splitExplanation(text,'note').used,false,text);
+ assert.equal(splitExplanation('正文补充背景：开始，解释补充背景：结束。后文','note').used,true);
+ assert.equal(splitExplanation('正文。備註：解釋，說完了。後文','note').used,true);
+ assert.equal(splitExplanation('Buy a laptop. Side note: for work. Back to text. Under 10000.','note').used,true);
+ assert.ok(splitExplanation('正文。备注：没有结束','note').issue);
+});
+
+test('recorded synthetic ASR outputs parse short and legacy markers without leaking explanation',async()=>{
+ const {readFile}=await import('node:fs/promises');const fixture=JSON.parse(await readFile(new URL('./fixtures/explanation-asr-v1.json',import.meta.url),'utf8'));
+ for(const item of fixture.cases){const r=splitExplanation(item.raw,'note');assert.equal(r.used,true,item.voice+item.variant);assert.ok(r.text.includes('预算'),item.raw);assert.ok(!r.text.includes('剪辑视频'),item.raw);}
+});

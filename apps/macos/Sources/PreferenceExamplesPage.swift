@@ -4,14 +4,14 @@ import SwiftUI
 struct DictionaryPage: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var examples = PreferenceExamples.shared
-    @State private var manual = false
+    @State private var selected = 0
+    init(initialTab: Int = 0) { _selected = State(initialValue: initialTab) }
     var body: some View {
         VStack(spacing: 0) {
-            Picker(L10n.text("偏好资料"), selection: $manual) {
-                Text(L10n.text("偏好示例")).tag(false)
-                Text(L10n.text("手工词典")).tag(true)
-            }.pickerStyle(.segmented).padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 14)
-            if manual { ManualDictionaryPage() }
+            ChipPicker(options: [(0, L10n.text("表达示例（{0}）", examples.pending.count)), (1, L10n.text("个人词汇")), (2, L10n.text("排除与高级规则"))], selection: $selected)
+                .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 14)
+            if selected == 1 { PersonalVocabularyPage() }
+            else if selected == 2 { PersonalizationRulesPage() }
             else {
                 PageHeader(title: L10n.text("偏好示例"), subtitle: L10n.text("保存真实识别与用户确认的修改，不自动训练模型。")) {}
                 ScrollView {
@@ -47,7 +47,7 @@ struct DictionaryPage: View {
                     }.padding(.horizontal, 36).padding(.bottom, 24)
                 }
             }
-        }.onChange(of: examples.pending.count) { count in if count > 0 { manual = false } }
+        }
     }
 }
 
@@ -87,6 +87,6 @@ private struct PreferenceReviewCard: View {
                     Button(L10n.text("忽略")) { examples.dismiss(item.id) }.buttonStyle(SecondaryButtonStyle())
                 }
             }
-        }.onAppear { edited = item.correctedText }
+        }.onAppear { edited = item.correctedText }.onDisappear { examples.stageRevision(item.id, edited) }
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
 
@@ -19,12 +20,22 @@ public sealed class PreferenceExample
 }
 
 /// <summary>Only explicitly confirmed examples reach encrypted storage and the model request.</summary>
+public sealed class PersonalizationArchive {
+    public int FormatVersion { get; set; } = 2;
+    public List<PreferenceExample> Entries { get; set; } = new();
+    public List<string> Excluded { get; set; } = new();
+    public Dictionary<string,bool> WordStates { get; set; } = new();
+    public Dictionary<string,bool> RuleStates { get; set; } = new();
+}
 public sealed class PreferenceExamples
 {
     private readonly string path;
     private readonly IHistoryProtection protection;
     private bool locked;
     public List<PreferenceExample> Entries { get; private set; } = new();
+    public List<string> Excluded { get; private set; } = new();
+    public Dictionary<string,bool> WordStates { get; private set; } = new();
+    public Dictionary<string,bool> RuleStates { get; private set; } = new();
     public List<PreferenceExample> Pending { get; } = new();
     public string? Problem { get; private set; }
     public long Revision { get; private set; }
@@ -35,9 +46,12 @@ public sealed class PreferenceExamples
         byte[]? plain = null;
         try {
             plain = this.protection.Unprotect(File.ReadAllBytes(path));
-            var records = JsonSerializer.Deserialize<List<PreferenceExample>>(plain, Json.Options);
-            if (records is null || records.Count > 100 || records.Any(x => x is null || !x.Valid || !x.Confirmed)) throw new JsonException();
-            Entries = records;
+            using var document=JsonDocument.Parse(plain);
+            var archive=document.RootElement.ValueKind==JsonValueKind.Array
+                ? new PersonalizationArchive {Entries=JsonSerializer.Deserialize<List<PreferenceExample>>(plain,Json.Options)!}
+                : JsonSerializer.Deserialize<PersonalizationArchive>(plain,Json.Options);
+            if(archive?.Entries is null || archive.FormatVersion!=2 || archive.Excluded is null || archive.WordStates is null || archive.RuleStates is null || archive.Entries.Count>100 || archive.Entries.Any(x=>x is null || !x.Valid || !x.Confirmed) || archive.Excluded.Count>512 || archive.Excluded.Any(x=>x is null || x.Length>120 || x.Any(char.IsControl)) || archive.WordStates.Count>2000 || archive.RuleStates.Count>2000)throw new JsonException();
+            Entries=archive.Entries;Excluded=archive.Excluded;WordStates=archive.WordStates;RuleStates=archive.RuleStates;
         } catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or CryptographicException or PlatformNotSupportedException) { locked = true; Problem = "preferences-unavailable"; }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
@@ -77,12 +91,24 @@ public sealed class PreferenceExamples
     }
     public bool Remove(string id) => Save(Entries.Where(x => x.Id != id).ToList());
     public object[] WireExamples => Entries.Where(x => x.Confirmed && x.Enabled).Take(20).Select(x => x.Wire).ToArray();
+    public bool IsExcluded(string term) {var normalized=term.Normalize(NormalizationForm.FormKC).Trim();return Excluded.Any(x=>x.Normalize(NormalizationForm.FormKC).Trim().Equals(normalized,StringComparison.OrdinalIgnoreCase));}
+    public bool References(WordEntry word) => !word.LocalOnly&&!IsExcluded(word.Word)&&WordStates.GetValueOrDefault(word.Id, word.Source=="manual"&&string.IsNullOrEmpty(word.HeardAs));
+    public bool Replaces(WordEntry word) => !IsExcluded(word.Word)&&!IsExcluded(word.ReplacementHeard??"")&&word.ReplacementHeard is not null&&RuleStates.GetValueOrDefault(word.ApprovalKey);
+    public bool SetReference(string id,bool enabled) {var old=new Dictionary<string,bool>(WordStates);WordStates[id]=enabled;if(Save(Entries))return true;WordStates=old;return false;}
+    public bool SetRule(WordEntry word,bool enabled) {var old=new Dictionary<string,bool>(RuleStates);RuleStates=RuleStates.Where(x=>!x.Key.StartsWith(word.Id+"|",StringComparison.Ordinal)).ToDictionary(x=>x.Key,x=>x.Value);RuleStates[word.ApprovalKey]=enabled;if(Save(Entries))return true;RuleStates=old;return false;}
+    public bool Exclude(string term) {
+        term=term.Trim();if(term.Length is 0 or >120 || Excluded.Count>=512 || IsExcluded(term))return false;
+        var old=Excluded.ToList();Excluded.Add(term);if(Save(Entries))return true;Excluded=old;return false;
+    }
+    public bool Restore(string term) {var old=Excluded.ToList();Excluded.RemoveAll(x=>x.Normalize(NormalizationForm.FormKC).Equals(term.Trim().Normalize(NormalizationForm.FormKC),StringComparison.OrdinalIgnoreCase));if(Save(Entries))return true;Excluded=old;return false;}
+    public object WirePolicy(IEnumerable<WordEntry> words,bool disabled=false) => new {version=1,disabled,excluded=Excluded.Take(512).ToArray(),rules=words.Where(x=>Replaces(x)&&x.ReplacementHeard is not null).Take(128).Select(x=>new {id=x.Id,heard=x.ReplacementHeard,word=x.Word,enabled=true}).ToArray()};
     private bool Save(List<PreferenceExample> next)
     {
+        if(Excluded.Count>512||WordStates.Count>2000||RuleStates.Count>2000){Problem="preferences-limit";return false;}
         if (locked) { Problem = "preferences-unavailable"; return false; }
         byte[]? plain = null;
         try {
-            plain = JsonSerializer.SerializeToUtf8Bytes(next, Json.Options);
+            plain = JsonSerializer.SerializeToUtf8Bytes(new PersonalizationArchive {Entries=next,Excluded=Excluded,WordStates=WordStates,RuleStates=RuleStates}, Json.Options);
             var sealedData = protection.Protect(plain);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
             File.WriteAllBytes(path + ".tmp", sealedData); File.Move(path + ".tmp", path, true);

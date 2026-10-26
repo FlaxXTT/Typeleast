@@ -77,14 +77,14 @@ internal sealed class AppHost : IDictationHost
         PrivateStorage.EnsureDirectory(AppPaths.StateDirectory());
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
-        Dictionary = new DictionaryController(Settings, SaveSettings, SetHint, () => quitting,
+        Preferences = new PreferenceExamples(System.IO.Path.Combine(AppPaths.StateDirectory(), "app-preferences.sealed"));
+        Dictionary = new DictionaryController(Settings, Preferences, SaveSettings, SetHint,
             (inserted, edited) => Client.LearnedWordAsync(inserted, edited));
         Plugins = new PluginController(Client, () => Settings.UpdateSource);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);
         Theme.Apply(Settings.Appearance);
-        Preferences = new PreferenceExamples(System.IO.Path.Combine(AppPaths.StateDirectory(), "app-preferences.sealed"));
         Preferences.Changed += Raise;
         History = new LocalHistory(AppPaths.AppHistoryFile());
         History.ApplyRetention(Settings.HistoryRetention);
@@ -335,7 +335,7 @@ internal sealed class AppHost : IDictationHost
     public bool StartMicrophoneTest() => onboarding?.PracticeBusy != true && dictation.StartMicrophoneTest();
     public void EndMicrophoneTest() => dictation.EndMicrophoneTest();
     public Task PasteLast() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return Task.CompletedTask; if(Settings.NeedsPractice){ShowOnboarding();return Task.CompletedTask;}return dictation.PasteLast(); }
-    public Task RetryHistory(HistoryEntry entry) { if(Settings.NeedsPractice){ShowOnboarding();return Task.CompletedTask;}return dictation.RetryHistory(entry); }
+    public Task RetryHistory(HistoryEntry entry, bool withoutPersonalization = false) { if(Settings.NeedsPractice){ShowOnboarding();return Task.CompletedTask;}return dictation.RetryHistory(entry, withoutPersonalization); }
     public void Toggle() {
         if(onboarding?.PracticeActive==true){onboarding.HandleShortcut();return;}
         if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.Toggle();
@@ -348,6 +348,11 @@ internal sealed class AppHost : IDictationHost
     void IDictationHost.PruneAudio() => PruneAudio();
 
     /// <summary>"删除全部历史": the per-day activity goes with it.</summary>
+    public void UndoReplacement(HistoryEntry entry) {
+        if(entry.Personalization?.BeforeReplacements is not {} original)return;
+        entry.Text=original;entry.Personalization.BeforeReplacements=null;entry.Personalization.Restored=true;History.Update(entry);Paster.SetText(original);
+        SetHint(L10n.T("已恢复历史结果并复制；其他程序中已粘贴的文字需自行替换。"));
+    }
     public void ClearHistory()
     {
         History.Clear();

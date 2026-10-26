@@ -37,7 +37,7 @@ test('common words need context in the same utterance and clause', () => {
 test('a disabled pack gives no hints, and a bad suggestion cannot change dictation', async () => {
   const stub = enabled => new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) },
-    extension: new PluginRuntime({ activeTerms: () => enabled ? pack.terms : [], activeAliases: () => enabled ? pack.aliases : [], activeCaseTerms: () => enabled ? ['GitHub'] : [], activeStyle: () => null }),
+    extension: new PluginRuntime({plugins:new Map([[pack.id,pack]]),state:{plugins:{[pack.id]:{enabled}}},activeStyle:()=>null}),
     config: { dictionary: [], redactSecrets: true },
   });
   const off = await stub(false).buildContext({ dictionary: [] }, '把 prompt 发到 cloud 模型');
@@ -47,7 +47,7 @@ test('a disabled pack gives no hints, and a bad suggestion cannot change dictati
   assert.deepEqual((await stub(true).buildContext({ dictionary: [] }, '把 prompt 发到 cloud storage')).aliases, []);
   assert.deepEqual((await stub(true).buildContext({ dictionary: [], fieldContext: { before: '模型' } }, 'cloud storage')).aliases, [], 'cursor text does not trigger alias');
   const result = await stub(true).recordAndReturn({ strength: 'off', dictionary: [] }, { raw: 'github', text: 'github', fallback: false });
-  assert.equal(result.text, 'GitHub');
+  assert.equal(result.text, 'github', 'ordinary references do not rewrite returned text');
   const owned = await stub(true).recordAndReturn({ strength: 'off', dictionary: ['github'] }, { raw: 'github', text: 'github', fallback: false });
   assert.equal(owned.text, 'github', 'a user spelling overrides the enabled pack');
   assert.deepEqual(await wordSuggestions('cloud storage', 'Claude storage'), [], 'do not suggest changing an ordinary word to a brand');
@@ -57,7 +57,7 @@ test('only a supported alias reaches the provider in the existing model call', a
   const calls = [];
   const service = new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) },
-    extension: new PluginRuntime({ activeTerms: () => pack.terms, activeAliases: () => pack.aliases, activeCaseTerms: () => [], activeStyle: () => null }),
+    extension: new PluginRuntime({plugins:new Map([[pack.id,pack]]),state:{plugins:{[pack.id]:{enabled:true}}},activeStyle:()=>null}),
     config: { dictionary: [], redactSecrets: true, maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt' },
     fetchImpl: async (_, init) => {
       calls.push(JSON.parse(init.body).messages[0].content);

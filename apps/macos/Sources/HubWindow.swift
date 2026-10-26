@@ -119,6 +119,7 @@ private struct SidebarItem: View {
                 Image(systemName: page.symbol)
                     .font(.system(size: 14, weight: selected ? .semibold : .regular))
                     .frame(width: 18)
+                if page == .dictionary { PersonalizationPendingBadge() }
                 Text(page.title).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
                 Spacer()
             }

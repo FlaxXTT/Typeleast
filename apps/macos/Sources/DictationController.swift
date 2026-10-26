@@ -50,7 +50,7 @@ final class DictationController {
     private var previewPanel: PreviewPanel?
     private let namePanel = NameConfirmationPanel()
     private var clarificationSource: String?
-    private var clarificationDestination: (app: String, field: FocusedField?, language: String, strength: String, target: String?, variants: String?, evidence: String, markers: String)?
+    private var clarificationDestination: (app: String, field: FocusedField?, language: String, strength: String, target: String?, variants: String?, evidence: String, markers: String, disabled: Bool)?
 
     private var tickTimer: Timer?
     private var lastTickedSecond = -1
@@ -227,6 +227,21 @@ final class DictationController {
 
     // MARK: server
 
+    func retryWithoutPersonalization(_ entry: LocalHistoryEntry) {
+        guard phase == .idle, !entry.raw.isEmpty, entry.strength != "promptbeta" else { return }
+        guard let route = settings.activeLLMRoute else { setHint(L10n.text("请先配置可用的整理模型。"), warning: true); return }
+        phase = .thinking; recordingBar.showThinking(detail: ""); idleBar.hide(); applyState()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try self.client.polishSync(text: entry.raw, language: entry.language, strength: entry.strength, llm: route,
+                translateTo: entry.translated, variants: entry.variants, dictionary: [], localOnly: [], explanationMarkers: entry.explanationMarkers ?? "",
+                personalization: ["version":1,"disabled":true]) }
+            DispatchQueue.main.async {
+                self.finishRequest(result, appBundleId: entry.app ?? "", language: entry.language, strength: entry.strength, audioPath: nil, seconds: entry.seconds,
+                    field: nil, insert: false, llm: route, variants: entry.variants, markers: entry.explanationMarkers ?? "")
+            }
+        }
+    }
+
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
@@ -245,7 +260,7 @@ final class DictationController {
         idleBar.hide()
         applyState()
         // The field's text goes to the model's provider only when the user turned that on.
-        let context = settings.readFieldContext ? field?.context.encoded() : nil
+        let context = (destination?.disabled == true) ? nil : (settings.readFieldContext ? field?.context.encoded() : nil)
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let previousBeta = betaSession == nil ? nil : betaPending
         let llm = previousBeta?.llm ?? settings.activeLLMRoute
@@ -254,6 +269,7 @@ final class DictationController {
         let dictionary = self.dictionary.serviceEntries
         let localOnly = self.dictionary.localEntries
         let markers = destination?.markers ?? explanationMarkers ?? settings.explanationMarkers
+        let policy = PreferenceExamples.shared.wirePolicy(words: settings.words, disabled: destination?.disabled ?? false)
         let examples = PreferenceExamples.shared.wireExamples
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -268,7 +284,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              dictionary: dictionary, localOnly: localOnly, clarificationSource: source, clarificationEvidence: destination?.evidence, explanationMarkers: markers, preferenceExamples: examples))
+                                                              dictionary: dictionary, localOnly: localOnly, clarificationSource: source, clarificationEvidence: destination?.evidence, explanationMarkers: markers, preferenceExamples: examples, personalization: policy))
             } catch {
                 outcome = .failure(error)
             }
@@ -307,7 +323,7 @@ final class DictationController {
             if let clarification = resp.clarification {
                 recordingBar.hide()
                 clarificationSource = resp.raw
-                clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.markerId ?? markers)
+                clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.markerId ?? markers, clarification.personalizationDisabled ?? false)
                 namePanel.show(question: L10n.text("需要确认：{0}", clarification.evidence), raw: resp.raw, kind: clarification.kind) { [weak self] choice in
                     guard let self else { return }
                     self.clarificationSource = nil
@@ -316,7 +332,7 @@ final class DictationController {
                     case .cancel: self.setHint(L10n.text("已取消"))
                     case .supplement:
                         self.clarificationSource = resp.raw
-                        self.clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.markerId ?? markers)
+                        self.clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.markerId ?? markers, clarification.personalizationDisabled ?? false)
                         self.toggleDictation(translateTo: clarification.target)
                     case .original:
                         var confirmed = resp
@@ -332,11 +348,12 @@ final class DictationController {
                         let local = self.dictionary.localEntries
                         let context = self.settings.readFieldContext ? field?.context.encoded() : nil
                         let markers = clarification.markerId ?? markers
+                        let policy = PreferenceExamples.shared.wirePolicy(words: self.settings.words, disabled: clarification.personalizationDisabled ?? false)
                         let examples = PreferenceExamples.shared.wireExamples
                         DispatchQueue.global(qos: .userInitiated).async {
                             let outcome = Result { try self.client.polishSync(text: text, language: language, strength: strength, llm: llm,
                                 translateTo: clarification.target, variants: variants,
-                                dictionary: entries, localOnly: local, fieldContext: context, explanationMarkers: markers, preferenceExamples: examples) }
+                                dictionary: entries, localOnly: local, fieldContext: context, explanationMarkers: markers, preferenceExamples: examples, personalization: policy) }
                             DispatchQueue.main.async {
                                 self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength,
                                                    audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants, markers: markers)
@@ -382,6 +399,8 @@ final class DictationController {
             entry.model = resp.model ?? resp.provider
             entry.translated = resp.translated
             entry.explanationMarkers = markers
+            entry.personalization = resp.personalization
+            entry.variants = variants
             HistoryStore.shared.add(entry)
             if !resp.fallback, resp.translated == nil { dictionary.received(resp.suggestions) }
             if text.isEmpty {
@@ -458,7 +477,7 @@ final class DictationController {
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
                 if result == .pasted, let field = field, field.bundleId == appBundleId {
                     let entry = HistoryStore.shared.entries.first { $0.id == entryId }
-                    if let entry, entry.strength == "concise", entry.translated == nil {
+                    if let entry {
                         self.dictionary.pasted(text, into: field, onRevision: { corrected in
                             PreferenceExamples.shared.offer(historyId: entry.id, raw: entry.raw, aiText: entry.text, corrected: corrected)
                         })

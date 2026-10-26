@@ -5,16 +5,17 @@ internal static class ContextPreferencesTests
 {
     public static void Run(Action<string, bool, string> check)
     {
+        AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProtection.Shared);
         void Assert(string name,bool value)=>check(name,value,"");
         var directory=Path.Combine(Path.GetTempPath(),"typeleast-context-"+Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try {
             var settingsPath=Path.Combine(directory,"settings.json");
-            Assert("fresh Windows installation requires real tutorial",AppSettings.Load(settingsPath).NeedsPractice);
+            Assert("fresh Windows installation requires real tutorial",LoadSettings(settingsPath).NeedsPractice);
             File.WriteAllText(settingsPath,"{\"strength\":\"prompt\"}");
-            Assert("legacy Windows settings do not force tutorial",!AppSettings.Load(settingsPath).NeedsPractice);
-            new AppSettings {OnboardingDone=true,PracticeGateRequired=false}.Save(settingsPath);
-            Assert("finished tutorial persists",!AppSettings.Load(settingsPath).NeedsPractice);
+            Assert("legacy Windows settings do not force tutorial",!LoadSettings(settingsPath).NeedsPractice);
+            new AppSettings {OnboardingDone=true,PracticeGateRequired=false}.Save(settingsPath, TestHistoryProtection.Shared);
+            Assert("finished tutorial persists",!LoadSettings(settingsPath).NeedsPractice);
             var path=Path.Combine(directory,"preferences.sealed");
             var protection=TestHistoryProtection.Shared;
             var examples=new PreferenceExamples(path,protection);

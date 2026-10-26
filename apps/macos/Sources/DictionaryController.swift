@@ -8,7 +8,6 @@ import Foundation
 final class DictionaryController {
     private let settings: Settings
     private let watcher = EditWatcher()
-    private let toast = LearnedToast()
     private let setHint: (String) -> Void
     private let changed: () -> Void
 
@@ -16,19 +15,18 @@ final class DictionaryController {
         self.settings = settings
         self.setHint = setHint
         self.changed = changed
-        watcher.onLearn = { [weak self] word in self?.learned(word) }
-        settings.learnSuggestions()
+
     }
 
     /// The entries sent with a dictation ("word" or "heard=word").
-    var serviceEntries: [String] { settings.hostDictionary }
+    var serviceEntries: [String] { settings.words.filter { $0.localOnly != true && PreferenceExamples.shared.references($0) }.map(\.word) }
 
     /// Entries marked 「不发给模型」: the service only fixes their heard-as spellings locally.
-    var localEntries: [String] { settings.localDictionary }
+    var localEntries: [String] { [] }
 
     /// A paste landed in `field`: watch it for a fix of `text`.
     func pasted(_ text: String, into field: FocusedField, onRevision: ((String) -> Void)? = nil) {
-        guard settings.autoLearn else { return }
+        guard settings.autoLearn, let onRevision else { return }
         watcher.watch(field: field, inserted: text, onRevision: onRevision)
     }
 
@@ -41,9 +39,7 @@ final class DictionaryController {
     }
 
     /// The service has already filtered these pairs; learn them without a confirmation step.
-    func received(_ candidates: [SuggestionCandidate]) {
-        if settings.learnSuggestions(candidates) > 0 { changed() }
-    }
+    func received(_ candidates: [SuggestionCandidate]) { /* Model guesses are never learned. */ }
 
     /// A word the user selected in History: added by hand. One already in the dictionary is
     /// left as it is, with what it is often heard as.
@@ -57,16 +53,4 @@ final class DictionaryController {
         changed()
     }
 
-    private func learned(_ word: String) {
-        guard settings.autoLearn, settings.addWord(word, source: .auto),
-              let id = settings.words.first(where: { $0.word == word })?.id else { return }
-        setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
-        toast.show(word: word) { [weak self] in
-            guard let self else { return }
-            self.settings.removeWord(id: id)
-            self.setHint(L10n.text("已从词典删除「{0}」", word))
-            self.changed()
-        }
-        changed()
-    }
 }

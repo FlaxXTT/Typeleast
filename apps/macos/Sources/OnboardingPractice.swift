@@ -66,7 +66,7 @@ final class OnboardingPracticeController: ObservableObject {
         switch exercise {
         case 0: return english ? "Send the report on Tuesday, no wait, on Thursday. Keep it under 3 pages." : "嗯，把报告周三发，不对，改成周四，不超过三页。"
         case 1:
-            let marker = ExplanationMarkers(rawValue: settings.explanationMarkers) ?? .background
+            let marker = ExplanationMarkers(rawValue: settings.explanationMarkers) ?? .note
             return english ? "I want a ROG laptop. \(marker.words.0) ROG refers to Republic of Gamers. \(marker.words.1) My budget is under 10000 yuan." : "我想买一台 ROG 电脑。\(marker.words.0)，ROG 指的是玩家国度那个 ROG，\(marker.words.1)。预算不超过一万元。"
         default: return english ? "Please send the meeting report to the team." : "请把会议报告发给团队。"
         }

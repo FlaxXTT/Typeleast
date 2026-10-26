@@ -22,22 +22,7 @@ public static class WordSuggestions
     /// <summary>Use only service-filtered pairs. Never replace a user's spelling or revive a deleted word.</summary>
     public static bool ApplyAutomatic(AppSettings settings, IEnumerable<SuggestionCandidate> candidates)
     {
-        if (!settings.LearnCorrections) return false;
-        var known = settings.DictionaryEntries.Select(e => e.Word).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var dismissed = settings.DismissedSuggestions.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var pending = settings.WordSuggestions.Take(Limit).Where(s => s is not null).Select(s => new SuggestionCandidate(s.Word, s.HeardAs))
-            .Concat(candidates.Take(8)).ToList();
-        var changed = settings.WordSuggestions.Count > 0;
-        foreach (var candidate in pending)
-        {
-            if (!ValidCandidate(candidate.Word, candidate.HeardAs)) continue;
-            if (WordEntry.Parse(candidate.Word, candidate.HeardAs, "auto") is not { } entry ||
-                dismissed.Contains(entry.Word) || !known.Add(entry.Word)) continue;
-            settings.DictionaryEntries.Add(entry);
-            changed = true;
-        }
-        settings.WordSuggestions = new();
-        return changed;
+        return false; // Legacy candidates stay stored; no automatic learning.
     }
 
     public static void RememberDeletion(AppSettings settings, IEnumerable<WordEntry> removed) =>

@@ -2,7 +2,7 @@
 
 这套用例只给开发者运行。它保存在源码仓库的 `tests/conformance/`，不复制进 Mac 或 Windows 安装包，也不在应用界面中提供入口。发布包只包含应用与本地服务运行文件。
 
-这组测试从进程外检查 TypeLeast 本地服务。运行器不导入服务源码。重写者可以用任何语言实现服务，再用同一批 JSON 用例验收。`v1.json` 定义 HTTP 行为；`client-v2.json` 由 Mac 和 Windows 测试共同读取。`automatic-dictionary-v1.json` 供双端开发测试检查自动学词、旧建议迁移、手工写法优先和删除后不再自动加入；它也不进入安装包。
+这组测试从进程外检查 TypeLeast 本地服务。运行器不导入服务源码。重写者可以用任何语言实现服务，再用同一批 JSON 用例验收。`v1.json` 定义 HTTP 行为；`client-v2.json` 由 Mac 和 Windows 测试共同读取。`personalization-v1.json` 检查双端词汇权限、旧数据保留和待确认修改；旧自动学词契约作为历史记录保留。这些文件不进入安装包。
 
 ## 运行
 
@@ -34,3 +34,7 @@ node tests/conformance/run.mjs --fixture tests/conformance/v1-asr.json -- node t
 ## 客户端契约 v2
 
 v2 将 `concise` 的界面名称改为 AI 整理，并增加待确认名称的响应样例：存在 `clarification` 时，即使有草稿 `text` 也不能插入。v1 保留给旧版本，HTTP 主契约仍为 v1。默认档位的一次性迁移由两端隔离设置测试覆盖；完成迁移后不得在后续启动重置用户选择。
+
+## 个性化契约
+
+`personalization-v1.json` 是当前双端共享的词汇权限、旧数据迁移和待确认样例。`automatic-dictionary-v1.json` 保留为旧版行为记录，不作为当前自动学习要求。服务策略测试由 `service/test/personalization-policy.test.js` 通过假模型验证。所有这些文件仅供开发，不进入安装包。

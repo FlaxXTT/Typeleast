@@ -159,6 +159,12 @@ struct LocalWord: Codable, Equatable, Identifiable {
 
     /// The string the host stores: "word" or "heard=word".
     var requestEntry: String { source == .auto ? word : hostEntry }
+    var replacementHeard: String? {
+        if let heardAs, !heardAs.isEmpty { return heardAs }
+        if localOnly == true, word.lowercased() != word { return word.lowercased() }
+        return nil
+    }
+    var approvalKey: String { id + "|" + (replacementHeard ?? "") + "=" + word }
 
     var hostEntry: String {
         if let heard = heardAs, !heard.isEmpty, heard != word { return heard + "=" + word }
@@ -180,6 +186,10 @@ final class Settings {
                 key.hasPrefix("voice.") || key.hasPrefix("llm.") || key.hasPrefix("ui.onboardingDone") || key.hasPrefix("hk.")
             }
             defaults.set(!existing, forKey: "ui.practiceGate.v1")
+        }
+        if !defaults.bool(forKey: "voice.shortMarkers.v1") {
+            if let selected = defaults.string(forKey: "voice.explanationMarkers.v1"), ["background","explanation","aside"].contains(selected) { defaults.set("note", forKey: "voice.explanationMarkers.v1") }
+            defaults.set(true, forKey: "voice.shortMarkers.v1")
         }
         Self.migrateAICleanup(defaults)
     }
@@ -382,8 +392,8 @@ final class Settings {
     }
 
     var explanationMarkers: String {
-        get { let value = d.string(forKey: "voice.explanationMarkers.v1") ?? ""; return ["background", "explanation", "aside"].contains(value) ? value : "" }
-        set { d.set(["background", "explanation", "aside"].contains(newValue) ? newValue : "", forKey: "voice.explanationMarkers.v1"); changed() }
+        get { let value = d.string(forKey: "voice.explanationMarkers.v1") ?? ""; return ["note", "background", "explanation", "aside"].contains(value) ? value : "" }
+        set { d.set(["note", "background", "explanation", "aside"].contains(newValue) ? newValue : "", forKey: "voice.explanationMarkers.v1"); changed() }
     }
 
     var needsPractice: Bool { d.bool(forKey: "ui.practiceGate.v1") && !onboardingDone }
@@ -420,16 +430,26 @@ final class Settings {
 
     // MARK: dictionary
 
+    private(set) var vocabularyProblem: String?
+    private var vocabulary: VocabularyArchive? {
+        if d.object(forKey: VocabularyStorage.key) != nil {
+            let archive = VocabularyStorage.read(d); vocabularyProblem = archive == nil ? "vocabulary-unavailable" : nil; return archive
+        }
+        let legacy = VocabularyArchive(words: d.data(forKey: "voice.words.v2").flatMap { try? JSONDecoder().decode([LocalWord].self, from: $0) } ?? migratedWords(),
+            suggestions: d.data(forKey: "voice.wordSuggestions").flatMap { try? JSONDecoder().decode([WordSuggestion].self, from: $0) } ?? [],
+            dismissed: d.stringArray(forKey: "voice.dismissedSuggestions") ?? [])
+        if ["voice.words.v2","voice.dictionary","voice.wordSuggestions","voice.dismissedSuggestions"].contains(where: { d.object(forKey: $0) != nil }) {
+            vocabularyProblem = VocabularyStorage.write(legacy, to: d) ? nil : "vocabulary-unavailable"
+        }
+        return legacy
+    }
+    private func saveVocabulary(_ archive: VocabularyArchive) {
+        vocabularyProblem = VocabularyStorage.write(archive, to: d) ? nil : "vocabulary-unavailable"
+        NotificationCenter.default.post(name: Settings.wordsDidChange, object: nil)
+    }
     var words: [LocalWord] {
-        get {
-            if let data = d.data(forKey: "voice.words.v2"),
-               let list = try? JSONDecoder().decode([LocalWord].self, from: data) { return list }
-            return migratedWords()
-        }
-        set {
-            if let data = try? JSONEncoder().encode(newValue) { d.set(data, forKey: "voice.words.v2") }
-            NotificationCenter.default.post(name: Settings.wordsDidChange, object: nil)
-        }
+        get { vocabulary?.words ?? [] }
+        set { guard var archive = vocabulary else { return }; archive.words = newValue; saveVocabulary(archive) }
     }
 
     /// Entries in the service's format ("word" or "heard=word"), sent with every dictation;
@@ -443,16 +463,16 @@ final class Settings {
     func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source, localOnly: Bool = false) -> Bool {
         let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !w.isEmpty else { return false }
+        guard !w.isEmpty, w.count + (h?.count ?? 0) <= 119, !(w + (h ?? "")).contains("="), (w + (h ?? "")).rangeOfCharacter(from: .controlCharacters) == nil else { return false }
         if source == .auto && dismissedSuggestions.contains(w.lowercased()) { return false }
         var list = words
         // Auto-learning never overrides what the user typed in by hand.
         if source == .auto, list.contains(where: { $0.word.caseInsensitiveCompare(w) == .orderedSame }) { return false }
-        list.removeAll { $0.word.caseInsensitiveCompare(w) == .orderedSame }
+        list.removeAll { $0.word.caseInsensitiveCompare(w) == .orderedSame && ($0.heardAs ?? "").caseInsensitiveCompare(h ?? "") == .orderedSame }
         list.insert(LocalWord(id: UUID().uuidString, word: w, heardAs: (h?.isEmpty ?? true) ? nil : h,
                               source: source, addedAt: Date(), localOnly: localOnly ? true : nil), at: 0)
         words = list
-        return true
+        return vocabularyProblem == nil
     }
 
     func updateWord(id: String, word: String, heardAs: String?, localOnly: Bool? = nil) {
@@ -477,34 +497,18 @@ final class Settings {
     /// Existing service-filtered candidates go straight into the dictionary. User deletions win.
     @discardableResult
     func learnSuggestions(_ candidates: [SuggestionCandidate] = []) -> Int {
-        guard autoLearn else { return 0 }
-        let pending = Array(wordSuggestions.prefix(WordSuggestions.limit)) + candidates.prefix(8).map {
-            WordSuggestion(word: $0.word, heardAs: $0.heardAs, count: 1, lastSeen: Date())
-        }
-        var added = 0
-        for suggestion in pending where WordSuggestions.validCandidate(word: suggestion.word, heardAs: suggestion.heardAs) {
-            if addWord(suggestion.word, heardAs: suggestion.heardAs, source: .auto) { added += 1 }
-        }
-        if !wordSuggestions.isEmpty { wordSuggestions = [] }
-        return added
+        return 0 // Retain old data; model guesses no longer mutate the dictionary.
     }
 
     // MARK: dictionary suggestions (from what the cleanup model corrected)
 
     var wordSuggestions: [WordSuggestion] {
-        get {
-            guard let data = d.data(forKey: "voice.wordSuggestions") else { return [] }
-            return (try? JSONDecoder().decode([WordSuggestion].self, from: data)) ?? []
-        }
-        set {
-            if let data = try? JSONEncoder().encode(newValue) { d.set(data, forKey: "voice.wordSuggestions") }
-            NotificationCenter.default.post(name: Settings.wordsDidChange, object: nil)
-        }
+        get { vocabulary?.suggestions ?? [] }
+        set { guard var archive = vocabulary else { return }; archive.suggestions = newValue; saveVocabulary(archive) }
     }
-
     private var dismissedSuggestions: [String] {
-        get { d.stringArray(forKey: "voice.dismissedSuggestions") ?? [] }
-        set { d.set(Array(Set(newValue.map { $0.lowercased() })), forKey: "voice.dismissedSuggestions") }
+        get { vocabulary?.dismissed ?? [] }
+        set { guard var archive = vocabulary else { return }; archive.dismissed = Array(Set(newValue.map { $0.lowercased() })); saveVocabulary(archive) }
     }
 
     /// Import a CSV: one entry per line, "word" or "heard,word".

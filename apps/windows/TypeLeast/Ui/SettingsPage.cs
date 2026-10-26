@@ -207,7 +207,7 @@ internal sealed class SettingsPage : IPage
             modelSection,
             Section(L10n.T("整理选项"),
                 Theme.SettingRow(L10n.T("参考输入框内容"), null, Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("修改学习"), Theme.Text(L10n.T("AI 整理后的修改先确认再保存为偏好；自然整理保留术语学习。关闭后不观察修改。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; if (host.SaveSettings() && v) host.Dictionary.Received(Array.Empty<SuggestionCandidate>()); })),
+                Theme.SettingRow(L10n.T("修改学习"), Theme.Text(L10n.T("各模式的修改先确认再保存为偏好，不自动添加词汇。关闭后不观察修改。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; if (host.SaveSettings() && v) host.Dictionary.Received(Array.Empty<SuggestionCandidate>()); })),
                 Theme.SettingRow(L10n.T("编号列表"), null, Theme.Toggle(s.FormattedLists, v => { s.FormattedLists = v; host.SaveSettings(); }))));
         AddTab(L10n.T("通用"),
             Section(L10n.T("插入"),

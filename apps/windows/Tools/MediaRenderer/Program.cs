@@ -158,6 +158,28 @@ class P
         Console.WriteLine($"CONTROLLER CHECKS: {checks} passed");
     }
 
+    static void RenderPersonalization(AppHost host,string dir,string language)
+    {
+        host.Settings.OnboardingDone=true;host.Settings.PracticeGateRequired=false;host.Settings.ExplanationMarkers="note";
+        host.Settings.DictionaryEntries.Clear();
+        var term=WordEntry.Parse("Acme")!;var rule=WordEntry.Parse("Acme","Acmee")!;
+        host.Settings.DictionaryEntries.Add(term);host.Settings.DictionaryEntries.Add(rule);
+        host.Settings.DictionaryEntries.Add(WordEntry.Parse("LegacyTerm","","auto")!);
+        host.Preferences.Prepare("fixture-review","请把报告发给产品团队","请将报告发送给产品团队。");
+        host.Preferences.SetRule(rule,true);host.Preferences.Exclude("LegacyTerm");
+        foreach(var appearance in new[]{"light","dark"}) {
+            Theme.Apply(appearance);
+            var page=new DictionaryPage(host);
+            var root=(StackPanel)page.View;var tabs=(ComboBox)root.Children[0];
+            for(var tab=0;tab<3;tab++) {
+                tabs.SelectedIndex=tab;page.Refresh();
+                var scroll=new ScrollViewer {Content=root,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Padding=new Thickness(20),Background=Theme.Background};
+                Save(scroll,Path.Combine(dir,$"personalization-{tab}-{appearance}-{language}.png"),880,740);
+                scroll.Content=null;
+            }
+        }
+    }
+
     [STAThread]
     static int Main(string[] args)
     {
@@ -174,6 +196,7 @@ class P
                 L10n.Configure(language);
                 RenderUpdateWindow(dir);
                 RenderSpeechModels(host, dir, language);
+                RenderPersonalization(host,dir,language);
                 foreach (var mode in new[] { "light", "dark" })
                 foreach (var strength in new[] { "prompt", "concise" })
                 {

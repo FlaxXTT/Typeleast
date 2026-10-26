@@ -19,6 +19,8 @@ void Check(string name, bool ok, string detail = "")
 
 void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Default.Equals(got, want), $"got={got} want={want}");
 
+AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProtection.Shared);
+
 // ---- 1. WAV: the one shape the service accepts
 
 {
@@ -128,32 +130,32 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     var file = Path.Combine(dir, "app-settings.json");
     s.Hotkey = DictationKey.F8;
     s.Words.Add("TypeLeast");
-    s.Save(file);
-    var back = AppSettings.Load(file);
+    s.Save(file, TestHistoryProtection.Shared);
+    var back = LoadSettings(file);
     Eq("settings round-trip", back.Hotkey, DictationKey.F8);
     Eq("old plain words become dictionary entries", back.DictionaryEntries.FirstOrDefault()?.Word, "TypeLeast");
     Eq("…and are not written back", back.Words.Count, 0);
     Check("the key is never written to the settings file", !File.ReadAllText(file).Contains("sk-test"));
     File.WriteAllText(file, "{ broken");
-    Eq("a broken file gives defaults", AppSettings.Load(file).Hotkey, DictationKey.RightAlt);
+    Eq("a broken file gives defaults", LoadSettings(file).Hotkey, DictationKey.RightAlt);
     File.WriteAllText(file, "{\"PasteLastShortcut\":\"CtrlShiftV\"}");
-    Eq("the old Ctrl+Shift+V default moves once", AppSettings.Load(file).PasteLastShortcut, "CtrlShiftAltV");
+    Eq("the old Ctrl+Shift+V default moves once", LoadSettings(file).PasteLastShortcut, "CtrlShiftAltV");
     File.WriteAllText(file, "{\"PasteLastShortcut\":\"CtrlShiftV\",\"PasteShortcutDefaults\":1}");
-    Eq("a Ctrl+Shift+V chosen after the move stays", AppSettings.Load(file).PasteLastShortcut, "CtrlShiftV");
+    Eq("a Ctrl+Shift+V chosen after the move stays", LoadSettings(file).PasteLastShortcut, "CtrlShiftV");
     Eq("new settings do not take Ctrl+Shift+V", new AppSettings().PasteLastShortcut, "CtrlShiftAltV");
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
-    Eq("an old install switches to AI cleanup once", AppSettings.Load(file).Strength, "concise");
+    Eq("an old install switches to AI cleanup once", LoadSettings(file).Strength, "concise");
     foreach (var retired in new[] { "promptbrief", "promptify" })
     {
         File.WriteAllText(file, "{\"Strength\":\"" + retired + "\"}");
-        Eq("the retired prompt-mode tier " + retired + " reads as concise", AppSettings.Load(file).Strength, "concise");
+        Eq("the retired prompt-mode tier " + retired + " reads as concise", LoadSettings(file).Strength, "concise");
     }
-    Eq("automatic updates are on for settings saved before they existed", AppSettings.Load(file).AutoUpdate, true);
+    Eq("automatic updates are on for settings saved before they existed", LoadSettings(file).AutoUpdate, true);
     File.WriteAllText(file, "{\"Strength\":\"promptbeta\"}");
-    var migratedAI = AppSettings.Load(file);
+    var migratedAI = LoadSettings(file);
     Eq("existing Beta user switches to AI once", migratedAI.Strength, "concise");
-    migratedAI.Strength = "prompt"; migratedAI.Save(file);
-    Eq("next startup keeps chosen mode", AppSettings.Load(file).Strength, "prompt");
+    migratedAI.Strength = "prompt"; migratedAI.Save(file, TestHistoryProtection.Shared);
+    Eq("next startup keeps chosen mode", LoadSettings(file).Strength, "prompt");
     var autoHint = WordEntry.Parse("ROG", "LG", "auto")!;
     Eq("automatic mapping is preserved", autoHint.ServiceValue, "LG=ROG");
     Eq("automatic mapping is not a replacement", autoHint.RequestValue, "ROG");
@@ -436,8 +438,8 @@ Console.WriteLine();
     Check("same window may receive paste", PasteTarget.Matches(new IntPtr(1), new IntPtr(1)));
     var path = Path.Combine(Path.GetTempPath(), "typeleast-ui-" + Guid.NewGuid() + ".json");
     try {
-        new AppSettings { InterfaceLanguage = "en", Language = "ja" }.Save(path);
-        var saved = AppSettings.Load(path);
+        new AppSettings { InterfaceLanguage = "en", Language = "ja" }.Save(path, TestHistoryProtection.Shared);
+        var saved = LoadSettings(path);
         Eq("UI language persists", saved.InterfaceLanguage, "en");
         Eq("dictation language is independent", saved.Language, "ja");
         Eq("saving does not switch running UI", L10n.Language, "zh-Hans");
@@ -457,8 +459,8 @@ Console.WriteLine();
     Eq("older services without beta still decode", plain.BetaQuestions.Count, 0);
     var path = Path.Combine(Path.GetTempPath(), "typeleast-beta-" + Guid.NewGuid() + ".json");
     try {
-        new AppSettings { Strength = "promptbeta" }.Save(path);
-        Eq("Prompt Beta strength survives a reload", AppSettings.Load(path).Strength, "promptbeta");
+        new AppSettings { Strength = "promptbeta" }.Save(path, TestHistoryProtection.Shared);
+        Eq("Prompt Beta strength survives a reload", LoadSettings(path).Strength, "promptbeta");
     } finally { if (File.Exists(path)) File.Delete(path); }
 }
 
@@ -472,13 +474,13 @@ Console.WriteLine();
     var path = Path.Combine(Path.GetTempPath(), "typeleast-translate-" + Guid.NewGuid() + ".json");
     try
     {
-        new AppSettings { TranslateHotkey = DictationKey.F8, TranslateTarget = "ja", ZhVariant = "hk", EnVariant = "gb" }.Save(path);
-        var loaded = AppSettings.Load(path);
+        new AppSettings { TranslateHotkey = DictationKey.F8, TranslateTarget = "ja", ZhVariant = "hk", EnVariant = "gb" }.Save(path, TestHistoryProtection.Shared);
+        var loaded = LoadSettings(path);
         Eq("the translate key survives a reload", loaded.TranslateHotkey, (DictationKey?)DictationKey.F8);
         Eq("the target survives a reload", loaded.TranslateTarget, "ja");
         Eq("the Chinese variant survives a reload", loaded.ZhVariant, "hk");
-        new AppSettings { Hotkey = DictationKey.F8, TranslateHotkey = DictationKey.F8, TranslateTarget = "xx", ZhVariant = "nope" }.Save(path);
-        loaded = AppSettings.Load(path);
+        new AppSettings { Hotkey = DictationKey.F8, TranslateHotkey = DictationKey.F8, TranslateTarget = "xx", ZhVariant = "nope" }.Save(path, TestHistoryProtection.Shared);
+        loaded = LoadSettings(path);
         Eq("the translate key cannot be the dictation key", loaded.TranslateHotkey, (DictationKey?)null);
         Eq("an unknown target reads as English", loaded.TranslateTarget, "en");
         Eq("an unknown variant reads as Simplified", loaded.ZhVariant, "hans");
@@ -622,7 +624,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         history.Clear(); Check("clear forgets memory result", history.Last is null);
         var settingsPath = Path.Combine(dir, "settings.json");
         File.WriteAllText(settingsPath, "{\"words\":[\"heard=TypeLeast\",\"SenseVoice\"]}");
-        var settings = AppSettings.Load(settingsPath);
+        var settings = LoadSettings(settingsPath);
         Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 2);
         Eq("legacy heardAs preserved", settings.DictionaryEntries[0].HeardAs, "heard");
         Eq("legacy source is manual", settings.DictionaryEntries[0].Source, "manual");
@@ -635,9 +637,9 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         Eq("CSV quoted commas preserved", preview.Valid[0].Word, "Product, Name");
         Check("dictionary rejects controls", WordEntry.Parse("bad\nword") is null);
         Check("dictionary enforces service limit", WordEntry.Parse(new string('a', 121)) is null);
-        File.WriteAllText(settingsPath, "{broken"); var broken = AppSettings.Load(settingsPath);
+        File.WriteAllText(settingsPath, "{broken"); var broken = LoadSettings(settingsPath);
         Check("corrupt settings block writes", broken.PersistenceBlocked);
-        try { broken.Save(settingsPath); Check("cannot replace corrupt settings", false); } catch (IOException) { Check("cannot replace corrupt settings", File.ReadAllText(settingsPath) == "{broken"); }
+        try { broken.Save(settingsPath, TestHistoryProtection.Shared); Check("cannot replace corrupt settings", false); } catch (IOException) { Check("cannot replace corrupt settings", File.ReadAllText(settingsPath) == "{broken"); }
         var audio = new RetainedAudio(Path.Combine(dir, "recordings"), TestHistoryProtection.Shared);
         var id = Guid.NewGuid().ToString("N"); var wav = Wav.FromPcm16(new byte[16000]);
         audio.Save(id, wav); Check("retained audio round-trip", audio.Load(id).SequenceEqual(wav));
@@ -900,7 +902,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("GitHub only means one source", UpdateSources.For(setupUrl, "github").Count, 1);
     Eq("other addresses are never sent to a mirror", UpdateSources.For("https://example.com/x.exe", "mirror").Count, 1);
     Check("the line names the source", UpdateProgressText.Describe(UpdateStage.Downloading, 1 << 20, 2 << 20, "ghfast.top").Contains("ghfast.top"));
-    Eq("an unknown source setting falls back to auto", AppSettings.Load(WriteTemp("""{"UpdateSource":"weird"}""")).UpdateSource, "auto");
+    Eq("an unknown source setting falls back to auto", LoadSettings(WriteTemp("""{"UpdateSource":"weird"}""")).UpdateSource, "auto");
 
     Eq("the service starting: ask often", HealthPolling.Interval(false, null, null), HealthPolling.Busy);
     Eq("a speech model loading: ask often", HealthPolling.Interval(true, "loading", null), HealthPolling.Busy);
@@ -928,9 +930,9 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("learning is on for new installs", new AppSettings().LearnCorrections);
     var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(old, """{"LearnCorrections":false}""");
-    Check("switched on once for settings from before", AppSettings.Load(old) is { LearnCorrections: true, LearningDefaults: 1 });
+    Check("switched on once for settings from before", LoadSettings(old) is { LearnCorrections: true, LearningDefaults: 1 });
     File.WriteAllText(old, """{"LearnCorrections":false,"LearningDefaults":1}""");
-    Check("a later choice to turn it off is kept", !AppSettings.Load(old).LearnCorrections);
+    Check("a later choice to turn it off is kept", !LoadSettings(old).LearnCorrections);
     File.Delete(old);
 }
 
@@ -953,8 +955,8 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     try
     {
         var settings = new AppSettings { Strength = "concise" };
-        settings.Save(path);
-        Eq("the concise tier persists", AppSettings.Load(path).Strength, "concise");
+        settings.Save(path, TestHistoryProtection.Shared);
+        Eq("the concise tier persists", LoadSettings(path).Strength, "concise");
     }
     finally { File.Delete(path); }
 }
@@ -975,7 +977,7 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     Eq("the suggested mirror", ModelMirror.Suggested, "https://hf-mirror.com");
 }
 
-using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "automatic-dictionary-v1.json"))))
+using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "personalization-v1.json"))))
 {
     foreach (var item in contract.RootElement.GetProperty("cases").EnumerateArray())
     {
@@ -997,8 +999,8 @@ using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContex
             try
             {
                 settings.LearningDefaults = 1;
-                settings.Save(path);
-                settings = AppSettings.Load(path);
+                settings.Save(path, TestHistoryProtection.Shared);
+                settings = LoadSettings(path);
             }
             finally { File.Delete(path); }
             WordSuggestions.ApplyAutomatic(settings, [new(entry.Word, entry.HeardAs)]);
@@ -1008,6 +1010,7 @@ using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContex
 }
 
 ContextPreferencesTests.Run(Check);
+PersonalizationPolicyTests.Run(Check);
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

@@ -24,6 +24,8 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     /// 翻译模式: the target language, so a retry translates again. Absent otherwise.
     var translated: String? = nil
     var explanationMarkers: String? = nil
+    var personalization: PersonalizationTrace? = nil
+    var variants: String? = nil
 
     var title: String {
         let t = text.isEmpty ? raw : text

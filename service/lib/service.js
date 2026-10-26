@@ -1,3 +1,4 @@
+import { personalizationContext, applyExplicitRules, requestPolicy, readPolicy } from "./personalization-policy.js";
 import { splitExplanation, explanationNameRule, explanationInstruction } from "./explanation-context.js";
 import { requestPreferences, preferenceHints, preferenceInstruction } from "./preference-hints.js";
 import { nameClarification, clarificationSource, clarificationRule } from "./name-clarification.js";
@@ -131,6 +132,7 @@ export class VoicePolishService {
    * @returns {Promise<object>} the polished (or raw) text plus telemetry.
    */
   async polish(request) {
+    request = { ...request };
     const started = Date.now();
     const originalText = String(request.rawText ?? "").trim();
     // The retired prompt-mode tiers (promptbrief, promptify) are read as 精简整理.
@@ -188,9 +190,12 @@ export class VoicePolishService {
     const safeNotes = explanation.notes.map(s => redactSecrets(s));
     const nameRules = explanationNameRule(rawText, safeNotes);
     context.dictionary.push(...nameRules);
-    const examples = strength === "concise" ? preferenceHints(request.preferenceExamples ?? requestPreferences(request.dictionary), rawText) : [];
-    let style = null;
-    try { style = this.extension?.style() ?? null; } catch { /* Optional extensions never stop cleanup. */ }
+    const rawExamples = request.preferenceExamples ?? requestPreferences(request.dictionary);
+    const filteredExamples = (Array.isArray(rawExamples) ? rawExamples : []).filter(x => x && ![x.raw,x.aiText,x.correctedText].some(v => typeof v === "string" && request._personalization.excludedText?.(v)));
+    const examples = request._personalization.policy.disabled ? [] : preferenceHints(filteredExamples, rawText);
+    request._personalization.trace.references.push(...examples.map(x=>({kind:"example",source:"personal",sourceId:filteredExamples.find(y=>y.raw===x.raw&&y.correctedText===x.correctedText)?.id??"example"})));
+    const style = context.style?.instructions ?? null;
+    if(style) request._personalization.trace.references.push({kind:'style',source:'extension',sourceId:context.style.sourceId,label:context.style.label});
     // Generic cleanup rules, plus relevant dictionary and optional pronunciation hints.
     const system = systemPromptFor({
       dictionary: context.dictionary,
@@ -560,19 +565,11 @@ export class VoicePolishService {
     if (!request.supportsClarification) return this.recordFallback(request, {
       ...base, fallback: true, reason: "entity-changed", ms: timing(started, 0),
     });
-    return { ...base, text: "", clarification: { ...clarification, markerId: request.explanationMarkers ?? "", ...(request.translateTo ? { target: request.translateTo } : {}) }, suggestions: [], ms: timing(started, 0) };
+    return { ...base, text: "", clarification: { ...clarification, markerId: request.explanationMarkers ?? "", personalizationDisabled: readPolicy(requestPolicy(request)).disabled, ...(request.translateTo ? { target: request.translateTo } : {}) }, suggestions: [], ms: timing(started, 0) };
   }
 
   async recordAndReturn(request, result) {
-    // A failed optional extension must not change or stop dictation.
-    try {
-      const changed = this.extension?.normalizeText(result.text, dictionaryFrom(this.dictionary, request.dictionary));
-      if (typeof changed === "string") result.text = changed;
-    } catch { /* Core output stays intact. */ }
-    // Entries the user keeps from the model: their heard-as spellings are corrected here.
-    result.text = applyLocalEntries(result.text, localEntriesFrom(request.dictionary));
-    // Marked entries with no heard-as form can still fix the case of a Latin word (acme → Acme).
-    result.text = normalizeTermCase(result.text, localSpellingsFrom(request.dictionary));
+    result = applyExplicitRules(result, request._personalization, result.explanation ? splitExplanation(result.raw, request.explanationMarkers).text : result.raw, canonicalStrength(request.strength ?? this.strength));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
     const target = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
@@ -580,11 +577,6 @@ export class VoicePolishService {
     const outputLanguage = target ? (result.fallback ? "auto" : target) : (request.language ?? this.config.language ?? "auto");
     if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants), outputLanguage);
     result.suggestions = [];
-    if (!result.fallback && !request.translateTo && !result.translated &&
-        canonicalStrength(request.strength ?? this.strength) !== "concise" && !result.beta?.sessionId) {
-      try { result.suggestions = await this.suggestionEngine(result.raw, result.text); }
-      catch { /* Optional suggestions must never fail dictation or echo user text into logs. */ }
-    }
     return result;
   }
 
@@ -632,8 +624,10 @@ export class VoicePolishService {
         betaSession: request.betaSession ?? null,
         translateTo: request.translateTo ?? null,
         variants: request.variants ?? null,
-        dictionary: [...(Array.isArray(request.dictionary) ? request.dictionary : []), ...clarificationRule(request.dictionary, spoken.text)],
+        dictionary: Array.isArray(request.dictionary) ? request.dictionary : [],
+        currentTermRules: clarificationRule(request.dictionary, spoken.text).map(rule => rule.heardAs + "=" + rule.word),
         explanationMarkers: request.explanationMarkers ?? null,
+        personalization: requestPolicy(request),
       });
       const result = {
         requestId: request.requestId,
@@ -651,6 +645,7 @@ export class VoicePolishService {
           total: Date.now() - started,
         },
         metrics: polished.metrics,
+        personalization: polished.personalization,
         ...(polished.beta ? { beta: polished.beta } : {}),
         ...(polished.clarification ? { clarification: polished.clarification } : {}),
         ...(polished.explanation ? { explanation: polished.explanation } : {}),
@@ -685,18 +680,16 @@ export class VoicePolishService {
     const redact = this.config.redactSecrets !== false;
     const fieldContext = request.fieldContext ?? null;
     const own = dictionaryFrom(this.dictionary, request.dictionary);
-    const texts = [rawText, ...Object.values(fieldContext ?? {})];
-    let entries;
-    let aliases = [];
-    try {
-      const extensionContext = await this.extension?.context(own, texts, rawText);
-      entries = extensionContext?.entries ?? await relevantEntries(own, texts);
-      aliases = extensionContext?.aliases ?? [];
-    } catch {
-      // A damaged optional pack must never take down speech or a user's own dictionary.
-      entries = await relevantEntries(own, texts);
+    let data;
+    try { data = await personalizationContext(request, own, this.extension, rawText); }
+    catch {
+      // Optional personalization must not become a dependency of dictation.
+      data = {dictionary:[],aliases:[],style:null,policy:{disabled:true,rules:[]},trace:{disabled:true,references:[],replacements:[],blocked:[]}};
     }
+    request._personalization = data;
+    const entries = [...data.dictionary, ...(request.currentTermRules ?? [])], aliases = data.aliases;
     return {
+      style: data.style,
       dictionary: entries.map(entry => redact ? redactSecrets(entry) : entry),
       aliases,
       // Found in the outbound text, so a redacted secret cannot return through a hint.
@@ -759,7 +752,7 @@ export function dictionaryFrom(configured, sent) {
       if (!word || /[=\p{Cc}]/u.test(word + heard) || word.length + heard.length > DICTIONARY_LIMITS.entryLength - 1) continue;
       value = (entry.source === "manual" && heard ? heard + "=" : "") + word;
     }
-    const trimmed = value.trim().slice(0, DICTIONARY_LIMITS.entryLength);
+    const trimmed = value.trim().split("=").at(-1).trim().slice(0, DICTIONARY_LIMITS.entryLength);
     if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
   }
   return entries;
