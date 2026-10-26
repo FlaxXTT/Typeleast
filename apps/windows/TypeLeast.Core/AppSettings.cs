@@ -175,6 +175,9 @@ public sealed class AppSettings
     public void Save(string path)
     {
         if (PersistenceBlocked) throw new IOException("Existing settings could not be read; retained without replacement");
+        // Settings written by this version already contain the user's current choice.
+        // Only a file from an older version should trigger the one-time default move.
+        AiCleanupDefaultApplied = true;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(this, Json.Options));

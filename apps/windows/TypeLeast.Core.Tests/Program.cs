@@ -676,7 +676,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     double shown = 0; for (var i = 0; i < 30; i++) shown = level.Next(quiet);
     Check("quiet speech fills most of the bar", shown > 0.8, $"shown={shown}");
     Check("loud speech is clamped", new AudioLevel().Next(6) <= 1);
-    Eq("three cleanup modes", string.Join(",", CleanupModes.Codes), "prompt,concise,promptbeta");
+    Eq("AI cleanup is first in the three modes", string.Join(",", CleanupModes.Codes), "concise,prompt,promptbeta");
     Eq("retired verbatim setting becomes natural cleanup", CleanupModes.Stored("off"), "prompt");
     Eq("natural cleanup appears in the mode label", CleanupModes.Title("prompt"), L10n.T("自然整理"));
     Check("natural cleanup keeps its stored id", CleanupModes.IsKnown("prompt") && !CleanupModes.IsKnown("maximal") && !CleanupModes.IsKnown("promptify"));
