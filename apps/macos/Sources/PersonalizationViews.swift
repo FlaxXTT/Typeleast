@@ -8,6 +8,17 @@ struct PersonalizationDetails: View {
     @ObservedObject private var preferences = PreferenceExamples.shared
     @EnvironmentObject var model: AppModel
     let entry: LocalHistoryEntry
+    private func referenceTitle(_ reference: PersonalizationReference) -> String {
+        let subject: String
+        if reference.kind == "example" { subject = L10n.text("表达示例") }
+        else { subject = reference.word ?? reference.label ?? reference.sourceId }
+        var source = L10n.text("个人偏好")
+        if reference.source == "extension" {
+            let label = reference.label.flatMap { $0.isEmpty ? nil : $0 } ?? reference.sourceId
+            source = L10n.text("扩展") + ": " + label
+        }
+        return subject + " · " + source
+    }
     var body: some View {
         if let trace = entry.personalization {
             DisclosureGroup(L10n.text("本次参考与修改")) {
@@ -16,7 +27,7 @@ struct PersonalizationDetails: View {
                         .font(.caption).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                     ForEach(Array(trace.references.prefix(64).enumerated()), id: \.offset) { _, reference in
                         HStack {
-                            Text((reference.kind == "example" ? L10n.text("表达示例") : (reference.word ?? reference.label ?? reference.sourceId)) + " · " + (reference.source == "extension" ? L10n.text("扩展") + ": " + ((reference.label?.isEmpty == false) ? reference.label! : reference.sourceId) : L10n.text("个人偏好"))).font(.caption)
+                            Text(referenceTitle(reference)).font(.caption)
                             Spacer()
                             if let word = reference.word { Button(L10n.text(preferences.isExcluded(word) ? "恢复参考" : "不再参考")) { if let saved = preferences.excluded.first(where: { $0.precomposedStringWithCompatibilityMapping.lowercased() == word.precomposedStringWithCompatibilityMapping.lowercased() }) { preferences.restore(saved) } else { preferences.exclude(word) } }.buttonStyle(.plain) }
                         }

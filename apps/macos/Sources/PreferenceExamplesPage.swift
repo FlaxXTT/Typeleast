@@ -17,7 +17,7 @@ struct DictionaryPage: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Card { ExplanationMarkerPicker() }
-                        Text(L10n.text("仅在本机加密保存。只有相关且已确认、启用的短示例会随 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"))
+                        Text(L10n.text("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"))
                             .font(.system(size: 12)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                         Text(L10n.text("已确认资料独立保存，清空历史不会删除；可在本页删除。")).font(.system(size: 12)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                         if examples.problem != nil {

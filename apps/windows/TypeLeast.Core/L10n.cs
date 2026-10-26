@@ -173,7 +173,7 @@ public static class L10n
         ["3. 确认修改"] = "3. Confirm an edit",
         ["AI 整理前（识别原文）"] = "Before AI cleanup (recognized speech)",
         ["AI 整理后的修改先确认再保存为偏好；自然整理保留术语学习。关闭后不观察修改。"] = "AI cleanup edits need confirmation before becoming preferences. Natural cleanup keeps vocabulary learning. Turn off to stop observing edits.",
-        ["仅在本机加密保存。只有相关且已确认、启用的短示例会随 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"] = "Encrypted on this computer. AI cleanup sends only relevant, confirmed and enabled short examples to your selected model. Name or value changes do not become automatic replacement rules.",
+        ["仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"] = "Encrypted on this computer. Natural cleanup and AI cleanup send only relevant, confirmed and enabled short examples to your selected model. Name or value changes do not become automatic replacement rules.",
         ["仅用于 AI 整理。开始词与结束词之间的内容只作本次解释，不写入结果，也不成为永久替换规则。"] = "AI cleanup only. Words between the start and end markers provide context for this input. They are omitted from the result and do not create permanent replacement rules.",
         ["保存真实识别与用户确认的修改，不自动训练模型。"] = "Keep actual transcripts and confirmed edits. Models are not trained automatically.",
         ["修改学习"] = "Learn from edits",

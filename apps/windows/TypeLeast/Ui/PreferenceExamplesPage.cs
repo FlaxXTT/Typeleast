@@ -42,7 +42,7 @@ internal sealed class DictionaryPage : IPage
         content.Children.Add(Theme.Text(L10n.T("偏好示例"),28,bold:true));
         content.Children.Add(Theme.Text(L10n.T("保存真实识别与用户确认的修改，不自动训练模型。"),13,Theme.Grey));
         content.Children.Add(MarkerPicker(host));
-        content.Children.Add(Theme.Text(L10n.T("仅在本机加密保存。只有相关且已确认、启用的短示例会随 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"),12,Theme.Grey));
+        content.Children.Add(Theme.Text(L10n.T("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"),12,Theme.Grey));
         content.Children.Add(Theme.Text(L10n.T("已确认资料独立保存，清空历史不会删除；可在本页删除。"),12,Theme.Grey));
         if (host.Preferences.Problem is not null) content.Children.Add(Theme.Text(L10n.T("偏好资料无法保存或已达上限，原资料已保留。"),12,Theme.Warning));
         if (pendingCount>0) content.Children.Add(Theme.SectionTitle(L10n.T("待确认的修改")));
