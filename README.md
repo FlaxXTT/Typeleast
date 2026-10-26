@@ -98,7 +98,7 @@
 
 ## 下载
 
-最新版：[**v1.21.3**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.21.3)
+最新版：[**v1.22.0**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.22.0)
 
 | 电脑 | 文件 |
 |---|---|
