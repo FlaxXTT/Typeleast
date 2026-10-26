@@ -16,6 +16,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     var isVisible: Bool { window?.isVisible ?? false }
 
     func show(page: HubPage? = nil) {
+        if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
         if let page = page { model.page = page }
         if window == nil { window = makeWindow() }
         model.refreshPermissions()
@@ -87,7 +88,7 @@ private struct Sidebar: View {
             .padding(.bottom, 22)
 
             ForEach([HubPage.home, .history, .dictionary, .extensions]) { page in
-                SidebarItem(page: page)
+                SidebarItem(page: page).disabled(model.settings.needsPractice)
             }
 
             Spacer()

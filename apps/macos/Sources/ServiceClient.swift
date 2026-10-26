@@ -280,6 +280,14 @@ struct NameClarification: Codable, Equatable {
     let question: String
     let evidence: String
     var target: String?
+    var kind: String?
+    var markerId: String?
+}
+
+struct ExplanationReceipt: Codable, Equatable {
+    let used: Bool
+    let segments: Int
+    let markerId: String
 }
 
 struct DictateResponse: Codable, Equatable {
@@ -291,6 +299,8 @@ struct DictateResponse: Codable, Equatable {
     var model: String?
     var provider: String?
     var ms: MSBreakdown?
+    var contextOnly: Bool = false
+    var explanation: ExplanationReceipt?
     var clarification: NameClarification?
     var beta: BetaInfo?
     var suggestions: [SuggestionCandidate] = []
@@ -301,7 +311,7 @@ struct DictateResponse: Codable, Equatable {
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated, suggestions, clarification
+        case requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated, suggestions, clarification, contextOnly, explanation
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -321,6 +331,8 @@ struct DictateResponse: Codable, Equatable {
         ms = lenient(c, MSBreakdown.self, .ms)
         beta = lenient(c, BetaInfo.self, .beta)
         clarification = lenient(c, NameClarification.self, .clarification)
+        contextOnly = lenient(c, Bool.self, .contextOnly) ?? false
+        explanation = lenient(c, ExplanationReceipt.self, .explanation)
         translated = lenient(c, String.self, .translated)
         suggestions = Array((lenient(c, [SuggestionCandidate].self, .suggestions) ?? []).prefix(8)).filter(\.isValid)
     }
@@ -328,7 +340,7 @@ struct DictateResponse: Codable, Equatable {
     /// When fallback is true the service has ALREADY substituted the raw transcript into
     /// "text". Guard anyway against a service that only flips the flag.
     var insertableText: String {
-        if betaWaiting || clarification != nil { return "" }
+        if betaWaiting || clarification != nil || contextOnly { return "" }
         if !text.isEmpty { return text }
         return raw
     }
@@ -600,23 +612,31 @@ final class ServiceClient {
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
                      translateTo: String? = nil, variants: String? = nil, dictionary: [String] = [],
-                     localOnly: [String] = [], clarificationSource: String? = nil, clarificationEvidence: String? = nil) throws -> DictateResponse {
+                     localOnly: [String] = [], clarificationSource: String? = nil, clarificationEvidence: String? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = []) throws -> DictateResponse {
         try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
-                                            translateTo: translateTo, variants: variants, dictionary: dictionary, localOnly: localOnly, clarificationSource: clarificationSource, clarificationEvidence: clarificationEvidence) }
+                                            translateTo: translateTo, variants: variants, dictionary: dictionary, localOnly: localOnly, clarificationSource: clarificationSource, clarificationEvidence: clarificationEvidence, explanationMarkers: explanationMarkers, preferenceExamples: preferenceExamples) }
     }
 
     /// The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
     /// Entries marked 「不发给模型」 go as {"local": entry}; the service never passes those to a model.
-    static func dictateBody(wav: Data, dictionary: [String], localOnly: [String] = [], clarificationSource: String? = nil, clarificationEvidence: String? = nil) -> (body: Data, dictionaryBytes: Int) {
+    static func dictateBody(wav: Data, dictionary: [String], localOnly: [String] = [], clarificationSource: String? = nil, clarificationEvidence: String? = nil, preferenceExamples: [[String: Any]] = []) -> (body: Data, dictionaryBytes: Int) {
         var entries: [Any] = dictionary + localOnly.map { ["local": $0] }
         if let source = clarificationSource { entries.append(["clarificationSource": source, "clarificationEvidence": clarificationEvidence ?? ""]) }
+        var selected: [[String: Any]] = []
+        for candidate in preferenceExamples.prefix(20) {
+            let next = selected + [candidate]
+            guard let block = try? JSONSerialization.data(withJSONObject: next), block.count <= 32768,
+                  let trial = try? JSONSerialization.data(withJSONObject: entries + [["preferenceExamples": next]]), trial.count <= 256 * 1024 else { continue }
+            selected = next
+        }
+        if !selected.isEmpty { entries.append(["preferenceExamples": selected]) }
         guard !entries.isEmpty, let json = try? JSONSerialization.data(withJSONObject: entries) else { return (wav, 0) }
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], fieldContext: Data? = nil) throws -> DictateResponse {
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], fieldContext: Data? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = []) throws -> DictateResponse {
         try withPortRetry { try withTokenRetry { token in
             let entries: [Any] = dictionary + localOnly.map { ["local": $0] }
             var body: [String: Any] = ["text": text, "language": language, "strength": strength, "supportsClarification": true,
@@ -625,6 +645,16 @@ final class ServiceClient {
             if let fieldContext, let context = try? JSONSerialization.jsonObject(with: fieldContext) { body["fieldContext"] = context }
             if let translateTo { body["translateTo"] = translateTo }
             if let variants { body["variants"] = variants }
+            if let explanationMarkers { body["explanationMarkers"] = explanationMarkers }
+            var selected: [[String: Any]] = []
+            for candidate in preferenceExamples.prefix(20) {
+                let next = selected + [candidate]
+                var trial = body; trial["preferenceExamples"] = next
+                guard let data = try? JSONSerialization.data(withJSONObject: next), data.count <= 32768,
+                      let payload = try? JSONSerialization.data(withJSONObject: trial), payload.count <= 256 * 1024 else { continue }
+                selected = next
+            }
+            if !selected.isEmpty { body["preferenceExamples"] = selected }
             let req = try makeRequest(path: "/api/voice-polish/polish", method: "POST", token: token,
                                       headers: ["content-type": "application/json"], body: JSONSerialization.data(withJSONObject: body), timeout: dictateTimeout)
             let (data, response) = try performSync(req, timeout: dictateTimeout)
@@ -654,7 +684,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], clarificationSource: String?, clarificationEvidence: String?) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], clarificationSource: String?, clarificationEvidence: String?, explanationMarkers: String?, preferenceExamples: [[String: Any]]) throws -> DictateResponse {
         try withTokenRetry { token in
             var headers: [String: String] = [
                 "content-type": "audio/wav",
@@ -669,12 +699,13 @@ final class ServiceClient {
             if let route = ServiceClient.encodeRouteHeader(llm) {
                 headers["x-voice-llm"] = route
             }
+            if let explanationMarkers { headers["x-voice-explanation-markers"] = explanationMarkers }
             if let betaSession { headers["x-voice-beta-session"] = betaSession }
             if let translateTo { headers["x-voice-translate"] = translateTo }
             if let variants { headers["x-voice-variants"] = variants }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
-            let payload = ServiceClient.dictateBody(wav: wav, dictionary: dictionary, localOnly: localOnly, clarificationSource: clarificationSource, clarificationEvidence: clarificationEvidence)
+            let payload = ServiceClient.dictateBody(wav: wav, dictionary: dictionary, localOnly: localOnly, clarificationSource: clarificationSource, clarificationEvidence: clarificationEvidence, preferenceExamples: preferenceExamples)
             headers["x-voice-dictionary-bytes"] = String(payload.dictionaryBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)

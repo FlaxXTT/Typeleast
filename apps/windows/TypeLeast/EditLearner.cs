@@ -22,6 +22,7 @@ internal sealed class EditLearner
     private FieldTarget? target;
     private string inserted = "";
     private Action<string>? learned;
+    private Action<string>? revision;
     private EditPoll? poll;
     private DateTime started;
     private bool baselineSeen;
@@ -33,17 +34,17 @@ internal sealed class EditLearner
         timer.Tick += (_, _) => Tick();
     }
 
-    public void Start(FieldTarget field, string text, Action<string> onLearn)
+    public void Start(FieldTarget field, string text, Action<string> onLearn, Action<string>? onRevision = null)
     {
         Finish(); if (text.Length > 2000) return;
-        target = field; inserted = text; learned = onLearn; started = DateTime.UtcNow;
+        target = field; inserted = text; learned = onLearn; revision = onRevision; started = DateTime.UtcNow;
         baselineSeen = false; lastRead = null;
         poll = new EditPoll(started, value => value != text);
         timer.Interval = TimeSpan.FromSeconds(1);
         timer.Start();
     }
 
-    public void Stop() { timer.Stop(); target = null; inserted = ""; learned = null; poll = null; lastRead = null; }
+    public void Stop() { timer.Stop(); target = null; inserted = ""; learned = null; revision = null; poll = null; lastRead = null; }
 
     /// <summary>Judge what the field held when last read (the next dictation started).</summary>
     public void Finish()
@@ -76,7 +77,9 @@ internal sealed class EditLearner
     {
         var text = inserted;
         var callback = learned;
+        var review = revision;
         Stop();
+        if (review is not null) { review(value); return; }
         _ = Ask(text, value, callback);
     }
 

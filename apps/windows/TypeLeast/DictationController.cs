@@ -14,6 +14,7 @@ internal interface IDictationHost
     AppSettings Settings { get; }
     DictionaryController Dictionary { get; }
     LocalHistory History { get; }
+    PreferenceExamples Preferences { get; }
     ActivityLog Activity { get; }
     ServiceClient Client { get; }
     bool ServiceUp { get; }
@@ -59,6 +60,7 @@ internal sealed class DictationController
     private AppSettings Settings => host.Settings;
     private DictionaryController Dictionary => host.Dictionary;
     private LocalHistory History => host.History;
+    private PreferenceExamples Preferences => host.Preferences;
     private ActivityLog Activity => host.Activity;
     private ServiceClient Client => host.Client;
     private bool ServiceUp => host.ServiceUp;
@@ -116,14 +118,15 @@ internal sealed class DictationController
         {
             wav = RetainedAudio.Load(entry.AudioId!);
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
-                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries);
+                ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries, explanationMarkers: request.ExplanationMarkers ?? "", preferenceExamples: Preferences.WireExamples);
             if (!operations.IsCurrent(operation)) return;
             targetWindow = Native.GetForegroundWindow(); targetApp = entry.App; targetField = null; recordingContext = null;
             var options = new DictationOptions(request.Language, request.Strength, request.TranslateTo, request.Variants, ActiveRoute,
-                Settings.RestoreClipboard, "clipboardOnly");
+                Settings.RestoreClipboard, "clipboardOnly", ExplanationMarkers: request.ExplanationMarkers ?? "");
             var confirmed = await ConfirmName(result, options, operation);
             if (confirmed is null) return;
             result = confirmed;
+            if (result.ContextOnly) { bar.ShowResult(L10n.T("这次只有解释信息，没有正文，未插入。"), false); return; }
             Paster.SetText(result.InsertableText);
             History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
                 Fallback = result.Fallback, Reason = result.FallbackReason, Seconds = entry.Seconds,
@@ -211,7 +214,7 @@ internal sealed class DictationController
             : CleanupModes.Title(Settings.Strength));
         Raise();
         Dictionary.DictationStarting();
-        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
+        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections, Settings.ExplanationMarkers);
         targetApp = Shell.ProcessName(targetWindow);
         var window = targetWindow;
         if (clarificationPending is not null) { targetFieldTask = null; recordingContextTask = null; }
@@ -302,11 +305,13 @@ internal sealed class DictationController
             var requestOptions = answering is not null ? beta.Options ?? options : options;
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
-                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries, clarificationSource: held?.Source, clarificationEvidence: held?.Evidence);
+                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries, clarificationSource: held?.Source, clarificationEvidence: held?.Evidence, explanationMarkers: requestOptions.ExplanationMarkers, preferenceExamples: Preferences.WireExamples);
             if (!operations.IsCurrent(operation)) return;
+            if (result.ContextOnly) { bar.ShowResult(L10n.T("这次只有解释信息，没有正文，未插入。"), false); return; }
             var confirmed = await ConfirmName(result, requestOptions, operation);
             if (confirmed is null) return;
             result = confirmed;
+            if (result.ContextOnly) { bar.ShowResult(L10n.T("这次只有解释信息，没有正文，未插入。"), false); return; }
             if (ShowBetaQuestions(result, requestOptions)) return;
             if (answering is not null)
             {
@@ -350,7 +355,7 @@ internal sealed class DictationController
     {
         while (result.Clarification is { } clarification) {
             bar.Hide();
-            var choice = await NameConfirmationPanel.Show(L10n.T("需要确认：{0}", clarification.Evidence), result.Raw, operation.Token);
+            var choice = await NameConfirmationPanel.Show(L10n.T("需要确认：{0}", clarification.Evidence), result.Raw, operation.Token, clarification.Kind);
             if (!operations.IsCurrent(operation)) return null;
             if (choice.Kind == "cancel") { bar.ShowResult(L10n.T("已取消"), false); return null; }
             if (choice.Kind == "supplement") {
@@ -362,7 +367,7 @@ internal sealed class DictationController
                 result.Text = result.Raw; result.Clarification = null; result.Suggestions.Clear(); break;
             }
             result = await Client.PolishAsync(choice.Text, options.Language, options.Strength, options.Route,
-                clarification.Target, options.Variants, Dictionary.ServiceEntries, Dictionary.LocalEntries, operation.Token, fieldContext: recordingContext);
+                clarification.Target, options.Variants, Dictionary.ServiceEntries, Dictionary.LocalEntries, operation.Token, fieldContext: recordingContext, explanationMarkers: clarification.MarkerId ?? options.ExplanationMarkers, preferenceExamples: Preferences.WireExamples);
             if (!operations.IsCurrent(operation)) return null;
         }
         return result;
@@ -405,7 +410,7 @@ internal sealed class DictationController
                     Reason = result.FallbackReason,
                     Seconds = seconds,
                     Inserted = outcome == Paster.Outcome.Pasted,
-                    Request = new HistoryRequest(options.Language, options.Strength, options.TranslateTo, options.Variants),
+                    Request = new HistoryRequest(options.Language, options.Strength, options.TranslateTo, options.Variants, options.ExplanationMarkers),
                 };
                 if (wav is not null && Settings.KeepAudio24h && Settings.HistoryRetention != "never" && options.Strength != "promptbeta")
                 {
@@ -416,7 +421,8 @@ internal sealed class DictationController
                 // Terms the cleanup model corrected become suggestions on the Dictionary page.
                 if (!result.Fallback && options.TranslateTo is null) Dictionary.Received(result.Suggestions);
                 if (outcome == Paster.Outcome.Pasted && options.LearnCorrections && targetField is { } field)
-                    Dictionary.Pasted(field, text);
+                    Dictionary.Pasted(field, text, options.Strength == "concise" && options.TranslateTo is null
+                        ? corrected => Preferences.Offer(entry.Id, entry.Raw, result.Text, corrected) : null);
                 if (History.LastError is not null) SetHint(L10n.T("历史无法读写，文件已保留。请检查文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);

@@ -8,13 +8,13 @@ final class NameConfirmationPanel: NSObject, NSWindowDelegate {
     private var editor: NSTextView?
     private var frontApp: NSRunningApplication?
 
-    func show(question: String, raw: String, reply: @escaping (Choice) -> Void) {
+    func show(question: String, raw: String, kind: String? = nil, reply: @escaping (Choice) -> Void) {
         dismiss()
         self.reply = reply
         frontApp = NSWorkspace.shared.frontmostApplication
         let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 320),
                         styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
-        p.title = L10n.text("确认本次名称")
+        p.title = L10n.text(kind == "explanation" ? "检查解释触发词" : "确认本次名称")
         p.minSize = NSSize(width: 520, height: 320)
         p.level = .floating
         p.hidesOnDeactivate = false
@@ -25,7 +25,7 @@ final class NameConfirmationPanel: NSObject, NSWindowDelegate {
         stack.alignment = .leading
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
-        let label = NSTextField(wrappingLabelWithString: L10n.text("名称有歧义，请补充全称、用途或拼写。确认前不会粘贴。"))
+        let label = NSTextField(wrappingLabelWithString: L10n.text(kind == "explanation" ? "开始词与结束词须成对出现。可继续口述补全，或编辑本次内容。" : "名称有歧义，请补充全称、用途或拼写。确认前不会粘贴。"))
         let detail = NSTextField(wrappingLabelWithString: question)
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true

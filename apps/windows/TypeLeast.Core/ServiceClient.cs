@@ -277,12 +277,19 @@ public sealed class ServiceClient
 
     /// <summary>The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
     /// Entries marked 「不发给模型」 go as {"local": entry}; the service never passes those to a model.</summary>
-    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null)
+    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, IReadOnlyCollection<object>? preferenceExamples = null)
     {
         var entries = new List<object>();
         if (dictionary is not null) entries.AddRange(dictionary);
         if (localOnly is not null) entries.AddRange(localOnly.Select(entry => new Dictionary<string, string> { ["local"] = entry }));
         if (clarificationSource is not null) entries.Add(new { clarificationSource, clarificationEvidence });
+        var selected = new List<object>();
+        foreach (var candidate in (preferenceExamples ?? Array.Empty<object>()).Take(20)) {
+            var next = selected.Append(candidate).ToList();
+            if (JsonSerializer.SerializeToUtf8Bytes(next).Length > 32768 || JsonSerializer.SerializeToUtf8Bytes(entries.Append(new { preferenceExamples = next })).Length > 256 * 1024) continue;
+            selected = next;
+        }
+        if (selected.Count > 0) entries.Add(new { preferenceExamples = selected });
         if (entries.Count == 0) return (wav, 0);
         var json = JsonSerializer.SerializeToUtf8Bytes(entries);
         return ([.. json, .. wav], json.Length);
@@ -292,7 +299,7 @@ public sealed class ServiceClient
     /// dictation; the service keeps no copy, so there is nothing to keep in sync.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null) =>
+        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null) =>
         Once(async () =>
         {
             var headers = new Dictionary<string, string>
@@ -304,10 +311,11 @@ public sealed class ServiceClient
             };
             if (EncodeContextHeader(fieldContext) is { } context) headers["x-voice-context"] = context;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
+            if (!string.IsNullOrEmpty(explanationMarkers)) headers["x-voice-explanation-markers"] = explanationMarkers;
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
-            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly, clarificationSource, clarificationEvidence);
+            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly, clarificationSource, clarificationEvidence, preferenceExamples);
             headers["x-voice-dictionary-bytes"] = dictionaryBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var content = new ByteArrayContent(payload);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
@@ -319,14 +327,22 @@ public sealed class ServiceClient
         });
 
     public Task<DictateResponse> PolishAsync(string text, string language, string strength, LlmRoute? llm, string? translateTo,
-        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null) =>
+        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null) =>
         Once(async () =>
         {
             var entries = new List<object>(dictionary);
             entries.AddRange(localOnly.Select(entry => new { local = entry }));
             using var context = fieldContext is null ? null : JsonDocument.Parse(fieldContext);
+            var selected = new List<object>();
+            foreach (var candidate in (preferenceExamples ?? Array.Empty<object>()).Take(20)) {
+                var next = selected.Append(candidate).ToList();
+                if (JsonSerializer.SerializeToUtf8Bytes(next).Length > 32768) continue;
+                var trial = JsonSerializer.SerializeToUtf8Bytes(new { text, language, strength, llm, translateTo, variants,
+                    fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, explanationMarkers, preferenceExamples = next });
+                if (trial.Length <= 256 * 1024) selected = next;
+            }
             var json = JsonSerializer.Serialize(new { text, language, strength, llm, translateTo, variants,
-                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true }, Json.Options);
+                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, explanationMarkers, preferenceExamples = selected }, Json.Options);
             var (status, body) = await SendAsync(HttpMethod.Post, "/polish", new StringContent(json, Encoding.UTF8, "application/json"),
                 new Dictionary<string, string>(), DictateTimeout, ct).ConfigureAwait(false);
             if (status != HttpStatusCode.OK) throw HttpError(status, body);

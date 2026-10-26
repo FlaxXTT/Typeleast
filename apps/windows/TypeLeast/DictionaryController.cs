@@ -53,9 +53,9 @@ internal sealed class DictionaryController(AppSettings settings, Func<bool> save
     }
 
     /// <summary>A paste landed in <paramref name="field"/>: watch it for a fix of <paramref name="text"/>.</summary>
-    public void Pasted(FieldTarget field, string text)
+    public void Pasted(FieldTarget field, string text, Action<string>? onRevision = null)
     {
-        if (settings.LearnCorrections) learner.Start(field, text, Learned);
+        if (settings.LearnCorrections) learner.Start(field, text, Learned, onRevision);
     }
 
     /// <summary>The next dictation starts: judge the last fix now.</summary>

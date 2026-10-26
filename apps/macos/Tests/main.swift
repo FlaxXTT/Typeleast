@@ -27,6 +27,32 @@ func checkEq<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     check(name, got == want, "got=" + String(describing: got) + " want=" + String(describing: want))
 }
 
+// Isolated visual regression fixture. It never loads the daily history or opens a service.
+if let index = CommandLine.arguments.firstIndex(of: "--history-ui-render"), CommandLine.arguments.count > index + 1 {
+    let output = CommandLine.arguments[index + 1]
+    guard output.hasPrefix("/private/tmp/"), let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"], home.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
+    try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+    let app = NSApplication.shared
+    for dark in [false, true] {
+        app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        for width in [520, 850] {
+            let model = AppModel()
+            let entry = LocalHistoryEntry(id: "fixture", ts: Date(timeIntervalSince1970: 0), app: "fictional.editor", language: "zh", strength: "concise", raw: "虚构识别原文", text: String(repeating: "这是虚构的长文本，保留数字 123、条件和 English words，用来验证换行后不会遮住来源和状态。", count: 3), fallback: true, inserted: false)
+            let view = NSHostingView(rootView: VStack(spacing: 0) { HistoryRow(entry: entry, compact: false); Divider(); HistoryRow(entry: entry, compact: true); Spacer() }.background(Theme.window).environmentObject(model).environment(\.colorScheme, dark ? .dark : .light))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 430), styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = view
+            view.frame = NSRect(x: 0, y: 0, width: width, height: 430)
+            window.layoutIfNeeded(); RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: output + "/history-\(width)-\(dark ? "dark" : "light").png"))
+            }
+            window.orderOut(nil)
+        }
+    }
+    exit(0)
+}
+
 // Developer-only UI fixture. No service, microphone, global shortcuts or real Keychain access.
 if let index = CommandLine.arguments.firstIndex(of: "--model-ui-render"), CommandLine.arguments.count > index + 1 {
     let output = CommandLine.arguments[index + 1]
@@ -1658,6 +1684,8 @@ do {
     let metadata = (try? JSONSerialization.jsonObject(with: payload.body.prefix(payload.dictionaryBytes))) as? [[String: String]]
     checkEq("voice continuation carries only explicit prior input", metadata?.first?["clarificationSource"], "我想买 LG 电脑")
 }
+
+contextPreferencesTests()
 
 server.stop()
 print("")

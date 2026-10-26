@@ -175,6 +175,12 @@ final class Settings {
 
     init(defaults: UserDefaults = .standard) {
         d = defaults
+        if defaults.object(forKey: "ui.practiceGate.v1") == nil {
+            let existing = defaults.dictionaryRepresentation().keys.contains { key in
+                key.hasPrefix("voice.") || key.hasPrefix("llm.") || key.hasPrefix("ui.onboardingDone") || key.hasPrefix("hk.")
+            }
+            defaults.set(!existing, forKey: "ui.practiceGate.v1")
+        }
         Self.migrateAICleanup(defaults)
     }
 
@@ -375,9 +381,16 @@ final class Settings {
         set { d.set(newValue, forKey: "ui.guideDismissed.v1"); changed() }
     }
 
+    var explanationMarkers: String {
+        get { let value = d.string(forKey: "voice.explanationMarkers.v1") ?? ""; return ["background", "explanation", "aside"].contains(value) ? value : "" }
+        set { d.set(["background", "explanation", "aside"].contains(newValue) ? newValue : "", forKey: "voice.explanationMarkers.v1"); changed() }
+    }
+
+    var needsPractice: Bool { d.bool(forKey: "ui.practiceGate.v1") && !onboardingDone }
+
     var onboardingDone: Bool {
         get { d.bool(forKey: "ui.onboardingDone.v1") }
-        set { d.set(newValue, forKey: "ui.onboardingDone.v1"); changed() }
+        set { d.set(newValue, forKey: "ui.onboardingDone.v1"); if newValue { d.set(false, forKey: "ui.practiceGate.v1") }; changed() }
     }
 
     /// Whether to build the pill panel shortly after launch.

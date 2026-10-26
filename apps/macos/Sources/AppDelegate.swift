@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     lazy var updates = UpdateController(host: .init(
         busyReason: { [weak self] in
             guard let self else { return nil }
+            if self.onboarding.practice.busy { return (L10n.text("正在练习"), L10n.text("练习结束后再更新。")) }
             if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
             // Restarting would drop the questions and the answers given so far.
             if self.betaPending != nil { return (L10n.text("提示词 Beta 未结束"), L10n.text("更新前，请先生成或取消提示词 Beta。")) }
@@ -146,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         applyState()
         startService()
 
-        if settings.warmUpPill {
+        if settings.warmUpPill && !settings.needsPractice {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.recordingBar.warmUp() }
         }
 
@@ -179,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // A demo recording shows only the voice bar over another app.
         if recorder.demoPCM != nil { return false }
+        if settings.needsPractice { showOnboarding(); return true }
         if !flag { hub.show() }
         return true
     }
@@ -187,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func applicationWillTerminate(_ notification: Notification) {
         recorder.cancel()
+        onboarding.practice.cancel()
         OutputMuter.shared.restore()
         recordingBar.hide()
         idleBar.hide()
@@ -408,7 +411,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func updateIdleBar() {
         idleBar.hint = L10n.text("按 ") + model.hotkeyLabel + L10n.text(" 开始听写")
-        if settings.showIdleBar && phase == .idle && !recordingBar.isVisible {
+        if !settings.needsPractice && settings.showIdleBar && phase == .idle && !recordingBar.isVisible {
             idleBar.show()
         } else {
             idleBar.hide()
@@ -610,7 +613,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         // A retry from the window copies the result rather than pasting into the window.
         dictation.sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
                      strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false,
-                     translateTo: e.translated)
+                     translateTo: e.translated, explanationMarkers: e.explanationMarkers ?? "")
     }
 
     func deleteEntry(id: String) {
@@ -619,6 +622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func clearHistory() {
         HistoryStore.shared.clear()
+        PreferenceExamples.shared.clearPending()
         ActivityLog.shared.clear()
     }
 
@@ -654,12 +658,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func recheckHealth() { refreshHealth() }
 
+    func openSetupSettings() { hub.show(page: .settings) }
+
     func showOnboarding() {
         onboarding.onFinish = { [weak self] in self?.finishOnboarding() }
         onboarding.show()
     }
 
     func finishOnboarding() {
+        guard !settings.needsPractice || (onboarding.practice.complete && !settings.explanationMarkers.isEmpty) else { return }
         settings.onboardingDone = true
         model.refreshPermissions()
         registerHotKeys()

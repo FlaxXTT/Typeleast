@@ -19,6 +19,7 @@ CMD=("$SWIFTC" -swift-version 5 -O
   -o "$BIN"
   "${SOURCES[@]}"
   "$ROOT/Tests/StubServer.swift"
+  "$ROOT/Tests/ContextPreferencesTests.swift"
   "$ROOT/Tests/main.swift")
 
 echo "compile: ${CMD[*]}"

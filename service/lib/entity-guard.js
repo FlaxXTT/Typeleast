@@ -12,22 +12,22 @@ function retracted(raw, name) {
     const correction = /不对|说错了|改成|改为|no,?\s+(?:wait|I mean)/iu.exec(clause);
     if (!correction || /[“「『"][^”」』"]*$/u.test(clause.slice(0, correction.index))) return false;
     const before = clause.slice(0, correction.index), after = clause.slice(correction.index + correction[0].length);
-    return contains(before, name) && !contains(after, name) && names(after).length > 0;
+    return contains(before, name) && !contains(after, name) && explicitNames(after).length > 0;
   });
 }
-function names(text) {
+export function explicitNames(text) {
   return [...String(text).matchAll(TOKEN)].map(m => m[0]).filter(word =>
     !ORDINARY.has(word) && (/^[A-Z][A-Z0-9]{1,15}$/u.test(word) || /[a-z][A-Z]/u.test(word)));
 }
 
 export function missingNames(raw, output, evidence = []) {
-  return [...new Set(names(raw))].filter(name => {
+  return [...new Set(explicitNames(raw))].filter(name => {
     if (contains(output, name) || retracted(raw, name)) return false;
     const clauses = String(raw).split(/[。！？;；\n]/u).filter(clause => contains(clause, name));
     if (clauses.length && clauses.every(clause => spelledWords(clause).some(s => {
       const before = clause.slice(0, clause.indexOf(s.spelled));
       return /拼法|拼写|拼一下|英文是|spell|letters/iu.test(before)
-        && names(before).at(-1)?.toLowerCase() === name.toLowerCase() && contains(output, s.word);
+        && explicitNames(before).at(-1)?.toLowerCase() === name.toLowerCase() && contains(output, s.word);
     }))) return false;
     // Only an exact, explicit heard-as rule can authorise a replacement here.
     return !evidence.some(entry => {

@@ -49,7 +49,7 @@ internal sealed class MainWindow : Window
         brand.Margin = new Thickness(20, 22, 0, 18);
         DockPanel.SetDock(brand, Dock.Top);
         side.Children.Add(brand);
-        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("词典")), (Page.Extensions, L10n.T("扩展")) })
+        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("偏好资料")), (Page.Extensions, L10n.T("扩展")) })
         {
             var b = NavButton(label, () => ShowPage(page));
             DockPanel.SetDock(b, Dock.Top);
@@ -142,6 +142,7 @@ internal sealed class MainWindow : Window
 
     public void ShowPage(Page page)
     {
+        if(host.Settings.NeedsPractice && page != Page.Settings){host.ShowOnboarding();return;}
         current = page;
         foreach (var (p, b) in nav) { b.Background = p == page ? Theme.Selected : Brushes.Transparent; b.FontWeight = p == page ? FontWeights.SemiBold : FontWeights.Normal; }
         if (!pages.TryGetValue(page, out var view))

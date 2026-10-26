@@ -1007,6 +1007,7 @@ using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContex
     }
 }
 
+ContextPreferencesTests.Run(Check);
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

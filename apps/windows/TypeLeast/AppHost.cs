@@ -27,6 +27,7 @@ internal sealed class AppHost : IDictationHost
 
     /// <summary>Why an update must wait (a dictation, Prompt Beta's questions), or null.</summary>
     private string? UpdateBlocker() =>
+        onboarding?.PracticeBusy == true ? L10n.T("练习结束后再更新。") :
         Phase != DictationPhase.Idle ? L10n.T("听写结束后再更新。")
         // Quitting would drop the questions and the answers given so far.
         : dictation.HasBeta ? L10n.T("更新前，请先生成或取消提示词 Beta。") : null;
@@ -55,7 +56,9 @@ internal sealed class AppHost : IDictationHost
     private DispatcherTimer? healthTimer;
     private DateTime lastHousekeeping = DateTime.MinValue;
     private bool quitting;
+    public bool QuittingForSetup => quitting;
     private bool refreshing;
+    public PreferenceExamples Preferences { get; }
     public RetainedAudio RetainedAudio { get; }
     public long? LastMicrophoneStartMs => dictation.LastMicrophoneStartMs;
     private IdleBar? idleBar;
@@ -81,6 +84,8 @@ internal sealed class AppHost : IDictationHost
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);
         Theme.Apply(Settings.Appearance);
+        Preferences = new PreferenceExamples(System.IO.Path.Combine(AppPaths.StateDirectory(), "app-preferences.sealed"));
+        Preferences.Changed += Raise;
         History = new LocalHistory(AppPaths.AppHistoryFile());
         History.ApplyRetention(Settings.HistoryRetention);
         RetainedAudio = new RetainedAudio(System.IO.Path.Combine(AppPaths.StateDirectory(), "recordings"));
@@ -162,7 +167,7 @@ internal sealed class AppHost : IDictationHost
             SaveSettings();
         }
         Dictionary.Received(Array.Empty<SuggestionCandidate>());
-        if (!Settings.OnboardingDone || !autostart) ShowWindow(MainWindow.Page.Home);
+        if (!Settings.NeedsPractice && (!Settings.OnboardingDone || !autostart)) ShowWindow(MainWindow.Page.Home);
         if (!Settings.OnboardingDone) ShowOnboarding();
         UpdateIdleBar();
     }
@@ -188,6 +193,7 @@ internal sealed class AppHost : IDictationHost
 
     public void ShowWindow(MainWindow.Page page)
     {
+        if (Settings.NeedsPractice && page != MainWindow.Page.Settings) { ShowOnboarding(); return; }
         window ??= new MainWindow(this);
         _ = RefreshHealth();
         window.ShowPage(page);
@@ -209,10 +215,19 @@ internal sealed class AppHost : IDictationHost
     private void UpdateIdleBar()
     {
         if (!started || quitting) return;
-        if (Settings.ShowIdleBar && Phase == DictationPhase.Idle && !bar.IsVisible)
+        if (!Settings.NeedsPractice && Settings.ShowIdleBar && Phase == DictationPhase.Idle && !bar.IsVisible)
         { idleBar ??= new IdleBar(this); if (!idleBar.IsVisible) idleBar.Show(); }
         else idleBar?.Hide();
     }
+    public bool CompleteOnboarding(bool practiced)
+    {
+        if(Settings.NeedsPractice&&(!practiced||string.IsNullOrEmpty(Settings.ExplanationMarkers)))return false;
+        var previous=Settings.OnboardingDone;var gate=Settings.PracticeGateRequired;
+        Settings.OnboardingDone=true;Settings.PracticeGateRequired=false;
+        if(!SaveSettings()){Settings.OnboardingDone=previous;Settings.PracticeGateRequired=gate;return false;}
+        ShowWindow(MainWindow.Page.Home);return true;
+    }
+
     public void ShowOnboarding()
     {
         if (onboarding is null) { onboarding = new Onboarding(this); onboarding.Closed += (_, _) => onboarding = null; }
@@ -317,14 +332,17 @@ internal sealed class AppHost : IDictationHost
         catch (Exception) { return false; }
     }
 
-    public bool StartMicrophoneTest() => dictation.StartMicrophoneTest();
+    public bool StartMicrophoneTest() => onboarding?.PracticeBusy != true && dictation.StartMicrophoneTest();
     public void EndMicrophoneTest() => dictation.EndMicrophoneTest();
-    public Task PasteLast() => dictation.PasteLast();
-    public Task RetryHistory(HistoryEntry entry) => dictation.RetryHistory(entry);
-    public void Toggle() => dictation.Toggle();
-    public void ToggleTranslate() => dictation.ToggleTranslate();
+    public Task PasteLast() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return Task.CompletedTask; if(Settings.NeedsPractice){ShowOnboarding();return Task.CompletedTask;}return dictation.PasteLast(); }
+    public Task RetryHistory(HistoryEntry entry) { if(Settings.NeedsPractice){ShowOnboarding();return Task.CompletedTask;}return dictation.RetryHistory(entry); }
+    public void Toggle() {
+        if(onboarding?.PracticeActive==true){onboarding.HandleShortcut();return;}
+        if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.Toggle();
+    }
+    public void ToggleTranslate() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return; if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.ToggleTranslate(); }
     public void SetStrength(string code, bool announce = false) => dictation.SetStrength(code, announce);
-    public void Cancel() => dictation.Cancel();
+    public void Cancel() { if(onboarding?.PracticeBusy==true)onboarding.CancelPractice();else dictation.Cancel(); }
     bool IDictationHost.Quitting => quitting;
     void IDictationHost.Changed() => Raise();
     void IDictationHost.PruneAudio() => PruneAudio();
@@ -333,6 +351,7 @@ internal sealed class AppHost : IDictationHost
     public void ClearHistory()
     {
         History.Clear();
+        Preferences.ClearPending();
         if (History.LastError is not null) { SetHint(L10n.T("历史无法读写，文件已保留。请检查文件权限。")); return; }
         Activity.Clear();
         PruneAudio();

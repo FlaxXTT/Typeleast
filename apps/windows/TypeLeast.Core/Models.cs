@@ -144,6 +144,15 @@ public sealed class NameClarification
     [JsonPropertyName("question")] public string Question { get; set; } = "";
     [JsonPropertyName("evidence")] public string Evidence { get; set; } = "";
     [JsonPropertyName("target")] public string? Target { get; set; }
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("markerId")] public string? MarkerId { get; set; }
+}
+
+public sealed class ExplanationReceipt
+{
+    [JsonPropertyName("used")] public bool Used { get; set; }
+    [JsonPropertyName("segments")] public int Segments { get; set; }
+    [JsonPropertyName("markerId")] public string MarkerId { get; set; } = "";
 }
 
 public sealed class DictateResponse
@@ -156,6 +165,8 @@ public sealed class DictateResponse
     [JsonPropertyName("model")] public string? Model { get; set; }
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
+    [JsonPropertyName("contextOnly")] public bool ContextOnly { get; set; }
+    [JsonPropertyName("explanation")] public ExplanationReceipt? Explanation { get; set; }
     [JsonPropertyName("clarification")] public NameClarification? Clarification { get; set; }
     [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
     [JsonPropertyName("suggestions"), JsonConverter(typeof(SuggestionListConverter))]
@@ -169,7 +180,7 @@ public sealed class DictateResponse
 
     /// <summary>When fallback is true the service has already put the raw transcript in Text.</summary>
     [JsonIgnore] public bool BetaWaiting => !string.IsNullOrWhiteSpace(Beta?.SessionId);
-    [JsonIgnore] public string InsertableText => BetaWaiting || Clarification is not null ? "" : Text.Length > 0 ? Text : Raw;
+    [JsonIgnore] public string InsertableText => BetaWaiting || Clarification is not null || ContextOnly ? "" : Text.Length > 0 ? Text : Raw;
 }
 
 public sealed class LlmTestResult

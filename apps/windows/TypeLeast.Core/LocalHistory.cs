@@ -18,7 +18,7 @@ public sealed class HistoryEntry
     public string? AudioId { get; set; }
 }
 
-public sealed record HistoryRequest(string Language, string Strength, string? TranslateTo, string? Variants);
+public sealed record HistoryRequest(string Language, string Strength, string? TranslateTo, string? Variants, string? ExplanationMarkers = null);
 
 /// <summary>Recent dictations, protected at rest with DPAPI; migrates legacy JSON.</summary>
 public sealed class LocalHistory

@@ -429,6 +429,8 @@ struct HistoryRow: View {
                         .lineLimit(expanded ? nil : (compact ? 2 : 4))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .clipped()
                 } else {
                     // Select a name or term, right-click, 加入词典.
                     SelectableText(text: entry.displayText, font: .systemFont(ofSize: 13.5), color: NSColor(Theme.ink),
@@ -436,12 +438,15 @@ struct HistoryRow: View {
                                    onAddWord: { word in model.actions?.addWordFromHistory(word) },
                                    onPlainClick: { expanded.toggle() })
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .clipped()
                 }
                 if expanded, !entry.raw.isEmpty, entry.raw != entry.displayText {
                     Text(L10n.text("原话：") + entry.raw)
                         .font(.system(size: 12))
                         .foregroundColor(Theme.secondary)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary)
@@ -449,7 +454,8 @@ struct HistoryRow: View {
                     if copied { Badge(text: L10n.text("已复制"), tint: Theme.success) }
                 }
             }
-            if hovering || copied {
+            // Reserve the action width. Hover must not change the text wrapping
+            // after AppKit has reported its height to SwiftUI.
                 HStack(spacing: 2) {
                     IconButton(symbol: "doc.on.doc", help: L10n.text("复制")) { copy(raw: false) }
                     if !compact {
@@ -457,10 +463,18 @@ struct HistoryRow: View {
                         if canRetry {
                             IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试")) { model.actions?.retryEntry(id: entry.id) }
                         }
+                        if entry.strength == "concise", entry.translated == nil {
+                            IconButton(symbol: "text.badge.checkmark", help: L10n.text("记录修改为偏好示例")) {
+                                PreferenceExamples.shared.prepare(historyId: entry.id, raw: entry.raw, aiText: entry.displayText)
+                                model.page = .dictionary
+                            }
+                        }
                         IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
                     }
                 }
-            }
+                .opacity(hovering || copied ? 1 : 0)
+                .allowsHitTesting(hovering || copied)
+                .accessibilityHidden(!hovering && !copied)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -481,7 +495,7 @@ struct HistoryRow: View {
 
 enum WordFilter: Hashable { case all, auto, manual }
 
-struct DictionaryPage: View {
+struct ManualDictionaryPage: View {
     @EnvironmentObject var model: AppModel
     @State private var filter: WordFilter = .all
     @State private var query = ""

@@ -27,9 +27,9 @@ final class DictionaryController {
     var localEntries: [String] { settings.localDictionary }
 
     /// A paste landed in `field`: watch it for a fix of `text`.
-    func pasted(_ text: String, into field: FocusedField) {
+    func pasted(_ text: String, into field: FocusedField, onRevision: ((String) -> Void)? = nil) {
         guard settings.autoLearn else { return }
-        watcher.watch(field: field, inserted: text)
+        watcher.watch(field: field, inserted: text, onRevision: onRevision)
     }
 
     /// The next dictation starts: the user is usually done fixing the last one.

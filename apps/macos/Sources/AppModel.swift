@@ -14,7 +14,7 @@ enum HubPage: String, CaseIterable, Identifiable {
         switch self {
         case .home: return L10n.text("首页")
         case .history: return L10n.text("历史")
-        case .dictionary: return L10n.text("词典")
+        case .dictionary: return L10n.text("偏好资料")
         case .extensions: return L10n.text("扩展")
         case .settings: return L10n.text("设置")
         }
@@ -51,6 +51,7 @@ protocol AppActions: AnyObject {
     func downloadModels()
     func chooseNode()
     func recheckHealth()
+    func openSetupSettings()
     func showOnboarding()
     func finishOnboarding()
     func applyGeneralSettings()

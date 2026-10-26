@@ -1,3 +1,5 @@
+import { splitExplanation, explanationNameRule, explanationInstruction } from "./explanation-context.js";
+import { requestPreferences, preferenceHints, preferenceInstruction } from "./preference-hints.js";
 import { nameClarification, clarificationSource, clarificationRule } from "./name-clarification.js";
 /**
  * VoicePolishService — "transcribe, then make it sayable".
@@ -130,11 +132,14 @@ export class VoicePolishService {
    */
   async polish(request) {
     const started = Date.now();
-    const rawText = String(request.rawText ?? "").trim();
+    const originalText = String(request.rawText ?? "").trim();
     // The retired prompt-mode tiers (promptbrief, promptify) are read as 精简整理.
     const strength = canonicalStrength(request.strength ?? this.strength);
+    const explanation = strength === "concise" && !request.translateTo
+      ? splitExplanation(originalText, request.explanationMarkers) : { text: originalText, notes: [], used: false };
+    const rawText = explanation.text;
     const base = {
-      raw: rawText,
+      raw: originalText,
       text: rawText,
       fallback: false,
       reason: null,
@@ -142,6 +147,10 @@ export class VoicePolishService {
       provider: null,
       ms: { transcribe: 0, polish: Date.now() - started, total: Date.now() - started },
     };
+    if (explanation.issue) return this.nameQuestion(request, base,
+      { question: "请检查补充信息的开始词和结束词。", evidence: explanation.evidence, kind: "explanation" }, started);
+    if (explanation.used) base.explanation = { used: true, segments: explanation.notes.length, markerId: request.explanationMarkers };
+    if (explanation.used && !/[\p{L}\p{N}]/u.test(rawText)) return { ...base, text: "", contextOnly: true, suggestions: [], reason: "explanation-only" };
     // Skipping Prompt Beta's questions sends no answer at all, which is not an empty dictation.
     const betaSkip = strength === "promptbeta" && request.betaSkip === true && Boolean(request.betaSession);
     if (rawText.length === 0 && !betaSkip && !(strength === "promptbeta" && request.betaSession)) {
@@ -176,6 +185,10 @@ export class VoicePolishService {
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
     const context = await this.buildContext(request, rawText);
+    const safeNotes = explanation.notes.map(s => redactSecrets(s));
+    const nameRules = explanationNameRule(rawText, safeNotes);
+    context.dictionary.push(...nameRules);
+    const examples = strength === "concise" ? preferenceHints(request.preferenceExamples ?? requestPreferences(request.dictionary), rawText) : [];
     let style = null;
     try { style = this.extension?.style() ?? null; } catch { /* Optional extensions never stop cleanup. */ }
     // Generic cleanup rules, plus relevant dictionary and optional pronunciation hints.
@@ -186,7 +199,8 @@ export class VoicePolishService {
       spellings: context.spellings,
       strength,
       style,
-    }) + variantInstruction(parseVariants(request.variants));
+    }) + explanationInstruction(safeNotes) + preferenceInstruction(examples)
+      + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
     // already redacted by buildContext. The text the user finally gets is what
@@ -228,6 +242,14 @@ export class VoicePolishService {
           ms: timing(started, 0),
           attempts: result.attempts,
           postprocess: tidyOnly.applied,
+        });
+      }
+      // Explanatory material is not insertable text, even if a provider ignores the boundary.
+      if (explanation.used) {
+        const outputNotes = splitExplanation(parsed.text, request.explanationMarkers);
+        const copiedNote = explanation.notes.some(note => note.length >= 8 && !rawText.includes(note) && parsed.text.includes(note));
+        if (outputNotes.used || outputNotes.issue || copiedNote) return this.recordFallback(request, {
+          ...base, text: tidy(rawText).text, fallback: true, reason: "explanation-leaked", ms: timing(started, 0),
         });
       }
       const clarification = nameClarification(parsed.clarification, rawText);
@@ -538,7 +560,7 @@ export class VoicePolishService {
     if (!request.supportsClarification) return this.recordFallback(request, {
       ...base, fallback: true, reason: "entity-changed", ms: timing(started, 0),
     });
-    return { ...base, text: "", clarification: { ...clarification, ...(request.translateTo ? { target: request.translateTo } : {}) }, suggestions: [], ms: timing(started, 0) };
+    return { ...base, text: "", clarification: { ...clarification, markerId: request.explanationMarkers ?? "", ...(request.translateTo ? { target: request.translateTo } : {}) }, suggestions: [], ms: timing(started, 0) };
   }
 
   async recordAndReturn(request, result) {
@@ -559,7 +581,7 @@ export class VoicePolishService {
     if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants), outputLanguage);
     result.suggestions = [];
     if (!result.fallback && !request.translateTo && !result.translated &&
-        !result.beta?.sessionId) {
+        canonicalStrength(request.strength ?? this.strength) !== "concise" && !result.beta?.sessionId) {
       try { result.suggestions = await this.suggestionEngine(result.raw, result.text); }
       catch { /* Optional suggestions must never fail dictation or echo user text into logs. */ }
     }
@@ -611,6 +633,7 @@ export class VoicePolishService {
         translateTo: request.translateTo ?? null,
         variants: request.variants ?? null,
         dictionary: [...(Array.isArray(request.dictionary) ? request.dictionary : []), ...clarificationRule(request.dictionary, spoken.text)],
+        explanationMarkers: request.explanationMarkers ?? null,
       });
       const result = {
         requestId: request.requestId,
@@ -630,11 +653,13 @@ export class VoicePolishService {
         metrics: polished.metrics,
         ...(polished.beta ? { beta: polished.beta } : {}),
         ...(polished.clarification ? { clarification: polished.clarification } : {}),
+        ...(polished.explanation ? { explanation: polished.explanation } : {}),
+        ...(polished.contextOnly ? { contextOnly: true } : {}),
         ...(polished.translated ? { translated: polished.translated } : {}),
       };
       this.stats.dictations += 1;
       if (result.fallback) this.stats.fallback += 1;
-      else if (!result.clarification && !result.beta?.sessionId) this.stats.polished += 1;
+      else if (!result.clarification && !result.beta?.sessionId && !result.contextOnly) this.stats.polished += 1;
       this.stats.lastMs = result.ms.total;
       return result;
     } finally {

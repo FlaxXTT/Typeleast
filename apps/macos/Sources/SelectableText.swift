@@ -21,7 +21,10 @@ struct SelectableText: NSViewRepresentable {
         view.drawsBackground = false
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
-        view.textContainer?.widthTracksTextView = true
+        // SwiftUI proposes the text width before assigning the native frame. Letting
+        // AppKit replace that width during layout can leave a stale, shorter height.
+        view.textContainer?.widthTracksTextView = false
+        view.isHorizontallyResizable = false
         view.isVerticallyResizable = false
         return view
     }
@@ -34,20 +37,39 @@ struct SelectableText: NSViewRepresentable {
         view.textContainer?.lineBreakMode = maxLines == 0 ? .byWordWrapping : .byTruncatingTail
         view.onAddWord = onAddWord
         view.onPlainClick = onPlainClick
+        view.invalidateIntrinsicContentSize()
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: HistoryTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? 400
-        guard let container = view.textContainer, let layout = view.layoutManager else { return nil }
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        return CGSize(width: width, height: ceil(layout.usedRect(for: container).height))
+        view.measuredSize(width: proposal.width ?? (view.bounds.width > 0 ? view.bounds.width : 400))
     }
 }
 
 final class HistoryTextView: NSTextView {
     var onAddWord: ((String) -> Void)?
     var onPlainClick: (() -> Void)?
+
+    func measuredSize(width: CGFloat) -> CGSize {
+        let width = max(1, width)
+        guard let container = textContainer, let layout = layoutManager else { return CGSize(width: width, height: 20) }
+        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        layout.ensureLayout(for: container)
+        return CGSize(width: width, height: max(1, ceil(layout.usedRect(for: container).height)))
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let changedWidth = abs(newSize.width - frame.width) > 0.5
+        super.setFrameSize(newSize)
+        if changedWidth {
+            _ = measuredSize(width: newSize.width)
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        guard bounds.width > 0 else { return NSSize(width: NSView.noIntrinsicMetric, height: 20) }
+        return NSSize(width: NSView.noIntrinsicMetric, height: measuredSize(width: bounds.width).height)
+    }
 
     /// The selection, when it is short enough to be a word or name.
     var selectedWord: String? {

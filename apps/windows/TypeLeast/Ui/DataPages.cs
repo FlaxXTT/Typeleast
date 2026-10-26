@@ -52,6 +52,9 @@ internal sealed class HistoryPage : IPage
                     Theme.Secondary(L10n.T("删除"), () => host.DeleteHistory(entry.Id)));
                 var retry = Theme.Secondary(L10n.T("用录音重试"), () => _ = host.RetryHistory(entry));
                 retry.IsEnabled = host.Phase == DictationPhase.Idle && host.CanRetry(entry);
+                if (entry.Request?.Strength == "concise" && entry.Request.TranslateTo is null) actions.Children.Add(Theme.Secondary(L10n.T("记录偏好"), () => {
+                    host.Preferences.Prepare(entry.Id, entry.Raw, entry.Text); host.ShowWindow(MainWindow.Page.Dictionary);
+                }));
                 retry.ToolTip = L10n.T("需要 5 分钟内的录音。Beta 记录不能重试。结果复制到剪贴板。"); actions.Children.Add(retry);
                 var reason = Messages.FallbackNote(entry.Reason);
                 var meta = entry.Time.ToLocalTime().ToString("t", L10n.Culture) + (entry.App.Length > 0 ? " · " + entry.App : "")
@@ -83,7 +86,7 @@ internal sealed class HistoryPage : IPage
     }
 }
 
-internal sealed class DictionaryPage : IPage
+internal sealed class ManualDictionaryPage : IPage
 {
     private readonly AppHost host;
     private readonly StackPanel root = new(), list = new();
@@ -92,7 +95,7 @@ internal sealed class DictionaryPage : IPage
     private readonly TextBlock status = Theme.Text("", 12, Theme.Warning);
     private string shown = "";
     public UIElement View => root;
-    public DictionaryPage(AppHost host)
+    public ManualDictionaryPage(AppHost host)
     {
         this.host = host;
         root.Children.Add(Theme.Text(L10n.T("词典"), 28, bold: true));

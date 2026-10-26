@@ -11,6 +11,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     let model: AppModel
     var onFinish: (() -> Void)?
+    let practice = OnboardingPracticeController()
 
     init(model: AppModel) {
         self.model = model
@@ -18,8 +19,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        if window == nil {
-            let host = NSHostingController(rootView: OnboardingView(finish: { [weak self] in self?.finish() })
+        if window == nil || window?.isVisible == false {
+            practice.reset()
+            let host = NSHostingController(rootView: OnboardingView(practice: practice, finish: { [weak self] in self?.finish() })
                 .environmentObject(model))
             let w = NSWindow(contentViewController: host)
             w.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -38,12 +40,16 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     func close() { window?.close() }
 
+    private var finishing = false
     private func finish() {
-        window?.close()
-        onFinish?()
+        guard !model.settings.needsPractice || (practice.complete && !model.settings.explanationMarkers.isEmpty) else { return }
+        finishing = true; window?.close(); onFinish?(); finishing = false
     }
+    func windowShouldClose(_ sender: NSWindow) -> Bool { finishing || !model.settings.needsPractice }
 
     func windowWillClose(_ notification: Notification) {
+        practice.acceptsShortcut = false
+        practice.cancel()
         model.refreshPermissions()
     }
 }
@@ -54,6 +60,7 @@ private enum OnboardingStep: Int, CaseIterable {
 
 struct OnboardingView: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject var practice: OnboardingPracticeController
     let finish: () -> Void
     @State private var step: OnboardingStep = .welcome
     @StateObject private var meter = MicMeter()
@@ -64,17 +71,15 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 0) {
             progress.padding(.top, 34)
-            Spacer(minLength: 10)
-            content
-                .frame(maxWidth: 440)
-                .padding(.horizontal, 40)
-            Spacer(minLength: 10)
+            ScrollView {
+                content.frame(maxWidth: 440).padding(.horizontal, 40).padding(.vertical, 20)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
             footer.padding(.horizontal, 40).padding(.bottom, 28)
         }
         .frame(width: 600, height: 560)
         .background(Theme.window)
         .onReceive(poll) { _ in model.refreshPermissions() }
-        .onDisappear { meter.stop() }
+        .onDisappear { meter.stop(); practice.cancel() }
     }
 
     private var progress: some View {
@@ -111,8 +116,8 @@ struct OnboardingView: View {
                         }
                     }
                     SpeechModelOptions()
-                    OnboardingCheck(done: model.llmConfigured, title: L10n.text("整理模型（可稍后设置）"),
-                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("在「设置 → 整理」填 API Key。不填也能听写，但不整理。")) {
+                    OnboardingCheck(done: model.llmConfigured, title: model.settings.needsPractice ? L10n.text("整理模型（练习必需）") : L10n.text("整理模型（可稍后设置）"),
+                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("请在设置中配置整理模型，完成真实语音和整理练习。")) {
                         EmptyView()
                     }
                 }
@@ -156,25 +161,7 @@ struct OnboardingView: View {
                 .onDisappear { meter.stop() }
             }
         case .tryIt:
-            StepView(symbol: "keyboard", title: L10n.text("说一句试试"),
-                     text: L10n.text("点下面的输入框，按 {0} 说话，再按 {1} 结束。", model.hotkeyLabel, model.hotkeyLabel)) {
-                VStack(spacing: 10) {
-                    TextEditor(text: $tryText)
-                        .font(.system(size: 14))
-                        .frame(height: 110)
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.card))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
-                    if model.phase == .recording {
-                        Text(L10n.text("正在听…")).font(.system(size: 12)).foregroundColor(Theme.accent)
-                    } else if model.phase == .thinking {
-                        Text(L10n.text("正在整理…")).font(.system(size: 12)).foregroundColor(Theme.secondary)
-                    } else if !model.serviceUp {
-                        Text(model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪，请回到「本地识别」一步。") : model.serviceProblem)
-                            .font(.system(size: 12)).foregroundColor(Theme.warning)
-                    }
-                }
-            }
+            OnboardingPracticeView(practice: practice)
         case .guide:
             StepView(symbol: "map", title: L10n.text("设置位置"),
                      text: "") {
@@ -206,8 +193,15 @@ struct OnboardingView: View {
 
     private var footer: some View {
         HStack {
-            if step != .welcome && step != .done {
+            if step != .welcome {
+                Button(L10n.text("上一步")) { meter.stop(); if let previous = OnboardingStep(rawValue: step.rawValue - 1) { step = previous } }.buttonStyle(.plain).disabled(practice.busy)
+            }
+            if !model.settings.needsPractice && step != .welcome && step != .done {
                 Button(L10n.text("跳过")) { advance() }.buttonStyle(.plain).foregroundColor(Theme.secondary)
+            }
+            if model.settings.needsPractice {
+                Button(L10n.text("退出应用")) { NSApp.terminate(nil) }.buttonStyle(.plain).foregroundColor(Theme.secondary)
+                Button(L10n.text("打开设置")) { model.actions?.openSetupSettings() }.buttonStyle(.plain)
             }
             Spacer()
             Button(step == .done ? L10n.text("开始使用") : (step == .welcome ? L10n.text("开始设置") : L10n.text("继续"))) {
@@ -216,11 +210,25 @@ struct OnboardingView: View {
             .buttonStyle(PrimaryButtonStyle())
             .keyboardShortcut(.defaultAction)
             // 「已改好」 is what lets this step continue; 跳过 is still there.
-            .disabled(step == .globeKey && !globeConfirmed)
+            .disabled(!canContinue)
+        }
+    }
+
+    private var canContinue: Bool {
+        if practice.busy { return false }
+        if step == .globeKey && !globeConfirmed { return false }
+        guard model.settings.needsPractice else { return true }
+        switch step {
+        case .localService: return model.serviceUp && model.speech?.ready == true && model.llmConfigured
+        case .microphone: return model.micStatus == .authorized
+        case .accessibility: return model.accessibilityTrusted
+        case .tryIt, .done: return practice.complete && !model.settings.explanationMarkers.isEmpty
+        default: return true
         }
     }
 
     private func advance() {
+        guard canContinue else { return }
         meter.stop()
         if let next = OnboardingStep(rawValue: step.rawValue + 1) { step = next }
     }
