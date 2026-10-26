@@ -78,8 +78,11 @@ network only in these cases:
   (for example DeepSeek, OpenAI, Moonshot, Zhipu, Alibaba DashScope, OpenRouter, or a local Ollama), the app sends
   that provider the recognized text and those of the user's dictionary words that the dictation mentions (spelled
   the same or sounding alike); unrelated dictionary words are not sent. Sound matching reduces what is sent but can
-  misjudge; words the user marks 不发给模型 are never sent (their "recognized as" spelling is corrected on the
-  computer). When the user turns on 参考输入框里的内容
+  misjudge. Personal exclusions filter vocabulary and aliases from all sources. Entries marked 不发给模型 are
+  not sent as vocabulary references; local replacements require individual approval and current-input validation.
+  Only relevant, confirmed and enabled wording examples are sent with natural or AI cleanup. They guide expression,
+  not the facts of the current dictation. There is no centralized collection or automatic model training.
+  When the user turns on 参考输入框里的内容
   (off by default), also the text near the cursor and the window title. Values that look like keys or passwords
   are removed first. The provider's own privacy policy applies to that data. Without an API key, nothing is sent.
   获取列表 (list the provider's models) asks the same provider for its model list.
@@ -97,9 +100,12 @@ network only in these cases:
   `TypeLeast/<version>` user agent). The Windows installed version installs updates automatically
   unless this is turned off in 设置 → 服务与更新.
 
-Learning corrections (on by default) reads the field the dictation was pasted into for up to two minutes, on the
-computer only, to add a word the user corrected to the dictionary; it records no keystrokes. Like any dictionary
-word, a learned word reaches the cleanup provider only with a later dictation that mentions it.
+Learning corrections reads the field the dictation was pasted into for up to two minutes when enabled.
+It records no keystrokes and creates only a pending, in-memory wording example. The user must confirm it before
+it is saved or becomes eligible for a later relevant request. No mode automatically adds dictionary entries.
+Personal vocabulary, examples, exclusions and replacement approvals are encrypted locally; unreadable data is
+retained and cannot be overwritten. Source records follow encrypted history retention. Retry without personalization
+sends the saved transcript to the selected cleanup provider again, without preferences, packs or new cursor context.
 The local service listens only on `127.0.0.1`. API keys are stored in Windows Credential Manager (macOS: Keychain)
 and are never written to logs. Settings, history and logs stay on the computer, in `%APPDATA%\TypeLeast\` and
 `%LOCALAPPDATA%\TypeLeast\` on Windows.
