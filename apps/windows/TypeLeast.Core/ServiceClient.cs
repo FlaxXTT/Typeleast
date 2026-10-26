@@ -277,11 +277,12 @@ public sealed class ServiceClient
 
     /// <summary>The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
     /// Entries marked 「不发给模型」 go as {"local": entry}; the service never passes those to a model.</summary>
-    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null)
+    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null)
     {
         var entries = new List<object>();
         if (dictionary is not null) entries.AddRange(dictionary);
         if (localOnly is not null) entries.AddRange(localOnly.Select(entry => new Dictionary<string, string> { ["local"] = entry }));
+        if (clarificationSource is not null) entries.Add(new { clarificationSource, clarificationEvidence });
         if (entries.Count == 0) return (wav, 0);
         var json = JsonSerializer.SerializeToUtf8Bytes(entries);
         return ([.. json, .. wav], json.Length);
@@ -291,7 +292,7 @@ public sealed class ServiceClient
     /// dictation; the service keeps no copy, so there is nothing to keep in sync.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null) =>
+        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null) =>
         Once(async () =>
         {
             var headers = new Dictionary<string, string>
@@ -299,19 +300,35 @@ public sealed class ServiceClient
                 ["x-voice-language"] = language,
                 ["x-voice-app"] = appHint,
                 ["x-voice-strength"] = strength,
+                ["x-voice-clarification"] = "1",
             };
             if (EncodeContextHeader(fieldContext) is { } context) headers["x-voice-context"] = context;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
-            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly);
+            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly, clarificationSource, clarificationEvidence);
             headers["x-voice-dictionary-bytes"] = dictionaryBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var content = new ByteArrayContent(payload);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             // Prompt Beta makes up to four model calls in one request.
             var timeout = strength == "promptbeta" && DictateTimeout < BetaTimeout ? BetaTimeout : DictateTimeout;
             var (status, body) = await SendAsync(HttpMethod.Post, "/dictate", content, headers, timeout, ct).ConfigureAwait(false);
+            if (status != HttpStatusCode.OK) throw HttpError(status, body);
+            return Decode<DictateResponse>(body);
+        });
+
+    public Task<DictateResponse> PolishAsync(string text, string language, string strength, LlmRoute? llm, string? translateTo,
+        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null) =>
+        Once(async () =>
+        {
+            var entries = new List<object>(dictionary);
+            entries.AddRange(localOnly.Select(entry => new { local = entry }));
+            using var context = fieldContext is null ? null : JsonDocument.Parse(fieldContext);
+            var json = JsonSerializer.Serialize(new { text, language, strength, llm, translateTo, variants,
+                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true }, Json.Options);
+            var (status, body) = await SendAsync(HttpMethod.Post, "/polish", new StringContent(json, Encoding.UTF8, "application/json"),
+                new Dictionary<string, string>(), DictateTimeout, ct).ConfigureAwait(false);
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
             return Decode<DictateResponse>(body);
         });

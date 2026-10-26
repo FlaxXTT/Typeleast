@@ -47,6 +47,10 @@ final class DictationController {
     private var pendingField: FocusedField?
     private var pendingTranslate: String?
     private var previewPanel: PreviewPanel?
+    private let namePanel = NameConfirmationPanel()
+    private var clarificationSource: String?
+    private var clarificationDestination: (app: String, field: FocusedField?, language: String, strength: String, target: String?, variants: String?, evidence: String)?
+
     private var tickTimer: Timer?
     private var lastTickedSecond = -1
 
@@ -65,6 +69,7 @@ final class DictationController {
 
     func startRecording() {
         guard phase == .idle else { return }
+        namePanel.dismiss()
         if recorder.demoPCM != nil {
             beginCapture()   // demo input: no microphone involved
             return
@@ -94,7 +99,7 @@ final class DictationController {
         // The previous dictation's field is checked for corrections before a new one starts.
         dictionary.dictationStarting()
         // Contract: frontmost bundle id is captured BEFORE recording starts.
-        pendingAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        pendingAppBundleId = clarificationDestination?.app ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         pendingField = nil
         let deviceID = AudioDevices.deviceID(forUID: settings.inputDeviceUID)
         recorder.prepareEngine = { engine in AudioInputSelector.apply(deviceID: deviceID, to: engine) }
@@ -134,7 +139,7 @@ final class DictationController {
         // Read the target field off the main thread while the user is already speaking: as
         // context for the model (only with 参考输入框里的内容 on) and, locally, so the edit
         // learner can see what the user fixes afterwards.
-        if settings.readFieldContext || settings.autoLearn {
+        if clarificationSource == nil && (settings.readFieldContext || settings.autoLearn) {
             let bundle = pendingAppBundleId
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 let field = FieldContextReader.capture(bundleId: bundle)
@@ -187,7 +192,14 @@ final class DictationController {
         }
     }
 
+    func dropNameConfirmation() {
+        namePanel.dismiss()
+        clarificationSource = nil
+        clarificationDestination = nil
+    }
+
     func cancelDictation() {
+        dropNameConfirmation()
         switch phase {
         case .recording:
             unregisterEscape()
@@ -217,6 +229,15 @@ final class DictationController {
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
                       translateTo: String? = nil) {
+        let source = clarificationSource
+        let destination = source == nil ? nil : clarificationDestination
+        clarificationSource = nil
+        clarificationDestination = nil
+        let appBundleId = destination?.app ?? appBundleId
+        let field = destination?.field ?? field
+        let language = destination?.language ?? language
+        let strength = destination?.strength ?? strength
+        let translateTo = destination?.target ?? translateTo
         phase = .thinking
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
@@ -227,7 +248,7 @@ final class DictationController {
         let previousBeta = betaSession == nil ? nil : betaPending
         let llm = previousBeta?.llm ?? settings.activeLLMRoute
         let effectiveLanguage = previousBeta?.language ?? language
-        let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
+        let variants = destination?.variants ?? (previousBeta == nil ? settings.variantsHeader : previousBeta?.variants)
         let dictionary = self.dictionary.serviceEntries
         let localOnly = self.dictionary.localEntries
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -243,7 +264,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              dictionary: dictionary, localOnly: localOnly))
+                                                              dictionary: dictionary, localOnly: localOnly, clarificationSource: source, clarificationEvidence: destination?.evidence))
             } catch {
                 outcome = .failure(error)
             }
@@ -274,6 +295,47 @@ final class DictationController {
         case .success(let resp):
             serviceUp = true
             model.serviceProblem = ""
+            if let clarification = resp.clarification {
+                recordingBar.hide()
+                clarificationSource = resp.raw
+                clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence)
+                namePanel.show(question: L10n.text("需要确认：{0}", clarification.evidence), raw: resp.raw) { [weak self] choice in
+                    guard let self else { return }
+                    self.clarificationSource = nil
+                    self.clarificationDestination = nil
+                    switch choice {
+                    case .cancel: self.setHint(L10n.text("已取消"))
+                    case .supplement:
+                        self.clarificationSource = resp.raw
+                        self.clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence)
+                        self.toggleDictation(translateTo: clarification.target)
+                    case .original:
+                        var confirmed = resp
+                        confirmed.clarification = nil
+                        confirmed.text = resp.raw
+                        confirmed.suggestions = []
+                        self.finishRequest(.success(confirmed), appBundleId: appBundleId, language: language, strength: strength,
+                                           audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
+                    case .edit(let text):
+                        self.phase = .thinking
+                        self.applyState()
+                        let entries = self.dictionary.serviceEntries
+                        let local = self.dictionary.localEntries
+                        let context = self.settings.readFieldContext ? field?.context.encoded() : nil
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let outcome = Result { try self.client.polishSync(text: text, language: language, strength: strength, llm: llm,
+                                translateTo: clarification.target, variants: variants,
+                                dictionary: entries, localOnly: local, fieldContext: context) }
+                            DispatchQueue.main.async {
+                                self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength,
+                                                   audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
+                            }
+                        }
+                    }
+                }
+                applyState()
+                return
+            }
             if let sessionId = resp.beta?.sessionId, let info = resp.beta {
                 beta.accept(info: info, sessionId: sessionId, llm: llm, language: language,
                             variants: variants, appBundleId: appBundleId, field: field)

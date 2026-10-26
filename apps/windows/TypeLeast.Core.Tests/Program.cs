@@ -142,13 +142,25 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     Eq("a Ctrl+Shift+V chosen after the move stays", AppSettings.Load(file).PasteLastShortcut, "CtrlShiftV");
     Eq("new settings do not take Ctrl+Shift+V", new AppSettings().PasteLastShortcut, "CtrlShiftAltV");
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
-    Eq("an old strength reads as natural cleanup", AppSettings.Load(file).Strength, "prompt");
+    Eq("an old install switches to AI cleanup once", AppSettings.Load(file).Strength, "concise");
     foreach (var retired in new[] { "promptbrief", "promptify" })
     {
         File.WriteAllText(file, "{\"Strength\":\"" + retired + "\"}");
         Eq("the retired prompt-mode tier " + retired + " reads as concise", AppSettings.Load(file).Strength, "concise");
     }
     Eq("automatic updates are on for settings saved before they existed", AppSettings.Load(file).AutoUpdate, true);
+    File.WriteAllText(file, "{\"Strength\":\"promptbeta\"}");
+    var migratedAI = AppSettings.Load(file);
+    Eq("existing Beta user switches to AI once", migratedAI.Strength, "concise");
+    migratedAI.Strength = "prompt"; migratedAI.Save(file);
+    Eq("next startup keeps chosen mode", AppSettings.Load(file).Strength, "prompt");
+    var autoHint = WordEntry.Parse("ROG", "LG", "auto")!;
+    Eq("automatic mapping is preserved", autoHint.ServiceValue, "LG=ROG");
+    Eq("automatic mapping is not a replacement", autoHint.RequestValue, "ROG");
+    Eq("manual mapping remains explicit", WordEntry.Parse("ROG", "LG")!.RequestValue, "LG=ROG");
+    var heldName = JsonSerializer.Deserialize<DictateResponse>("{\"text\":\"draft\",\"raw\":\"LG\",\"clarification\":{\"question\":\"Which name?\",\"evidence\":\"LG\"}}", Json.Options)!;
+    Eq("name confirmation never inserts a draft", heldName.InsertableText, "");
+
 
     var history = new LocalHistory(Path.Combine(dir, "app-history.json"), TestHistoryProtection.Shared);
     history.Add(new HistoryEntry { Text = "第一条", Seconds = 2 });
@@ -212,7 +224,7 @@ void Eq<T>(string name, T got, T want) => Check(name, EqualityComparer<T>.Defaul
     await client.DictateAsync(Wav.FromPcm16(new byte[3200]), "auto", "notepad.exe", "prompt", route);
     Eq("ordinary dictation sends no target", stub.LastHeaders.GetValueOrDefault("x-voice-translate"), null);
 
-    using (var requestContract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v1.json"))))
+    using (var requestContract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v2.json"))))
     {
         var sampleWav = Wav.FromPcm16(new byte[3200]);
         foreach (var sample in requestContract.RootElement.GetProperty("requestCases").EnumerateArray())
@@ -844,9 +856,9 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
             Eq("optional suggestions cannot break text", response.InsertableText, "Result stays usable.");
         }
     }
-    using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v1.json"))))
+    using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v2.json"))))
     {
-        Eq("shared client contract version", contract.RootElement.GetProperty("version").GetInt32(), 1);
+        Eq("shared client contract version", contract.RootElement.GetProperty("version").GetInt32(), 2);
         foreach (var sample in contract.RootElement.GetProperty("modeCases").EnumerateArray())
         {
             var storedElement = sample.GetProperty("stored");

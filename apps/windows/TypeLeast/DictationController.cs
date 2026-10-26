@@ -80,7 +80,10 @@ internal sealed class DictationController
         recorder.LimitReached += () => dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
         recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风断开或录音出错，请重新选择设备。")); });
     }
-    public void Shutdown() { recorder.Cancel(); }
+    private (string Source, IntPtr Window, string App, FieldTarget? Field, byte[]? Context, DictationOptions Options, string Evidence)? clarificationPending;
+    private bool resumeClarification;
+
+    public void Shutdown() { operations.Cancel(); recorder.Cancel(); clarificationPending = null; }
 
     public bool StartMicrophoneTest()
     {
@@ -115,6 +118,12 @@ internal sealed class DictationController
             var result = await Client.DictateAsync(wav, request.Language, entry.App, request.Strength, ActiveRoute,
                 ct: operation.Token, translateTo: request.TranslateTo, variants: request.Variants, dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries);
             if (!operations.IsCurrent(operation)) return;
+            targetWindow = Native.GetForegroundWindow(); targetApp = entry.App; targetField = null; recordingContext = null;
+            var options = new DictationOptions(request.Language, request.Strength, request.TranslateTo, request.Variants, ActiveRoute,
+                Settings.RestoreClipboard, "clipboardOnly");
+            var confirmed = await ConfirmName(result, options, operation);
+            if (confirmed is null) return;
+            result = confirmed;
             Paster.SetText(result.InsertableText);
             History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
                 Fallback = result.Fallback, Reason = result.FallbackReason, Seconds = entry.Seconds,
@@ -124,7 +133,9 @@ internal sealed class DictationController
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
         catch (Exception e) when (e is ServiceException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
         { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("重试失败，原记录保留"), true); }
-        finally { if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav); if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; } operations.Complete(operation); Raise(); }
+        finally { if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav); if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; } operations.Complete(operation); Raise();
+            if (resumeClarification && !quitting) { resumeClarification = false; dispatcher.InvokeAsync(() => Toggle(clarificationPending?.Options.TranslateTo)); }
+        }
     }
 
     public void Toggle() => Toggle(null);
@@ -134,6 +145,7 @@ internal sealed class DictationController
     public void SetStrength(string code, bool announce = false)
     {
         if (!CleanupModes.IsKnown(code) || Phase != DictationPhase.Idle) return;
+        clarificationPending = null;
         if (beta.Session is not null && code != "promptbeta") {
             if (MessageBox.Show(L10n.T("切换会结束这次 Beta，未生成的文字不会插入。"),
                 L10n.T("结束这次提示词 Beta？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
@@ -175,7 +187,7 @@ internal sealed class DictationController
         // The microphone opens first: anything slow before it (UI Automation, ducking) would cut
         // the start of what the user says. Only the foreground window, which is instant, is read before.
         micClock.Restart();
-        targetWindow = Native.GetForegroundWindow();
+        targetWindow = clarificationPending?.Window ?? Native.GetForegroundWindow();
         targetField = null; recordingContext = null;
         try
         {
@@ -202,8 +214,11 @@ internal sealed class DictationController
         recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections);
         targetApp = Shell.ProcessName(targetWindow);
         var window = targetWindow;
-        targetFieldTask = Task.Run(() => FieldTarget.CaptureFor(window));
-        recordingContextTask = Settings.UseFieldContext ? targetFieldTask.ContinueWith(t => FieldContextReader.Read(t.Result), TaskScheduler.Default) : null;
+        if (clarificationPending is not null) { targetFieldTask = null; recordingContextTask = null; }
+        else {
+            targetFieldTask = Task.Run(() => FieldTarget.CaptureFor(window));
+            recordingContextTask = Settings.UseFieldContext ? targetFieldTask.ContinueWith(t => FieldContextReader.Read(t.Result), TaskScheduler.Default) : null;
+        }
         if (Settings.MuteOtherAudio) ducking.Start();
     }
 
@@ -229,6 +244,7 @@ internal sealed class DictationController
 
     public void Cancel()
     {
+        clarificationPending = null; resumeClarification = false;
         Dictionary.StopWatching();
         ducking.Dispose(); IsMicrophoneTesting = false;
         var preserveBeta = Phase == DictationPhase.Recording && beta.Session is not null;
@@ -251,6 +267,12 @@ internal sealed class DictationController
         ducking.Dispose();
         if (Settings.PlaySounds) Sounds.Stop();
         hook.SwallowEscape = false;
+        var held = clarificationPending;
+        clarificationPending = null;
+        if (held is { } prior) {
+            options = prior.Options;
+            targetWindow = prior.Window; targetApp = prior.App; targetField = prior.Field;
+        }
         var translateTo = options.TranslateTo;
         translating = null;
         if (seconds < 0.3)
@@ -271,8 +293,8 @@ internal sealed class DictationController
         hook.SwallowEscape = true;
         bar.ShowThinking(translateTo is null ? CleanupModes.Title(options.Strength) : L10n.T("正在翻译…"));
         Raise();
-        targetField = await Within(targetFieldTask, 300);
-        recordingContext = await Within(recordingContextTask, 300);
+        targetField = held is { } original ? original.Field : await Within(targetFieldTask, 300);
+        recordingContext = held is { } originalContext ? originalContext.Context : await Within(recordingContextTask, 300);
         targetFieldTask = null; recordingContextTask = null;
         if (!operations.IsCurrent(operation)) return;
         try
@@ -280,8 +302,11 @@ internal sealed class DictationController
             var requestOptions = answering is not null ? beta.Options ?? options : options;
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
-                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries);
+                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries, clarificationSource: held?.Source, clarificationEvidence: held?.Evidence);
             if (!operations.IsCurrent(operation)) return;
+            var confirmed = await ConfirmName(result, requestOptions, operation);
+            if (confirmed is null) return;
+            result = confirmed;
             if (ShowBetaQuestions(result, requestOptions)) return;
             if (answering is not null)
             {
@@ -314,7 +339,33 @@ internal sealed class DictationController
                 Raise();
             }
             operations.Complete(operation);
+            if (resumeClarification && !quitting) {
+                resumeClarification = false;
+                dispatcher.InvokeAsync(() => Toggle(clarificationPending?.Options.TranslateTo));
+            }
         }
+    }
+
+    private async Task<DictateResponse?> ConfirmName(DictateResponse result, DictationOptions options, OperationTracker.Lease operation)
+    {
+        while (result.Clarification is { } clarification) {
+            bar.Hide();
+            var choice = await NameConfirmationPanel.Show(L10n.T("需要确认：{0}", clarification.Evidence), result.Raw, operation.Token);
+            if (!operations.IsCurrent(operation)) return null;
+            if (choice.Kind == "cancel") { bar.ShowResult(L10n.T("已取消"), false); return null; }
+            if (choice.Kind == "supplement") {
+                clarificationPending = (result.Raw, targetWindow, targetApp, targetField, recordingContext, options, clarification.Evidence);
+                resumeClarification = true;
+                return null;
+            }
+            if (choice.Kind == "original") {
+                result.Text = result.Raw; result.Clarification = null; result.Suggestions.Clear(); break;
+            }
+            result = await Client.PolishAsync(choice.Text, options.Language, options.Strength, options.Route,
+                clarification.Target, options.Variants, Dictionary.ServiceEntries, Dictionary.LocalEntries, operation.Token, fieldContext: recordingContext);
+            if (!operations.IsCurrent(operation)) return null;
+        }
+        return result;
     }
 
     private async Task Deliver(DictateResponse result, double seconds, OperationTracker.Lease operation, DictationOptions options, byte[]? wav = null)

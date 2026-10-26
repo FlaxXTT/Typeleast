@@ -18,7 +18,7 @@ import { CONCISE_PROMPT } from "./prompts/concise.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-26.1-cleanup+concise+beta+translate";
+export const PROMPT_VERSION = "2026-10-26.2-cleanup+concise+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -63,7 +63,7 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
   const lines = [HARNESS_ADDENDUM_MARKER];
   if (entries.length > 0) {
     lines.push(
-      "Dictionary entries are hard constraints. \"A=B\" means: wherever A, or anything that sounds like A, was recognised, write B. An entry without \"=\" is a spelling to use exactly whenever that word is meant.",
+      "Dictionary entries are spelling hints, not facts about this utterance. A=B is an explicit user mapping for that exact spelling, not permission to replace every similar sound or another valid name. Use an entry only when the current meaning supports it. Current explicit spelling and correction take priority. Never infer approval from a past output.",
       "Entries: " + entries.join(" | "),
     );
   }

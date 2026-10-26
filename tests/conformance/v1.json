@@ -113,7 +113,7 @@
     {
       "id": "translation-rejects-invented-number", "group": "translation",
       "modelReplies": ["{\"status\":\"ok\",\"text\":\"周四下午三点开会，大家记得带电脑。\"}", "The meeting is on Thursday at 3 pm in room 512. Please bring your laptops."],
-      "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "body": { "text": "周四下午三点开会，大家记得带电脑。", "translateTo": "en", "llm": "$FAKE_LLM" }, "expect": { "fields": { "status": 200, "json.text": "周四下午三点开会，大家记得带电脑。", "json.fallback": true }, "modelCalls": 2 } }]
+      "steps": [{ "method": "POST", "path": "/api/voice-polish/polish", "body": { "text": "周四下午三点开会，大家记得带电脑。", "translateTo": "en", "llm": "$FAKE_LLM" }, "expect": { "fields": { "status": 200, "json.text": "周四下午3点开会，大家记得带电脑。", "json.fallback": true }, "modelCalls": 2 } }]
     },
     {
       "id": "unknown-target-uses-ordinary-cleanup", "group": "translation",

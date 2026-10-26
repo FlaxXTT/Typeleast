@@ -27,13 +27,14 @@ internal static class ModePicker
             var dot = Theme.Text("○", 12, Theme.Grey, wrap: false);
             dot.Margin = new Thickness(0, 1, 9, 0);
             dot.VerticalAlignment = VerticalAlignment.Top;
-            var title = Theme.Text(CleanupModes.Title(code), 13, wrap: false);
+            var title = Theme.Text(CleanupModes.Title(code) + (code == "concise" ? " ★" : ""), 13, wrap: false);
             var row = new DockPanel();
             DockPanel.SetDock(dot, Dock.Left);
             row.Children.Add(dot);
             row.Children.Add(title);
             var button = Theme.Secondary("", () => host.SetStrength(code));
             button.Content = row;
+            if (code == "concise") button.ToolTip = L10n.T("推荐：重组表达，保留事实与条件。");
             button.BorderBrush = Brushes.Transparent;
             button.HorizontalAlignment = HorizontalAlignment.Stretch;
             button.HorizontalContentAlignment = HorizontalAlignment.Stretch;

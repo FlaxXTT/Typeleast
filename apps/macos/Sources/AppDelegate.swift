@@ -679,6 +679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             guard alert.runModal() == .alertSecondButtonReturn else { return }
             dropBeta(notify: false)
         }
+        dictation.dropNameConfirmation()
         settings.strength = code
         model.objectWillChange.send()
         applyState()

@@ -12,7 +12,7 @@ test('the concise tier uses the existing strength field and its own prompt', () 
   assert.ok(STRENGTHS.includes('concise'));
   assert.deepEqual(validateConfig({ strength: 'concise' }).issues, []);
   assert.ok(systemPromptFor({ strength: 'concise' }).startsWith(CONCISE_PROMPT));
-  assert.match(CONCISE_PROMPT, /用户明确要求表格/);
+  assert.match(CONCISE_PROMPT, /仅在用户要求时使用表格/);
 });
 
 test('all one-shot cleanup modes receive scoped correction and term-restoration rules', () => {
@@ -21,9 +21,9 @@ test('all one-shot cleanup modes receive scoped correction and term-restoration 
   }
   assert.match(translatePrompt('en'), /已经整理好的原语言文本/);
   assert.match(UTTERANCE_RULES, /只处理本次口述/);
-  assert.match(UTTERANCE_RULES, /连续改口/);
-  assert.match(UTTERANCE_RULES, /引号内引用/);
-  assert.match(UTTERANCE_RULES, /无法唯一确定/);
+  assert.match(UTTERANCE_RULES, /明确撤回/);
+  assert.match(UTTERANCE_RULES, /引用和强调/);
+  assert.match(UTTERANCE_RULES, /证据不足以解决/);
 });
 
 const samples = [

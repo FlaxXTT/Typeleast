@@ -803,7 +803,7 @@ do {
     UserDefaults.standard.set("maximal", forKey: "voice.strength")
     checkEq("a strength saved by an older build reads as natural cleanup", s.strength, "prompt")
     UserDefaults.standard.removeObject(forKey: "voice.strength")
-    checkEq("three cleanup modes are offered", VoiceStrength.allCases.map(\.rawValue), ["prompt", "concise", "promptbeta"])
+    checkEq("three cleanup modes are offered", VoiceStrength.allCases.map(\.rawValue), ["concise", "prompt", "promptbeta"])
     UserDefaults.standard.set("off", forKey: "voice.strength")
     checkEq("retired verbatim setting reads as natural cleanup", s.strength, "prompt")
     for retired in ["promptbrief", "promptify"] {
@@ -1429,7 +1429,7 @@ do {
     struct ClientContract: Decodable { let version: Int; let modeCases: [ModeCase]; let requestCases: [RequestCase]; let responseCases: [ResponseCase] }
     guard let path = ProcessInfo.processInfo.environment["TYPELEAST_CLIENT_CONTRACT"] else { fatalError("Missing client contract") }
     let contract = try JSONDecoder().decode(ClientContract.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
-    checkEq("client contract version", contract.version, 1)
+    checkEq("client contract version", contract.version, 2)
     let oldLanguage = L10n.language
     L10n.language = "zh-Hans"
     for sample in contract.modeCases {
@@ -1633,6 +1633,30 @@ do {
             check("deleted dictionary term stays removed: " + id, !settings.words.contains { $0.word == entry.word })
         }
     }
+}
+
+// AI cleanup migration and vocabulary provenance use a dedicated preference domain.
+do {
+    let suite = "typeleast.tests.ai-cleanup." + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set("promptbeta", forKey: "voice.strength")
+    let migrated = Settings(defaults: defaults)
+    checkEq("existing users switch to AI cleanup once", migrated.strength, "concise")
+    migrated.strength = "prompt"
+    checkEq("later startups preserve chosen mode", Settings(defaults: defaults).strength, "prompt")
+    let auto = LocalWord(id: "a", word: "ROG", heardAs: "LG", source: .auto, addedAt: Date())
+    checkEq("automatic mapping remains stored", auto.hostEntry, "LG=ROG")
+    checkEq("automatic mapping is only a vocabulary hint", auto.requestEntry, "ROG")
+    var manual = auto; manual.source = .manual
+    checkEq("manual rule remains explicit", manual.requestEntry, "LG=ROG")
+    migrated.words = [auto]
+    checkEq("old automatic mappings cannot bypass name guard", migrated.hostDictionary, ["ROG"])
+    migrated.updateWord(id: "a", word: "ROG", heardAs: "LG")
+    checkEq("explicit edit makes a manual rule", migrated.words.first?.source, .manual)
+    let payload = ServiceClient.dictateBody(wav: Data([1, 2]), dictionary: [], clarificationSource: "我想买 LG 电脑")
+    let metadata = (try? JSONSerialization.jsonObject(with: payload.body.prefix(payload.dictionaryBytes))) as? [[String: String]]
+    checkEq("voice continuation carries only explicit prior input", metadata?.first?["clarificationSource"], "我想买 LG 电脑")
 }
 
 server.stop()

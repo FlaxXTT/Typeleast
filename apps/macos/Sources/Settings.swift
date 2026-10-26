@@ -73,16 +73,16 @@ enum EnglishVariant: String, CaseIterable {
 /// The cleanup modes. "prompt" is the historical stored id for 自然整理.
 /// Retired prompt tiers read as `.concise`; retired verbatim reads as `.prompt`.
 enum VoiceStrength: String, CaseIterable {
-    case prompt, concise, promptbeta
+    case concise, prompt, promptbeta
     var label: String {
         switch self {
         case .prompt: return L10n.text("自然整理")
-        case .concise: return L10n.text("精简整理")
+        case .concise: return L10n.text("AI 整理")
         case .promptbeta: return L10n.text("提示词 Beta")
         }
     }
 
-    /// The tier a stored value means: the prompt-mode tiers of 1.18 became 精简整理.
+    /// The tier a stored value means: the prompt-mode tiers of 1.18 became AI 整理.
     static func stored(_ value: String?) -> VoiceStrength {
         if value == "promptbrief" || value == "promptify" { return .concise }
         if value == "off" { return .prompt }
@@ -158,6 +158,8 @@ struct LocalWord: Codable, Equatable, Identifiable {
     var localOnly: Bool? = nil
 
     /// The string the host stores: "word" or "heard=word".
+    var requestEntry: String { source == .auto ? word : hostEntry }
+
     var hostEntry: String {
         if let heard = heardAs, !heard.isEmpty, heard != word { return heard + "=" + word }
         return word
@@ -169,7 +171,18 @@ final class Settings {
     static let didChange = Notification.Name("DshVoiceSettingsDidChange")
     static let wordsDidChange = Notification.Name("DshVoiceWordsDidChange")
 
-    private let d = UserDefaults.standard
+    private let d: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        d = defaults
+        Self.migrateAICleanup(defaults)
+    }
+
+    static func migrateAICleanup(_ defaults: UserDefaults) {
+        guard !defaults.bool(forKey: "voice.aiCleanupDefault.v1") else { return }
+        defaults.set("concise", forKey: "voice.strength")
+        defaults.set(true, forKey: "voice.aiCleanupDefault.v1")
+    }
 
     private func changed() {
         NotificationCenter.default.post(name: Settings.didChange, object: nil)
@@ -408,10 +421,10 @@ final class Settings {
 
     /// Entries in the service's format ("word" or "heard=word"), sent with every dictation;
     /// the service passes on only those a dictation mentions.
-    var hostDictionary: [String] { words.filter { $0.localOnly != true }.map(\.hostEntry) }
+    var hostDictionary: [String] { words.filter { $0.localOnly != true }.map(\.requestEntry) }
 
     /// Entries marked 「不发给模型」, sent to the local service separately and never to a model.
-    var localDictionary: [String] { words.filter { $0.localOnly == true }.map(\.hostEntry) }
+    var localDictionary: [String] { words.filter { $0.localOnly == true }.map(\.requestEntry) }
 
     @discardableResult
     func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source, localOnly: Bool = false) -> Bool {
@@ -435,6 +448,7 @@ final class Settings {
         list[index].word = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
         list[index].heardAs = (h?.isEmpty ?? true) ? nil : h
+        list[index].source = .manual
         if let localOnly { list[index].localOnly = localOnly ? true : nil }
         words = list
     }

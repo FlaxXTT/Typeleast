@@ -96,6 +96,7 @@ internal sealed class DictionaryPage : IPage
     {
         this.host = host;
         root.Children.Add(Theme.Text(L10n.T("词典"), 28, bold: true));
+        root.Children.Add(Theme.Text(L10n.T("自动词条只提示写法，不决定名称。旧的自动替换记录会保留；只有手动确认的规则才用于替换。"), 12, Theme.Grey));
         foreach (var label in new[] { "全部", "自动添加", "手动添加" }) filter.Items.Add(L10n.T(label)); filter.SelectedIndex = 0;
         search.ToolTip = L10n.T("搜索词典"); System.Windows.Automation.AutomationProperties.SetName(search, L10n.T("搜索词典"));
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.Row(8, filter, search), Theme.Row(8,
@@ -135,7 +136,7 @@ internal sealed class DictionaryPage : IPage
             localOnly, caseOnly, error,
             Theme.Row(8, Theme.Primary(L10n.T("保存"), () =>
             {
-                var entry = WordEntry.Parse(word.Text, heard.Text, original?.Source ?? "manual");
+                var entry = WordEntry.Parse(word.Text, heard.Text, "manual");
                 if (entry is null) { error.Text = L10n.T("输入无效：合计最多 120 字，不能有换行或等号。"); return; }
                 if (original is not null) entry.Id = original.Id;
                 entry.LocalOnly = localOnly.IsChecked == true;

@@ -1,3 +1,4 @@
+import { nameClarification, clarificationSource, clarificationRule } from "./name-clarification.js";
 /**
  * VoicePolishService — "transcribe, then make it sayable".
  *
@@ -229,11 +230,18 @@ export class VoicePolishService {
           postprocess: tidyOnly.applied,
         });
       }
+      const clarification = nameClarification(parsed.clarification, rawText);
+      if (clarification) return this.nameQuestion(request, base, clarification, started);
+      if (parsed.clarification) return this.recordFallback(request, { ...base, fallback: true, reason: "output-format", ms: timing(started, 0) });
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
       // Deterministic cleanup runs BEFORE validation so the safety checks judge
       // exactly the text that would be inserted.
       const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text)));
       const verdict = validateOutput({ rawText, output: tidied.text, strength, termEvidence: context.dictionary });
+      if (!verdict.ok && verdict.reason === "entity-changed") {
+        const evidence = verdict.metrics.missingNames?.[0];
+        if (evidence) return this.nameQuestion(request, base, { question: "请确认这次口述中的名称。", evidence }, started);
+      }
       if (!verdict.ok) {
         // Same fallback text as the exception path below: the rejected rewrite
         // is discarded, but the filler in the raw transcript still is not wanted.
@@ -318,8 +326,14 @@ export class VoicePolishService {
       const parsed = parsePolishOutput(cleanup.text);
       if (!parsed.ok) this.stats.jsonFallback += 1;
       else if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
+      const clarification = nameClarification(parsed.clarification, rawText);
+      if (clarification) return this.nameQuestion(request, base, clarification, started);
+      if (parsed.clarification) return this.recordFallback(request, { ...base, fallback: true, reason: "output-format", ms: timing(started, 0) });
       const tidied = parsed.ok ? tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text))) : null;
       const sourceVerdict = tidied ? validateOutput({ rawText, output: tidied.text, strength: "prompt", termEvidence: context.dictionary }) : null;
+      if (sourceVerdict?.reason === "entity-changed") {
+        return this.nameQuestion(request, base, { question: "请确认这次口述中的名称。", evidence: sourceVerdict.metrics.missingNames[0] }, started);
+      }
       if (!sourceVerdict?.ok) {
         const issue = sourceVerdict ? sourceVerdict.reason : `source-output-format:${parsed.failure ?? "unknown"}`;
         this.logger.warn?.("typeleast: source cleanup unusable (%s); translating the transcript directly", issue);
@@ -519,6 +533,14 @@ export class VoicePolishService {
    * @param {object} result - the result about to be returned.
    * @returns {Promise<object>} the same result.
    */
+  nameQuestion(request, base, clarification, started) {
+    // Old clients cannot hold insertion: keep the safe raw fallback.
+    if (!request.supportsClarification) return this.recordFallback(request, {
+      ...base, fallback: true, reason: "entity-changed", ms: timing(started, 0),
+    });
+    return { ...base, text: "", clarification: { ...clarification, ...(request.translateTo ? { target: request.translateTo } : {}) }, suggestions: [], ms: timing(started, 0) };
+  }
+
   async recordAndReturn(request, result) {
     // A failed optional extension must not change or stop dictation.
     try {
@@ -577,7 +599,8 @@ export class VoicePolishService {
       }
       const spoken = await this.transcribe(audio, language);
       const polished = await this.polish({
-        rawText: spoken.text,
+        rawText: [clarificationSource(request.dictionary), spoken.text].filter(Boolean).join("\n"),
+        supportsClarification: request.supportsClarification === true,
         language: spoken.language ?? language,
         appHint: request.appHint,
         strength: request.strength,
@@ -587,7 +610,7 @@ export class VoicePolishService {
         betaSession: request.betaSession ?? null,
         translateTo: request.translateTo ?? null,
         variants: request.variants ?? null,
-        dictionary: request.dictionary ?? null,
+        dictionary: [...(Array.isArray(request.dictionary) ? request.dictionary : []), ...clarificationRule(request.dictionary, spoken.text)],
       });
       const result = {
         requestId: request.requestId,
@@ -606,11 +629,12 @@ export class VoicePolishService {
         },
         metrics: polished.metrics,
         ...(polished.beta ? { beta: polished.beta } : {}),
+        ...(polished.clarification ? { clarification: polished.clarification } : {}),
         ...(polished.translated ? { translated: polished.translated } : {}),
       };
       this.stats.dictations += 1;
       if (result.fallback) this.stats.fallback += 1;
-      else this.stats.polished += 1;
+      else if (!result.clarification && !result.beta?.sessionId) this.stats.polished += 1;
       this.stats.lastMs = result.ms.total;
       return result;
     } finally {
@@ -702,8 +726,15 @@ export const DICTIONARY_LIMITS = { entries: 2000, entryLength: 120 };
 export function dictionaryFrom(configured, sent) {
   const entries = [...configured];
   for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
-    if (typeof entry !== "string") continue;
-    const trimmed = entry.trim().slice(0, DICTIONARY_LIMITS.entryLength);
+    let value = typeof entry === "string" ? entry : "";
+    if (entry && typeof entry === "object" && typeof entry.word === "string") {
+      const word = entry.word.trim();
+      const heard = typeof entry.heardAs === "string" ? entry.heardAs.trim() : "";
+      // Structured automatic entries cannot smuggle a legacy A=B rule in the word field.
+      if (!word || /[=\p{Cc}]/u.test(word + heard) || word.length + heard.length > DICTIONARY_LIMITS.entryLength - 1) continue;
+      value = (entry.source === "manual" && heard ? heard + "=" : "") + word;
+    }
+    const trimmed = value.trim().slice(0, DICTIONARY_LIMITS.entryLength);
     if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
   }
   return entries;
@@ -718,6 +749,7 @@ export function dictionaryFrom(configured, sent) {
 export function localEntriesFrom(sent) {
   const pairs = [];
   for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
+    if (entry?.source === "auto") continue;
     const text = entry && typeof entry === "object" && typeof entry.local === "string" ? entry.local.trim().slice(0, DICTIONARY_LIMITS.entryLength) : "";
     const split = text.indexOf("=");
     if (split <= 0) continue;

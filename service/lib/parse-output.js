@@ -60,13 +60,18 @@ export function parsePolishOutput(raw) {
       if (typeof parsed.text === "string") {
         const text = parsed.text.trim();
         if (text.length === 0) return { ok: false, text: "", reason, mode: "json", failure: "empty-text" };
-        return { ok: true, text, reason, mode: "json" };
+        return { ok: true, text, reason, mode: "json", ...(parsed.clarification ? { clarification: parsed.clarification } : {}) };
       }
       // An object without a text field is not insertable.
       return { ok: false, text: "", reason, mode: "json", failure: "no-text-field" };
     }
   } catch {
     // Fall through to the recovery paths.
+  }
+
+  // A damaged confirmation envelope must never become insertable via regex recovery.
+  if (/"clarification"\s*:/u.test(stripped)) {
+    return { ok: false, text: "", reason: null, mode: "none", failure: "invalid-clarification" };
   }
 
   // 2. Recover a text field from a malformed body.

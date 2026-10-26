@@ -36,13 +36,13 @@ test("精简整理是一档整理强度，旧的提示词档按精简整理处�
 test("精简整理用自己的提示词，带上词典；标准整理不受影响", () => {
   const system = systemPromptFor({ strength: "concise", dictionary: ["TypeLeast"] });
   assert.ok(system.startsWith(CONCISE_PROMPT));
-  assert.match(CONCISE_PROMPT, /积极压缩/);
-  assert.match(CONCISE_PROMPT, /否定、例外、数字/);
-  assert.match(CONCISE_PROMPT, /不输出角色、背景、任务/);
-  assert.match(CONCISE_PROMPT, /保留请求的语气、对象和用途/);
+  assert.match(CONCISE_PROMPT, /积极改写/);
+  assert.match(CONCISE_PROMPT, /数字、否定、例外/);
+  assert.match(CONCISE_PROMPT, /不设角色、背景、任务/);
+  assert.match(CONCISE_PROMPT, /保留用途、对象/);
   assert.match(system, /HARNESS ADDENDUM[\s\S]*TypeLeast/);
   const standard = systemPromptFor({ strength: "prompt" });
-  assert.ok(standard.indexOf("5. Combine repeated references") < standard.indexOf("# Examples"), "规则在示例之前");
+  assert.doesNotMatch(standard, /# Examples|ROG|LG/, "individual cases belong in tests, not the generalized prompt");
   assert.doesNotMatch(system, /Subject Consolidation/);
 });
 

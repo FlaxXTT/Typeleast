@@ -26,8 +26,15 @@ public sealed class AppSettings
     /// <summary>语言变体: Chinese "hans" / "tw" / "hk", English "us" / "gb".</summary>
     public string ZhVariant { get; set; } = "hans";
     public string EnVariant { get; set; } = "us";
-    /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (自然整理), "concise" (精简整理), or "promptbeta".</summary>
-    public string Strength { get; set; } = "prompt";
+    /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (自然整理), "concise" (AI 整理), or "promptbeta".</summary>
+    public string Strength { get; set; } = "concise";
+    public bool AiCleanupDefaultApplied { get; set; }
+    public void ApplyAICleanupDefault()
+    {
+        if (AiCleanupDefaultApplied) return;
+        Strength = "concise";
+        AiCleanupDefaultApplied = true;
+    }
     public string InterfaceLanguage { get; set; } = "system";
     public string Language { get; set; } = "auto";
     public string LlmPresetId { get; set; } = "deepseek";
@@ -120,6 +127,7 @@ public sealed class AppSettings
             if (loaded is not null)
             {
                 loaded.Strength = CleanupModes.Stored(loaded.Strength);
+                loaded.ApplyAICleanupDefault();
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();
@@ -155,7 +163,7 @@ public sealed class AppSettings
                 return loaded;
             }
         }
-        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { return new AppSettings(); }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { var fresh = new AppSettings(); fresh.ApplyAICleanupDefault(); return fresh; }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {
             return new AppSettings { PersistenceBlocked = true };

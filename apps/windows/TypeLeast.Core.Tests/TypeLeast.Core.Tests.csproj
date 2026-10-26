@@ -11,7 +11,7 @@
   <ItemGroup>
     <None Include="../../../service/test/fixtures/suggestion-responses.json" Link="suggestion-responses.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../service/test/fixtures/release-notes.json" Link="release-notes.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="../../../tests/conformance/client-v1.json" Link="client-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../tests/conformance/client-v2.json" Link="client-v2.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../tests/conformance/automatic-dictionary-v1.json" Link="automatic-dictionary-v1.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

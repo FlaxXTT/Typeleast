@@ -33,6 +33,7 @@ internal sealed class Onboarding : Window
             _ => ""
         };
         if (description.Length > 0) content.Children.Add(Theme.Card(Theme.Text(L10n.T(description), 14)));
+        if (step == 0) content.Children.Add(Theme.Card(Theme.Text(L10n.T("遇到简称或专名，可以补一句全称、用途或拼写。AI 整理会合并补充信息；有歧义时先确认。"), 14)));
         if (step == 1)
         {
             speechModels.Refresh();

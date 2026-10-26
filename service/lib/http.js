@@ -234,6 +234,7 @@ export function createHandler(options) {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const result = await service.polish({
           rawText: body.text,
+          supportsClarification: body.supportsClarification === true,
           language: typeof body.language === "string" ? body.language : "auto",
           appHint: body.appHint ?? null,
           strength: body.strength,
@@ -256,6 +257,7 @@ export function createHandler(options) {
           provider: result.provider,
           ms: result.ms,
           ...(result.translated ? { translated: result.translated } : {}),
+          ...(result.clarification ? { clarification: result.clarification } : {}),
         });
         return;
       }
@@ -293,6 +295,7 @@ export function createHandler(options) {
         const audio = body.subarray(dictionaryBytes);
         const result = await service.transcribeAndPolish({
           dictionary,
+          supportsClarification: req.headers["x-voice-clarification"] === "1",
           requestId: req.headers["x-request-id"] ?? undefined,
           audio,
           language: req.headers["x-voice-language"] ?? undefined,

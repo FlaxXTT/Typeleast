@@ -254,7 +254,8 @@ private struct ModeRow: View {
                     .font(.system(size: 12)).foregroundColor(selected ? Theme.ink : Theme.secondary)
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(strength.label).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    Text(strength.label + (strength == .concise ? " ★" : "")).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                        .help(strength == .concise ? L10n.text("推荐：重组表达，保留事实与条件。") : "")
                         .foregroundColor(selected ? Theme.ink : Theme.secondary)
                 }
                 Spacer(minLength: 0)

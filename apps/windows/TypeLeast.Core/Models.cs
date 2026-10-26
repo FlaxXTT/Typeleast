@@ -139,6 +139,13 @@ public sealed class SuggestionListConverter : JsonConverter<List<SuggestionCandi
     }
 }
 
+public sealed class NameClarification
+{
+    [JsonPropertyName("question")] public string Question { get; set; } = "";
+    [JsonPropertyName("evidence")] public string Evidence { get; set; } = "";
+    [JsonPropertyName("target")] public string? Target { get; set; }
+}
+
 public sealed class DictateResponse
 {
     [JsonPropertyName("requestId")] public string? RequestId { get; set; }
@@ -149,6 +156,7 @@ public sealed class DictateResponse
     [JsonPropertyName("model")] public string? Model { get; set; }
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
+    [JsonPropertyName("clarification")] public NameClarification? Clarification { get; set; }
     [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
     [JsonPropertyName("suggestions"), JsonConverter(typeof(SuggestionListConverter))]
     public List<SuggestionCandidate> Suggestions { get; set; } = new();
@@ -161,7 +169,7 @@ public sealed class DictateResponse
 
     /// <summary>When fallback is true the service has already put the raw transcript in Text.</summary>
     [JsonIgnore] public bool BetaWaiting => !string.IsNullOrWhiteSpace(Beta?.SessionId);
-    [JsonIgnore] public string InsertableText => BetaWaiting ? "" : Text.Length > 0 ? Text : Raw;
+    [JsonIgnore] public string InsertableText => BetaWaiting || Clarification is not null ? "" : Text.Length > 0 ? Text : Raw;
 }
 
 public sealed class LlmTestResult

@@ -162,7 +162,7 @@ test("the model prompt is the cleanup prompt plus a dictionary addendum", async 
   assert.match(system.content, /Return only one JSON object/);
   // Our constraints ride in a delimited addendum, never woven into the prompt text.
   assert.match(system.content, /=== HARNESS ADDENDUM \(not part of the upstream prompt\) ===/);
-  assert.match(system.content, /Dictionary entries are hard constraints/);
+  assert.match(system.content, /Dictionary entries are spelling hints/);
   assert.match(system.content, /Entries: Wednesday$/m);
   // The user message is the recognised text alone.
   assert.equal(user.role, "user");

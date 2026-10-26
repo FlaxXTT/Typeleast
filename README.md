@@ -40,7 +40,7 @@
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/features-dark.svg">
-  <img src="docs/media/readme/features-light.svg" alt="功能：自然整理；音频不出电脑；写到任何输入框；精简整理；四个本机识别模型；你的 Key。" width="880">
+  <img src="docs/media/readme/features-light.svg" alt="功能：自然整理；音频不出电脑；写到任何输入框；AI 整理；四个本机识别模型；你的 Key。" width="880">
 </picture>
 </p>
 
@@ -171,10 +171,10 @@ Windows code signing via SignPath Foundation is currently pending approval.
 | 切换整理模式 | 侧栏、菜单栏 | 侧栏、托盘、任务栏右键 |
 
 - **自然整理**：删除口头禅，处理改口和数字。
-- **精简整理**：只留要点。
+- **AI 整理（推荐）**：重组零散口述、压缩重复和绕述，保留用途、条件、数字和否定。名称不清楚时先确认，再输出。
 - **提示词 Beta**：多轮提问，写出长提示词。轮次越多，用量越高。
 - **翻译**：先整理，再翻译。10 种语言。调用两次模型。
-- **词典**：固定写法，或「识别成=正确写法」，例如 `德普西克=DeepSeek`。
+- **词典**：提供相关写法。自动词条不能强行替换其他名称；手动设置的纠错规则继续可用。遇到简称或专名，可以补一句全称、用途或拼写。
 - **扩展**：词库和风格。插件不运行代码。见[插件规范](docs/插件规范.md)和 [market/README.md](market/README.md)。
 - **语言**：简体、台湾繁体、香港繁体；美式或英式拼写。界面语言在设置里改，重启后生效。
 - **历史**：加密存在本机。

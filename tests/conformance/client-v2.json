@@ -1,0 +1,190 @@
+{
+  "version": 2,
+  "modeCases": [
+    {
+      "stored": "prompt",
+      "expected": "prompt",
+      "labelZh": "自然整理"
+    },
+    {
+      "stored": "concise",
+      "expected": "concise",
+      "labelZh": "AI 整理"
+    },
+    {
+      "stored": "promptbeta",
+      "expected": "promptbeta",
+      "labelZh": "提示词 Beta"
+    },
+    {
+      "stored": "off",
+      "expected": "prompt",
+      "labelZh": "自然整理"
+    },
+    {
+      "stored": "promptbrief",
+      "expected": "concise",
+      "labelZh": "AI 整理"
+    },
+    {
+      "stored": "promptify",
+      "expected": "concise",
+      "labelZh": "AI 整理"
+    },
+    {
+      "stored": "unknown",
+      "expected": "prompt",
+      "labelZh": "自然整理"
+    },
+    {
+      "stored": null,
+      "expected": "prompt",
+      "labelZh": "自然整理"
+    }
+  ],
+  "requestCases": [
+    {
+      "id": "natural-chinese",
+      "language": "zh",
+      "strength": "prompt",
+      "translateTo": null,
+      "variants": null,
+      "dictionary": [],
+      "localOnly": []
+    },
+    {
+      "id": "translate-variants",
+      "language": "zh",
+      "strength": "prompt",
+      "translateTo": "en",
+      "variants": "zh=tw,en=gb",
+      "dictionary": [
+        "TypeLeast"
+      ],
+      "localOnly": []
+    },
+    {
+      "id": "beta-local-word",
+      "language": "auto",
+      "strength": "promptbeta",
+      "translateTo": null,
+      "variants": null,
+      "dictionary": [
+        "GitHub"
+      ],
+      "localOnly": [
+        "张为=章伟"
+      ]
+    }
+  ],
+  "responseCases": [
+    {
+      "id": "normal",
+      "response": {
+        "text": "整理结果。",
+        "raw": "口述结果",
+        "fallback": false
+      },
+      "insertable": "整理结果。",
+      "betaWaiting": false,
+      "translated": null
+    },
+    {
+      "id": "fallback-text",
+      "response": {
+        "text": "识别结果",
+        "raw": "识别结果",
+        "fallback": true,
+        "fallbackReason": "no-api-key"
+      },
+      "insertable": "识别结果",
+      "betaWaiting": false,
+      "translated": null
+    },
+    {
+      "id": "old-service-empty-text",
+      "response": {
+        "text": "",
+        "raw": "识别结果",
+        "fallback": true
+      },
+      "insertable": "识别结果",
+      "betaWaiting": false,
+      "translated": null
+    },
+    {
+      "id": "translation",
+      "response": {
+        "text": "Please send the report.",
+        "raw": "请发送报告",
+        "fallback": false,
+        "translated": "en"
+      },
+      "insertable": "Please send the report.",
+      "betaWaiting": false,
+      "translated": "en"
+    },
+    {
+      "id": "beta-waiting",
+      "response": {
+        "text": "",
+        "raw": "帮我整理需求",
+        "fallback": false,
+        "beta": {
+          "sessionId": "fictional-session",
+          "questions": [
+            "给谁使用？"
+          ],
+          "round": 1,
+          "ready": false
+        }
+      },
+      "insertable": "",
+      "betaWaiting": true,
+      "translated": null
+    },
+    {
+      "id": "beta-final",
+      "response": {
+        "text": "整理后的需求。",
+        "raw": "帮我整理需求",
+        "fallback": false,
+        "beta": {
+          "reviewed": true
+        }
+      },
+      "insertable": "整理后的需求。",
+      "betaWaiting": false,
+      "translated": null
+    },
+    {
+      "id": "unknown-optional-fields",
+      "response": {
+        "text": "仍可使用。",
+        "raw": "原话",
+        "fallback": false,
+        "futureField": {
+          "enabled": true
+        },
+        "suggestions": "wrong-type"
+      },
+      "insertable": "仍可使用。",
+      "betaWaiting": false,
+      "translated": null
+    },
+    {
+      "id": "name-confirmation-holds-insertion",
+      "response": {
+        "text": "不可粘贴的草稿",
+        "raw": "我想买 LG 电脑",
+        "clarification": {
+          "question": "请确认名称",
+          "evidence": "LG"
+        }
+      },
+      "insertable": "",
+      "betaWaiting": false,
+      "translated": null
+    }
+  ]
+}

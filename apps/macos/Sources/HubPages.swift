@@ -502,7 +502,7 @@ struct DictionaryPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("词典"), subtitle: "") {
+            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("自动词条只提示写法，不决定名称。旧的自动替换记录会保留；只有手动确认的规则才用于替换。")) {
                 HStack(spacing: 8) {
                     Button(L10n.text("导入 CSV")) { importCSV() }.buttonStyle(SecondaryButtonStyle())
                     Button {
