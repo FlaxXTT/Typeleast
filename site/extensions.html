@@ -99,6 +99,12 @@ nav a.link:hover, nav a.link[aria-current] { color: var(--ink); text-decoration:
 .plugin .foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--tile-2); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .plugin .where { font-size: 13px; color: var(--ink-2); }
 .state { margin-top: 22px; padding: 28px; border-radius: 20px; background: var(--tile); color: var(--ink-2); text-align: center; }
+.coming-card { margin-top: 22px; padding: 24px; border-radius: 20px; background: var(--tile); display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; align-items: start; }
+.coming-icon { width: 72px; height: 72px; border-radius: 18px; background: #fff; display: grid; place-items: center; font: 600 20px var(--mono); color: var(--violet); box-shadow: inset 0 0 0 1px var(--tile-2); }
+.coming-card .top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.coming-card p { color: var(--ink-2); font-size: 15px; }
+.coming-card .fine { margin-top: 8px; color: var(--ink-3); font-size: 13px; }
+@media (max-width: 560px) { .coming-card { padding: 20px; grid-template-columns: 48px minmax(0, 1fr); gap: 14px; } .coming-icon { width: 48px; height: 48px; border-radius: 12px; font-size: 16px; } }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 40px; counter-reset: step; }
 .step { background: var(--tile); border-radius: 20px; padding: 22px 22px 24px; }
 .step::before { counter-increment: step; content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%;
@@ -202,7 +208,7 @@ footer a { color: var(--ink-2); }
   <div class="wrap">
     <p class="eyebrow" data-i18n="market.eyebrow">插件市场</p>
     <h2 data-i18n="market.title">官方插件</h2>
-    <p class="lead" data-i18n="market.lead">与 App 内相同。</p>
+    <p class="lead" data-i18n="market.lead">可安装插件与 App 目录同步。</p>
     <div class="bar">
       <div class="tabs" role="tablist" aria-label="插件类型" data-i18n-aria="market.tabs">
         <button role="tab" aria-selected="true" data-filter="all" data-i18n="market.all">全部</button>
@@ -213,6 +219,15 @@ footer a { color: var(--ink-2); }
     </div>
     <div class="grid" id="grid" aria-live="polite"></div>
     <div class="state" id="state" data-i18n="market.loading">正在读取…</div>
+    <article class="coming-card" id="mlx-coming-soon" aria-labelledby="mlx-title">
+      <div class="coming-icon" aria-hidden="true">MLX</div>
+      <div>
+        <div class="top"><h3 id="mlx-title" data-i18n="mlx.title">MLX 语音后端</h3><span class="badge style" data-i18n="mlx.status">Coming soon</span></div>
+        <p data-i18n="mlx.description">面向 Apple 芯片 Mac，计划以独立官方组件提供本机语音识别。</p>
+        <p class="fine" data-i18n="mlx.precision">规划 FP16 / FP32 选项，具体格式与资源需求以实测为准。</p>
+        <p class="fine" data-i18n="mlx.unavailable">尚未开放下载与安装。当前版本继续使用现有识别后端。</p>
+      </div>
+    </article>
     <div class="steps">
       <div class="step"><h4 data-i18n="inst.1h">打开扩展</h4><p data-i18n="inst.1p">侧栏 → 扩展 → 插件市场</p></div>
       <div class="step"><h4 data-i18n="inst.2h">确认安装</h4><p data-i18n="inst.2p">先看全部内容</p></div>
@@ -397,7 +412,11 @@ const EN = {
   "kind.sp": "One style at a time",
   "kind.s1": "Formal writing", "kind.s2": "Work email", "kind.s3": "Numbered lists",
   "market.eyebrow": "Plugin market", "market.title": "Official plugins",
-  "market.lead": "Same as in the app.",
+  "market.lead": "Installable plugins match the app catalog.",
+  "mlx.title": "MLX speech backend", "mlx.status": "Coming soon",
+  "mlx.description": "Planned as a separate official component for on-device speech recognition on Apple silicon Macs.",
+  "mlx.precision": "FP16 / FP32 options are planned. Available formats and resource requirements will depend on testing.",
+  "mlx.unavailable": "Downloads and installation are not available yet. The current version keeps its existing speech backend.",
   "market.tabs": "Plugin type", "market.all": "All", "market.dict": "Dictionary packs", "market.style": "Styles",
   "market.loading": "Loading…",
   "market.file": "You can also download and import.",
