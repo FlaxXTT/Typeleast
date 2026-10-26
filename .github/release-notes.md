@@ -3,48 +3,46 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 推荐使用 AI 整理：重组零散口述，压缩重复，保留用途、条件、数字和否定。
-- 自动词条改为写法提示，不再凭旧自动映射强行替换名称。
-- 名称不清楚时先确认，可编辑、继续口述、保留原文或取消；确认面板不阻塞其他窗口。
-- 旧安装切换到 AI 整理一次，此后保留你的选择。自然整理与提示词 Beta 继续提供。
+- 修复 Mac 历史长文本与来源、状态标签重叠。
+- AI 整理新增解释触发词：标记内的说明用于理解本次口述，不写入结果；不完整时先确认。
+- 新增偏好资料：对照识别原文、AI 输出和用户修改，确认后加密保存；手工词典保留。
+- 新用户先配置整理模型、下载识别模型并完成三组真实语音练习，再进入主界面。旧用户不强制。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- AI cleanup is now recommended. It reorganizes speech and removes repetition while preserving purposes, conditions, numbers and negations.
-- Automatic vocabulary entries suggest spellings. Old automatic mappings can no longer force name replacements.
-- Unclear names are held for confirmation. Edit, add by voice, keep the transcript or cancel in a non-modal panel.
-- Existing installations move to AI cleanup once, then keep your choice. Natural cleanup and Prompt Beta remain available.
+- Fixed overlapping text and metadata in long Mac history entries.
+- AI cleanup supports paired explanation markers. Notes help interpret the current speech and stay out of the result. Incomplete markers require confirmation.
+- Preference examples compare the transcript, AI output and your revision. They are encrypted locally after confirmation. The manual dictionary remains available.
+- New users configure cleanup, download a speech model and complete three real voice exercises before entering the main app. Existing users are not required to repeat setup.
 <!-- /typeleast-update -->
 
-## 名称与词典
+## 解释与偏好
 
-旧词条和自动替换记录保留。自动来源只作为相关写法提示，手动编辑的规则继续生效。确认面板只展示本次原话证据；明确补充只授权本次结果，不形成永久替换规则。确认前不粘贴、不自动学习、不记录成功历史。编辑内容会继续交给当前整理模型处理；保留原文则直接使用本次识别文本。
+仅 AI 整理识别所选的一组开始词、结束词。解释只作为本次上下文，不自动成为永久名称替换规则；自然整理、翻译与提示词 Beta 不处理这些标记。可在偏好资料页关闭或更换触发词。
 
-补充口述沿用最初目标与已允许的上下文，不读取后来切换窗口的内容。目标窗口变化时继续执行原有粘贴保护。
+偏好示例保存“识别原文 → AI 输出 → 用户确认的修改”。待确认内容只在内存中，确认后才在本机加密保存。只有相关、已确认且启用的短示例会随 AI 整理发送给你选择的模型；不集中上传、不自动训练模型。清空历史不会删除独立保存的已确认偏好，可在偏好资料页删除。旧词典保留，不将旧词条伪造成纠错样本。
 
-通用规则不能保证模型发现所有名称歧义，也不能修复每一种识别错误。遇到简称或专名，可以补一句全称、用途或拼写。
+## 首次使用
 
-## 模型与资源
+新安装须配置有效的整理模型、下载并加载识别模型、授予必要权限，再完成改口、解释和修改确认三组真实语音练习。需要可用的外部整理服务，会产生正常模型用量；失败或回退结果不能完成教程。设置、权限配置和退出始终可用。练习不粘贴、不保存历史或正式偏好。
 
-安装包不包含语音模型权重。本次不增加依赖或识别模型，不自动下载或切换现有模型。MLX 官方后端插件将在完成独立实现和实测后另行提供，本版没有上架。
-
-自然整理少改写；AI 整理积极重组表达，但不增加事实或删掉条件。Beta 多轮流程及两步翻译保留。
+已有安装不会被强制重新学习，可主动打开教程。
 
 ## 下载
 
 | 电脑 | 安装包 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.22.1-macOS-AppleSilicon.dmg` 或 `.zip` |
-| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.22.1-Windows-x64-Setup.exe` 或 `TypeLeast-1.22.1-Windows-x64-Portable.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.22.2-macOS-AppleSilicon.dmg` 或 `.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.22.2-Windows-x64-Setup.exe` 或 `TypeLeast-1.22.2-Windows-x64-Portable.zip` |
 
-Intel 不再构建，最后版本保持 1.17.1。
+Mac 构建号 31。Intel 不再构建，最后版本保持 1.17.1。安装包不包含语音模型权重，不增加运行时依赖；MLX 官方后端仍为 Coming soon，未开放安装。
 
 ## 验证与限制
 
-服务 365 项、Mac 611 项、Windows 791 项通过；独立 HTTP 接口验收 46 项通过。脱敏、事实与中英文本地化检查通过。发布前运行三平台 CI，并核对四个安装包及校验清单。
+服务 381 项、Mac 638 项、本机 Windows 核心 805 项、进程外接口验收 46 项通过；Windows 云端核心 811 项通过，客户端交叉编译通过。中英本地化、事实和脱敏检查通过。原有编译警告保留。
 
-确认面板尚未做双端真机操作，未继续大规模语音准确率或真实整理模型测试。已有识别模型沿用现有 CI 验收；Mac 标准云端机器按既有资源规则跳过 1.7B FP16，不将跳过记作识别通过。
+发布前核对三平台 CI、四个安装包及校验清单。Mac 标准云端机器仍按既有资源规则跳过大型 1.7B FP16 检查，其本地证据沿用此前记录。
 
-Mac 包未经过 Apple Developer ID 公证，Windows 包没有代码签名。校验值见 `SHA256SUMS.txt`。
+Windows 真实麦克风、目标窗口交互及双端真实外部模型完整教程尚未手动验收。自动测试和界面渲染不能替代真机操作，也不能保证模型理解每一次解释。
 
-完整变化见 [CHANGELOG](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md)。[代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)。
+[完整记录](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md) · [数据与教程说明](https://github.com/FlaxXTT/Typeleast/blob/main/docs/解释上下文与偏好资料.md) · [代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)
