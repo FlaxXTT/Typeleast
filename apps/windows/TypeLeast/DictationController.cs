@@ -134,7 +134,7 @@ internal sealed class DictationController
         catch (Exception e) when (e is ServiceException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
         { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("重试失败，原记录保留"), true); }
         finally { if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav); if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; } operations.Complete(operation); Raise();
-            if (resumeClarification && !quitting) { resumeClarification = false; dispatcher.InvokeAsync(() => Toggle(clarificationPending?.Options.TranslateTo)); }
+            if (resumeClarification && !quitting) { resumeClarification = false; _ = dispatcher.InvokeAsync(() => Toggle(clarificationPending?.Options.TranslateTo)); }
         }
     }
 
@@ -341,7 +341,7 @@ internal sealed class DictationController
             operations.Complete(operation);
             if (resumeClarification && !quitting) {
                 resumeClarification = false;
-                dispatcher.InvokeAsync(() => Toggle(clarificationPending?.Options.TranslateTo));
+                _ = dispatcher.InvokeAsync(() => Toggle(clarificationPending?.Options.TranslateTo));
             }
         }
     }
