@@ -3,14 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TypeLeast · 说话，得到文字</title>
-<meta name="description" content="免费的 Mac 和 Windows 听写软件。你说话，TypeLeast 写出文字。">
+<title>TypeLeast · AI时代的免费语音输入，帮你写最好的提示词</title>
+<meta name="description" content="免费的 Mac 和 Windows 语音输入工具。语音在本机识别，文字写入光标处；通过多轮补充需求，帮你写出更完整的提示词。">
 <meta name="theme-color" content="#ffffff">
 <meta name="color-scheme" content="light">
-<meta property="og:title" content="TypeLeast · 说话，得到文字">
-<meta property="og:description" content="免费的 Mac 和 Windows 听写软件。你说话，TypeLeast 写出文字。">
+<meta property="og:site_name" content="TypeLeast">
+<meta property="og:title" content="TypeLeast · AI时代的免费语音输入，帮你写最好的提示词">
+<meta property="og:description" content="免费的 Mac 和 Windows 语音输入工具。语音在本机识别，文字写入光标处；通过多轮补充需求，帮你写出更完整的提示词。">
 <meta property="og:image" content="assets/promo-poster.jpg">
-<link rel="icon" href="assets/icon.png">
+<link rel="icon" type="image/x-icon" sizes="32x32 48x48 96x96" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","name":"TypeLeast","url":"https://typeleast.promptking.workers.dev/"}
+</script>
 <style>
 /* White, like apple.com's light pages: one surface grey, three text greys, one blue for actions.
    Colour comes only from the product and one gradient headline per story. */
@@ -478,8 +483,8 @@ const EN = {
   "longfilm.title": "Full demo",
   "longfilm.lead": "72 seconds.",
   "longfilm.video": "Full 72-second TypeLeast product film",
-  "title": "TypeLeast · Speak. Get text.",
-  "description": "Free dictation for Mac and Windows. You speak. TypeLeast writes the text.",
+  "title": "TypeLeast · Free voice input for the AI era. Write your best prompts.",
+  "description": "Free voice input for Mac and Windows. Speech is recognized on your computer and text is inserted at the cursor. Add details over several turns to write more complete prompts.",
   "nav.prompt": "Prompts", "nav.features": "Features", "nav.privacy": "Privacy", "nav.ext": "Extensions", "nav.download": "Download",
   "ext.eyebrow": "Extensions", "ext.title": "Dictionary packs and <span class=\"sheen\">styles</span>",
   "ext.lead": "Correct terms. Your format.",
@@ -570,6 +575,8 @@ function applyLang(next) {
   const T = lang === "en" ? EN : ZH;
   document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
   document.title = T.title;
+  document.querySelector('meta[property="og:title"]').content = T.title;
+  document.querySelector('meta[property="og:description"]').content = T.description;
   document.querySelector('meta[name="description"]').content = T.description;
   for (const el of document.querySelectorAll("[data-i18n]")) if (T[el.dataset.i18n] != null) el.innerHTML = T[el.dataset.i18n];
   for (const el of document.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", T[el.dataset.i18nAria]);
