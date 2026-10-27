@@ -312,7 +312,7 @@ enum L10n {
         "提示词 Beta": "Prompt Beta",
         "和其他快捷键重复": "Same as another shortcut",
         "被占用，请换一个": "In use. Choose another.",
-        "不用词典、光标上下文和英式拼写。": "Does not use the dictionary, cursor text or British spelling.",
+        "不使用表达示例、光标上下文和英式拼写。": "Does not use wording examples, cursor text or British spelling.",
         "不用风格插件。": "Does not use style plugins.",
         "先回答几个问题": "Answer some questions first",
         "提示词 Beta：请回答面板里的问题": "Prompt Beta: answer the questions in the panel",

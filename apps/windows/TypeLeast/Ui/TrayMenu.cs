@@ -77,7 +77,7 @@ internal sealed class TrayMenu : Window
         Separator();
         Item("\uE80F", L10n.T("打开 TypeLeast"), "", true, () => host.ShowWindow(MainWindow.Page.Home));
         Item("\uE81C", L10n.T("历史"), "", true, () => host.ShowWindow(MainWindow.Page.History));
-        Item("\uE82D", L10n.T("词典"), "", true, () => host.ShowWindow(MainWindow.Page.Dictionary));
+        Item("\uE82D", L10n.T("个人偏好"), "", true, () => host.ShowWindow(MainWindow.Page.Dictionary));
         Item("\uE713", L10n.T("设置"), "", true, () => host.ShowWindow(MainWindow.Page.Settings));
         Separator();
         Item("\uE72C", L10n.T("重启本地服务"), "", true, host.RestartService);

@@ -99,7 +99,7 @@ public static class L10n
         ["已从词典删除「{0}」"] = "Removed “{0}” from the dictionary",
         ["插件已变化。请重新查看后再安装"] = "The plugin changed. Examine it again before you install it",
         ["不发给模型"] = "Do not send to the model",
-        ["不用词典、光标上下文和英式拼写。"] = "Does not use the dictionary, cursor text or British spelling.",
+        ["不使用表达示例、光标上下文和英式拼写。"] = "Does not use wording examples, cursor text or British spelling.",
         ["不用风格插件。"] = "Does not use style plugins.",
         ["没填识别成时，只修正英文大小写。"] = "Without a recognized-as form, only English letter case is fixed.",
         ["扩展"] = "Extensions",

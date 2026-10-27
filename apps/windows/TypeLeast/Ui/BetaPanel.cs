@@ -50,7 +50,7 @@ internal sealed class BetaPanel : Window
 
         var content = new StackPanel();
         content.Children.Add(title);
-        content.Children.Add(Theme.Text(L10n.T("不用词典、光标上下文和英式拼写。"), 11, Theme.Grey));
+        content.Children.Add(Theme.Text(L10n.T("不使用表达示例、光标上下文和英式拼写。"), 11, Theme.Grey));
         content.Children.Add(new ScrollViewer { Content = list, MaxHeight = 300, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         content.Children.Add(hint);
         content.Children.Add(buttons);

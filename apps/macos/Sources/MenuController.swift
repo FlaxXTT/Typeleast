@@ -99,7 +99,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(item(L10n.text("打开 TypeLeast"), #selector(onOpenHome)))
         menu.addItem(item(L10n.text("历史…"), #selector(onOpenHistory)))
-        menu.addItem(item(L10n.text("词典…"), #selector(onOpenDictionary)))
+        menu.addItem(item(L10n.text("个人偏好"), #selector(onOpenDictionary)))
         let settings = item(L10n.text("设置…"), #selector(onOpenSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)

@@ -72,7 +72,7 @@ struct BetaQuestionsView: View {
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
             Text(info.ready == true ? L10n.text("已清楚。可继续补充或生成。") : L10n.text("先说清信息"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
-            Text(L10n.text("不用词典、光标上下文和英式拼写。")).font(.system(size: 11)).foregroundColor(Theme.secondary)
+            Text(L10n.text("不使用表达示例、光标上下文和英式拼写。")).font(.system(size: 11)).foregroundColor(Theme.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if let confirmed = info.confirmed, !confirmed.isEmpty {
