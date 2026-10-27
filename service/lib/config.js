@@ -4,7 +4,7 @@
  * Defaults suit almost everyone; a user who wants to change one reads
  * `config.json` in the state directory (see paths.js), for example
  *
- *   { "timeoutMs": 15000, "dictionary": ["TypeLeast"] }
+ *   { "timeoutMs": 15000 }
  *
  * Unknown or ill-typed keys are reported and ignored, never fatal: a typo in a
  * hand-edited file must not stop dictation.
@@ -15,7 +15,7 @@
  *
  * @module typeleast-service/config
  */
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 export const STRENGTHS = ["conservative", "prompt", "maximal", "concise", "promptbeta"];
@@ -32,12 +32,11 @@ export const CONFIG_FILE = "config.json";
 /** Field declarations: default, kind and help. */
 const FIELDS = {
   maxOutputTokens: { kind: "integer", default: 800, help: "Upper bound for the polished text." },
-  timeoutMs: { kind: "integer", default: 12000, help: "Polishing budget; on expiry the raw transcript is used. Real dictations need 4-6s, so 12s leaves headroom." },
-  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "prompt (自然整理) uses the general cleanup prompt. conservative and maximal are legacy validation levels. concise (精简整理) keeps the intent and constraints in fewer words. Retired off reads as prompt; retired promptbrief and promptify read as concise. promptbeta (提示词 Beta) clarifies information over multiple rounds." },
+  timeoutMs: { kind: "integer", default: 18000, help: "Natural cleanup generation timeout. Failed cleanup waits for user review." },
+  strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "prompt (自然整理) uses the general cleanup prompt. conservative and maximal are legacy validation levels. concise (AI 整理) keeps the intent and constraints in fewer words. Retired off reads as prompt; retired promptbrief and promptify read as concise. promptbeta (提示词 Beta) clarifies information over multiple rounds." },
   temperature: { kind: "number", default: 0.8, help: "Sampling temperature. Keeps the existing default; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
-  dictionary: { kind: "stringArray", default: [], help: "Words whose spelling must be preserved verbatim." },
   maxAudioBytes: { kind: "integer", default: 4194304, help: "Largest accepted WAV body." },
   maxDurationSeconds: { kind: "integer", default: 120, help: "Longest accepted recording." },
   redactSecrets: { kind: "boolean", default: true, help: "Strip key-shaped strings from model context." },
@@ -115,7 +114,7 @@ export function validateConfig(value) {
   guard("temperature", (v) => v >= 0 && v <= 2, "temperature must be between 0 and 2");
   guard("maxAudioBytes", (v) => v >= 46, "maxAudioBytes must be at least the WAV header size (46)");
   guard("numThreads", (v) => v >= 1 && v <= 16, "numThreads must be between 1 and 16");
-  if (output.timeoutMs < 6000) issues.push({ message: "timeoutMs below 6000 will fall back on real dictations", path: ["timeoutMs"] });
+  if (output.timeoutMs < 6000) issues.push({ message: "timeoutMs below 6000 can interrupt real dictations", path: ["timeoutMs"] });
   return { value: output, issues };
 }
 
@@ -136,5 +135,14 @@ export async function loadConfig(stateDir) {
       return result;
     }
   }
-  return validateConfig(parsed);
+  let cleanupIssue=null;
+  if(parsed&&typeof parsed==='object'&&Object.hasOwn(parsed,'dictionary')) {
+    delete parsed.dictionary;
+    const temporary=join(stateDir,CONFIG_FILE+'.retire.tmp');
+    try {await writeFile(temporary,JSON.stringify(parsed,null,2)+'\n',{mode:0o600});await rename(temporary,join(stateDir,CONFIG_FILE));}
+    catch {cleanupIssue={message:'retired vocabulary cleanup incomplete; original retained',path:['dictionary']};await unlink(temporary).catch(()=>{});}
+  }
+  const result=validateConfig(parsed);
+  if(cleanupIssue)result.issues.push(cleanupIssue);
+  return result;
 }

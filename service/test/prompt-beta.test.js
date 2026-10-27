@@ -43,7 +43,7 @@ test('clear information waits for explicit generate and still accepts more conte
   const p = provider({ interview: calls => interview(calls.length === 1 ? [] : ['客户是哪个群体？']) });
   const history = [], s = serviceFor(p, history);
   const a = await send(s);
-  assert.equal(a.text, ''); assert.equal(a.beta.ready, true);
+  assert.equal(a.text, ''); assert.equal(a.beta.ready, false); assert.equal(a.beta.questions.length,4);
   const b = await send(s, '还想发给客户', { betaSession: a.beta.sessionId });
   assert.equal(b.beta.sessionId, a.beta.sessionId); assert.equal(b.beta.ready, false); assert.equal(b.beta.round, 2);
   assert.deepEqual(p.calls.map(c => c.stage), ['interview', 'interview']);
@@ -199,7 +199,7 @@ test('the WAV pipeline preserves clarification metadata and suppresses silent ra
   audio.writeUInt32LE(16000, 24); audio.writeUInt32LE(32000, 28); audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34);
   audio.write('data', 36); audio.writeUInt32LE(audio.length - 44, 40);
   const first = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE });
-  assert.ok(first.beta.sessionId); assert.equal(first.text, ''); assert.equal(first.beta.ready, true);
+  assert.ok(first.beta.sessionId); assert.equal(first.text, ''); assert.equal(first.beta.ready, false);assert.equal(first.beta.questions.length,4);
   const silent = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE, betaSession: first.beta.sessionId });
   assert.equal(silent.beta.notice, 'empty-transcript');
   // A new empty Beta request has no raw ASR token to fall through into a client paste.
@@ -219,4 +219,23 @@ test('review must cite the current draft, not an old user statement', async () =
   assert.equal(result.beta.sessionId, first.beta.sessionId);
  
   assert.equal(p.calls.some(c => c.stage === 'patch'), false, 'do not patch from invalid review evidence');
+});
+
+test('first Beta questions have a fixed order in both UI languages even when the model says ready', async () => {
+ for (const [text, language, fragments] of [
+  ['整理工作内容','zh',['联网搜索','背景资料','本地文件','重复性工作']],
+  ['Describe this task','en',['search the web','background materials','local files','repeatable work']],
+ ]) {
+  const p=provider(),s=serviceFor(p),first=await send(s,text,{language});
+  assert.equal(first.beta.ready,false);assert.equal(first.beta.questions.length,4);
+  first.beta.questions.forEach((q,i)=>assert.ok(q.includes(fragments[i]),q));
+  assert.equal(p.calls.length,1);
+ }
+});
+test('background answers and source restrictions remain in generation and review inputs',async()=>{
+ const p=provider(),s=serviceFor(p),first=await send(s);
+ const answer='不允许联网；资料为虚构产品说明，介绍用途；只允许本轮提供的文本，不许读取目录；重复性归档，不创新。';
+ await send(s,answer,{betaSession:first.beta.sessionId});await finish(s,first.beta.sessionId);
+ for(const stage of ['draft','review'])assert.ok(p.calls.find(c=>c.stage===stage).user.includes(answer),stage);
+ assert.deepEqual(p.calls.map(c=>c.stage),['interview','interview','draft','review']);
 });

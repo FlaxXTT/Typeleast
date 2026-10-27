@@ -122,7 +122,7 @@ test("a clean transcript is polished with the user's own route", async () => {
 
 test("legacy cleanup selections send only the owner's prompt and cannot restore the removed prompt", async () => {
   assert.deepEqual(readdirSync(new URL("../lib/prompts/", import.meta.url)).sort(),
-    ["cleanup.js", "concise.js", "prompt-beta.js", "translate.js"], "only the project's own prompts ship");
+    ["cleanup-review.js", "cleanup.js", "concise.js", "prompt-beta.js", "translate.js"], "only the project's own prompts ship");
   for (const strength of ["prompt", "conservative", "maximal"]) {
     const model = fakeModel("我们周三开会。");
     const service = makeService({ model, config: { strength, promptSource: "legacy-article" } });
@@ -137,19 +137,21 @@ test("legacy cleanup selections send only the owner's prompt and cannot restore 
   }
 });
 
-test("without an API key the tidied transcript is returned and nothing is called", async () => {
+test("without an API key the tidied transcript is held and nothing is called", async () => {
   const model = fakeModel("should not be used");
   const service = makeService({ model });
   const result = await service.polish({ rawText: "呃，我们周三把报告发出去吧。", strength: "prompt" });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "no-api-key");
-  assert.equal(result.text, "我们周三把报告发出去。");
+  assert.equal(result.clarification.candidate, "我们周三把报告发出去。");
   assert.equal(model.calls.length, 0);
   assert.equal(result.reason, "no-api-key");
   // A malformed route counts as no route: it is never half-used.
   const insecure = await service.polish({ rawText: RAW, llm: { ...ROUTE, baseURL: "http://api.example.com/v1" } });
   assert.equal(insecure.reason, "no-api-key");
   assert.equal(model.calls.length, 0);
+  assert.equal(result.text, "");
+  assert.equal(result.clarification.kind,"quality");
 });
 
 test("the model prompt is the cleanup prompt plus a dictionary addendum", async () => {
@@ -161,9 +163,9 @@ test("the model prompt is the cleanup prompt plus a dictionary addendum", async 
   assert.match(system.content, /speech recognition transcripts/);
   assert.match(system.content, /Return only one JSON object/);
   // Our constraints ride in a delimited addendum, never woven into the prompt text.
-  assert.match(system.content, /=== HARNESS ADDENDUM \(not part of the upstream prompt\) ===/);
-  assert.match(system.content, /Dictionary entries are spelling hints/);
-  assert.match(system.content, /Entries: Wednesday$/m);
+  assert.doesNotMatch(system.content, /=== HARNESS ADDENDUM/);
+  assert.doesNotMatch(system.content, /Dictionary entries are spelling hints/);
+  assert.doesNotMatch(system.content, /Entries:/);
   // The user message is the recognised text alone.
   assert.equal(user.role, "user");
   assert.equal(user.content, RAW);
@@ -208,6 +210,8 @@ test("an unusable reply falls back to the transcript and is counted", async () =
   assert.equal(result.reason, "output-format");
   assert.match(result.detail, /output-format/);
   assert.equal(service.snapshot().stats.jsonFallback, 1);
+  assert.equal(result.text, "");
+  assert.equal(result.clarification.kind,"quality");
 });
 
 test("an unreachable model falls back to the raw transcript, retried once, and says why", async () => {
@@ -216,10 +220,12 @@ test("an unreachable model falls back to the raw transcript, retried once, and s
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "model-error:NETWORK");
-  assert.equal(result.text, RAW);
+  assert.equal(result.clarification?.candidate ?? result.raw, RAW);
   assert.equal(result.attempts, 2);
   assert.match(result.detail, /^api\.example\.com unreachable: fetch failed \(2 attempts, \d+ ms\)$/);
   assert.ok(!result.detail.includes(ROUTE.apiKey));
+  assert.equal(result.text, "");
+  assert.equal(result.clarification.kind,"quality");
 });
 
 test("model failures are named by what actually went wrong", async () => {
@@ -243,8 +249,10 @@ test("a model that outlives the deadline is reported as a timeout and not retrie
   const service = makeService({ model: fakeModel("", { hang: true }), config: { timeoutMs: 30 } });
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.reason, "model-timeout");
-  assert.equal(result.attempts, 1, "a timeout is never retried");
-  assert.match(result.detail, /^no answer from api\.example\.com within 30 ms \(\d+ ms\)$/);
+  assert.equal(result.attempts, 2, "a timeout has one shared retry");
+  assert.match(result.detail, /^no answer from api\.example\.com within 30 ms/);
+  assert.equal(result.text, "");
+  assert.equal(result.clarification.kind,"quality");
 });
 
 test("a caller that goes away is reported as cancelled", async () => {
@@ -256,26 +264,30 @@ test("a caller that goes away is reported as cancelled", async () => {
   assert.equal(result.reason, "cancelled");
 });
 
-test("an answer that invents content is rejected and the raw transcript is used", async () => {
+test("an answer that invents content is held for editing and never inserted", async () => {
   const service = makeService({ model: fakeModel("We should send the report on Tuesday, then follow up in 3 days.") });
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
-  assert.equal(result.text, RAW, "the raw transcript is what the user gets");
+  assert.equal(result.clarification.candidate, "We should send the report on Tuesday, then follow up in 3 days.");
   // The detail carries measurements only, never the invented tokens themselves.
   assert.match(result.detail, /inventedFacts=1/);
   assert.ok(!result.detail.includes("3 days"));
+  assert.equal(result.text, "");
+  assert.equal(result.clarification.kind,"quality");
 });
 
-test("a rejected answer falls back to the TIDIED transcript, like a model failure does", async () => {
+test("a rejected answer retains the candidate and original for manual correction", async () => {
   const raw = "呃，我们周三把报告发出去吧。";
   const service = makeService({ model: fakeModel("我们周三把报告发出去，然后3天后跟进。") });
   const result = await service.polish({ rawText: raw, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
   assert.equal(result.raw, raw);
-  assert.equal(result.text, "我们周三把报告发出去。");
+  assert.equal(result.clarification.candidate, "我们周三把报告发出去，然后3天后跟进。");
   assert.deepEqual(result.postprocess, ["strip-particles"]);
+  assert.equal(result.text, "");
+  assert.equal(result.clarification.kind,"quality");
 });
 
 test("recent fallbacks are kept for /health, newest first and capped at five", async () => {
@@ -353,57 +365,11 @@ test("malformed audio never reaches the recogniser", async () => {
   await assert.rejects(() => service.transcribeAndPolish({ audio: Buffer.from("garbage that is definitely not audio") }), (error) => error.code === "invalid-audio");
 });
 
-test("the app's dictionary comes with each request and joins config.json's", async () => {
-  const model = fakeModel("Send the report on Wednesday.");
-  const service = makeService({ model, recognizer: fakeRecognizer("send the typeleast report to deep seek on wednesday"), config: { dictionary: ["TypeLeast"] } });
-  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["DeepSeek", "得普=DeepSeek", "TypeLeast", "  ", 42] });
-  const system = model.calls[0].body.messages[0].content;
-  for (const entry of ["TypeLeast", "DeepSeek"]) assert.ok(system.includes(entry), entry);
-  // Nothing is kept between requests.
-  assert.deepEqual(service.dictionary, ["TypeLeast"]);
-  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE });
-  assert.ok(!model.calls[1].body.messages[0].content.includes("DeepSeek"));
-});
-
-test("only the dictionary entries this dictation mentions reach the model", async () => {
-  const model = fakeModel("请把报告发给章伟。");
-  const service = makeService({ model, recognizer: fakeRecognizer("请把报告发给张伟"), config: { dictionary: ["内部代号凤凰"] } });
-  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["章伟", "Kubernetes", "李雷", "迪普西克=DeepSeek"] });
-  // The cleanup prompt's own examples mention some terms, so look at the dictionary line alone.
-  const entriesLine = (call) => (call.body.messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1] ?? null;
-  assert.equal(entriesLine(model.calls[0]), "章伟", "a homophone of what was said is kept, nothing else");
-  // Nothing related means no dictionary in the request at all.
-  await service.polish({ rawText: "明天下午三点开会", strength: "prompt", llm: ROUTE, dictionary: ["章伟", "Kubernetes"] });
-  assert.equal(entriesLine(model.calls[1]), null);
-  assert.ok(!model.calls[1].body.messages[0].content.includes("Dictionary entries"));
-  // The field the user allowed it to read counts too.
-  await service.polish({ rawText: "回复他", strength: "prompt", llm: ROUTE, dictionary: ["Kubernetes"],
-    fieldContext: { before: "Kubernetes 集群升级完成了吗？", selected: "", after: "", windowTitle: "" } });
-  assert.equal(entriesLine(model.calls[2]), "Kubernetes");
-});
-
-test("legacy local entries never reach the model or gain explicit replacement privileges", async () => {
-  const model = fakeModel("请把报告发给张为。");
-  const service = makeService({ model, recognizer: fakeRecognizer("请把报告发给张为") });
-  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, dictionary: ["报告", { local: "张为=章伟" }, { local: "内部代号凤凰" }] });
-  const request = JSON.stringify(model.calls[0].body);
-  for (const secret of ["章伟", "张为=", "凤凰"]) assert.ok(!request.includes(secret), secret);
-  assert.equal(result.text, "请把报告发给张为。");
-  // A local rule also applies when no model route is configured.
-  const withoutRoute = await service.polish({ rawText: "发给张为", strength: "prompt", dictionary: [{ local: "张为=章伟" }] });
-  assert.equal(withoutRoute.text, "发给张为");
-  const { applyLocalEntries } = await import("../lib/service.js");
-  assert.equal(applyLocalEntries("Use deep seek, not deep seeker.", [["deep seek", "DeepSeek"]]), "Use DeepSeek, not deep seeker.");
-  // A marked entry with no heard-as form still fixes the case of a Latin word.
-  const spelled = await service.polish({ rawText: "ask acmecorp about it", strength: "prompt", dictionary: [{ local: "AcmeCorp" }] });
-  assert.equal(spelled.text, "ask acmecorp about it");
-});
-
-test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {
-  const { dictionaryFrom, DICTIONARY_LIMITS } = await import("../lib/service.js");
-  assert.deepEqual(dictionaryFrom(["A"], [" B ", "B", "A", "", null, "x".repeat(200)]), ["A", "B", "x".repeat(DICTIONARY_LIMITS.entryLength)]);
-  assert.equal(dictionaryFrom([], Array.from({ length: 3000 }, (_, i) => `w${i}`)).length, DICTIONARY_LIMITS.entries);
-  assert.deepEqual(dictionaryFrom(["A"], "not a list"), ["A"]);
+test("legacy dictionary fields cannot regain output influence", async () => {
+  const model=fakeModel("请把报告发给张为。");const service=makeService({model,config:{dictionary:["Legacy"]}});
+  const result=await service.polish({rawText:"请把报告发给张为",strength:"prompt",llm:ROUTE,dictionary:["章伟",{local:"张为=章伟"}]});
+  assert.equal(result.text,"请把报告发给张为。");assert.doesNotMatch(model.calls[0].body.messages[0].content,/Legacy|章伟/);
+  assert.deepEqual(service.dictionary,[]);
 });
 
 test("snapshot reports readiness, dictionary size and counters", async () => {

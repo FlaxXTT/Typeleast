@@ -46,8 +46,8 @@ test('old clients retain safe fallback instead of receiving an uninsertable ques
   const result = await fixture(pending).service.polish({ rawText: raw, llm: route });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, 'entity-changed');
-  assert.ok(result.text.includes('LG'));
-  assert.equal(result.clarification, undefined);
+  assert.equal(result.text,'');
+  assert.equal(result.clarification.kind,'quality');
 });
 
 test('a rejected brand substitution opens confirmation and never auto-learns it', async () => {
@@ -71,18 +71,18 @@ test('unsupported or fabricated evidence cannot release a model draft', async ()
     .service.polish({ rawText: raw, llm: route, supportsClarification: true });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, 'output-format');
-  assert.ok(result.text.includes('LG'));
-  assert.equal(result.clarification, undefined);
+  assert.equal(result.text,'');
+  assert.equal(result.clarification.kind,'quality');
 });
 
 test('automatic dictionary entries cannot authorise replacing a valid different name', () => {
   const auto = dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG', source: 'auto' }]);
-  assert.deepEqual(auto, ['ROG']);
+  assert.deepEqual(auto, []);
   assert.deepEqual(dictionaryFrom([], [{ word: 'LG=ROG', source: 'auto' }]), []);
   assert.deepEqual(dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG=ROG', source: 'manual' }]), []);
   assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', auto), ['LG']);
   const manual = dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG', source: 'manual' }]);
-  assert.deepEqual(manual, ['ROG']);
+  assert.deepEqual(manual, []);
   assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', manual), ['LG']);
 });
 
@@ -179,6 +179,6 @@ test('HTTP voice continuation carries current confirmation, without teaching a p
 
 test('automatic local rules and repeated ambiguous names cannot force broad replacement', () => {
   assert.deepEqual(localEntriesFrom([{ local: 'LG=ROG', source: 'auto' }]), []);
-  assert.deepEqual(localEntriesFrom([{ local: 'LG=ROG', source: 'manual' }]), [['LG', 'ROG']]);
+  assert.deepEqual(localEntriesFrom([{ local: 'LG=ROG', source: 'manual' }]), []);
   assert.deepEqual(clarificationRule([{ clarificationSource: 'LG 电脑和 LG 屏幕', clarificationEvidence: 'LG' }], 'ROG'), []);
 });

@@ -125,11 +125,7 @@ final class EditWatcher {
         guard let region = EditLearner.editedRegion(before: p.field.context.before, after: p.field.context.after, now: now),
               region.count <= p.inserted.count * 2 + 40 else { return }
         if let revision = p.revision { revision(region); return }
-        let inserted = p.inserted, ask = learnedWord
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let word = ask(inserted, region) else { return }
-            DispatchQueue.main.async { self?.onLearn?(word) }
-        }
+
     }
 }
 
@@ -153,20 +149,4 @@ enum WordSuggestions {
         !word.trimmingCharacters(in: .whitespaces).isEmpty && !heardAs.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Add one sighting: words already in the dictionary or ignored are left out; the newest first.
-    static func merge(_ list: [WordSuggestion], word: String, heardAs: String, at now: Date,
-                      known: Set<String>, dismissed: Set<String>) -> [WordSuggestion] {
-        let key = word.lowercased()
-        guard !known.contains(key), !dismissed.contains(key) else { return list }
-        var out = list
-        if let index = out.firstIndex(where: { $0.id == key }) {
-            var s = out.remove(at: index)
-            s.count += 1
-            s.lastSeen = now
-            out.insert(s, at: 0)
-        } else {
-            out.insert(WordSuggestion(word: word, heardAs: heardAs, count: 1, lastSeen: now), at: 0)
-        }
-        return Array(out.prefix(limit))
-    }
 }

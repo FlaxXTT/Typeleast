@@ -1,9 +1,7 @@
 import Foundation
 
-// DictionaryController.swift - everything that adds words to the dictionary as one piece:
-// learning a word the user corrects after a paste (EditWatcher), suggestions from what the
-// cleanup model corrected (WordSuggestions), a word picked in History, and the "已加入词典 ·
-// 撤销" toast. The words themselves live in Settings and go with every dictation.
+// Legacy controller port. It now observes whole output revisions for confirmation only.
+// Vocabulary entry points return empty data and never persist model guesses.
 
 final class DictionaryController {
     private let settings: Settings
@@ -19,7 +17,7 @@ final class DictionaryController {
     }
 
     /// The entries sent with a dictation ("word" or "heard=word").
-    var serviceEntries: [String] { settings.words.filter { $0.localOnly != true && PreferenceExamples.shared.references($0) }.map(\.word) }
+    var serviceEntries: [String] { [] }
 
     /// Entries marked 「不发给模型」: the service only fixes their heard-as spellings locally.
     var localEntries: [String] { [] }
@@ -38,19 +36,11 @@ final class DictionaryController {
         if let watched = watcher.watchedBundleId, bundleId != watched { watcher.check() }
     }
 
-    /// The service has already filtered these pairs; learn them without a confirmation step.
+    /// Retired vocabulary callback; kept for response compatibility.
     func received(_ candidates: [SuggestionCandidate]) { /* Model guesses are never learned. */ }
 
     /// A word the user selected in History: added by hand. One already in the dictionary is
     /// left as it is, with what it is often heard as.
-    func addFromHistory(_ word: String) {
-        let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        if settings.words.contains(where: { $0.word.caseInsensitiveCompare(word) == .orderedSame }) {
-            setHint(L10n.text("「{0}」已在词典里", word))
-            return
-        }
-        if settings.addWord(word, source: .manual) { setHint(L10n.text("已把「") + word + L10n.text("」加入词典")) }
-        changed()
-    }
+    func addFromHistory(_ word: String) {}
 
 }

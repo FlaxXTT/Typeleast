@@ -1,24 +1,14 @@
 /**
- * Prompt construction for dictated-text polishing.
- *
- * Natural cleanup uses the general-purpose prompt (./prompts/cleanup.js):
- *   system  the prompt with its examples, then a delimited
- *           addendum carrying only what the prompt cannot know: the user's
- *           dictionary and the text already in the box being typed into
- *           (when there is any)
- *   user    the raw recognised text, nothing else
- *
- * Optional domain spellings and pronunciation hints come from enabled data plugins.
- *
- * @module typeleast-service/prompt
+ * General cleanup prompts with separate, optional current-utterance spelling,
+ * allowed cursor context, expression examples and style data. Persistent word
+ * lists and pronunciation aliases are ignored, including legacy callers.
  */
-
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
 import { CONCISE_PROMPT } from "./prompts/concise.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-27.1-cleanup+concise+beta+translate";
+export const PROMPT_VERSION = "2026-10-27.2-cleanup+concise+beta+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -46,31 +36,18 @@ const CONTEXT_PARTS = [
 /**
  * Context appended to a cleanup prompt only when it carries facts.
  *
- * The base prompt knows nothing about a personal dictionary or about the
- * text already in the box being typed into. Keep both separate from its rules.
+ * Keep current spellings and optional cursor context separate from core rules.
  *
- * @param {object} input - dictionary entries, pronunciation hints, spellings found in the
- *   utterance, and field context, if any.
+ * @param {object} input - current utterance spellings and optional field context.
  * @returns {string} the addendum, or an empty string when there is nothing to say.
  */
 export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }) {
-  const entries = Array.isArray(dictionary) ? dictionary.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
   const context = fieldContext !== null && typeof fieldContext === "object"
     ? CONTEXT_PARTS.filter(([key]) => typeof fieldContext[key] === "string" && fieldContext[key].trim().length > 0)
     : [];
   const spelled = Array.isArray(spellings) ? spellings.filter((item) => item?.spelled && item?.word) : [];
-  if (entries.length === 0 && context.length === 0 && spelled.length === 0 && (!Array.isArray(aliases) || aliases.length === 0)) return "";
+  if (context.length === 0 && spelled.length === 0) return "";
   const lines = [HARNESS_ADDENDUM_MARKER];
-  if (entries.length > 0) {
-    lines.push(
-      "Dictionary entries are spelling hints, not facts about this utterance. A=B is an explicit user mapping for that exact spelling, not permission to replace every similar sound or another valid name. Use an entry only when the current meaning supports it. Current explicit spelling and correction take priority. Never infer approval from a past output.",
-      "Entries: " + entries.join(" | "),
-    );
-  }
-  if (Array.isArray(aliases) && aliases.length > 0) {
-    lines.push("Optional pronunciation hints from an enabled terminology plugin. Treat each as a candidate only when the meaning of this utterance supports it. Do not replace an ordinary word just because it sounds similar:");
-    for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
-  }
   if (spelled.length > 0) {
     lines.push("Letter-by-letter spellings in this utterance. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it:");
     for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);
@@ -84,10 +61,9 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
 
 /**
  * The system prompt for one request: the cleanup prompt, or for the "concise"
- * strength (精简整理) the concise rewriter. Both get the same addendum
- * (dictionary and field context).
+ * strength (AI 整理) the concise rewriter. Both can use current spellings and cursor context.
  * @param {object} input - strength, the selected style plugin's instructions (if any), and
- *   the dictionary and field context the addendum needs.
+ *   the spellings and field context the addendum needs.
  * @returns {string} the system prompt.
  */
 export function systemPromptFor({ dictionary, aliases, fieldContext, spellings, strength, style } = {}) {

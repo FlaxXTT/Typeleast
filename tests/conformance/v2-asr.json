@@ -1,0 +1,275 @@
+{
+  "version": 2,
+  "cases": [
+    {
+      "id": "local-transcript-held-without-model",
+      "group": "dictation",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 4,
+          "headers": {
+            "x-voice-language": "zh",
+            "x-voice-strength": "prompt"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.raw": "请发送报告。",
+              "json.fallback": true,
+              "json.text": "",
+              "json.clarification.kind": "quality"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "language-is-per-request",
+      "group": "dictation",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 4,
+          "headers": {
+            "x-voice-language": "zh"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.raw": "请发送报告。"
+            },
+            "modelCalls": 0
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 4,
+          "headers": {
+            "x-voice-language": "en"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.raw": "Send the report."
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "unknown-language-is-client-error",
+      "group": "dictation",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 4,
+          "headers": {
+            "x-voice-language": "zz"
+          },
+          "expect": {
+            "fields": {
+              "status": 400,
+              "json.code": "invalid-language"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "beta-three-rounds-and-explicit-finish",
+      "group": "beta-flow",
+      "modelReplies": [
+        "{\"goal\":\"整理纪要\",\"confirmed\":[\"整理详细纪要，供团队阅读\"],\"questions\":[\"给谁看？\"]}",
+        "{\"goal\":\"整理纪要\",\"confirmed\":[\"整理详细纪要，供团队和客户阅读\"],\"questions\":[\"客户属于哪个群体？\"]}",
+        "{\"goal\":\"整理纪要\",\"confirmed\":[\"整理详细纪要，只供团队内部阅读\"],\"questions\":[]}",
+        "## 目标\n将会议记录整理成详细纪要，只供团队内部阅读。",
+        "{\"issues\":[]}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 1,
+          "headers": {
+            "x-voice-language": "zh",
+            "x-voice-strength": "promptbeta",
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "saveSession": true,
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "",
+              "json.beta.round": 1,
+              "json.beta.ready": false
+            },
+            "present": [
+              "json.beta.sessionId"
+            ],
+            "modelCalls": 1
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 2,
+          "headers": {
+            "x-voice-language": "zh",
+            "x-voice-strength": "promptbeta",
+            "x-voice-beta-session": "$LAST_SESSION",
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "",
+              "json.beta.round": 2
+            },
+            "modelCalls": 2,
+            "modelUsersContain": [
+              {
+                "index": 1,
+                "fragment": "还要发给客户看"
+              }
+            ]
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 3,
+          "headers": {
+            "x-voice-language": "zh",
+            "x-voice-strength": "promptbeta",
+            "x-voice-beta-session": "$LAST_SESSION",
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "",
+              "json.beta.round": 3,
+              "json.beta.ready": true
+            },
+            "modelCalls": 3,
+            "modelUsersContain": [
+              {
+                "index": 2,
+                "fragment": "还要发给客户看"
+              },
+              {
+                "index": 2,
+                "fragment": "不对，只给团队内部看"
+              }
+            ]
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/prompts/beta/finish",
+          "headers": {
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "body": {
+            "sessionId": "$LAST_SESSION"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "## 目标\n将会议记录整理成详细纪要，只供团队内部阅读。"
+            },
+            "modelCalls": 5,
+            "modelUsersContain": [
+              {
+                "index": 3,
+                "fragment": "不对，只给团队内部看"
+              }
+            ]
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/prompts/beta/finish",
+          "headers": {
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "body": {
+            "sessionId": "$LAST_SESSION"
+          },
+          "expect": {
+            "fields": {
+              "status": 410,
+              "json.code": "beta-expired"
+            },
+            "modelCalls": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "beta-cancel-forgets-session",
+      "group": "beta-flow",
+      "modelReplies": [
+        "{\"goal\":\"整理纪要\",\"confirmed\":[\"整理详细纪要\"],\"questions\":[\"给谁看？\"]}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 1,
+          "headers": {
+            "x-voice-strength": "promptbeta",
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "saveSession": true,
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": ""
+            },
+            "modelCalls": 1
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/prompts/beta/cancel",
+          "body": {
+            "sessionId": "$LAST_SESSION"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.cancelled": true
+            },
+            "modelCalls": 1
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "wavId": 2,
+          "headers": {
+            "x-voice-strength": "promptbeta",
+            "x-voice-beta-session": "$LAST_SESSION",
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "expect": {
+            "fields": {
+              "status": 410,
+              "json.code": "beta-expired"
+            },
+            "modelCalls": 1
+          }
+        }
+      ]
+    }
+  ]
+}

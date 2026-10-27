@@ -94,14 +94,15 @@ export function routeLabel(route) {
  * @throws {ModelCallError} with kind timeout, cancelled, max-tokens, tool-calls or error.
  */
 export async function completeOpenAI(options) {
-  const { route, system, user, maxTokens, temperature, timeoutMs, signal, fetchImpl = globalThis.fetch } = options;
+  const { route, system, user, maxTokens, temperature, timeoutMs, signal, retryBudget, fetchImpl = globalThis.fetch } = options;
   const started = Date.now();
   let lastError;
   let extra = thinkingSwitchRejected.has(route.host) ? {} : noThinkingFields(route.host);
   let budget = maxTokens;
   let widened = false;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const deadline = createDeadline(signal, timeoutMs);
+    retryBudget?.assertTime();
+    const deadline = createDeadline(signal, Math.min(timeoutMs, retryBudget?.remainingMs() ?? timeoutMs));
     try {
       const response = await fetchImpl(`${route.baseURL}/chat/completions`, {
         method: "POST",
@@ -129,6 +130,7 @@ export async function completeOpenAI(options) {
         // A provider that does not know the thinking switch may answer 400:
         // retry once without it, and do not send it to that host again.
         if (response.status === 400 && Object.keys(extra).length > 0) {
+          if (retryBudget && !retryBudget.retry()) throw new ModelCallError("error", "provider rejected parameters", {code:"HTTP_400"});
           thinkingSwitchRejected.add(route.host);
           extra = {};
           attempt -= 1;
@@ -146,6 +148,7 @@ export async function completeOpenAI(options) {
       // All of the budget went to thinking (the switch was ignored): one retry
       // with room to answer beats falling back to the raw transcript.
       if (choice?.finish_reason === "length" && text.trim() === "" && !widened && budget !== undefined) {
+        if (retryBudget && !retryBudget.retry()) throw new ModelCallError("max-tokens", "model output hit its token limit");
         widened = true;
         budget = Math.min(4096, budget * 4);
         attempt -= 1;
@@ -162,6 +165,7 @@ export async function completeOpenAI(options) {
       if (signal?.aborted) {
         throw new ModelCallError("cancelled", "caller cancelled", { attempts: attempt, elapsedMs: Date.now() - started, cause: error });
       }
+      if (deadline.timedOut() && retryBudget && attempt === 1 && retryBudget.retry()) continue;
       if (deadline.timedOut()) {
         throw new ModelCallError("timeout", `no answer from ${route.host} within ${timeoutMs} ms`, { attempts: attempt, elapsedMs: Date.now() - started });
       }
@@ -175,7 +179,7 @@ export async function completeOpenAI(options) {
       lastError = failure;
       const status = Number(String(failure.code ?? "").replace("HTTP_", ""));
       const retryable = failure.kind === "error" && (failure.code === "NETWORK" || status === 429 || status >= 500);
-      if (attempt === 1 && retryable) {
+      if (attempt === 1 && retryable && (!retryBudget || retryBudget.retry())) {
         await new Promise((resolve) => setTimeout(resolve, 400));
         continue;
       }

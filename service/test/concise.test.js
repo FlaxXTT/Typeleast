@@ -40,7 +40,7 @@ test("精简整理用自己的提示词，带上词典；标准整理不受影�
   assert.match(CONCISE_PROMPT, /数字、否定、例外/);
   assert.match(CONCISE_PROMPT, /不设角色、背景、任务/);
   assert.match(CONCISE_PROMPT, /保留用途、对象/);
-  assert.match(system, /HARNESS ADDENDUM[\s\S]*TypeLeast/);
+  assert.doesNotMatch(system, /Entries:|HARNESS ADDENDUM/);
   const standard = systemPromptFor({ strength: "prompt" });
   assert.doesNotMatch(standard, /# Examples|ROG|LG/, "individual cases belong in tests, not the generalized prompt");
   assert.doesNotMatch(system, /Subject Consolidation/);
@@ -60,7 +60,7 @@ test("精简整理给模型更多输出空间；旧的提示词档发来时也�
     assert.ok(call.messages[0].content.startsWith(CONCISE_PROMPT));
   }
   await svc.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
-  assert.equal(calls[3].max_tokens, 800, "标准整理不变");
+  assert.equal(calls[3].max_tokens, 1800, "标准整理不变");
 });
 
 test("精简整理的编号输出通过事实校验，编造的数字、时间、日期仍被拒绝", () => {

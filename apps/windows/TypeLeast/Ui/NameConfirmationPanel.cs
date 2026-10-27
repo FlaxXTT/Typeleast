@@ -18,7 +18,7 @@ internal static class NameConfirmationPanel
         var previous = Native.GetForegroundWindow();
         var editor = new TextBox { Text = raw, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 140, MaxLength = 32000, FontSize = 14 };
-        var window = new Window { Title = L10n.T(kind == "explanation" ? "检查解释触发词" : "确认本次名称"), Width = 580, Height = 390,
+        var window = new Window { Title = L10n.T(kind == "quality" ? "检查整理结果" : kind == "explanation" ? "检查解释触发词" : "确认本次名称"), Width = 580, Height = 390,
             MinWidth = 480, MinHeight = 320, Background = Theme.Background, ShowActivated = false,
             Topmost = true, WindowStartupLocation = WindowStartupLocation.CenterScreen };
         void Finish(string kind, string text = "")
@@ -35,7 +35,8 @@ internal static class NameConfirmationPanel
             Theme.Secondary(L10n.T("继续口述"), () => Finish("supplement")),
             Theme.Secondary(L10n.T("保留原文"), () => Finish("original")),
             Theme.Secondary(L10n.T("取消"), () => Finish("cancel")));
-        var content = Theme.Stack(12, Theme.Text(L10n.T(kind == "explanation" ? "开始词与结束词须成对出现。可继续口述补全，或编辑本次内容。" : "名称有歧义，请补充全称、用途或拼写。确认前不会粘贴。"), 14),
+        if(kind=="quality")row=Theme.Row(8,Theme.Primary(L10n.T("继续整理"),()=>Finish("retry")),Theme.Secondary(L10n.T("使用修改内容"),()=>Finish("edit",editor.Text.Trim())),Theme.Secondary(L10n.T("取消"),()=>Finish("cancel")));
+        var content = Theme.Stack(12, Theme.Text(L10n.T(kind == "quality" ? "本次整理尚未完成。可继续整理，或编辑后确认插入；不会自动插入原文。" : kind == "explanation" ? "开始词与结束词须成对出现。可继续口述补全，或编辑本次内容。" : "名称有歧义，请补充全称、用途或拼写。确认前不会粘贴。"), 14),
             Theme.Text(question, 13), editor, row);
         content.Margin = new Thickness(20);
         window.Content = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };

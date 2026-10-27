@@ -283,6 +283,8 @@ struct NameClarification: Codable, Equatable {
     var kind: String?
     var markerId: String?
     var personalizationDisabled: Bool?
+    var candidate: String?
+    var reason: String?
 }
 
 struct ExplanationReceipt: Codable, Equatable {

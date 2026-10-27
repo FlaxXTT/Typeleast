@@ -431,26 +431,7 @@ final class Settings {
     // MARK: dictionary
 
     private(set) var vocabularyProblem: String?
-    private var vocabulary: VocabularyArchive? {
-        if d.object(forKey: VocabularyStorage.key) != nil {
-            let archive = VocabularyStorage.read(d); vocabularyProblem = archive == nil ? "vocabulary-unavailable" : nil; return archive
-        }
-        let legacy = VocabularyArchive(words: d.data(forKey: "voice.words.v2").flatMap { try? JSONDecoder().decode([LocalWord].self, from: $0) } ?? migratedWords(),
-            suggestions: d.data(forKey: "voice.wordSuggestions").flatMap { try? JSONDecoder().decode([WordSuggestion].self, from: $0) } ?? [],
-            dismissed: d.stringArray(forKey: "voice.dismissedSuggestions") ?? [])
-        if ["voice.words.v2","voice.dictionary","voice.wordSuggestions","voice.dismissedSuggestions"].contains(where: { d.object(forKey: $0) != nil }) {
-            vocabularyProblem = VocabularyStorage.write(legacy, to: d) ? nil : "vocabulary-unavailable"
-        }
-        return legacy
-    }
-    private func saveVocabulary(_ archive: VocabularyArchive) {
-        vocabularyProblem = VocabularyStorage.write(archive, to: d) ? nil : "vocabulary-unavailable"
-        NotificationCenter.default.post(name: Settings.wordsDidChange, object: nil)
-    }
-    var words: [LocalWord] {
-        get { vocabulary?.words ?? [] }
-        set { guard var archive = vocabulary else { return }; archive.words = newValue; saveVocabulary(archive) }
-    }
+    var words: [LocalWord] { get { [] } set { } }
 
     /// Entries in the service's format ("word" or "heard=word"), sent with every dictation;
     /// the service passes on only those a dictation mentions.
@@ -460,55 +441,26 @@ final class Settings {
     var localDictionary: [String] { words.filter { $0.localOnly == true }.map(\.requestEntry) }
 
     @discardableResult
-    func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source, localOnly: Bool = false) -> Bool {
-        let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !w.isEmpty, w.count + (h?.count ?? 0) <= 119, !(w + (h ?? "")).contains("="), (w + (h ?? "")).rangeOfCharacter(from: .controlCharacters) == nil else { return false }
-        if source == .auto && dismissedSuggestions.contains(w.lowercased()) { return false }
-        var list = words
-        // Auto-learning never overrides what the user typed in by hand.
-        if source == .auto, list.contains(where: { $0.word.caseInsensitiveCompare(w) == .orderedSame }) { return false }
-        list.removeAll { $0.word.caseInsensitiveCompare(w) == .orderedSame && ($0.heardAs ?? "").caseInsensitiveCompare(h ?? "") == .orderedSame }
-        list.insert(LocalWord(id: UUID().uuidString, word: w, heardAs: (h?.isEmpty ?? true) ? nil : h,
-                              source: source, addedAt: Date(), localOnly: localOnly ? true : nil), at: 0)
-        words = list
-        return vocabularyProblem == nil
-    }
+    func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source, localOnly: Bool = false) -> Bool { return false }
 
-    func updateWord(id: String, word: String, heardAs: String?, localOnly: Bool? = nil) {
-        var list = words
-        guard let index = list.firstIndex(where: { $0.id == id }) else { return }
-        list[index].word = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
-        list[index].heardAs = (h?.isEmpty ?? true) ? nil : h
-        list[index].source = .manual
-        if let localOnly { list[index].localOnly = localOnly ? true : nil }
-        words = list
-    }
-
-    func removeWord(id: String) {
-        if let removed = words.first(where: { $0.id == id }) {
-            dismissedSuggestions = dismissedSuggestions.filter { $0 != removed.word.lowercased() } + [removed.word.lowercased()]
-            wordSuggestions = wordSuggestions.filter { $0.id != removed.word.lowercased() }
-        }
-        words = words.filter { $0.id != id }
-    }
+    func updateWord(id: String, word: String, heardAs: String?, localOnly: Bool? = nil) {}
+    func removeWord(id: String) {}
 
     /// Existing service-filtered candidates go straight into the dictionary. User deletions win.
     @discardableResult
     func learnSuggestions(_ candidates: [SuggestionCandidate] = []) -> Int {
-        return 0 // Retain old data; model guesses no longer mutate the dictionary.
+        return 0 // Legacy caller compatibility; vocabulary learning is retired.
     }
 
     // MARK: dictionary suggestions (from what the cleanup model corrected)
 
     var wordSuggestions: [WordSuggestion] {
-        get { vocabulary?.suggestions ?? [] }
-        set { guard var archive = vocabulary else { return }; archive.suggestions = newValue; saveVocabulary(archive) }
+        get { [] }
+        set { }
     }
     private var dismissedSuggestions: [String] {
-        get { vocabulary?.dismissed ?? [] }
-        set { guard var archive = vocabulary else { return }; archive.dismissed = Array(Set(newValue.map { $0.lowercased() })); saveVocabulary(archive) }
+        get { [] }
+        set { }
     }
 
     /// Import a CSV: one entry per line, "word" or "heard,word".

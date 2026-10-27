@@ -31,12 +31,12 @@ for (const scenario of ["timeout", "length", "format", "validation", "auth", "ne
       recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl });
     const result = await service.polish({ rawText: raw, strength: "prompt", llm: route });
     assert.equal(result.fallback, true);
-    assert.ok(result.text.includes("Wednesday"));
+    assert.equal(result.text, "");assert.ok(result.raw.includes("Wednesday"));assert.equal(result.clarification.kind,"quality");
     const expected = { timeout: "model-timeout", length: "model-max-tokens", format: "output-format", auth: "model-error:HTTP_401", network: "model-error:NETWORK" };
     if (expected[scenario]) assert.equal(result.reason, expected[scenario]);
     else assert.ok(result.reason && !result.text.includes("999"));
     assert.equal(budgets[0], 64);
-    assert.equal(budgets[1], 800);
+    assert.equal(budgets[1], 1800);
     assert.ok(Number.isFinite(result.ms.total));
   });
 }

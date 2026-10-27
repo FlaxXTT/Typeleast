@@ -133,7 +133,7 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
     s.Save(file, TestHistoryProtection.Shared);
     var back = LoadSettings(file);
     Eq("settings round-trip", back.Hotkey, DictationKey.F8);
-    Eq("old plain words become dictionary entries", back.DictionaryEntries.FirstOrDefault()?.Word, "TypeLeast");
+    Eq("old plain words become dictionary entries", back.DictionaryEntries.FirstOrDefault()?.Word, null);
     Eq("…and are not written back", back.Words.Count, 0);
     Check("the key is never written to the settings file", !File.ReadAllText(file).Contains("sk-test"));
     File.WriteAllText(file, "{ broken");
@@ -625,16 +625,12 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         var settingsPath = Path.Combine(dir, "settings.json");
         File.WriteAllText(settingsPath, "{\"words\":[\"heard=TypeLeast\",\"SenseVoice\"]}");
         var settings = LoadSettings(settingsPath);
-        Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 2);
-        Eq("legacy heardAs preserved", settings.DictionaryEntries[0].HeardAs, "heard");
-        Eq("legacy source is manual", settings.DictionaryEntries[0].Source, "manual");
+        Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 0);
+        Check("legacy vocabulary no longer restores mappings", settings.DictionaryEntries.Count==0);
+
         Check("entries saved before 「不发给模型」 existed are sent as before", settings.DictionaryEntries.All(e => !e.LocalOnly));
         var kept = JsonSerializer.Deserialize<WordEntry>("{\"Word\":\"章伟\",\"HeardAs\":\"张为\",\"LocalOnly\":true}", Json.Options)!;
         Check("the mark survives saving", kept.LocalOnly && JsonSerializer.Deserialize<WordEntry>(JsonSerializer.Serialize(kept, Json.Options), Json.Options)!.LocalOnly);
-        var preview = WordImport.Preview("word,heardAs\nTypeLeast,heard\n\"Product, Name\",wrong\nnew,old\n\"unterminated", settings.DictionaryEntries);
-        Eq("CSV duplicates reported", preview.Duplicates, 1); Eq("CSV valid preview", preview.Valid.Count, 2);
-        Eq("CSV invalid line reported", preview.InvalidLines.Single(), 5);
-        Eq("CSV quoted commas preserved", preview.Valid[0].Word, "Product, Name");
         Check("dictionary rejects controls", WordEntry.Parse("bad\nword") is null);
         Check("dictionary enforces service limit", WordEntry.Parse(new string('a', 121)) is null);
         File.WriteAllText(settingsPath, "{broken"); var broken = LoadSettings(settingsPath);
@@ -833,7 +829,7 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
 }
 
 {
-    // Which word an edit teaches is decided by the service (service/test/edit-correction.test.js);
+    // Whole-output revisions can be offered for confirmation; vocabulary learning is retired.
     // the client test below checks the request.
     var t0 = new DateTime(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
     var poll = new EditPoll(t0, v => v != "hello deepseak");
@@ -880,15 +876,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
             Eq("shared translation result: " + id, response.Translated, translation.ValueKind == JsonValueKind.Null ? null : translation.GetString());
         }
     }
-    var seenAt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Utc);
-    var none = new HashSet<string>();
-    var merged = WordSuggestions.Merge([], "DeepSeek", "德普西克", seenAt, none, none);
-    var originalSuggestion = merged[0];
-    merged = WordSuggestions.Merge(merged, "deepseek", "deep seek", seenAt, none, none);
-    Eq("merging a repeat does not mutate stored settings before saving", originalSuggestion.Count, 1);
-    Eq("a repeated suggestion is counted once", string.Join(",", merged.Select(m => m.Count)), "2");
-    Eq("a word already in the dictionary is not suggested", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, new HashSet<string> { "github" }, none).Count, 0);
-    Eq("an ignored word is not suggested again", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, none, new HashSet<string> { "github" }).Count, 0);
     Eq("download progress is a fraction", UpdateProgressText.Fraction(UpdateStage.Downloading, 25 << 20, 50 << 20), 0.5);
     Eq("an unknown size shows a moving bar", UpdateProgressText.Fraction(UpdateStage.Downloading, 1, null), null);
     string WriteTemp(string json) { var f = Path.Combine(Path.GetTempPath(), "tl-src-" + Guid.NewGuid().ToString("N") + ".json"); File.WriteAllText(f, json); return f; }
@@ -975,38 +962,6 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     Check("a load failure is not", !ModelMirror.NetworkFailure(Speech("""{"phase":"error","error":"model load failed"}""")));
     Check("no status is not", !ModelMirror.NetworkFailure(null));
     Eq("the suggested mirror", ModelMirror.Suggested, "https://hf-mirror.com");
-}
-
-using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "personalization-v1.json"))))
-{
-    foreach (var item in contract.RootElement.GetProperty("cases").EnumerateArray())
-    {
-        var id = item.GetProperty("id").GetString()!;
-        var settings = new AppSettings { LearnCorrections = item.GetProperty("enabled").GetBoolean() };
-        if (item.TryGetProperty("initial", out var initial))
-            settings.DictionaryEntries = initial.EnumerateArray().Select(v => WordEntry.Parse(v.GetString()!)!).ToList();
-        if (item.TryGetProperty("ignored", out var ignored)) settings.DismissedSuggestions = ignored.EnumerateArray().Select(v => v.GetString()!).ToList();
-        settings.WordSuggestions = item.GetProperty("pending").EnumerateArray().Select(v => new WordSuggestion { Word = v.GetProperty("word").GetString()!, HeardAs = v.GetProperty("heardAs").GetString()! }).ToList();
-        var incoming = item.GetProperty("incoming").EnumerateArray().Select(v => new SuggestionCandidate(v.GetProperty("word").GetString()!, v.GetProperty("heardAs").GetString()!)).ToArray();
-        WordSuggestions.ApplyAutomatic(settings, incoming);
-        Eq("automatic dictionary: " + id, string.Join(",", settings.DictionaryEntries.Select(e => e.Word).Order()), string.Join(",", item.GetProperty("expected").EnumerateArray().Select(e => e.GetString()!).Order()));
-        Eq("pending dictionary: " + id, settings.WordSuggestions.Count, item.GetProperty("pendingCount").GetInt32());
-        if (settings.DictionaryEntries.FirstOrDefault(e => e.Source == "auto") is { } entry)
-        {
-            WordSuggestions.RememberDeletion(settings, [entry]);
-            settings.DictionaryEntries.Remove(entry);
-            var path = Path.Combine(Path.GetTempPath(), "typeleast-auto-dictionary-" + Guid.NewGuid().ToString("N") + ".json");
-            try
-            {
-                settings.LearningDefaults = 1;
-                settings.Save(path, TestHistoryProtection.Shared);
-                settings = LoadSettings(path);
-            }
-            finally { File.Delete(path); }
-            WordSuggestions.ApplyAutomatic(settings, [new(entry.Word, entry.HeardAs)]);
-            Check("deleted dictionary term stays removed: " + id, !settings.DictionaryEntries.Any(e => e.Word == entry.Word));
-        }
-    }
 }
 
 ContextPreferencesTests.Run(Check);
@@ -1115,7 +1070,7 @@ sealed class TestHistoryProtection : IHistoryProtection
         return result;
     }
     public byte[] Unprotect(byte[] data) {
-        if (Fail) throw new System.Security.Cryptography.CryptographicException();
+        if (Fail || data.Length<28) throw new System.Security.Cryptography.CryptographicException();
         var result = new byte[data.Length-28];
         using var aes = new System.Security.Cryptography.AesGcm(key,16);
         aes.Decrypt(data.AsSpan(0,12),data.AsSpan(28),data.AsSpan(12,16),result);

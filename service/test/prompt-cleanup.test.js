@@ -31,7 +31,7 @@ test("dictionary and field context ride in a delimited addendum", () => {
   });
   const [base, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
   assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd(), "the base prompt and separate rules remain intact");
-  assert.match(addendum, /第四批=TypeLeast/);
+  assert.doesNotMatch(addendum, /第四批=TypeLeast/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);
 });
 

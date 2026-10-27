@@ -15,7 +15,7 @@ const target = separator < 0 ? [] : args.slice(separator + 1);
 const groupAt = options.indexOf('--group');
 const group = groupAt < 0 ? null : options[groupAt + 1];
 const fixtureAt = options.indexOf('--fixture');
-const fixturePath = fixtureAt < 0 ? join(here, 'v1.json') : options[fixtureAt + 1];
+const fixturePath = fixtureAt < 0 ? join(here, 'v2.json') : options[fixtureAt + 1];
 const jsonOutput = options.includes('--json');
 if (options.some((item, index) => item !== '--json' && item !== '--group' && item !== '--fixture' && (index === 0 || !['--group', '--fixture'].includes(options[index - 1]))) || groupAt >= 0 && !group || fixtureAt >= 0 && !fixturePath || !target.length) {
   process.stderr.write('Usage: node tests/conformance/run.mjs [--group NAME] [--fixture FILE] [--json] -- PROGRAM [ARG ...]\n');
@@ -23,7 +23,7 @@ if (options.some((item, index) => item !== '--json' && item !== '--group' && ite
 }
 
 const fixture = JSON.parse(await readFile(fixturePath, 'utf8'));
-if (fixture.version !== 1 || !Array.isArray(fixture.cases)) throw new Error('Unsupported contract fixture');
+if (![1,2].includes(fixture.version) || !Array.isArray(fixture.cases)) throw new Error('Unsupported contract fixture');
 const selected = fixture.cases.filter(item => !group || item.group === group);
 if (group && !selected.length) throw new Error(`Unknown or empty group: ${group}`);
 

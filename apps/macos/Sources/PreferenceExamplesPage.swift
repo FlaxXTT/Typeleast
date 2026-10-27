@@ -8,12 +8,6 @@ struct DictionaryPage: View {
     init(initialTab: Int = 0) { _selected = State(initialValue: initialTab) }
     var body: some View {
         VStack(spacing: 0) {
-            ChipPicker(options: [(0, L10n.text("表达示例（{0}）", examples.pending.count)), (1, L10n.text("个人词汇")), (2, L10n.text("排除与高级规则"))], selection: $selected)
-                .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 14)
-            if selected == 1 { PersonalVocabularyPage() }
-            else if selected == 2 { PersonalizationRulesPage() }
-            else {
-                PageHeader(title: L10n.text("偏好示例"), subtitle: L10n.text("保存真实识别与用户确认的修改，不自动训练模型。")) {}
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Card { ExplanationMarkerPicker() }
@@ -29,7 +23,7 @@ struct DictionaryPage: View {
                             ForEach(examples.pending) { item in PreferenceReviewCard(item: item) }
                         }
                         if examples.entries.isEmpty && examples.pending.isEmpty {
-                            Text(L10n.text("在历史中选择一条 AI 整理记录，点击「记录偏好」，再填写最终修改。旧词典仍保留在手工词典中。"))
+                            Text(L10n.text("在历史中选择一条整理记录，点击「记录偏好」，再填写最终修改。"))
                                 .foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                         }
                         ForEach(examples.entries) { item in
@@ -46,7 +40,6 @@ struct DictionaryPage: View {
                         }
                     }.padding(.horizontal, 36).padding(.bottom, 24)
                 }
-            }
         }
     }
 }

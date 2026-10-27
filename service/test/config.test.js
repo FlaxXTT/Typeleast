@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configJsonSchema, loadConfig, validateConfig } from "../lib/config.js";
@@ -9,7 +9,7 @@ test("an empty configuration is valid and returns the documented key set", () =>
   const result = validateConfig({});
   assert.deepEqual(result.issues, []);
   assert.deepEqual(Object.keys(result.value).sort(), [
-    "dictionary", "language", "maxAudioBytes", "maxDurationSeconds",
+    "language", "maxAudioBytes", "maxDurationSeconds",
     "maxOutputTokens", "numThreads", "redactSecrets", "strength", "temperature", "timeoutMs",
   ]);
   assert.equal(result.value.temperature, 0.8, "keeps the existing sampling temperature default");
@@ -26,17 +26,16 @@ test("no model, provider or key is configured in the service", () => {
 });
 
 test("an explicit value wins over the default", () => {
-  const result = validateConfig({ strength: "conservative", timeoutMs: 8000, dictionary: ["TypeLeast", "SenseVoice"] });
+  const result = validateConfig({ strength: "conservative", timeoutMs: 8000 });
   assert.equal(result.value.strength, "conservative");
   assert.equal(result.value.timeoutMs, 8000);
-  assert.deepEqual(result.value.dictionary, ["TypeLeast", "SenseVoice"]);
   assert.deepEqual(result.issues, []);
 });
 
 test("defaults are copied, not shared between calls", () => {
   const first = validateConfig({});
-  first.value.dictionary.push("mutated");
-  assert.deepEqual(validateConfig({}).value.dictionary, []);
+  first.value.language = "zh";
+  assert.equal(validateConfig({}).value.language, "auto");
 });
 
 test("bad values are reported and keep their defaults, never fatal", () => {
@@ -44,9 +43,9 @@ test("bad values are reported and keep their defaults, never fatal", () => {
     [{ nope: 1 }, /unknown configuration key/, null],
     [{ strength: "aggressive" }, /must be one of conservative, prompt/, ["strength", "prompt"]],
     [{ redactSecrets: "yes" }, /must be a boolean/, ["redactSecrets", true]],
-    [{ dictionary: [1, 2] }, /array of strings/, ["dictionary", []]],
-    [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 12000]],
-    [{ timeoutMs: 100 }, /at least 1000/, ["timeoutMs", 12000]],
+    [{ dictionary: [1, 2] }, /unknown configuration key/, null],
+    [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 18000]],
+    [{ timeoutMs: 100 }, /at least 1000/, ["timeoutMs", 18000]],
     [{ maxAudioBytes: 10 }, /WAV header size/, ["maxAudioBytes", 4194304]],
     [{ maxOutputTokens: 0 }, /at least 1/, ["maxOutputTokens", 800]],
     [{ numThreads: 64 }, /between 1 and 16/, ["numThreads", 2]],
@@ -67,7 +66,7 @@ test("the JSON Schema view is derived from the same declarations", () => {
   assert.equal(schema.properties.timeoutMs.type, "integer");
   // Measured: real dictations take 4-6s, so a 6s budget cut them off and fell
   // back to the raw transcript. The default must leave headroom.
-  assert.equal(schema.properties.timeoutMs.default, 12000);
+  assert.equal(schema.properties.timeoutMs.default, 18000);
 });
 
 test("config.json is read from the state directory; missing or malformed means defaults", async () => {
@@ -77,10 +76,11 @@ test("config.json is read from the state directory; missing or malformed means d
     await writeFile(join(dir, "config.json"), JSON.stringify({ timeoutMs: 15000, dictionary: ["TypeLeast"] }));
     const loaded = await loadConfig(dir);
     assert.equal(loaded.value.timeoutMs, 15000);
-    assert.deepEqual(loaded.value.dictionary, ["TypeLeast"]);
+    assert.equal(loaded.value.dictionary, undefined);
+    assert.deepEqual(JSON.parse(await readFile(join(dir, "config.json"), "utf8")), {timeoutMs:15000});
     await writeFile(join(dir, "config.json"), "{ not json");
     const broken = await loadConfig(dir);
-    assert.equal(broken.value.timeoutMs, 12000);
+    assert.equal(broken.value.timeoutMs, 18000);
     assert.match(broken.issues[0].message, /could not be read/);
   } finally {
     await rm(dir, { recursive: true, force: true });

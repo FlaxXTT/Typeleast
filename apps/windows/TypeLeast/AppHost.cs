@@ -78,8 +78,8 @@ internal sealed class AppHost : IDictationHost
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
         Preferences = new PreferenceExamples(System.IO.Path.Combine(AppPaths.StateDirectory(), "app-preferences.sealed"));
-        Dictionary = new DictionaryController(Settings, Preferences, SaveSettings, SetHint,
-            (inserted, edited) => Client.LearnedWordAsync(inserted, edited));
+        if(Preferences.VocabularyRemovalComplete&&!Settings.PersistenceBlocked) { try {Settings.Save(settingsPath);}catch { } }
+        Dictionary = new DictionaryController(Settings);
         Plugins = new PluginController(Client, () => Settings.UpdateSource);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);

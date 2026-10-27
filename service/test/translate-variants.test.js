@@ -37,7 +37,7 @@ test("翻译：先验证原语言整理稿，再把它交给第二次调用译�
   const service = makeService(fetchImpl);
   const result = await service.polish({ rawText: SPOKEN, strength: "prompt", llm: ROUTE, translateTo: "en" });
   assert.equal(result.fallback, false);
-  assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+  assert.equal((result.clarification?.candidate ?? result.text), "The meeting is on Thursday at 3 pm. Please bring your laptops.");
   assert.equal(result.translated, "en");
   assert.equal(calls.length, 2);
   assert.equal(calls[0].user, SPOKEN);
@@ -56,7 +56,7 @@ test("翻译不受整理档位影响：旧的 off 值也先整理再翻译", asy
     ? JSON.stringify({ status: "ok", text: cleaned, reason: "改口" })
     : "会議は木曜日の午後3時です。皆さん、パソコンを持参してください。");
   const result = await makeService(fetchImpl).polish({ rawText: SPOKEN, strength: "off", llm: ROUTE, translateTo: "ja" });
-  assert.equal(result.text, "会議は木曜日の午後3時です。皆さん、パソコンを持参してください。");
+  assert.equal((result.clarification?.candidate ?? result.text), "会議は木曜日の午後3時です。皆さん、パソコンを持参してください。");
   assert.equal(calls.length, 2);
 });
 
@@ -82,7 +82,7 @@ test("原语言整理没通过校验：改用一次调用直接翻译原话，�
   const service = makeService(fetchImpl);
   const result = await service.polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
   assert.equal(result.fallback, false);
-  assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+  assert.equal((result.clarification?.candidate ?? result.text), "The meeting is on Thursday at 3 pm. Please bring your laptops.");
   assert.equal(result.translated, "en");
   assert.equal(result.detail, "direct-after:invented-fact");
   assert.equal(calls.length, 2);
@@ -100,7 +100,7 @@ test("原语言整理的回复无法解析：同样改用直接翻译", async ()
   const service = makeService(fetchImpl);
   const result = await service.polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
   assert.equal(result.fallback, false);
-  assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+  assert.equal((result.clarification?.candidate ?? result.text), "The meeting is on Thursday at 3 pm. Please bring your laptops.");
   assert.match(result.detail, /^direct-after:source-output-format:/);
   assert.equal(calls.length, 2);
   assert.equal(service.stats.jsonFallback, 1);
@@ -116,8 +116,8 @@ test("直接翻译也编造数字时，退回去掉口头禅的原话", async ()
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
   assert.match(result.detail, /^invented-fact; direct /);
-  assert.doesNotMatch(result.text, /512/);
-  assert.match(result.text, /周四/);
+  assert.doesNotMatch((result.clarification?.candidate ?? result.text), /512/);
+  assert.match((result.clarification?.candidate ?? result.text), /周四/);
   assert.equal(service.stats.modelFallbacks, 1);
 });
 
@@ -132,7 +132,7 @@ test("translation request fails: the validated source remains insertable", async
   const result = await makeService(fetchImpl).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
   assert.equal(calls, 2);
   assert.equal(result.fallback, true);
-  assert.equal(result.text, normalizeNumbers(cleaned));
+  assert.equal((result.clarification?.candidate ?? result.text), normalizeNumbers(cleaned));
   assert.equal(result.reason, "model-error:HTTP_401");
 });
 
@@ -180,7 +180,7 @@ test("繁体只用于中文：日文汉字和译成其他语言的结果不转�
   assert.equal(chinese.text, "這個軟體週四更新。");
   // Recognised as Japanese: no kana does not make it Chinese (企画書 must not become 企畫書).
   const kanjiOnly = await makeService(provider('{"status":"ok","text":"企画書。"}').fetchImpl).polish({ rawText: "企画書", language: "ja", variants: "zh=tw" });
-  assert.match(kanjiOnly.text, /^企画書/);
+  assert.match(kanjiOnly.clarification?.candidate ?? kanjiOnly.text, /^企画書/);
 });
 
 test("变体对整理结果和无模型回退都生效；英式拼写写进系统提示词", async () => {
@@ -190,7 +190,7 @@ test("变体对整理结果和无模型回退都生效；英式拼写写进系�
   assert.equal(polished.text, "週四下午3點開會，大家記得帶電腦。");
   assert.match(calls[0].system, /British spelling/);
   const withoutRoute = await service.polish({ rawText: "下午三点开会", strength: "prompt", variants: "zh=hk" });
-  assert.equal(withoutRoute.text, "下午三點開會");
+  assert.equal(withoutRoute.clarification?.candidate ?? withoutRoute.text, "下午三點開會");
 });
 
 test("繁体按语言启用：中文和粤语启用，其他及未知语言关闭", async () => {
@@ -199,7 +199,7 @@ test("繁体按语言启用：中文和粤语启用，其他及未知语言关�
       assert.equal(await applyVariants(text, { zh: "tw" }, language), text, `${language}: ${text}`);
     }
     const result = await makeService().polish({ rawText: "企画書", language: language ?? "auto", variants: "zh=tw" });
-    assert.equal(result.text, "企画書");
+    assert.equal((result.clarification?.candidate ?? result.text), "企画書");
   }
   for (const language of ["zh", "yue"]) {
     assert.equal(await applyVariants("软件开发", { zh: "tw" }, language), "軟體開發");
@@ -215,7 +215,7 @@ test("recognizer metadata reaches the output-language gate without another model
     service.recognizer.transcribe = async () => ({ text, language: "auto", detectedLanguage });
     const spoken = await service.transcribe(Buffer.alloc(0), "auto");
     const result = await service.polish({ rawText: spoken.text, language: spoken.language, variants: "zh=tw" });
-    assert.equal(result.text, expected);
+    assert.equal((result.clarification?.candidate ?? result.text), expected);
   }
 });
 

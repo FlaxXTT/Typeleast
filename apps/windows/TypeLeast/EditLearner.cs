@@ -14,7 +14,6 @@ namespace TypeLeast;
 /// </summary>
 internal sealed class EditLearner
 {
-    private readonly Func<string, string, Task<string?>> learnedWord;
     /// <summary>The paste may land a moment after the insertion is reported.</summary>
     private static readonly TimeSpan BaselineWait = TimeSpan.FromSeconds(5);
 
@@ -30,7 +29,7 @@ internal sealed class EditLearner
 
     public EditLearner(Func<string, string, Task<string?>> learnedWord)
     {
-        this.learnedWord = learnedWord;
+
         timer.Tick += (_, _) => Tick();
     }
 
@@ -80,16 +79,7 @@ internal sealed class EditLearner
         var review = revision;
         Stop();
         if (review is not null) { review(value); return; }
-        _ = Ask(text, value, callback);
+
     }
 
-    /// <summary>The local service decides which word the edit teaches (the same rule as on macOS);
-    /// no answer means none. Resumes on the UI thread.</summary>
-    private async Task Ask(string text, string value, Action<string>? callback)
-    {
-        string? word;
-        try { word = await learnedWord(text, value); }
-        catch (ServiceException) { word = null; }
-        if (word is not null) callback?.Invoke(word);
-    }
 }

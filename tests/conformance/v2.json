@@ -1,0 +1,1205 @@
+{
+  "version": 2,
+  "cases": [
+    {
+      "id": "ready-and-health-shape",
+      "group": "startup",
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.service": "typeleast"
+            },
+            "present": [
+              "json.version",
+              "json.speech.phase",
+              "json.strength",
+              "json.stats",
+              "json.pid"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime-file-and-restart",
+      "group": "startup",
+      "steps": [
+        {
+          "file": "runtime.json",
+          "expect": {
+            "contains": [
+              "\"port\"",
+              "\"pid\""
+            ]
+          }
+        },
+        {
+          "restart": true
+        },
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.service": "typeleast"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "legacy-off-becomes-natural",
+      "group": "startup",
+      "preloadFiles": {
+        "config.json": {
+          "strength": "off"
+        }
+      },
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.strength": "prompt"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "bad-config-keeps-service-available",
+      "group": "startup",
+      "preloadFiles": {
+        "config.json": "{bad"
+      },
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.service": "typeleast"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "missing-token",
+      "group": "security",
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "auth": "missing",
+          "expect": {
+            "fields": {
+              "status": 401,
+              "json.code": "unauthorized"
+            },
+            "excludes": [
+              "api-token",
+              "sk-test"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "wrong-token",
+      "group": "security",
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "auth": "wrong",
+          "expect": {
+            "fields": {
+              "status": 401,
+              "json.code": "unauthorized"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "foreign-host",
+      "group": "security",
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "headers": {
+            "Host": "example.invalid"
+          },
+          "expect": {
+            "fields": {
+              "status": 403,
+              "json.code": "forbidden-host"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lookalike-host",
+      "group": "security",
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "headers": {
+            "Host": "127.0.0.1.example.invalid"
+          },
+          "expect": {
+            "fields": {
+              "status": 403,
+              "json.code": "forbidden-host"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "unknown-path",
+      "group": "security",
+      "steps": [
+        {
+          "path": "/api/voice-polish-unsafe/health",
+          "expect": {
+            "fields": {
+              "status": 404,
+              "json.code": "not-found"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "malformed-json-does-not-echo-key",
+      "group": "security",
+      "expectLogExcludes": [
+        "sk-test-conformance-only"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "rawBody": "{\"text\":\"fake-private-text\",\"apiKey\":\"sk-test-conformance-only\"",
+          "expect": {
+            "fields": {
+              "status": 400,
+              "json.code": "invalid-json"
+            },
+            "excludes": [
+              "fake-private-text",
+              "sk-test-conformance-only"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "oversized-json-is-rejected",
+      "group": "security",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "repeatBody": {
+            "char": "x",
+            "count": 262145
+          },
+          "expect": {
+            "fields": {
+              "status": 413,
+              "json.code": "payload-too-large"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "route-does-not-send-key-to-remote-http",
+      "group": "security",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "llm": {
+              "baseURL": "http://model.example.invalid/v1",
+              "model": "m",
+              "apiKey": "sk-test-conformance-only"
+            }
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true,
+              "json.fallbackReason": "no-api-key"
+            },
+            "excludes": [
+              "sk-test-conformance-only"
+            ],
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "empty-wav-rejected",
+      "group": "audio",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "rawBody": "",
+          "expect": {
+            "fields": {
+              "status": 400
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "bad-dictionary-length",
+      "group": "audio",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "headers": {
+            "x-voice-dictionary-bytes": "-1"
+          },
+          "rawBody": "data",
+          "expect": {
+            "fields": {
+              "status": 400
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "bad-dictionary-json",
+      "group": "audio",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/dictate",
+          "headers": {
+            "x-voice-dictionary-bytes": "3"
+          },
+          "rawBody": "bad",
+          "expect": {
+            "fields": {
+              "status": 400
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "natural-cleanup",
+      "group": "cleanup",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"Send the report on Monday.\",\"reason\":\"Removed an echo.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report on Monday.",
+            "strength": "prompt",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "Send the report on Monday.",
+              "json.fallback": false
+            },
+            "modelCalls": 1,
+            "modelUsers": [
+              "$REQUEST_BODY_TEXT"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "concise-cleanup",
+      "group": "cleanup",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"Send the report Monday.\",\"reason\":\"Shortened.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Please send the report on Monday.",
+            "strength": "concise",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": false
+            },
+            "contains": [
+              "report",
+              "Monday"
+            ],
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "old-off-does-not-skip-model",
+      "group": "cleanup",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"Send the report.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "strength": "off",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "no-model-preserves-usable-text",
+      "group": "cleanup",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report."
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true,
+              "json.fallbackReason": "no-api-key"
+            },
+            "contains": [
+              "Send the report"
+            ],
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "invented-fact-rejected",
+      "group": "cleanup",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"Send the report to room 512.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true,
+              "json.fallbackReason": "invented-fact"
+            },
+            "excludes": [
+              "\"text\":\"Send the report to room 512.\""
+            ],
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "uncertain-still-returns-best-guess",
+      "group": "cleanup",
+      "modelReplies": [
+        "{\"status\":\"uncertain\",\"text\":\"Send the report.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "Send the report.",
+              "json.fallback": false
+            },
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "two-stage-translation",
+      "group": "translation",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"周四开会。\"}",
+        "Meet on Thursday."
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "周四开会。",
+            "translateTo": "en",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "Meet on Thursday.",
+              "json.translated": "en",
+              "json.fallback": false
+            },
+            "modelCalls": 2,
+            "modelUsers": [
+              "周四开会。",
+              "周四开会。"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "translation-second-step-fails-safely",
+      "group": "translation",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"周四开会。\"}",
+        {
+          "status": 401
+        }
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "周四开会。",
+            "translateTo": "en",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "周四开会。",
+              "json.fallback": true
+            },
+            "modelCalls": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "translation-rejects-invented-number",
+      "group": "translation",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"周四下午三点开会，大家记得带电脑。\"}",
+        "The meeting is on Thursday at 3 pm in room 512. Please bring your laptops."
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "周四下午三点开会，大家记得带电脑。",
+            "translateTo": "en",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.text": "周四下午3点开会，大家记得带电脑。",
+              "json.fallback": true
+            },
+            "modelCalls": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "unknown-target-uses-ordinary-cleanup",
+      "group": "translation",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"Send the report.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "translateTo": "xx",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "beta-expired-session",
+      "group": "beta",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/prompts/beta/finish",
+          "headers": {
+            "x-voice-llm": "$FAKE_LLM_HEADER"
+          },
+          "body": {
+            "sessionId": "missing"
+          },
+          "expect": {
+            "fields": {
+              "status": 410,
+              "json.code": "beta-expired"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "beta-cancel-missing-session",
+      "group": "beta",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/prompts/beta/cancel",
+          "body": {
+            "sessionId": "missing"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.cancelled": false
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "edit-learning-no-change",
+      "group": "dictionary",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/learned-word",
+          "body": {
+            "inserted": "请发送报告。",
+            "edited": "请发送报告。"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.word": null
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "edit-learning-rejects-long-change",
+      "group": "dictionary",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/learned-word",
+          "body": {
+            "inserted": "请发送报告。",
+            "edited": "请发送报告并安排一场会议。"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.word": null
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "model-list-without-download",
+      "group": "models",
+      "steps": [
+        {
+          "path": "/api/voice-polish/models",
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "present": [
+              "json.activeModelId",
+              "json.models"
+            ],
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "invalid-model-id",
+      "group": "models",
+      "steps": [
+        {
+          "method": "PUT",
+          "path": "/api/voice-polish/models/active",
+          "body": {
+            "modelId": "../../secret"
+          },
+          "expect": {
+            "fields": {
+              "status": 400,
+              "json.code": "invalid-model"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "malformed-model-request",
+      "group": "models",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/models/download",
+          "body": [],
+          "expect": {
+            "fields": {
+              "status": 400,
+              "json.code": "invalid-model"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugin-list",
+      "group": "plugins",
+      "steps": [
+        {
+          "path": "/api/voice-polish/plugins",
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "present": [
+              "json.plugins"
+            ],
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugin-rejects-code",
+      "group": "plugins",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/plugins/inspect",
+          "body": {
+            "format": "typeleast-plugin",
+            "formatVersion": 1,
+            "id": "example.script",
+            "version": "1.0.0",
+            "type": "script",
+            "script": "print('no')"
+          },
+          "expect": {
+            "fields": {
+              "status": 400,
+              "json.code": "plugin-invalid"
+            },
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugin-inspect-install-restart-remove",
+      "group": "plugins",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/plugins/inspect",
+          "body": {
+            "format": "typeleast-plugin",
+            "formatVersion": 1,
+            "id": "example.words",
+            "version": "1.0.0",
+            "type": "style",
+            "name": {
+              "zh-Hans": "示例风格",
+              "en": "Example style"
+            },
+            "description": {
+              "zh-Hans": "测试用。",
+              "en": "For tests."
+            },
+            "author": "Example",
+            "license": "CC0-1.0",
+            "instructions": "Use clear paragraphs."
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.plugin.id": "example.words"
+            },
+            "present": [
+              "json.plugin.digest"
+            ]
+          },
+          "saveDigest": true
+        },
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/plugins?enable=1&digest=$LAST_DIGEST",
+          "body": {
+            "format": "typeleast-plugin",
+            "formatVersion": 1,
+            "id": "example.words",
+            "version": "1.0.0",
+            "type": "style",
+            "name": {
+              "zh-Hans": "示例风格",
+              "en": "Example style"
+            },
+            "description": {
+              "zh-Hans": "测试用。",
+              "en": "For tests."
+            },
+            "author": "Example",
+            "license": "CC0-1.0",
+            "instructions": "Use clear paragraphs."
+          },
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "contains": [
+              "example.words"
+            ]
+          }
+        },
+        {
+          "restart": true
+        },
+        {
+          "path": "/api/voice-polish/plugins",
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "contains": [
+              "example.words"
+            ]
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/voice-polish/plugins/example.words",
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "excludes": [
+              "example.words"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugin-changed-after-inspect",
+      "group": "plugins",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/plugins?enable=1&digest=wrong",
+          "body": {
+            "format": "typeleast-plugin",
+            "formatVersion": 1,
+            "id": "example.words",
+            "version": "1.0.0",
+            "type": "style",
+            "name": {
+              "zh-Hans": "示例风格",
+              "en": "Example style"
+            },
+            "description": {
+              "zh-Hans": "测试用。",
+              "en": "For tests."
+            },
+            "author": "Example",
+            "license": "CC0-1.0",
+            "instructions": "Use clear paragraphs."
+          },
+          "expect": {
+            "fields": {
+              "status": 409,
+              "json.code": "plugin-changed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugin-api-requires-token",
+      "group": "plugins",
+      "steps": [
+        {
+          "path": "/api/voice-polish/plugins",
+          "auth": "wrong",
+          "expect": {
+            "fields": {
+              "status": 401,
+              "json.code": "unauthorized"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "taiwan-writing-without-model",
+      "group": "variants",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "这个软件很好用。",
+            "language": "zh",
+            "variants": {
+              "zh": "tw"
+            }
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true
+            },
+            "contains": [
+              "軟體"
+            ],
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "invalid-variant-does-not-break-text",
+      "group": "variants",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "这个软件很好用。",
+            "variants": {
+              "zh": "not-a-variant"
+            }
+          },
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "contains": [
+              "软件"
+            ],
+            "modelCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-variant-is-model-instruction",
+      "group": "variants",
+      "modelReplies": [
+        "{\"status\":\"ok\",\"text\":\"The colour is blue.\"}"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "The color is blue.",
+            "variants": {
+              "en": "gb"
+            },
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "modelCalls": 1,
+            "modelSystemsContain": [
+              "British spelling"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "model-http-error-keeps-dictation",
+      "group": "recovery",
+      "modelReplies": [
+        {
+          "status": 401
+        }
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true,
+              "json.text": "",
+              "json.clarification.kind": "quality"
+            },
+            "excludes": [
+              "sk-test-conformance-only"
+            ],
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "model-malformed-output-keeps-text",
+      "group": "recovery",
+      "modelReplies": [
+        "{\"text\": }"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true,
+              "json.text": "",
+              "json.clarification.kind": "quality"
+            },
+            "modelCalls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "service-still-answers-after-failed-model",
+      "group": "recovery",
+      "modelReplies": [
+        {
+          "status": 401
+        }
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/polish",
+          "body": {
+            "text": "Send the report.",
+            "llm": "$FAKE_LLM"
+          },
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.fallback": true
+            },
+            "modelCalls": 1
+          }
+        },
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.service": "typeleast"
+            },
+            "excludes": [
+              "sk-test-conformance-only",
+              "Send the report"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "bad-plugin-does-not-stop-service",
+      "group": "recovery",
+      "preloadFiles": {
+        "plugins/example.bad.typeleast-plugin": "{bad"
+      },
+      "steps": [
+        {
+          "path": "/api/voice-polish/plugins",
+          "expect": {
+            "fields": {
+              "status": 200
+            },
+            "contains": [
+              "example.bad"
+            ]
+          }
+        },
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.service": "typeleast"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "settings-survive-restart",
+      "group": "migration",
+      "preloadFiles": {
+        "config.json": {
+          "strength": "concise",
+          "redactSecrets": true
+        }
+      },
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.strength": "concise"
+            }
+          }
+        },
+        {
+          "restart": true
+        },
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.strength": "concise"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "invalid-settings-use-safe-default",
+      "group": "migration",
+      "preloadFiles": {
+        "config.json": {
+          "strength": "nonexistent-mode"
+        }
+      },
+      "steps": [
+        {
+          "path": "/api/voice-polish/health",
+          "expect": {
+            "fields": {
+              "status": 200,
+              "json.strength": "prompt"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retired-vocabulary-cannot-be-imported",
+      "group": "plugins",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/voice-polish/plugins/inspect",
+          "body": {
+            "format": "typeleast-plugin",
+            "formatVersion": 1,
+            "id": "example.words",
+            "version": "1.0.0",
+            "type": "dictionary",
+            "name": {
+              "zh-Hans": "示例词库",
+              "en": "Example words"
+            },
+            "description": {
+              "zh-Hans": "测试用。",
+              "en": "For tests."
+            },
+            "author": "Example",
+            "license": "CC0-1.0",
+            "terms": [
+              "TypeLeast",
+              "GitHub"
+            ]
+          },
+          "expect": {
+            "fields": {
+              "status": 400
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

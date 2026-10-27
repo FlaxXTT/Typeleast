@@ -77,14 +77,6 @@ test("line breaks between list items survive sentence de-duplication", () => {
   assert.equal(collapseRepeats("我想把会议挪到周四。\n我想把会议挪到周四。"), "我想把会议挪到周四。\n", "a repeated line still collapses");
 });
 
-test("only enabled pack terms get exact-token capitalisation", async () => {
-  const { normalizeTermCase } = await import("../lib/tidy.js");
-  assert.equal(normalizeTermCase("我在iphone上用github，这个api的ppt"), "我在iphone上用github，这个api的ppt");
-  assert.equal(normalizeTermCase("我在iphone上用github", ["iPhone", "GitHub"]), "我在iPhone上用GitHub");
-  assert.equal(normalizeTermCase("调用 json.loads 和 my_api 还有 /api/users", ["JSON", "API"]), "调用 json.loads 和 my_api 还有 /api/users");
-  assert.equal(normalizeTermCase("users react to the notion", ["GitHub"]), "users react to the notion");
-  assert.equal(normalizeTermCase("rapid prototyping", ["API"]), "rapid prototyping");
-});
 
 test("generic raw cleanup does not add brand spelling", () => {
   assert.equal(tidy("嗯，我在iphone上用github").text, "我在iphone上用github");

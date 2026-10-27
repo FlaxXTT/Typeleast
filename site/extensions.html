@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TypeLeast 扩展 · 词库和风格</title>
-<meta name="description" content="TypeLeast 插件市场：词库和风格，制作与提交说明。">
+<title>TypeLeast 扩展 · 表达风格</title>
+<meta name="description" content="TypeLeast 插件市场：表达风格与制作提交说明。">
 <meta name="theme-color" content="#ffffff">
 <meta name="color-scheme" content="light">
 <link rel="icon" type="image/x-icon" sizes="32x32 48x48 96x96" href="/favicon.ico">
@@ -83,7 +83,6 @@ nav a.link:hover, nav a.link[aria-current] { color: var(--ink); text-decoration:
 .plugin { border-radius: 20px; padding: 24px 24px 20px; box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .plugin .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .badge { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; background: var(--tile-2); color: var(--ink-2); }
-.badge.dictionary { background: #e8f1fd; color: #0058b0; }
 .badge.style { background: #f3ebfa; color: var(--violet); }
 .plugin h3 { font-size: 21px; }
 .plugin .desc { color: var(--ink-2); font-size: 15px; }
@@ -181,19 +180,13 @@ footer a { color: var(--ink-2); }
 <section class="hero">
   <div class="wrap">
     <p class="eyebrow" data-i18n="hero.eyebrow">扩展</p>
-    <h1 data-i18n="hero.title"><span class="sheen">词库和风格</span></h1>
-    <p class="lead" data-i18n="hero.lead">术语写对，格式由你定。</p>
+    <h1 data-i18n="hero.title"><span class="sheen">表达风格</span></h1>
+    <p class="lead" data-i18n="hero.lead">表达方式，由你来定。</p>
     <div class="actions">
       <a class="btn" href="#market" data-i18n="hero.browse">浏览插件</a>
       <a class="more" href="#make" data-i18n="hero.make">制作插件</a>
     </div>
     <div class="kinds">
-      <div class="kind">
-        <div class="k" data-i18n="kind.dk">词库</div>
-        <h3 data-i18n="kind.dh">术语写对</h3>
-        <p data-i18n="kind.dp">只发相关词</p>
-        <div class="eg"><span>Kubernetes</span><span>TypeScript</span><span>GitHub</span><span>Node.js</span></div>
-      </div>
       <div class="kind">
         <div class="k" data-i18n="kind.sk">风格</div>
         <h3 data-i18n="kind.sh">固定格式</h3>
@@ -212,7 +205,6 @@ footer a { color: var(--ink-2); }
     <div class="bar">
       <div class="tabs" role="tablist" aria-label="插件类型" data-i18n-aria="market.tabs">
         <button role="tab" aria-selected="true" data-filter="all" data-i18n="market.all">全部</button>
-        <button role="tab" aria-selected="false" data-filter="dictionary" data-i18n="market.dict">词库</button>
         <button role="tab" aria-selected="false" data-filter="style" data-i18n="market.style">风格</button>
       </div>
       <span class="source" id="source"></span>
@@ -246,9 +238,9 @@ footer a { color: var(--ink-2); }
       <div>
         <h3 data-i18n="make.stepsH">步骤</h3>
         <ol>
-          <li data-i18n="make.s1">选择类型：词库或风格。</li>
+          <li data-i18n="make.s1">插件类型为风格。</li>
           <li data-i18n="make.s2">复制模板，填写信息。</li>
-          <li data-i18n="make.s3">填写词条或风格说明。</li>
+          <li data-i18n="make.s3">填写写法和格式说明。</li>
           <li data-i18n="make.s4">存为 <code>&lt;id&gt;.typeleast-plugin</code>。</li>
           <li data-i18n="make.s5">在 App 里导入测试。</li>
         </ol>
@@ -257,10 +249,8 @@ footer a { color: var(--ink-2); }
       <div>
         <h3 data-i18n="make.tplH">模板</h3>
         <div class="two">
-          <div class="code"><div class="name" data-i18n="make.tplDict">词库</div><button class="copy" type="button" data-copy="dict" data-i18n="make.copy">复制</button><pre><code id="tpl-dict"></code></pre></div>
           <div class="code"><div class="name" data-i18n="make.tplStyle">风格</div><button class="copy" type="button" data-copy="style" data-i18n="make.copy">复制</button><pre><code id="tpl-style"></code></pre></div>
         </div>
-        <p class="fine" style="margin-top:10px" data-i18n="make.tplNote">不要读音提示：删除 <code>aliases</code>，版本写 <code>1</code>。</p>
       </div>
 
       <div>
@@ -272,8 +262,6 @@ footer a { color: var(--ink-2); }
             <tr><td><code>version</code></td><td data-i18n="tbl.version">例如 1.0.0，每次更新调大。</td></tr>
             <tr><td><code>name</code> / <code>description</code></td><td data-i18n="tbl.name">中英文都要写</td></tr>
             <tr><td><code>license</code></td><td data-i18n="tbl.license">例如 CC0-1.0、MIT</td></tr>
-            <tr><td><code>terms</code></td><td data-i18n="tbl.terms">最多 2000 个词</td></tr>
-            <tr><td><code>aliases</code></td><td data-i18n="tbl.aliases">可选，读音提示</td></tr>
             <tr><td><code>instructions</code></td><td data-i18n="tbl.instructions">风格说明，最多 8 KiB</td></tr>
           </tbody>
         </table></div>
@@ -281,14 +269,6 @@ footer a { color: var(--ink-2); }
       </div>
 
       <div class="two">
-        <div>
-          <h3 data-i18n="make.dictTipsH">词库要点</h3>
-          <ul>
-            <li data-i18n="make.dt1">只收易错的专有名词。</li>
-            <li data-i18n="make.dt2">大小写按官方写法。</li>
-            <li data-i18n="make.dt3">每条读音提示配语境词。</li>
-          </ul>
-        </div>
         <div>
           <h3 data-i18n="make.styleTipsH">风格要点</h3>
           <ul>
@@ -304,7 +284,6 @@ footer a { color: var(--ink-2); }
         <div class="table"><table>
           <thead><tr><th data-i18n="data.kind">类型</th><th data-i18n="data.sent">发送内容</th><th data-i18n="data.cost">额外费用</th></tr></thead>
           <tbody>
-            <tr><td data-i18n="data.dict">词库</td><td data-i18n="data.dictSent">只发相关词条</td><td data-i18n="data.dictCost">不额外调用</td></tr>
             <tr><td data-i18n="data.style">风格</td><td data-i18n="data.styleSent">每次整理都发</td><td data-i18n="data.styleCost">略增 token</td></tr>
           </tbody>
         </table></div>
@@ -389,22 +368,20 @@ const SITE = {
 // Plugin file templates; each passes the apps' check.
 const TEMPLATES = {
   "zh": {
-    "dict": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 2,\n  \"id\": \"yourname.web-terms\",\n  \"version\": \"1.0.0\",\n  \"type\": \"dictionary\",\n  \"name\": { \"zh-Hans\": \"前端常用术语\", \"en\": \"Web terms\" },\n  \"description\": { \"zh-Hans\": \"前端开发里常被听错的英文名词。\", \"en\": \"English names from web development that are often misheard.\" },\n  \"author\": \"你的名字\",\n  \"license\": \"CC0-1.0\",\n  \"homepage\": \"https://example.com\",\n  \"terms\": [\"JSON\", \"GraphQL\", \"Kubernetes\", \"Tailwind CSS\"],\n  \"aliases\": [\n    { \"heard\": \"杰森\", \"term\": \"JSON\", \"cues\": [\"格式\", \"解析\", \"字段\"] },\n    { \"heard\": \"库伯内蒂斯\", \"term\": \"Kubernetes\", \"cues\": [\"集群\", \"部署\"] }\n  ]\n}",
     "style": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 1,\n  \"id\": \"yourname.work-email\",\n  \"version\": \"1.0.0\",\n  \"type\": \"style\",\n  \"name\": { \"zh-Hans\": \"工作邮件\", \"en\": \"Work email\" },\n  \"description\": { \"zh-Hans\": \"整理成礼貌、简洁的工作邮件语气。\", \"en\": \"A polite, concise work-email tone.\" },\n  \"author\": \"你的名字\",\n  \"license\": \"CC0-1.0\",\n  \"instructions\": \"用礼貌、简洁的书面语。每段只讲一件事；有两个以上事项时用编号列表。保留说话人提到的称呼，不另加问候语和署名。\"\n}"
   },
   "en": {
-    "dict": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 2,\n  \"id\": \"yourname.web-terms\",\n  \"version\": \"1.0.0\",\n  \"type\": \"dictionary\",\n  \"name\": { \"zh-Hans\": \"前端常用术语\", \"en\": \"Web terms\" },\n  \"description\": { \"zh-Hans\": \"前端开发里常被听错的英文名词。\", \"en\": \"English names from web development that are often misheard.\" },\n  \"author\": \"Your Name\",\n  \"license\": \"CC0-1.0\",\n  \"homepage\": \"https://example.com\",\n  \"terms\": [\"JSON\", \"GraphQL\", \"Kubernetes\", \"Tailwind CSS\"],\n  \"aliases\": [\n    { \"heard\": \"杰森\", \"term\": \"JSON\", \"cues\": [\"格式\", \"解析\", \"字段\"] },\n    { \"heard\": \"库伯内蒂斯\", \"term\": \"Kubernetes\", \"cues\": [\"集群\", \"部署\"] }\n  ]\n}",
     "style": "{\n  \"format\": \"typeleast-plugin\",\n  \"formatVersion\": 1,\n  \"id\": \"yourname.work-email\",\n  \"version\": \"1.0.0\",\n  \"type\": \"style\",\n  \"name\": { \"zh-Hans\": \"工作邮件\", \"en\": \"Work email\" },\n  \"description\": { \"zh-Hans\": \"整理成礼貌、简洁的工作邮件语气。\", \"en\": \"A polite, concise work-email tone.\" },\n  \"author\": \"Your Name\",\n  \"license\": \"CC0-1.0\",\n  \"instructions\": \"Use polite, concise written language. One topic per paragraph; use a numbered list for two or more items. Keep any greeting the speaker used, and add no greeting or signature of your own.\"\n}"
   }
 };
 
 const EN = {
-  title: "TypeLeast Extensions · Dictionary packs and styles",
-  description: "The TypeLeast plugin market. Dictionary packs and styles. How to make and submit a plugin.",
+  title: "TypeLeast Extensions · Writing styles",
+  description: "The TypeLeast plugin market. Writing styles, authoring and submission.",
   "nav.features": "Features", "nav.ext": "Extensions", "nav.make": "Make", "nav.submit": "Submit", "nav.download": "Download",
   "hero.eyebrow": "Extensions",
-  "hero.title": "<span class=\"sheen\">Dictionary packs and styles</span>",
-  "hero.lead": "Correct terms. Your format.",
+  "hero.title": "<span class=\"sheen\">Writing styles</span>",
+  "hero.lead": "Your wording. Your format.",
   "hero.browse": "Browse plugins", "hero.make": "Make a plugin",
   "kind.dk": "Dictionary pack", "kind.dh": "Correct terms",
   "kind.dp": "Sends only related terms",
@@ -426,13 +403,12 @@ const EN = {
   "make.eyebrow": "Make an extension", "make.title": "One JSON file",
   "make.lead": "No code.",
   "make.stepsH": "Steps",
-  "make.s1": "Select a type: dictionary pack or style.",
+  "make.s1": "Use the style plugin type.",
   "make.s2": "Copy a template. Fill it in.",
-  "make.s3": "Add terms or style text.",
+  "make.s3": "Add wording and formatting instructions.",
   "make.s4": "Save as <code>&lt;id&gt;.typeleast-plugin</code>.",
   "make.s5": "Import it in the app. Test it.",
   "make.tplH": "Templates", "make.tplDict": "Dictionary pack", "make.tplStyle": "Style", "make.copy": "Copy",
-  "make.tplNote": "No hints: remove <code>aliases</code>, set version <code>1</code>.",
   "make.fieldsH": "Main fields", "make.fieldsFine": "All rules: <a data-link=\"spec\" href=\"#\">plugin specification</a>.",
   "tbl.field": "Field", "tbl.rule": "Rule",
   "tbl.id": "publisher.name, lowercase",
@@ -508,7 +484,6 @@ function applyLang(next) {
   const button = document.getElementById("lang");
   button.textContent = lang === "en" ? "中文" : "EN";
   button.setAttribute("aria-label", lang === "en" ? "切换到中文" : "Switch to English");
-  document.getElementById("tpl-dict").textContent = TEMPLATES[lang].dict;
   document.getElementById("tpl-style").textContent = TEMPLATES[lang].style;
   fillLinks();
   renderMarket();
@@ -547,35 +522,18 @@ const local = (text) => (text && (lang === "en" ? text.en : text["zh-Hans"])) ||
 function pluginCard(p) {
   const card = el("article", "plugin");
   const top = el("div", "top");
-  top.append(el("span", "badge " + p.type, p.type === "style" ? t("风格", "Style") : t("词库", "Dictionary pack")));
+  top.append(el("span", "badge " + p.type, t("风格", "Style")));
   top.append(el("span", "fine", "v" + p.version));
   card.append(top, el("h3", null, local(p.name)), el("p", "desc", local(p.description)));
 
   const meta = el("div", "meta");
   meta.append(el("span", null, t("作者 ", "By ") + p.author), el("span", null, t("许可 ", "License ") + p.license));
-  if (p.type === "dictionary") {
-    meta.append(el("span", null, t(`${p.terms.length} 个词`, `${p.terms.length} terms`)));
-    if (Array.isArray(p.aliases) && p.aliases.length) meta.append(el("span", null, t(`${p.aliases.length} 条读音提示`, `${p.aliases.length} pronunciation hints`)));
-  }
   card.append(meta);
 
   const details = el("details");
-  details.append(el("summary", null, p.type === "style" ? t("看说明", "Instructions") : t("看词条", "Terms")));
+  details.append(el("summary", null, t("看说明", "Instructions")));
   const content = el("div", "content");
-  if (p.type === "style") content.textContent = p.instructions;
-  else {
-    const chips = el("div", "chips");
-    for (const term of p.terms) chips.append(el("span", null, term));
-    content.append(chips);
-    if (Array.isArray(p.aliases) && p.aliases.length) {
-      const hints = el("p", null);
-      hints.style.marginTop = "10px";
-      hints.textContent = t("读音提示：", "Hints: ")
-        + p.aliases.slice(0, 12).map((a) => `${a.heard} → ${a.term}`).join(t("；", "; "))
-        + (p.aliases.length > 12 ? t(" 等", " …") : "");
-      content.append(hints);
-    }
-  }
+  content.textContent = p.instructions;
   details.append(content);
   card.append(details);
 
@@ -621,7 +579,7 @@ async function loadCatalog() {
     if (!response.ok) throw new Error("HTTP " + response.status);
     const value = await response.json();
     if (value?.format !== "typeleast-catalog" || !Array.isArray(value.plugins)) throw new Error("not a catalog");
-    catalog = { plugins: value.plugins.filter((p) => p && typeof p.id === "string" && (p.type === "dictionary" || p.type === "style")) };
+    catalog = { plugins: value.plugins.filter((p) => p && typeof p.id === "string" && (p.type === "style")) };
   } catch {
     failed = true;
   }

@@ -78,13 +78,13 @@ test("the service listens on loopback, publishes its port, and serves the contra
       assert.equal(dictated.status, 200);
       assert.equal(dictated.json.fallback, true);
       assert.equal(dictated.json.fallbackReason, "no-api-key");
-      assert.equal(dictated.json.text, "我们周三把报告发出去。");
+      assert.equal(dictated.json.text, "");
       // The app's dictionary rides ahead of the audio.
       const dictionary = Buffer.from(JSON.stringify(["TypeLeast"]));
       const withDictionary = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
         headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": String(dictionary.length) }, body: Buffer.concat([dictionary, wav(0.5)]) });
       assert.equal(withDictionary.status, 200);
-      assert.equal(withDictionary.json.text, "我们周三把报告发出去。");
+      assert.equal(withDictionary.json.text, "");
       const badLength = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
         headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": "-1" }, body: wav(0.5) });
       assert.equal(badLength.status, 400);
@@ -105,12 +105,12 @@ test('an existing state gets bundled terminology once without a market request',
     const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
     try {
       const pack = handle.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms');
-      assert.equal(pack?.enabled, true);
-      assert.equal(pack?.source, 'bundled');
-      await handle.service.extension.store.setEnabled(pack.id, false);
+      assert.equal(pack, undefined);
+      assert.equal(handle.service.extension.store.state.vocabularyRemoved,true);
+
     } finally { await handle.close(); }
     const again = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
-    try { assert.equal(again.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms')?.enabled, false); }
+    try { assert.equal(again.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms'), undefined); }
     finally { await again.close(); }
   });
 });
@@ -127,7 +127,7 @@ test('core dictation starts and answers with the extension module disabled', asy
       assert.deepEqual([plugins.status, plugins.json.code], [503, 'plugins-unavailable']);
       const dictated = await raw(handle.port, { method: 'POST', path: '/api/voice-polish/dictate',
         headers: { ...headers, 'content-type': 'audio/wav' }, body: wav(0.5) });
-      assert.deepEqual([dictated.status, dictated.json.text], [200, '我们周三把报告发出去。']);
+      assert.deepEqual([dictated.status, dictated.json.text], [200, '']);
     } finally { await handle.close(); }
   });
 });

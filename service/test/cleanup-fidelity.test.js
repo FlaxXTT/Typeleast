@@ -27,7 +27,9 @@ for (const [rawText, output] of [
   const result = await service.polish({ rawText, strength: 'prompt', llm: route });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, 'entity-changed');
-  assert.equal(result.text, rawText);
+  assert.equal(result.text, "");
+  assert.equal(result.raw, rawText);
+  assert.equal(result.clarification.kind,"quality");
   assert.deepEqual(result.suggestions, []);
   assert.equal(calls.length, 1);
 });

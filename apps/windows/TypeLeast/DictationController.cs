@@ -362,7 +362,7 @@ internal sealed class DictationController
         while (result.Clarification is { } clarification) {
             options = options with {WithoutPersonalization=clarification.PersonalizationDisabled??options.WithoutPersonalization};
             bar.Hide();
-            var choice = await NameConfirmationPanel.Show(L10n.T("需要确认：{0}", clarification.Evidence), result.Raw, operation.Token, clarification.Kind);
+            var choice = await NameConfirmationPanel.Show(clarification.Kind=="quality"?CleanupIssue.Message(clarification.Reason):L10n.T("需要确认：{0}", clarification.Evidence), clarification.Kind=="quality"?(clarification.Candidate??result.Raw):result.Raw, operation.Token, clarification.Kind);
             if (!operations.IsCurrent(operation)) return null;
             if (choice.Kind == "cancel") { bar.ShowResult(L10n.T("已取消"), false); return null; }
             if (choice.Kind == "supplement") {
@@ -373,7 +373,8 @@ internal sealed class DictationController
             if (choice.Kind == "original") {
                 result.Text = result.Raw; result.Clarification = null; result.Suggestions.Clear(); break;
             }
-            result = await Client.PolishAsync(choice.Text, options.Language, options.Strength, options.Route,
+            if(clarification.Kind=="quality"&&choice.Kind=="edit") {result.Text=choice.Text;result.Clarification=null;result.Fallback=false;result.FallbackReason=null;break;}
+            result = await Client.PolishAsync(choice.Kind=="retry"?result.Raw:choice.Text, options.Language, options.Strength, options.Route,
                 clarification.Target, options.Variants, Dictionary.ServiceEntries, Dictionary.LocalEntries, operation.Token, fieldContext: recordingContext, explanationMarkers: clarification.MarkerId ?? options.ExplanationMarkers, preferenceExamples: Preferences.WireExamples, personalization: Preferences.WirePolicy(Settings.DictionaryEntries, options.WithoutPersonalization));
             if (!operations.IsCurrent(operation)) return null;
         }

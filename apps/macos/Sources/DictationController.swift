@@ -324,7 +324,7 @@ final class DictationController {
                 recordingBar.hide()
                 clarificationSource = resp.raw
                 clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.markerId ?? markers, clarification.personalizationDisabled ?? false)
-                namePanel.show(question: L10n.text("需要确认：{0}", clarification.evidence), raw: resp.raw, kind: clarification.kind) { [weak self] choice in
+                namePanel.show(question: clarification.kind == "quality" ? CleanupIssue.message(clarification.reason) : L10n.text("需要确认：{0}", clarification.evidence), raw: clarification.kind == "quality" ? (clarification.candidate ?? resp.raw) : resp.raw, kind: clarification.kind) { [weak self] choice in
                     guard let self else { return }
                     self.clarificationSource = nil
                     self.clarificationDestination = nil
@@ -341,7 +341,15 @@ final class DictationController {
                         confirmed.suggestions = []
                         self.finishRequest(.success(confirmed), appBundleId: appBundleId, language: language, strength: strength,
                                            audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants, markers: markers)
-                    case .edit(let text):
+                    case .edit(let text) where clarification.kind == "quality":
+                        var confirmed = resp
+                        confirmed.clarification = nil; confirmed.fallback = false; confirmed.fallbackReason = nil
+                        confirmed.text = text; confirmed.suggestions = []
+                        self.finishRequest(.success(confirmed), appBundleId: appBundleId, language: language, strength: strength,
+                                           audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants, markers: markers)
+                    case .retry, .edit:
+                        let text: String
+                        if case .edit(let edited) = choice { text = edited } else { text = resp.raw }
                         self.phase = .thinking
                         self.applyState()
                         let entries = self.dictionary.serviceEntries

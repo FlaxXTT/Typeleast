@@ -1,3 +1,4 @@
+import {normalizePunctuation,protectLiterals} from './punctuation.js';
 /**
  * Deterministic cleanup applied after the model, for the things a model
  * reliably under-does on Chinese dictation: filler particles survive
@@ -188,30 +189,13 @@ export function collapseRepeats(text) {
  */
 export function tidy(text) {
   const applied = [];
-  let out = String(text ?? "");
-  const collapsed = collapseRepeats(out);
+  let out = normalizePunctuation(text);
+  if (out !== String(text ?? "")) applied.push("normalize-punctuation");
+  const collapsed = protectLiterals(out,collapseRepeats);
   if (collapsed !== out) applied.push("collapse-repeats");
   out = collapsed;
-  const stripped = stripParticles(out);
+  const stripped = protectLiterals(out,stripParticles);
   if (stripped !== out) applied.push("strip-particles");
   out = stripped;
   return { text: out, applied };
-}
-
-/**
- * Exact-token case correction from an enabled version-2 dictionary pack.
- * The caller must exclude names that are also ordinary English words.
- */
-export function normalizeTermCase(text, terms = []) {
-  let out = String(text ?? "");
-  const sourceLower = out.toLowerCase();
-  for (const term of terms) {
-    if (typeof term !== "string" || !term || !/[a-z]/iu.test(term)) continue;
-    if (!sourceLower.includes(term.toLowerCase())) continue;
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-    // Do not alter code paths, identifiers or a token inside another word.
-    const pattern = new RegExp(`(?<![A-Za-z0-9_./-])${escaped}(?![A-Za-z0-9_./(-])`, "gi");
-    out = out.replace(pattern, term);
-  }
-  return out;
 }

@@ -141,6 +141,8 @@ public sealed class SuggestionListConverter : JsonConverter<List<SuggestionCandi
 
 public sealed class NameClarification
 {
+    [JsonPropertyName("candidate")] public string? Candidate {get;set;}
+    [JsonPropertyName("reason")] public string? Reason {get;set;}
     [JsonPropertyName("question")] public string Question { get; set; } = "";
     [JsonPropertyName("evidence")] public string Evidence { get; set; } = "";
     [JsonPropertyName("target")] public string? Target { get; set; }

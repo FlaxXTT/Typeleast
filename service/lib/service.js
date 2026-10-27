@@ -1,3 +1,6 @@
+import {betaSetupQuestions} from './prompts/prompt-beta.js';
+import {CleanupTask, cleanupParameters, needsCleanupReview} from './cleanup-task.js';
+import {CLEANUP_REVIEW_PROMPT, parseCleanupReview} from './prompts/cleanup-review.js';
 import { personalizationContext, applyExplicitRules, requestPolicy, readPolicy } from "./personalization-policy.js";
 import { splitExplanation, explanationNameRule, explanationInstruction } from "./explanation-context.js";
 import { requestPreferences, preferenceHints, preferenceInstruction } from "./preference-hints.js";
@@ -22,8 +25,6 @@ import { nameClarification, clarificationSource, clarificationRule } from "./nam
  *
  * @module typeleast-service/service
  */
-import { wordSuggestions } from "./word-suggestions.js";
-import { relevantEntries } from "./dictionary-relevance.js";
 import { spelledWords } from "./spelling.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -34,7 +35,7 @@ import { parsePolishOutput } from "./parse-output.js";
 import { failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
 import { normalizeNumbers } from './number-format.js';
-import { normalizeTermCase, tidy } from "./tidy.js";
+import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
@@ -68,7 +69,6 @@ export class VoicePolishService {
     this.config = options.config;
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
-    this.suggestionEngine = options.suggestionEngine ?? wordSuggestions;
     /** Optional extension port. Core dictation works when it is absent. */
     this.extension = options.extension ?? null;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
@@ -78,8 +78,8 @@ export class VoicePolishService {
     /** The route of the most recent cleanup, for /health: "custom:<host>" and model id. */
     this.lastRoute = { provider: null, model: null };
     this.startedAt = Date.now();
-    /** Entries from config.json; each request adds the app's own dictionary (dictionaryFrom). */
-    this.dictionary = [...(this.config.dictionary ?? [])];
+    /** Legacy wire field remains empty; persistent vocabulary is retired. */
+    this.dictionary = [];
     // dictations/polished/fallback/lastMs count /dictate; modelCalls and
     // modelFallbacks count every polish() that reached the model, /polish included.
     this.stats = { dictations: 0, polished: 0, fallback: 0, lastError: null, lastMs: null, modelCalls: 0, modelFallbacks: 0, jsonFallback: 0, jsonRecovered: 0 };
@@ -173,8 +173,7 @@ export class VoicePolishService {
       return await this.polishTranslate({ request, base, route, started, rawText, target: translateTo });
     }
     // The model and the user's own API key come with the request. Without a
-    // usable route there is nothing to call: the tidied transcript is inserted
-    // and the app tells the user to add a key.
+    // usable route there is nothing to call: hold the transcript for explicit user review.
     const custom = request.llm ? normalizeRoute(request.llm) : null;
     if (!custom) {
       const tidyOnly = tidy(rawText);
@@ -186,6 +185,9 @@ export class VoicePolishService {
 
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
+    const task = new CleanupTask(request.signal);
+    let candidate = null;
+    try {
     const context = await this.buildContext(request, rawText);
     const safeNotes = explanation.notes.map(s => redactSecrets(s));
     const nameRules = explanationNameRule(rawText, safeNotes);
@@ -196,7 +198,7 @@ export class VoicePolishService {
     request._personalization.trace.references.push(...examples.map(x=>({kind:"example",source:"personal",sourceId:filteredExamples.find(y=>y.raw===x.raw&&y.correctedText===x.correctedText)?.id??"example"})));
     const style = context.style?.instructions ?? null;
     if(style) request._personalization.trace.references.push({kind:'style',source:'extension',sourceId:context.style.sourceId,label:context.style.label});
-    // Generic cleanup rules, plus relevant dictionary and optional pronunciation hints.
+    // Generic cleanup rules with the current utterance, optional style and cursor context.
     const system = systemPromptFor({
       dictionary: context.dictionary,
       aliases: context.aliases,
@@ -215,16 +217,14 @@ export class VoicePolishService {
     const user = buildUserMessage({ rawText: outboundText });
 
     this.stats.modelCalls += 1;
-    try {
       const result = await completeOpenAI({
         route: custom,
         system,
         user,
         // 精简整理 may restructure a long dictation: more room and more time.
-        maxTokens: strength === "concise" ? Math.max(this.config.maxOutputTokens, 1600) : this.config.maxOutputTokens,
-        temperature: this.config.temperature ?? 0.8,
-        timeoutMs: strength === "concise" ? Math.max(this.config.timeoutMs, 25000) : this.config.timeoutMs,
-        signal: request.signal,
+        ...cleanupParameters(rawText,strength,this.config),
+        signal: task.signal,
+        retryBudget: task,
         ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
       });
       // The prompt asks for {status,text,reason}; a model may answer
@@ -237,7 +237,7 @@ export class VoicePolishService {
         const tidyOnly = tidy(rawText);
         const detail = `output-format:${parsed.failure ?? "unknown"}`;
         this.stats.lastError = detail;
-        this.logger.warn?.("typeleast: unusable model reply (%s); using the raw transcript", detail);
+        this.logger.warn?.("typeleast: unusable model reply (%s); holding delivery", detail);
         return await this.recordFallback(request, {
           ...base,
           text: tidyOnly.text,
@@ -264,18 +264,18 @@ export class VoicePolishService {
       // Deterministic cleanup runs BEFORE validation so the safety checks judge
       // exactly the text that would be inserted.
       const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text)));
-      const verdict = validateOutput({ rawText, output: tidied.text, strength, termEvidence: context.dictionary });
+      candidate = tidied.text;
+      const verdict = validateOutput({ rawText, output: candidate, strength, termEvidence: context.dictionary });
       if (!verdict.ok && verdict.reason === "entity-changed") {
         const evidence = verdict.metrics.missingNames?.[0];
         if (evidence) return this.nameQuestion(request, base, { question: "请确认这次口述中的名称。", evidence }, started);
       }
       if (!verdict.ok) {
-        // Same fallback text as the exception path below: the rejected rewrite
-        // is discarded, but the filler in the raw transcript still is not wanted.
+        // Keep the candidate for editing, but never expose it as insertable text.
         const tidyOnly = tidy(rawText);
         return await this.recordFallback(request, {
           ...base,
-          text: tidyOnly.text,
+          text: candidate,
           fallback: true,
           reason: verdict.reason,
           detail: describeVerdict(verdict.metrics),
@@ -285,6 +285,18 @@ export class VoicePolishService {
           postprocess: tidyOnly.applied,
         });
       }
+      candidate = verdict.text;
+      if (needsCleanupReview(rawText, candidate, verdict.metrics)) {
+        this.stats.modelCalls += 1;
+        const source = redactSecrets(rawText);
+        const review = await completeOpenAI({route:custom,system:CLEANUP_REVIEW_PROMPT,
+          user:JSON.stringify({source,candidate:redactSecrets(candidate),explanation:safeNotes,fieldContext:context.fieldContext}),
+          maxTokens:800,temperature:0,timeoutMs:10000,signal:task.signal,retryBudget:task,
+          ...(this.fetchImpl?{fetchImpl:this.fetchImpl}:{})});
+        const issues=parseCleanupReview(review.text,source,redactSecrets(candidate));
+        if(issues===null||issues.length) return this.recordFallback(request,{...base,text:candidate,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
+      }
+      task.assertTime();
       return await this.recordAndReturn(request, {
         ...base,
         text: verdict.text,
@@ -301,16 +313,16 @@ export class VoicePolishService {
       // deterministic steps after it and must not be blamed on the model.
       const reason = request.signal?.aborted
         ? "cancelled"
-        : error instanceof ModelCallError ? failureReason(error) : "internal-error";
+        : task.deadline.timedOut() ? "model-timeout" : error instanceof ModelCallError ? failureReason(error) : "internal-error";
       const detail = this.redactDetail(failureDetail(error)).split(custom.apiKey || "\u0000").join("[redacted-key]");
       this.stats.lastError = `${reason}: ${detail}`;
-      this.logger.warn?.("typeleast: polishing failed (%s: %s); using the raw transcript", reason, detail);
+      this.logger.warn?.("typeleast: polishing failed (%s: %s); holding delivery", reason, detail);
       // The fallback is still cleaned deterministically: a model timeout is no
       // reason to insert "呃，嗯，那个" into the user's document.
       const tidyOnly = tidy(rawText);
       return await this.recordFallback(request, {
         ...base,
-        text: tidyOnly.text,
+        text: candidate ?? tidyOnly.text,
         fallback: true,
         reason,
         detail,
@@ -318,7 +330,7 @@ export class VoicePolishService {
         attempts: error instanceof ModelCallError ? error.attempts : undefined,
         postprocess: tidyOnly.applied,
       });
-    }
+    } finally { task.dispose(); }
   }
 
   /**
@@ -437,7 +449,7 @@ export class VoicePolishService {
       if (rawText.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
       // Do not evict another user's active operation to admit a new one.
       if (this.betaSessions.size >= BETA_LIMITS.sessions) throw Object.assign(new Error('too many clarifications'), { code: 'busy' });
-      session = { request: rawText, turns: [], questions: [], confirmed: [], created: Date.now(), ready: false };
+      session = { request: rawText, turns: [], questions: betaSetupQuestions(rawText,request.language), confirmed: [], created: Date.now(), ready: false };
       this.betaSessions.set(id, session);
     }
     const pending = notice => ({ ...base, text: '', raw: rawText,
@@ -458,7 +470,7 @@ export class VoicePolishService {
           throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
         }
         if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
-        const questions = normaliseQuestions(reply.questions);
+        const questions = request.betaSession ? normaliseQuestions(reply.questions) : betaSetupQuestions(rawText,request.language);
         if (reply.questions.length && !questions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
         session.turns = turns;
         session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
@@ -546,7 +558,16 @@ export class VoicePolishService {
       ms: result.ms.polish,
     });
     this.recentFailures.length = Math.min(this.recentFailures.length, MAX_RECENT_FAILURES);
+    const mode=canonicalStrength(request.strength??this.strength);
+    if(!request.translateTo&&mode!=='promptbeta'&&result.reason!=='cancelled')return this.qualityQuestion(request,result);
     return await this.recordAndReturn(request, result);
+  }
+
+  async qualityQuestion(request,result) {
+    const seed=request.variants?await applyVariants(result.text,parseVariants(request.variants),request.language??this.config.language??"auto"):result.text;
+    const candidate=seed;
+    return {...result,text:'',clarification:{kind:'quality',question:'整理尚未完成，请继续整理或编辑本次内容。',evidence:'',reason:result.reason,candidate,
+      markerId:request.explanationMarkers??'',personalizationDisabled:readPolicy(requestPolicy(request)).disabled},suggestions:[]};
   }
 
   /** Failure text can quote provider responses; keep it to the history's privacy rules. */
@@ -569,6 +590,7 @@ export class VoicePolishService {
   }
 
   async recordAndReturn(request, result) {
+    if(result.fallback&&!request.translateTo&&canonicalStrength(request.strength??this.strength)!=="promptbeta"&&result.reason!=="cancelled")return this.qualityQuestion(request,result);
     result = applyExplicitRules(result, request._personalization, result.explanation ? splitExplanation(result.raw, request.explanationMarkers).text : result.raw, canonicalStrength(request.strength ?? this.strength));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
@@ -679,7 +701,7 @@ export class VoicePolishService {
   async buildContext(request, rawText) {
     const redact = this.config.redactSecrets !== false;
     const fieldContext = request.fieldContext ?? null;
-    const own = dictionaryFrom(this.dictionary, request.dictionary);
+    const own = [];
     let data;
     try { data = await personalizationContext(request, own, this.extension, rawText); }
     catch {
@@ -741,22 +763,7 @@ export const DICTIONARY_LIMITS = { entries: 2000, entryLength: 120 };
  * @param {unknown} sent - the app's list from the request.
  * @returns {string[]} entries to use.
  */
-export function dictionaryFrom(configured, sent) {
-  const entries = [...configured];
-  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
-    let value = typeof entry === "string" ? entry : "";
-    if (entry && typeof entry === "object" && typeof entry.word === "string") {
-      const word = entry.word.trim();
-      const heard = typeof entry.heardAs === "string" ? entry.heardAs.trim() : "";
-      // Structured automatic entries cannot smuggle a legacy A=B rule in the word field.
-      if (!word || /[=\p{Cc}]/u.test(word + heard) || word.length + heard.length > DICTIONARY_LIMITS.entryLength - 1) continue;
-      value = (entry.source === "manual" && heard ? heard + "=" : "") + word;
-    }
-    const trimmed = value.trim().split("=").at(-1).trim().slice(0, DICTIONARY_LIMITS.entryLength);
-    if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
-  }
-  return entries;
-}
+export function dictionaryFrom() { return []; }
 
 /**
  * Entries the user marked 「不发给模型」 arrive as {"local": "heard=word"} (or {"local": "word"})
@@ -764,18 +771,7 @@ export function dictionaryFrom(configured, sent) {
  * spelling become replacements made on this computer.
  * @returns {Array<[string, string]>} heard-as and correct spellings.
  */
-export function localEntriesFrom(sent) {
-  const pairs = [];
-  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
-    if (entry?.source === "auto") continue;
-    const text = entry && typeof entry === "object" && typeof entry.local === "string" ? entry.local.trim().slice(0, DICTIONARY_LIMITS.entryLength) : "";
-    const split = text.indexOf("=");
-    if (split <= 0) continue;
-    const heard = text.slice(0, split).trim(), word = text.slice(split + 1).trim();
-    if (heard && word && heard !== word) pairs.push([heard, word]);
-  }
-  return pairs;
-}
+export function localEntriesFrom() { return []; }
 
 /** Marked entries that are only a spelling (no "heard=" part). */
 export function localSpellingsFrom(sent) {
@@ -788,15 +784,7 @@ export function localSpellingsFrom(sent) {
 }
 
 /** Replace heard-as spellings: anywhere for Chinese, as whole words (any case) for latin. */
-export function applyLocalEntries(text, pairs) {
-  if (!pairs.length || typeof text !== "string" || !text) return text;
-  let out = text;
-  for (const [heard, word] of pairs) {
-    if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(heard)) out = out.split(heard).join(word);
-    else out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${heard.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "giu"), () => word);
-  }
-  return out;
-}
+export function applyLocalEntries(text) { return text; }
 
 /** Narrow an unknown throwable to a printable message. */
 function message(error) {
