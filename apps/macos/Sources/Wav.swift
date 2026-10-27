@@ -1,12 +1,12 @@
 import Foundation
 
-// Wav.swift - canonical 44-byte RIFF/PCM16 writer + parser (contract: 16 kHz mono PCM16, <= 4 MiB, <= 120 s).
+// Wav.swift - canonical 44-byte RIFF/PCM16 writer + parser (contract: 16 kHz mono PCM16, <= 24 MiB, <= 600 s).
 
 enum Wav {
     static let sampleRate: UInt32 = 16000
     static let channels: UInt16 = 1
     static let bitsPerSample: UInt16 = 16
-    static let maxBytes = 4 * 1024 * 1024
+    static let maxBytes = 24 * 1024 * 1024
 
     struct Info: Equatable {
         var audioFormat: UInt16

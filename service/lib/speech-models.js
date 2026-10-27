@@ -63,9 +63,9 @@ export class SpeechModels {
     return this.current.prepare();
   }
   definition(id) { return this.local.get(id) ?? modelFor(id); }
-  transcribe(audio, language) { return this.enqueue(() => {
+  transcribe(audio, language, signal) { return this.enqueue(() => {
     if (!this.activeId) throw fail('speech-not-ready', 'select a speech model first');
-    return this.current.transcribe(audio, language);
+    return this.current.transcribe(audio, language, signal);
   }); }
   snapshot() {
     if (!this.activeId) return { phase: 'missing-model', ready: false, modelId: '', modelName: '', languages: [], canSetLanguage: false, notice: this.notice, operation: this.operation };

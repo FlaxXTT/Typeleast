@@ -57,7 +57,7 @@ internal sealed class Onboarding : Window
             _=>"",
         };
         if(description.Length>0)content.Children.Add(Theme.Text(description,14,Theme.Grey));
-        if(step==0)content.Children.Add(Theme.Card(Theme.Text(L10n.T("遇到简称或专名，可以补一句全称、用途或拼写。AI 整理会合并补充信息；有歧义时先确认。"),14)));
+        if(step==0)content.Children.Add(Theme.Card(Theme.Text(L10n.T("遇到简称或专名，可补充全称、含义或逐字拼写。听写会结合整段理解，删除只用于确认名称的解释。"),14)));
         if(step==1){speechModels.Refresh();content.Children.Add(speechModels.View);content.Children.Add(Theme.Secondary(L10n.T("打开设置"),()=>host.ShowWindow(MainWindow.Page.Settings)));}
         if(step==2)content.Children.Add(Theme.Secondary(L10n.T("打开麦克风设置"),()=>Shell.Open("ms-settings:privacy-microphone")));
         if(step==4)content.Children.Add(Theme.Secondary(L10n.T("测试麦克风"),()=>MicrophoneTestPanel.Show(host)));

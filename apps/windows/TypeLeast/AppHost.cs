@@ -30,7 +30,7 @@ internal sealed class AppHost : IDictationHost
         onboarding?.PracticeBusy == true ? L10n.T("练习结束后再更新。") :
         Phase != DictationPhase.Idle ? L10n.T("听写结束后再更新。")
         // Quitting would drop the questions and the answers given so far.
-        : dictation.HasBeta ? L10n.T("更新前，请先生成或取消提示词 Beta。") : null;
+        : dictation.HasBeta ? L10n.T("更新前，请先生成或取消需求助手。") : null;
     public LocalHistory History { get; }
     public ActivityLog Activity { get; }
     public ServiceClient Client { get; } = new();
@@ -100,6 +100,7 @@ internal sealed class AppHost : IDictationHost
             .Select(e => (e.Time.LocalDateTime, ActivityLog.CountWords(e.Text))));
         Service = new ServiceManager(Client) { NodePathOverride = Settings.NodePath, ModelMirror = Settings.ModelMirror };
         hook = new KeyboardHook(Settings.Hotkey, Settings.TranslateHotkey);
+        hook.SetAssistantKey(Settings.AssistantHotkey);
         bar = new RecordingBar(this);
         dictation = new DictationController(this, app.Dispatcher, hook, bar);
         bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
@@ -157,6 +158,7 @@ internal sealed class AppHost : IDictationHost
         hook.Tapped += () => app.Dispatcher.InvokeAsync(() => Toggle());
         hook.PasteLast += () => app.Dispatcher.InvokeAsync(() => _ = PasteLast());
         hook.CopyShortcut = Settings.PasteLastShortcut;
+        hook.AssistantTapped += () => app.Dispatcher.InvokeAsync(() => ToggleAssistant());
         hook.TranslateTapped += () => app.Dispatcher.InvokeAsync(() => ToggleTranslate());
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
         HotkeyReady = hook.Install();
@@ -257,10 +259,11 @@ internal sealed class AppHost : IDictationHost
         if (window is not null) window.ShowInTaskbar = Settings.ShowInTaskbar;
         hook.CopyShortcut = Settings.PasteLastShortcut;
         hook.SetKey(Settings.Hotkey);
+        if (Settings.AssistantHotkey == Settings.Hotkey || Settings.AssistantHotkey == Settings.TranslateHotkey) Settings.AssistantHotkey = null;
+        hook.SetAssistantKey(Settings.AssistantHotkey);
         hook.SetTranslateKey(Settings.TranslateHotkey);
         Service.NodePathOverride = Settings.NodePath;
         Service.ModelMirror = Settings.ModelMirror;
-        if (Settings.Strength != "promptbeta" && dictation.HasBeta) dictation.DropBeta();
         History.ApplyRetention(Settings.HistoryRetention); PruneAudio();
         Raise(); return true;
     }
@@ -349,6 +352,7 @@ internal sealed class AppHost : IDictationHost
         if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.Toggle();
     }
     public void ToggleTranslate() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return; if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.ToggleTranslate(); }
+    public void ToggleAssistant() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return; if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.ToggleAssistant(); }
     public void SetStrength(string code, bool announce = false) => dictation.SetStrength(code, announce);
     public void Cancel() { if(onboarding?.PracticeBusy==true)onboarding.CancelPractice();else dictation.Cancel(); }
     bool IDictationHost.Quitting => quitting;

@@ -44,6 +44,7 @@ internal sealed class DictationController
     private IntPtr targetWindow;
     private string targetApp = "";
     private string? translating;
+    private bool assistantRecording;
     private DictationOptions? recordingOptions;
     private FieldTarget? targetField;
     private byte[]? recordingContext;
@@ -77,7 +78,7 @@ internal sealed class DictationController
     public DictationController(IDictationHost host, System.Windows.Threading.Dispatcher dispatcher, KeyboardHook hook, RecordingBar bar)
     {
         this.host = host; this.dispatcher = dispatcher; this.hook = hook; this.bar = bar;
-        beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers());
+        beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers(), ToggleAssistant);
         recorder.AudioStarted += OnAudioStarted;
         recorder.LimitReached += () => dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
         recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风断开或录音出错，请重新选择设备。")); });
@@ -134,7 +135,7 @@ internal sealed class DictationController
             result = confirmed;
             if (result.ContextOnly) { bar.ShowResult(L10n.T("这次只有解释信息，没有正文，未插入。"), false); return; }
             Paster.SetText(result.InsertableText);
-            History.Add(new HistoryEntry { Text = result.InsertableText, Raw = result.Raw, App = entry.App,
+            History.Add(new HistoryEntry { Task = result.Task, Text = result.InsertableText, Raw = result.Raw, App = entry.App,
                 Fallback = result.Fallback, Reason = result.FallbackReason, Seconds = entry.Seconds, Personalization=result.Personalization,
                 Request = request, AudioId = entry.AudioId });
             bar.ShowResult(L10n.T("已复制"), result.Fallback);
@@ -150,31 +151,20 @@ internal sealed class DictationController
     public void Toggle() => Toggle(null);
 
     public void ToggleTranslate() => Toggle(Settings.TranslateTarget);
+    public void ToggleAssistant() => Toggle(null, true);
 
     public void SetStrength(string code, bool announce = false)
     {
-        if (!CleanupModes.IsKnown(code) || Phase != DictationPhase.Idle) return;
-        clarificationPending = null;
-        if (beta.Session is not null && code != "promptbeta") {
-            if (MessageBox.Show(L10n.T("切换会结束这次 Beta，未生成的文字不会插入。"),
-                L10n.T("结束这次提示词 Beta？"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
-            DropBeta();
-        }
-        if (Settings.Strength != code)
-        {
-            Settings.Strength = code;
-            if (!SaveSettings()) return;
-            JumpList.Update(Settings.Strength);
-        }
-        if (announce && Phase == DictationPhase.Idle) bar.ShowResult(L10n.T("整理模式：") + CleanupModes.Title(code), warning: false);
+        if (code == "promptbeta") ToggleAssistant();
     }
 
-    private void Toggle(string? translateTo)
+    private void Toggle(string? translateTo, bool assistant = false)
     {
         if (IsMicrophoneTesting) return;
         switch (Phase)
         {
             case DictationPhase.Idle:
+                assistantRecording = assistant;
                 translating = translateTo;
                 StartRecording();
                 break;
@@ -213,14 +203,14 @@ internal sealed class DictationController
         }
         Phase = DictationPhase.Recording;
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
-        if (translating is null && beta.Session is not null) beta.SetBusy(L10n.T("正在听。说完按 {0}。", HotkeyLabel));
+        if (assistantRecording && beta.Session is not null) beta.SetBusy(L10n.T("正在听。说完按 {0}。", HotkeyLabel));
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target
             ? L10n.T("翻译") + " →" + target.ToUpperInvariant()
-            : CleanupModes.Title(Settings.Strength));
+            : L10n.T(assistantRecording ? "需求助手" : "听写"));
         Raise();
         Dictionary.DictationStarting();
-        recordingOptions = new DictationOptions(Settings.Language, Settings.Strength, translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections, Settings.ExplanationMarkers);
+        recordingOptions = new DictationOptions(Settings.Language, assistantRecording ? "promptbeta" : "prompt", translating, Settings.VariantsHeader, ActiveRoute, Settings.RestoreClipboard, Settings.InsertionMode, Settings.FormattedLists, Settings.LearnCorrections, Settings.ExplanationMarkers);
         targetApp = Shell.ProcessName(targetWindow);
         var window = targetWindow;
         if (clarificationPending is not null) { targetFieldTask = null; recordingContextTask = null; }
@@ -295,12 +285,11 @@ internal sealed class DictationController
         }
         // A recording made while Prompt Beta's questions are open is the answer to them;
         // a translation is not, and leaves the questions waiting.
-        if (translateTo is null && options.Strength != "promptbeta" && beta.Session is not null) DropBeta();
         var answering = translateTo is null && options.Strength == "promptbeta" ? beta.Session : null;
         if (answering is not null) beta.SetBusy(L10n.T("正在更新…"));
         Phase = DictationPhase.Thinking;
         hook.SwallowEscape = true;
-        bar.ShowThinking(translateTo is null ? CleanupModes.Title(options.Strength) : L10n.T("正在翻译…"));
+        bar.ShowThinking(translateTo is null ? L10n.T(options.Strength == "promptbeta" ? "需求助手" : "正在整理…") : L10n.T("正在翻译…"));
         Raise();
         targetField = held is { } original ? original.Field : await Within(targetFieldTask, 300);
         recordingContext = held is { } originalContext ? originalContext.Context : await Within(recordingContextTask, 300);
@@ -311,7 +300,8 @@ internal sealed class DictationController
             var requestOptions = answering is not null ? beta.Options ?? options : options;
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
-                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries, clarificationSource: held?.Source, clarificationEvidence: held?.Evidence, explanationMarkers: requestOptions.ExplanationMarkers, preferenceExamples: Preferences.WireExamples, personalization: Preferences.WirePolicy(Settings.DictionaryEntries, requestOptions.WithoutPersonalization));
+                dictionary: Dictionary.ServiceEntries, localOnly: Dictionary.LocalEntries, clarificationSource: held?.Source, clarificationEvidence: held?.Evidence, explanationMarkers: requestOptions.ExplanationMarkers, preferenceExamples: Preferences.WireExamples, personalization: Preferences.WirePolicy(Settings.DictionaryEntries, requestOptions.WithoutPersonalization),
+                onProgress: progress => dispatcher.InvokeAsync(() => { if (operations.IsCurrent(operation) && Phase == DictationPhase.Thinking) bar.ShowThinking(progress.Label); }));
             if (!operations.IsCurrent(operation)) return;
             if (result.ContextOnly) { bar.ShowResult(L10n.T("这次只有解释信息，没有正文，未插入。"), false); return; }
             var confirmed = await ConfirmName(result, requestOptions, operation);
@@ -411,6 +401,7 @@ internal sealed class DictationController
                 if (!operations.IsCurrent(operation)) return;
                 var entry = new HistoryEntry
                 {
+                    Task = result.Task,
                     Personalization = result.Personalization,
                     Text = text,
                     Raw = result.Raw,
@@ -442,8 +433,8 @@ internal sealed class DictationController
 
     private bool ShowBetaQuestions(DictateResponse result, DictationOptions options)
     {
-        if (!beta.Show(result, options, targetWindow, targetApp, targetField, HotkeyLabel)) return false;
-        bar.ShowResult(L10n.T("提示词 Beta：继续补充或生成"), warning: false);
+        if (!beta.Show(result, options, targetWindow, targetApp, targetField, Settings.AssistantHotkey is { } key ? TapDetector.Label(key) : L10n.T("继续补充按钮"))) return false;
+        bar.ShowResult(L10n.T("需求助手：继续补充或生成"), warning: false);
         return true;
     }
 

@@ -214,16 +214,12 @@ struct SidebarModes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(L10n.text("整理模式"))
-                .font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.secondary)
-                .padding(.horizontal, 12).padding(.bottom, 4)
-            ForEach(VoiceStrength.allCases, id: \.self) { strength in
-                ModeRow(strength: strength, selected: model.settings.strength == strength.rawValue) {
-                    model.selectStrength(strength.rawValue)
-                }
-            }
+            Button { model.actions?.startAssistant() } label: {
+                Label(L10n.text("需求助手"), systemImage:"text.bubble")
+                    .font(.system(size:13,weight:.medium)).padding(10)
+            }.buttonStyle(.plain)
             // A style plugin applies to 标准 and 精简 only.
-            if !plugins.styles.isEmpty, ["prompt", "concise"].contains(model.settings.strength) {
+            if !plugins.styles.isEmpty {
                 Menu {
                     Button(L10n.text("不用风格")) { plugins.selectStyle(nil) }
                     ForEach(plugins.styles) { style in Button(style.title) { plugins.selectStyle(style.id) } }
@@ -240,36 +236,6 @@ struct SidebarModes: View {
         .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
         .onAppear { plugins.refresh() }
         .onChange(of: model.serviceUp) { up in if up { plugins.refresh() } }
-    }
-}
-
-private struct ModeRow: View {
-    let strength: VoiceStrength
-    let selected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 9) {
-                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 12)).foregroundColor(selected ? Theme.ink : Theme.secondary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(strength.label + (strength == .concise ? " ★" : "")).font(.system(size: 13, weight: selected ? .semibold : .regular))
-                        .help(strength == .concise ? L10n.text("推荐：重组表达，保留事实与条件。") : "")
-                        .foregroundColor(selected ? Theme.ink : Theme.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(selected ? Theme.selection : (hovering ? Theme.selection.opacity(0.5) : Color.clear)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

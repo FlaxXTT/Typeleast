@@ -158,8 +158,20 @@ public sealed class ExplanationReceipt
     [JsonPropertyName("markerId")] public string MarkerId { get; set; } = "";
 }
 
+public sealed class TaskProgress
+{
+    public string Stage { get; set; } = "waiting";
+    public int Completed { get; set; }
+    public int Total { get; set; }
+    public string Label => Stage switch {
+        "recognizing" => L10n.T("正在识别…"), "preparing" => L10n.T("正在理解全文…"),
+        "generating" => Total > 1 ? L10n.T("正在整理 {0}/{1}", Completed, Total) : L10n.T("正在整理…"),
+        "checking" => L10n.T("正在检查完整性…"), "translating" => L10n.T("正在翻译…"), _ => L10n.T("正在处理…") };
+}
+
 public sealed class DictateResponse
 {
+    public string? Task { get; set; }
     [JsonPropertyName("requestId")] public string? RequestId { get; set; }
     [JsonPropertyName("text")] public string Text { get; set; } = "";
     [JsonPropertyName("raw")] public string Raw { get; set; } = "";

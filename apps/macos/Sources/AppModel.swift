@@ -36,6 +36,7 @@ protocol AppActions: AnyObject {
     /// A word the user selected in History: added to the dictionary by hand.
     func addWordFromHistory(_ word: String)
     func setCleanupMode(_ code: String)
+    func startAssistant()
     func toggleDictation()
     func pasteLast()
     func copyEntry(id: String, raw: Bool)
@@ -60,6 +61,8 @@ protocol AppActions: AnyObject {
     func registerHotKeys()
     func checkForUpdates(interactive: Bool)
 }
+
+extension AppActions { func startAssistant() { setCleanupMode("promptbeta") } }
 
 final class AppModel: ObservableObject {
     static let shared = AppModel()

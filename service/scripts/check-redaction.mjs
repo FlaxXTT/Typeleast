@@ -37,7 +37,7 @@ const checks = [
   ['outbound payload shows the password redaction', outbound.includes('[redacted]')],
   ['field context passed to the model is redacted', !outbound.includes('ghp_abcdefghijklmnop')],
   ['the route key travels only in the Authorization header, never in the body', !outbound.includes(route.apiKey)],
-  ['outbound payload carries the general cleanup prompt', outbound.includes('speech recognition transcripts')],
+  ['outbound payload carries the general cleanup prompt', outbound.includes('整理语音识别文本')],
 ];
 let failures = 0;
 for (const [label, ok] of checks) {

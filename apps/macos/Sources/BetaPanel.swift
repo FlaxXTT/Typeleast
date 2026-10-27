@@ -7,6 +7,7 @@ import SwiftUI
 
 final class BetaPanel {
     private var panel: NSPanel?
+    var onContinue: (() -> Void)?
     var onSkip: (() -> Void)?
     var onCancel: (() -> Void)?
 
@@ -25,6 +26,7 @@ final class BetaPanel {
         let firstShow = !isVisible
         shown = (info, hotkey)
         let view = BetaQuestionsView(info: info, hotkey: hotkey, busy: busy,
+                                     resume: { [weak self] in self?.onContinue?() },
                                      skip: { [weak self] in self?.onSkip?() },
                                      cancel: { [weak self] in self?.onCancel?() })
         let host = NSHostingView(rootView: view)
@@ -63,12 +65,13 @@ struct BetaQuestionsView: View {
     let info: BetaInfo
     let hotkey: String
     var busy: String? = nil
+    var resume: () -> Void = {}
     let skip: () -> Void
     let cancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("提示词 Beta · 第 {0} 轮", info.round ?? 1))
+            Text(L10n.text("需求助手 · 第 {0} 轮", info.round ?? 1))
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
             Text(info.ready == true ? L10n.text("已清楚。可继续补充或生成。") : L10n.text("先说清信息"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
@@ -98,9 +101,10 @@ struct BetaQuestionsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(L10n.text("取消"), action: cancel).buttonStyle(SecondaryButtonStyle())
+                Button(L10n.text("继续补充"), action:resume).buttonStyle(SecondaryButtonStyle()).disabled(busy != nil)
                 Spacer()
-                Button(L10n.text("生成"), action: skip).buttonStyle(PrimaryButtonStyle())
-            }.disabled(busy != nil)
+                Button(L10n.text("生成"), action: skip).buttonStyle(PrimaryButtonStyle()).disabled(busy != nil)
+            }
         }
         .padding(EdgeInsets(top: 30, leading: 20, bottom: 18, trailing: 20))
         .frame(width: 440, alignment: .leading)

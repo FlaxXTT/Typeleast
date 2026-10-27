@@ -153,19 +153,20 @@ export class LocalRecognizer {
    * @param {Buffer} audio - a WAV that passed validateWav().
    * @returns {Promise<{text: string}>}
    */
-  transcribe(audio, language = this.language) {
+  transcribe(audio, language = this.language, signal) {
     if (!LANGUAGES.includes(language)) {
       const error = new Error("unsupported recognition language");
       error.code = "invalid-language";
       return Promise.reject(error);
     }
     // One recognizer at a time. Keep a failed request from poisoning the queue.
-    const work = this.transcribing.then(() => this.transcribeSerial(audio, language));
+    const work = this.transcribing.then(() => this.transcribeSerial(audio, language, signal));
     this.transcribing = work.catch(() => {});
     return work;
   }
 
-  async transcribeSerial(audio, language) {
+  async transcribeSerial(audio, language, signal) {
+    signal?.throwIfAborted();
     if (!this.recognizer) {
       void this.prepare();
       const error = new Error(`speech model is not ready (phase: ${this.phase})`);
@@ -189,16 +190,20 @@ export class LocalRecognizer {
     const samples = pcm16ToFloat32(withLeadIn(audio));
     const segments = samples.length / SAMPLE_RATE > SEGMENT_THRESHOLD_SECONDS ? this.split(samples) : [samples];
     const texts = [];
+    const boundaries = [];
     const detected = [];
     for (const segment of segments) {
+      signal?.throwIfAborted();
       const stream = this.recognizer.createStream();
       if (this.modelId.startsWith("qwen3-asr-") && language !== "auto") {
         stream.setOption("language", ({ zh: "Chinese", en: "English", yue: "Cantonese", ja: "Japanese", ko: "Korean" })[language]);
       }
       stream.acceptWaveform({ sampleRate: SAMPLE_RATE, samples: segment });
       const result = await this.recognizer.decodeAsync(stream);
+      signal?.throwIfAborted();
       const text = String(result?.text ?? "").trim();
       if (text.length > 0) {
+        boundaries.push({index:boundaries.length,text,startSample:segment.startSample ?? 0,samples:segment.length});
         texts.push(text);
         // SenseVoice exposes its detected language as e.g. <|ja|>. Other models may omit it.
         const code = String(result?.lang ?? result?.language ?? "").trim().toLowerCase().replace(/^<\|([^|]+)\|>$/, "$1");
@@ -206,7 +211,7 @@ export class LocalRecognizer {
       }
     }
     const detectedLanguage = detected.length > 0 && detected[0] && detected.every(code => code === detected[0]) ? detected[0] : null;
-    return { text: joinSegments(texts), language, detectedLanguage };
+    return { text: joinSegments(texts), language, detectedLanguage, segments:boundaries };
   }
 
   async release() {
@@ -243,12 +248,22 @@ export class LocalRecognizer {
       const segments = [];
       const drain = () => {
         while (!vad.isEmpty()) {
-          segments.push(Float32Array.from(vad.front(false).samples));
+          const speech = vad.front(false);
+          const segment = Float32Array.from(speech.samples);
+          segment.startSample = Number.isFinite(speech.start) ? speech.start : 0;
+          segments.push(segment);
           vad.pop();
         }
       };
       for (let start = 0; start + VAD_WINDOW <= samples.length; start += VAD_WINDOW) {
         vad.acceptWaveform(samples.subarray(start, start + VAD_WINDOW));
+        drain();
+      }
+      const tail = samples.length % VAD_WINDOW;
+      if (tail) {
+        const padded = new Float32Array(VAD_WINDOW);
+        padded.set(samples.subarray(samples.length - tail));
+        vad.acceptWaveform(padded);
         drain();
       }
       vad.flush();
@@ -279,6 +294,9 @@ export function joinSegments(texts) {
 /** Cut samples into windows of at most `size`. */
 export function fixedWindows(samples, size) {
   const out = [];
-  for (let start = 0; start < samples.length; start += size) out.push(samples.subarray(start, Math.min(samples.length, start + size)));
+  for (let start = 0; start < samples.length; start += size) {
+    const segment = samples.subarray(start,Math.min(samples.length,start+size));
+    segment.startSample = start; out.push(segment);
+  }
   return out;
 }

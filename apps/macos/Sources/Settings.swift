@@ -191,7 +191,11 @@ final class Settings {
             if let selected = defaults.string(forKey: "voice.explanationMarkers.v1"), ["background","explanation","aside"].contains(selected) { defaults.set("note", forKey: "voice.explanationMarkers.v1") }
             defaults.set(true, forKey: "voice.shortMarkers.v1")
         }
-        Self.migrateAICleanup(defaults)
+        if !defaults.bool(forKey:"voice.unifiedDictation.v1") {
+            defaults.set("prompt",forKey:"voice.strength")
+            defaults.set(600,forKey:"voice.maxSeconds")
+            defaults.set(true,forKey:"voice.unifiedDictation.v1")
+        }
     }
 
     static func migrateAICleanup(_ defaults: UserDefaults) {
@@ -222,6 +226,11 @@ final class Settings {
     var hotkeyAlt: HotKeyBinding {
         get { decodeBinding("hk.alt.v2") ?? HotKeyBinding.optionSpaceDefault }
         set { encodeBinding("hk.alt.v2", newValue); changed() }
+    }
+
+    var hotkeyAssistant: HotKeyBinding {
+        get { decodeBinding("hk.assistant") ?? HotKeyBinding(keyCode: 0, modifiers: 0, enabled: false, name: "") }
+        set { encodeBinding("hk.assistant", newValue); changed() }
     }
 
     /// 翻译模式: dictate, and the cleaned-up text is inserted in the target language.
@@ -335,7 +344,7 @@ final class Settings {
     }
 
     var maxSeconds: Int {
-        get { d.object(forKey: "voice.maxSeconds") == nil ? 120 : d.integer(forKey: "voice.maxSeconds") }
+        get { d.object(forKey: "voice.maxSeconds") == nil ? 600 : d.integer(forKey: "voice.maxSeconds") }
         set { d.set(newValue, forKey: "voice.maxSeconds"); changed() }
     }
 

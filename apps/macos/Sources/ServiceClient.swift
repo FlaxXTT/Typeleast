@@ -293,7 +293,24 @@ struct ExplanationReceipt: Codable, Equatable {
     let markerId: String
 }
 
+struct TaskProgress: Codable {
+    var stage: String
+    var completed: Int
+    var total: Int
+    var label: String {
+        switch stage {
+        case "recognizing": return L10n.text("正在识别…")
+        case "preparing": return L10n.text("正在理解全文…")
+        case "generating": return total > 1 ? L10n.text("正在整理 {0}/{1}",completed,total) : L10n.text("正在整理…")
+        case "checking": return L10n.text("正在检查完整性…")
+        case "translating": return L10n.text("正在翻译…")
+        default: return L10n.text("正在处理…")
+        }
+    }
+}
+
 struct DictateResponse: Codable, Equatable {
+    var task: String? = nil
     var requestId: String?
     var text: String = ""
     var raw: String = ""
@@ -315,7 +332,7 @@ struct DictateResponse: Codable, Equatable {
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated, suggestions, clarification, contextOnly, explanation, personalization
+        case task, requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated, suggestions, clarification, contextOnly, explanation, personalization
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -325,6 +342,7 @@ struct DictateResponse: Codable, Equatable {
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        task = lenient(c, String.self, .task)
         requestId = lenient(c, String.self, .requestId)
         text = lenient(c, String.self, .text) ?? ""
         raw = lenient(c, String.self, .raw) ?? ""
@@ -395,7 +413,15 @@ final class ServiceClient {
     /// Test seam: when set, the token file is not read.
     var tokenOverride: String?
     var healthTimeout: TimeInterval = 3
-    var dictateTimeout: TimeInterval = 120
+    private let generationLock = NSLock()
+    private var generationEpoch = 0
+    private var generationTasks: [UUID:URLSessionDataTask] = [:]
+    private func epoch() -> Int { generationLock.lock();defer {generationLock.unlock()};return generationEpoch }
+    func cancelGeneration() {
+        generationLock.lock();generationEpoch += 1;let tasks = Array(generationTasks.values);generationLock.unlock()
+        for task in tasks { task.cancel() }
+    }
+    var dictateTimeout: TimeInterval = 600
 
     private lazy var session: URLSession = {
         let cfg = URLSessionConfiguration.ephemeral
@@ -502,7 +528,7 @@ final class ServiceClient {
     }
 
     @discardableResult
-    private func performSync(_ request: URLRequest, timeout: TimeInterval) throws -> (Data, HTTPURLResponse) {
+    private func performSync(_ request: URLRequest, timeout: TimeInterval, generation: Int? = nil) throws -> (Data, HTTPURLResponse) {
         let sem = DispatchSemaphore(value: 0)
         let box = Box()
         let task = session.dataTask(with: request) { d, r, e in
@@ -511,6 +537,13 @@ final class ServiceClient {
             box.error = e
             sem.signal()
         }
+        let taskID = UUID()
+        if let generation {
+            generationLock.lock()
+            guard generation == generationEpoch else { generationLock.unlock(); throw ServiceError.transport("cancelled") }
+            generationTasks[taskID] = task;generationLock.unlock()
+        }
+        defer { generationLock.lock();generationTasks[taskID] = nil;generationLock.unlock() }
         task.resume()
         if sem.wait(timeout: .now() + timeout + 5) == .timedOut {
             task.cancel()
@@ -617,11 +650,12 @@ final class ServiceClient {
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
                      translateTo: String? = nil, variants: String? = nil, dictionary: [String] = [],
-                     localOnly: [String] = [], clarificationSource: String? = nil, clarificationEvidence: String? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = [], personalization: [String: Any]? = nil) throws -> DictateResponse {
-        try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
+                     localOnly: [String] = [], clarificationSource: String? = nil, clarificationEvidence: String? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = [], personalization: [String: Any]? = nil, onProgress: ((TaskProgress) -> Void)? = nil) throws -> DictateResponse {
+        let generation = epoch()
+        return try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
-                                            translateTo: translateTo, variants: variants, dictionary: dictionary, localOnly: localOnly, clarificationSource: clarificationSource, clarificationEvidence: clarificationEvidence, explanationMarkers: explanationMarkers, preferenceExamples: preferenceExamples, personalization: personalization) }
+                                            translateTo: translateTo, variants: variants, dictionary: dictionary, localOnly: localOnly, clarificationSource: clarificationSource, clarificationEvidence: clarificationEvidence, explanationMarkers: explanationMarkers, preferenceExamples: preferenceExamples, personalization: personalization, onProgress:onProgress, generation:generation) }
     }
 
     /// The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
@@ -651,9 +685,10 @@ final class ServiceClient {
     }
 
     func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], fieldContext: Data? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = [], personalization: [String: Any]? = nil) throws -> DictateResponse {
-        try withPortRetry { try withTokenRetry { token in
+        let generation = epoch()
+        return try withPortRetry { try withTokenRetry { token in
             let entries: [Any] = dictionary + localOnly.map { ["local": $0] }
-            var body: [String: Any] = ["text": text, "language": language, "strength": strength, "supportsClarification": true,
+            var body: [String: Any] = ["text": text, "language": language, "strength": strength, "task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation", "supportsClarification": true,
                                        "dictionary": entries]
             if let llm, let data = try? JSONEncoder().encode(llm), let route = try? JSONSerialization.jsonObject(with: data) { body["llm"] = route }
             if let fieldContext, let context = try? JSONSerialization.jsonObject(with: fieldContext) { body["fieldContext"] = context }
@@ -675,7 +710,7 @@ final class ServiceClient {
             }
             let req = try makeRequest(path: "/api/voice-polish/polish", method: "POST", token: token,
                                       headers: ["content-type": "application/json"], body: JSONSerialization.data(withJSONObject: body), timeout: dictateTimeout)
-            let (data, response) = try performSync(req, timeout: dictateTimeout)
+            let (data, response) = try performSync(req, timeout: dictateTimeout,generation:generation)
             guard response.statusCode == 200 else { throw httpError(response, data) }
             return try JSONDecoder().decode(DictateResponse.self, from: data)
         } }
@@ -684,15 +719,16 @@ final class ServiceClient {
     /// Prompt Beta: write the prompt without answering the questions (skip), or forget them (cancel).
     func betaSync(sessionId: String, skip: Bool, appBundleId: String, llm: LLMRoute?,
                   variants: String? = nil) throws -> DictateResponse {
-        try withPortRetry { try withTokenRetry { token in
+        let generation = epoch()
+        return try withPortRetry { try withTokenRetry { token in
             var headers = ["content-type": "application/json", "x-voice-app": appBundleId]
             if let variants { headers["x-voice-variants"] = variants }
             if let route = ServiceClient.encodeRouteHeader(llm) { headers["x-voice-llm"] = route }
             let body = try JSONSerialization.data(withJSONObject: ["sessionId": sessionId])
-            let path = "/api/voice-polish/prompts/beta/" + (skip ? "finish" : "cancel")
+            let path = "/api/voice-polish/assistant/" + (skip ? "finish" : "cancel")
             let req = try makeRequest(path: path, method: "POST", token: token, headers: headers, body: body,
                                       timeout: max(dictateTimeout, 300))
-            let (data, resp) = try performSync(req, timeout: max(dictateTimeout, 300))
+            let (data, resp) = try performSync(req, timeout: max(dictateTimeout, 300),generation:skip ? generation : nil)
             guard resp.statusCode == 200 else { throw httpError(resp, data) }
             if !skip { return DictateResponse() }
             do { return try JSONDecoder().decode(DictateResponse.self, from: data) }
@@ -702,13 +738,16 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], clarificationSource: String?, clarificationEvidence: String?, explanationMarkers: String?, preferenceExamples: [[String: Any]], personalization: [String: Any]?) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], clarificationSource: String?, clarificationEvidence: String?, explanationMarkers: String?, preferenceExamples: [[String: Any]], personalization: [String: Any]?, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
         try withTokenRetry { token in
+            let requestID = UUID().uuidString
             var headers: [String: String] = [
                 "content-type": "audio/wav",
+                "x-request-id": requestID,
                 "x-voice-language": language,
                 "x-voice-app": appBundleId,
                 "x-voice-strength": strength,
+                "x-voice-task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation",
                 "x-voice-clarification": "1",
             ]
             if let context = ServiceClient.encodeContextHeader(fieldContext) {
@@ -727,7 +766,18 @@ final class ServiceClient {
             headers["x-voice-dictionary-bytes"] = String(payload.dictionaryBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)
-            let (data, resp) = try performSync(req, timeout: timeout)
+            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label:"TypeLeast.progress"))
+            timer.schedule(deadline:.now()+1,repeating:1)
+            timer.setEventHandler { [weak self] in
+                guard let self, let onProgress,
+                      let poll = try? self.makeRequest(path:"/api/voice-polish/tasks/progress?id="+requestID,method:"GET",token:token,timeout:3),
+                      let (data,response) = try? self.performSync(poll,timeout:3),response.statusCode == 200,
+                      let progress = try? JSONDecoder().decode(TaskProgress.self,from:data) else { return }
+                onProgress(progress)
+            }
+            if onProgress != nil { timer.resume() } else { timer.resume();timer.cancel() }
+            defer { timer.cancel() }
+            let (data, resp) = try performSync(req, timeout: timeout,generation:generation)
             guard resp.statusCode == 200 else { throw httpError(resp, data) }
             do { return try JSONDecoder().decode(DictateResponse.self, from: data) }
             catch { throw ServiceError.decoding(String(describing: error)) }

@@ -22,11 +22,11 @@ for (const [rawText, output] of [
   ['我想买一个 ROG 电脑', '我想买一个 LG 电脑。'],
   ['ROG 电脑主要用来剪视频，屏幕要清楚', '电脑屏幕要清楚。'],
   ['不要 LG 电脑，想买 ROG，主要用来剪视频', '想买 ROG，主要用来剪视频。'],
-]) test(`a rejected name change cannot be pasted or learned: ${rawText}`, async () => {
+]) test(`a rejected name change preserves source names without a question: ${rawText}`, async () => {
   const { service, calls } = fixture([output]);
   const result = await service.polish({ rawText, strength: 'prompt', llm: route });
   assert.equal(result.fallback, true);
-  assert.equal(result.reason, 'entity-changed');
+  assert.equal(result.reason, 'name-kept');
   assert.equal(result.text, "");
   assert.equal(result.raw, rawText);
   assert.equal(result.clarification.kind,"quality");
@@ -47,8 +47,8 @@ test('explicit name correction and mixed languages preserve the user request', a
   const result = await service.polish({ rawText: '请用 LG，不对，ROG 电脑测试 API，不要执行 delete 命令。', strength: 'prompt', llm: route });
   assert.equal(result.fallback, false, result.reason);
   assert.equal(result.text, '请用 ROG 电脑测试 API，不要执行 delete 命令。');
-  assert.match(calls[0].messages[0].content, /Execution boundary/);
-  assert.match(calls[0].messages[0].content, /including the beginning/);
+  assert.match(calls[0].messages[0].content, /不得执行或回答/);
+  assert.match(calls[0].messages[0].content, /开头到结尾/);
 });
 
 test('invented values are still rejected after number formatting', async () => {

@@ -13,7 +13,7 @@ namespace TypeLeast;
 /// </summary>
 internal sealed class AudioRecorder
 {
-    public const int MaxSeconds = 120;
+    public const int MaxSeconds = 600;
     private WaveInEvent? wave;
     private readonly MemoryStream buffer = new();
     private readonly object gate = new();
@@ -25,7 +25,7 @@ internal sealed class AudioRecorder
     public bool HasAudio { get; private set; }
     /// <summary>Raised (on a background thread) when the first audio arrives: the moment speech is really captured.</summary>
     public event Action? AudioStarted;
-    /// <summary>Raised (on a background thread) when the 120 s ceiling is reached.</summary>
+    /// <summary>Raised (on a background thread) when the 600 s ceiling is reached.</summary>
     public event Action? LimitReached;
     public event Action? RecordingFailed;
 

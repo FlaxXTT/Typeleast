@@ -45,3 +45,12 @@ test("拼写确认：整理请求带上拼写提示，普通话语不带", async
   assert.match(systems[0], /"R-O-G" spells "ROG"\./);
   assert.doesNotMatch(systems[1], /Letter-by-letter spellings in this utterance/);
 });
+
+test('a matching parenthetical spelling is evidence without an extra cue',()=>{
+ assert.deepEqual(spelledWords('我想知道 stream（s t r e a m）是什么意思。'),[{spelled:'s t r e a m',word:'stream'}]);
+ assert.deepEqual(spelledWords('这个单词是 C U D A，用于计算。'),[{spelled:'C U D A',word:'CUDA'}]);
+ assert.deepEqual(spelledWords('compare alpha (x y z)'),[]);
+});
+test('spelling late in a long utterance is not discarded at an early text boundary',()=>{
+ assert.deepEqual(spelledWords('这是说明。'.repeat(1600)+'它的拼法是 S-T-R-E-A-M。'),[{spelled:'S-T-R-E-A-M',word:'STREAM'}]);
+});

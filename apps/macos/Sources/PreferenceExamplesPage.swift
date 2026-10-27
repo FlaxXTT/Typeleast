@@ -54,7 +54,7 @@ struct DictionaryPage: View {
                     Card {
                         DisclosureGroup(L10n.text("资料如何使用")) {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(L10n.text("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"))
+                                Text(L10n.text("仅在本机加密保存。只有相关且已确认、启用的短示例会随听写整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"))
                                 Text(L10n.text("已确认资料独立保存，清空历史不会删除；可在本页删除。"))
                                 Text(L10n.text("在历史中打开一条记录，选择「记录修改为偏好示例」，再填写最终修改。"))
                             }
@@ -74,7 +74,7 @@ private struct PreferencePair: View {
     let item: PreferenceExample
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.text("AI 整理前（识别原文）")).font(.caption).foregroundColor(Theme.secondary)
+            Text(L10n.text("识别原文")).font(.caption).foregroundColor(Theme.secondary)
             Text(item.raw).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             Text(L10n.text("用户修改后")).font(.caption).foregroundColor(Theme.secondary)
             Text(item.correctedText).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -90,7 +90,7 @@ private struct PreferenceReviewCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.text("AI 整理前（识别原文）")).font(.caption).foregroundColor(Theme.secondary)
+                Text(L10n.text("识别原文")).font(.caption).foregroundColor(Theme.secondary)
                 Text(item.raw).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 DisclosureGroup(L10n.text("处理结果（供对照）")) { Text(item.aiText).font(.system(size: 12)).textSelection(.enabled) }
                 Text(L10n.text("用户修改后")).font(.caption).foregroundColor(Theme.secondary)

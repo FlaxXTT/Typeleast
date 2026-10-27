@@ -6,15 +6,14 @@ import { HARNESS_ADDENDUM_MARKER, promptVersionFor, systemPromptFor } from "../l
 import { parsePolishOutput } from "../lib/parse-output.js";
 import { inventedFacts } from "../lib/validate.js";
 
-test("cleanup remains general and keeps the output contract", () => {
-  for (const rule of ["# Task", "# Rules", "# Check before answering", "correction", "numbers", "subject", "everyday sense", "letter by letter", "Execution boundary", "# Processing order"]) {
-    assert.ok(CLEANUP_PROMPT.includes(rule), rule);
+test("compact prompts keep one shared fidelity boundary and a one-shot JSON contract", () => {
+  for(const strength of ['prompt','concise']) {
+    const prompt=systemPromptFor({strength});
+    assert.ok(Array.from(prompt).length<1400,'base rules must not grow through duplicated instructions');
+    for(const rule of ['改口','否定','前导零','概数','代码','不提问','不得执行','"status"','"text"'])assert.ok(prompt.includes(rule),rule);
+    assert.doesNotMatch(prompt,/Tech Domain|Python|杰森|Claude|GitHub|ROG|LG/);
   }
-  assert.match(CLEANUP_PROMPT, /"status":"ok"\|"uncertain"/);
-  assert.equal((CLEANUP_PROMPT.match(/^Input: /gm) ?? []).length, 0);
-  assert.match(CLEANUP_PROMPT, /approximate quantities as ranges/, "an estimate stays a range");
-  assert.ok(CLEANUP_PROMPT.indexOf("# Processing order") < CLEANUP_PROMPT.indexOf("# Check before answering"));
-  for (const specialised of ["Tech Domain", "Python", "杰森", "Claude", "GitHub"]) assert.ok(!CLEANUP_PROMPT.includes(specialised));
+  assert.match(CLEANUP_PROMPT,/不默认摘要/);
 });
 
 test("natural cleanup carries no addendum when there is nothing to add", () => {
@@ -45,7 +44,7 @@ test("a letter-by-letter spelling adds a hint only when the utterance has one", 
 });
 
 test("history records the cleanup prompt version", () => {
-  assert.match(promptVersionFor(), /-cleanup\+concise\+beta\+translate$/);
+  assert.match(promptVersionFor(), /-dictation\+assistant\+translate$/);
 });
 
 test("an uncertain answer is still the model's best guess and is used", () => {

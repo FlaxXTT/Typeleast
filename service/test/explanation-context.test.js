@@ -38,17 +38,18 @@ test('AI cleanup uses explicit explanation once, validates main facts and retain
  assert.equal(f.calls.length,1);assert.ok(!f.calls[0].messages[1].content.includes('玩家国度'));assert.ok(f.calls[0].messages[0].content.includes('玩家国度'));
  assert.deepEqual(r.suggestions,[]);
 });
-test('natural cleanup and translation do not interpret explanation markers',async()=>{
+test('unified dictation uses current explanation markers for understanding',async()=>{
  const raw='我想买电脑补充背景开始指的是设备补充背景结束';
  const f=fixture(raw);const r=await f.service.polish({rawText:raw,llm:route,strength:'prompt',explanationMarkers:'background'});
- assert.equal(r.explanation,undefined);assert.equal(f.calls[0].messages[1].content,raw);
+ assert.equal(r.explanation.used,true);assert.equal(f.calls[0].messages[1].content,"我想买电脑");
 });
-test('incomplete note is held before any model request and context-only input is never insertable',async()=>{
- const f=fixture('');
- const held=await f.service.polish({rawText:'正文补充背景开始解释',llm:route,strength:'concise',explanationMarkers:'background',supportsClarification:true});
- assert.equal(held.text,'');assert.equal(held.clarification.kind,'explanation');assert.equal(f.calls.length,0);
+test('incomplete markers remain source text without a continuation question',async()=>{
+ const f=fixture('正文。');
+ const r=await f.service.polish({rawText:'正文补充背景开始解释',llm:route,strength:'concise',explanationMarkers:'background',supportsClarification:true});
+ assert.equal(r.text,'正文。');assert.equal(r.clarification,undefined);assert.equal(f.calls.length,1);
+ assert.ok(f.calls[0].messages[1].content.includes('补充背景开始解释'));
  const empty=await f.service.polish({rawText:'补充背景开始只有说明补充背景结束',strength:'concise',explanationMarkers:'background'});
- assert.equal(empty.contextOnly,true);assert.equal(empty.text,'');assert.equal(f.calls.length,0);
+ assert.equal(empty.contextOnly,true);assert.equal(empty.text,'');assert.equal(f.calls.length,1);
 });
 
 test('traditional markers and ASR spaces have the same scoped meaning',()=>{
@@ -68,9 +69,9 @@ test('explanation secrets are redacted before any provider message or scoped nam
  await f.service.polish({rawText:'请购买电脑。补充背景开始测试密码 sk-live-1234567890abcdefghijklmno补充背景结束',llm:route,strength:'concise',explanationMarkers:'background'});
  assert.equal(f.calls.length,1);assert.ok(!JSON.stringify(f.calls).includes('sk-live-1234567890abcdefghijklmno'));
 });
-test('clarification preserves marker selection for edited or continued requests',async()=>{
- const f=fixture('');const r=await f.service.polish({rawText:'请购买电脑。旁注开始说明',llm:route,strength:'concise',explanationMarkers:'aside',supportsClarification:true});
- assert.equal(r.clarification.markerId,'aside');assert.equal(f.calls.length,0);
+test('one-shot marker recovery never asks the user to continue speaking',async()=>{
+ const f=fixture('请购买电脑。');const r=await f.service.polish({rawText:'请购买电脑。旁注开始说明',llm:route,strength:'concise',explanationMarkers:'aside',supportsClarification:true});
+ assert.equal(r.clarification,undefined);assert.equal(r.text,'请购买电脑。');assert.equal(f.calls.length,1);
 });
 
 test('unknown and prototype names are inert and punctuation does not become a body',async()=>{

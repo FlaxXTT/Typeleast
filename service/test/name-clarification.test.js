@@ -31,30 +31,29 @@ test('name question requires bounded evidence present in the current utterance',
     assert.equal(nameClarification(invalid, raw), null);
 });
 
-test('new clients hold ambiguous names without learning or returning a draft', async () => {
+test('ordinary modes retain uncertain source names without a confirmation or learning', async () => {
   const f = fixture(pending);
   const result = await f.service.polish({ rawText: raw, llm: route, supportsClarification: true });
-  assert.equal(result.text, '');
+  assert.equal(result.text, "");
   assert.equal(result.raw, raw);
-  assert.equal(result.clarification.evidence, 'LG');
+  assert.equal(result.reason,'name-kept');
+  assert.equal(result.clarification.kind,"quality");
   assert.deepEqual(result.suggestions, []);
   assert.equal(f.suggestions(), 0);
   assert.equal(f.calls.length, 1);
 });
 
-test('old clients retain safe fallback instead of receiving an uninsertable question', async () => {
-  const result = await fixture(pending).service.polish({ rawText: raw, llm: route });
-  assert.equal(result.fallback, true);
-  assert.equal(result.reason, 'entity-changed');
-  assert.equal(result.text,'');
-  assert.equal(result.clarification.kind,'quality');
+test('older clients get the same conservative one-pass name result', async () => {
+  const result = await fixture(pending).service.polish({rawText:raw,llm:route});
+  assert.equal(result.fallback,true);assert.equal(result.reason,'name-kept');
+  assert.equal(result.text,"");assert.equal(result.clarification.kind,"quality");
 });
 
-test('a rejected brand substitution opens confirmation and never auto-learns it', async () => {
+test('an unsupported brand substitution returns the source without a question', async () => {
   const f = fixture({ status: 'ok', text: '我想买 ROG 电脑。' });
   const result = await f.service.polish({ rawText: '我想买 LG 电脑', llm: route, supportsClarification: true });
   assert.equal(result.text, '');
-  assert.equal(result.clarification.evidence, 'LG');
+  assert.equal(result.clarification.kind,"quality");
   assert.equal(f.suggestions(), 0);
 });
 
@@ -66,13 +65,9 @@ test('translation stops before its second call when source name needs confirmati
   assert.equal(result.clarification.target, 'en');
 });
 
-test('unsupported or fabricated evidence cannot release a model draft', async () => {
-  const result = await fixture({ ...pending, text: '我想买 ROG 电脑。', clarification: { question: 'Which?', evidence: '玩家国度' } })
-    .service.polish({ rawText: raw, llm: route, supportsClarification: true });
-  assert.equal(result.fallback, true);
-  assert.equal(result.reason, 'output-format');
-  assert.equal(result.text,'');
-  assert.equal(result.clarification.kind,'quality');
+test('fabricated clarification evidence cannot release an unsupported name', async () => {
+  const result=await fixture({...pending,text:'我想买 ROG 电脑。',clarification:{question:'Which?',evidence:'玩家国度'}}).service.polish({rawText:raw,llm:route,supportsClarification:true});
+  assert.equal(result.text,"");assert.equal(result.reason,'name-kept');assert.equal(result.clarification.kind,"quality");
 });
 
 test('automatic dictionary entries cannot authorise replacing a valid different name', () => {
@@ -107,8 +102,8 @@ test('general prompts describe evidence and constraints, without hardcoded brand
     const prompt = systemPromptFor({ strength });
     assert.doesNotMatch(prompt, /\bROG\b|\bLG\b|玩家国度|败家之眼|# Examples|^Input:/mu);
     assert.match(prompt, /证据|evidence/);
-    assert.match(prompt, /clarification/);
-    if (strength === 'concise') assert.match(prompt, /缩写（全称）/);
+    assert.match(prompt,/不猜、不提问/);
+    if(strength==='concise')assert.match(prompt,/找词/);
   }
 });
 
@@ -150,12 +145,12 @@ function silentWav() {
   return b;
 }
 
-test('HTTP polish carries clarification capability and preserves the held response', async () => {
+test('HTTP ordinary polish delivers the source directly instead of a name question', async () => {
   const f = fixture(pending);
   const res = await post(f.service, '/polish', Buffer.from(JSON.stringify({ text: raw, llm: route, supportsClarification: true })));
   assert.equal(res.status, 200);
-  assert.equal(res.json.text, '');
-  assert.equal(res.json.clarification.evidence, 'LG');
+  assert.equal(res.json.text, "");
+  assert.equal(res.json.clarification.kind,"quality");
   assert.deepEqual(res.json.suggestions, []);
 });
 

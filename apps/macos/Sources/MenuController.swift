@@ -76,26 +76,9 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(cancelItem)
         pasteItem = item(L10n.text("粘贴上一条"), #selector(onPasteLast))
         menu.addItem(pasteItem)
-        let modes = NSMenu()
-        for strength in VoiceStrength.allCases {
-            let choice = item(strength.label, #selector(onMode(_:)))
-            choice.representedObject = strength.rawValue
-            modes.addItem(choice)
-            modeItems.append(choice)
-        }
-        let modeMenu = item(L10n.text("整理模式"), nil)
-        modeMenu.submenu = modes
-        menu.addItem(modeMenu)
-
-
-        hintItem = item("", nil)
-        hintItem.isEnabled = false
-        menu.addItem(hintItem)
-        axItem = item(L10n.text("自动粘贴需要辅助功能权限，点此允许"), #selector(onAccessibility))
-        menu.addItem(axItem)
-        launchItem = item(L10n.text("重启本地服务"), #selector(onLaunch))
-        menu.addItem(launchItem)
-
+        let assistant = item(L10n.text("需求助手"), #selector(onMode(_:)))
+        assistant.representedObject = "promptbeta"
+        menu.addItem(assistant)
         menu.addItem(.separator())
         menu.addItem(item(L10n.text("打开 TypeLeast"), #selector(onOpenHome)))
         menu.addItem(item(L10n.text("历史…"), #selector(onOpenHistory)))

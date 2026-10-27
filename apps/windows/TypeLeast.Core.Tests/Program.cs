@@ -144,16 +144,16 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
     Eq("a Ctrl+Shift+V chosen after the move stays", LoadSettings(file).PasteLastShortcut, "CtrlShiftV");
     Eq("new settings do not take Ctrl+Shift+V", new AppSettings().PasteLastShortcut, "CtrlShiftAltV");
     File.WriteAllText(file, "{\"Strength\":\"maximal\"}");
-    Eq("an old install switches to AI cleanup once", LoadSettings(file).Strength, "concise");
+    Eq("an old install migrates to unified dictation", LoadSettings(file).Strength, "prompt");
     foreach (var retired in new[] { "promptbrief", "promptify" })
     {
         File.WriteAllText(file, "{\"Strength\":\"" + retired + "\"}");
-        Eq("the retired prompt-mode tier " + retired + " reads as concise", LoadSettings(file).Strength, "concise");
+        Eq("the retired prompt-mode tier " + retired + " migrates to dictation", LoadSettings(file).Strength, "prompt");
     }
     Eq("automatic updates are on for settings saved before they existed", LoadSettings(file).AutoUpdate, true);
     File.WriteAllText(file, "{\"Strength\":\"promptbeta\"}");
     var migratedAI = LoadSettings(file);
-    Eq("existing Beta user switches to AI once", migratedAI.Strength, "concise");
+    Eq("existing Beta settings migrate to dictation", migratedAI.Strength, "prompt");
     migratedAI.Strength = "prompt"; migratedAI.Save(file, TestHistoryProtection.Shared);
     Eq("next startup keeps chosen mode", LoadSettings(file).Strength, "prompt");
     var autoHint = WordEntry.Parse("ROG", "LG", "auto")!;
@@ -460,7 +460,7 @@ Console.WriteLine();
     var path = Path.Combine(Path.GetTempPath(), "typeleast-beta-" + Guid.NewGuid() + ".json");
     try {
         new AppSettings { Strength = "promptbeta" }.Save(path, TestHistoryProtection.Shared);
-        Eq("Prompt Beta strength survives a reload", LoadSettings(path).Strength, "promptbeta");
+        Eq("assistant is not a persistent cleanup tier", LoadSettings(path).Strength, "prompt");
     } finally { if (File.Exists(path)) File.Delete(path); }
 }
 
@@ -943,7 +943,7 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     {
         var settings = new AppSettings { Strength = "concise" };
         settings.Save(path, TestHistoryProtection.Shared);
-        Eq("the concise tier persists", LoadSettings(path).Strength, "concise");
+        Eq("retired tier migrates to dictation", LoadSettings(path).Strength, "prompt");
     }
     finally { File.Delete(path); }
 }

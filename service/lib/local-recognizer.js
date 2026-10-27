@@ -10,7 +10,8 @@ const fail = code => Object.assign(new Error('local speech model could not be us
 export class LocalModelProcess {
   constructor(description) { this.description = description; this.phase = 'loading'; this.nextId = 0; this.pending = new Map(); }
   snapshot() { return { phase: this.phase, ready: this.phase === 'ready', languages: this.description.languages, modelName: this.description.name, canSetLanguage: this.description.canSetLanguage }; }
-  async prepare() {
+  async prepare(signal) {
+    signal?.throwIfAborted();
     if (this.child) return this.phase;
     this.child = fork(fileURLToPath(import.meta.url), ['--local-asr-worker'], { env: modelEnvironment(), execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
     this.child.on('message', message => {
@@ -21,21 +22,27 @@ export class LocalModelProcess {
     });
     const died = () => { this.phase = 'error'; for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(fail('model-load-failed')); } this.pending.clear(); };
     this.child.on('error', died); this.child.on('exit', died);
-    try { await this.call('prepare', this.description, 180000); this.phase = 'ready'; return this.phase; }
+    try { await this.call('prepare', this.description, 180000, signal); this.phase = 'ready'; return this.phase; }
     catch (error) { await this.release(); throw error; }
   }
-  call(action, value, timeout = 120000) {
+  call(action, value, timeout = 300000, signal) {
+    signal?.throwIfAborted();
     if (!this.child?.connected) return Promise.reject(fail('speech-not-ready'));
     return new Promise((resolve, reject) => {
       const id = ++this.nextId;
       const timer = setTimeout(() => { this.pending.delete(id); reject(fail('model-timeout')); void this.release(); }, timeout);
-      this.pending.set(id, { resolve, reject, timer });
+      const abort = () => { this.pending.delete(id); clearTimeout(timer); reject(signal.reason); void this.release(); };
+      signal?.addEventListener('abort',abort,{once:true});
+      const finish = fn => result => { signal?.removeEventListener('abort',abort); fn(result); };
+      this.pending.set(id, { resolve:finish(resolve), reject:finish(reject), timer });
       this.child.send({ id, action, value }, error => { if (error) { clearTimeout(timer); this.pending.delete(id); reject(fail('model-load-failed')); } });
     });
   }
-  transcribe(audio, language) {
-    if (!Buffer.isBuffer(audio) || audio.length > 4194304) return Promise.reject(fail('invalid-audio'));
-    return this.call('transcribe', { audio: audio.toString('base64'), language });
+  async transcribe(audio, language, signal) {
+    if (!Buffer.isBuffer(audio) || audio.length > 25165824) return Promise.reject(fail('invalid-audio'));
+    signal?.throwIfAborted();
+    if (!this.child) await this.prepare(signal);
+    return this.call('transcribe', { audio: audio.toString('base64'), language }, 300000, signal);
   }
   metrics() { return this.call('metrics', null); }
   async release() {
@@ -64,7 +71,7 @@ if (process.argv[2] === '--local-asr-worker' && process.send) {
           configFactory: options => localConfig(d, options), language: 'auto', numThreads: 2 });
         if (await recognizer.prepare() !== 'ready') throw fail('model-load-failed');
         result = true;
-      } else if (action === 'transcribe' && recognizer && typeof value.audio === 'string' && value.audio.length <= 5592412) {
+      } else if (action === 'transcribe' && recognizer && typeof value.audio === 'string' && value.audio.length <= 33554432) {
         result = await recognizer.transcribe(Buffer.from(value.audio, 'base64'), value.language);
       } else if (action === 'metrics' && recognizer) {
         result = { rssMiB: Math.round(process.memoryUsage().rss / 1024 ** 2), maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024) };

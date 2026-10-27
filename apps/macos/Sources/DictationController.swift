@@ -45,6 +45,8 @@ final class DictationController {
     private(set) var recordingStartedAt: Date?
     private var pendingAppBundleId = ""
     private var pendingField: FocusedField?
+    private var progressID = UUID()
+    private var pendingAssistant = false
     private var pendingTranslate: String?
     private var pendingMarkers = ""
     private var previewPanel: PreviewPanel?
@@ -57,10 +59,13 @@ final class DictationController {
 
     func toggleDictation() { toggleDictation(translateTo: nil) }
 
+    func toggleAssistant() { toggleDictation(translateTo:nil,assistant:true) }
+
     /// `translateTo` only matters when this starts a recording (翻译模式's own hotkey).
-    func toggleDictation(translateTo: String?) {
+    func toggleDictation(translateTo: String?, assistant: Bool = false) {
         switch phase {
         case .idle:
+            pendingAssistant = assistant
             pendingTranslate = translateTo
             startRecording()
         case .recording: stopRecording()
@@ -97,6 +102,7 @@ final class DictationController {
     }
 
     func beginCapture() {
+        progressID = UUID()
         pendingMarkers = clarificationDestination?.markers ?? settings.explanationMarkers
         // The previous dictation's field is checked for corrections before a new one starts.
         dictionary.dictationStarting()
@@ -105,7 +111,7 @@ final class DictationController {
         pendingField = nil
         let deviceID = AudioDevices.deviceID(forUID: settings.inputDeviceUID)
         recorder.prepareEngine = { engine in AudioInputSelector.apply(deviceID: deviceID, to: engine) }
-        recorder.maxSeconds = max(5, min(120, settings.maxSeconds))
+        recorder.maxSeconds = max(5, min(600, settings.maxSeconds))
         recorder.onAutoStop = { [weak self] in self?.stopRecording(auto: true) }
         do {
             try recorder.start()
@@ -117,13 +123,13 @@ final class DictationController {
         }
         phase = .recording
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
-        if pendingTranslate == nil && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", model.hotkeyLabel)) }
+        if pendingAssistant && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", settings.hotkeyAssistant.enabled ? settings.hotkeyAssistant.name : model.hotkeyLabel)) }
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
         recordingBar.showRecording(destination: pendingAppBundleId,
                                    badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
-                                       ?? VoiceStrength.stored(settings.strength).label)
+                                       ?? L10n.text(pendingAssistant ? "需求助手" : "听写"))
         setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
         playSound(start: true)
         if settings.muteWhileDictating {
@@ -161,14 +167,14 @@ final class DictationController {
         let app = pendingAppBundleId
         let field = pendingField
         let language = settings.language
-        let strength = settings.strength
+        let strength = pendingAssistant ? "promptbeta" : "prompt"
+        pendingAssistant = false
         // With "never keep history" nothing stays on disk, the recording included.
         let keep = settings.keepAudio24h && settings.historyRetention.seconds != 0
         let translateTo = pendingTranslate
         pendingTranslate = nil
         // A recording made while Prompt Beta's questions are open is the answer to them;
         // a translation is not, and leaves the questions waiting.
-        if translateTo == nil, strength != VoiceStrength.promptbeta.rawValue, betaPending != nil { dropBeta(notify: false) }
         let betaSession = translateTo == nil && strength == VoiceStrength.promptbeta.rawValue ? betaPending?.sessionId : nil
         if betaSession != nil { beta.setBusy(L10n.text("正在更新…")) }
         do {
@@ -218,8 +224,12 @@ final class DictationController {
             applyState()
             updateIdleBar()
         case .thinking:
-            setHint(L10n.text("正在整理，无法取消"))
-            applyState()
+            progressID = UUID()
+            client.cancelGeneration()
+            unregisterEscape(); stopTick(); recordingBar.hide()
+            phase = .idle
+            if betaPending != nil { showBetaQuestions() }
+            setHint(L10n.text("已取消"));applyState();updateIdleBar()
         case .idle:
             break
         }
@@ -230,12 +240,14 @@ final class DictationController {
     func retryWithoutPersonalization(_ entry: LocalHistoryEntry) {
         guard phase == .idle, !entry.raw.isEmpty, entry.strength != "promptbeta" else { return }
         guard let route = settings.activeLLMRoute else { setHint(L10n.text("请先配置可用的整理模型。"), warning: true); return }
-        phase = .thinking; recordingBar.showThinking(detail: ""); idleBar.hide(); applyState()
+        phase = .thinking; registerEscape(); recordingBar.showThinking(detail: ""); idleBar.hide(); applyState()
+        let generation = UUID(); progressID = generation
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try self.client.polishSync(text: entry.raw, language: entry.language, strength: entry.strength, llm: route,
                 translateTo: entry.translated, variants: entry.variants, dictionary: [], localOnly: [], explanationMarkers: entry.explanationMarkers ?? "",
                 personalization: ["version":1,"disabled":true]) }
             DispatchQueue.main.async {
+                guard self.progressID == generation else { return }
                 self.finishRequest(result, appBundleId: entry.app ?? "", language: entry.language, strength: entry.strength, audioPath: nil, seconds: entry.seconds,
                     field: nil, insert: false, llm: route, variants: entry.variants, markers: entry.explanationMarkers ?? "")
             }
@@ -256,6 +268,7 @@ final class DictationController {
         let strength = destination?.strength ?? strength
         let translateTo = destination?.target ?? translateTo
         phase = .thinking
+        registerEscape()
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
         applyState()
@@ -271,25 +284,31 @@ final class DictationController {
         let markers = destination?.markers ?? explanationMarkers ?? settings.explanationMarkers
         let policy = PreferenceExamples.shared.wirePolicy(words: settings.words, disabled: destination?.disabled ?? false)
         let examples = PreferenceExamples.shared.wireExamples
+        let progressID = UUID(); self.progressID = progressID
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var outcome: Result<DictateResponse, Error>
             do {
                 let data = try HistorySeal.readAudio(audioURL)
                 if data.count > Wav.maxBytes {
-                    throw ServiceError.transport(L10n.text("录音超过 4 MiB"))
+                    throw ServiceError.transport(L10n.text("录音超过 24 MiB"))
                 }
                 outcome = .success(try self.client.dictateSync(wav: data, language: effectiveLanguage,
                                                               appBundleId: appBundleId, strength: strength,
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              dictionary: dictionary, localOnly: localOnly, clarificationSource: source, clarificationEvidence: destination?.evidence, explanationMarkers: markers, preferenceExamples: examples, personalization: policy))
+                                                              dictionary: dictionary, localOnly: localOnly, clarificationSource: source, clarificationEvidence: destination?.evidence, explanationMarkers: markers, preferenceExamples: examples, personalization: policy,
+                                                              onProgress: { [weak self] progress in DispatchQueue.main.async {
+                                                                  guard let self, self.phase == .thinking, self.progressID == progressID else { return }
+                                                                  self.recordingBar.showThinking(detail:progress.label)
+                                                              } }))
             } catch {
                 outcome = .failure(error)
             }
             if deleteWhenDone { try? FileManager.default.removeItem(at: audioURL) }
             DispatchQueue.main.async {
+                guard self.progressID == progressID else { return }
                 self.finishRequest(outcome, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
                                    audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants, markers: markers)
             }
@@ -299,6 +318,7 @@ final class DictationController {
     func finishRequest(_ outcome: Result<DictateResponse, Error>, appBundleId: String, language: String,
                        strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool,
                        llm: LLMRoute? = nil, variants: String? = nil, markers: String = "") {
+        unregisterEscape()
         // A failed request or Beta question does not retain an untracked raw recording.
         defer {
             if let path = audioPath, !path.hasSuffix(".sealed") {
@@ -351,6 +371,9 @@ final class DictationController {
                         let text: String
                         if case .edit(let edited) = choice { text = edited } else { text = resp.raw }
                         self.phase = .thinking
+                        self.registerEscape()
+                        self.recordingBar.showThinking(detail:L10n.text("正在整理…"))
+                        let generation = UUID(); self.progressID = generation
                         self.applyState()
                         let entries = self.dictionary.serviceEntries
                         let local = self.dictionary.localEntries
@@ -363,6 +386,7 @@ final class DictationController {
                                 translateTo: clarification.target, variants: variants,
                                 dictionary: entries, localOnly: local, fieldContext: context, explanationMarkers: markers, preferenceExamples: examples, personalization: policy) }
                             DispatchQueue.main.async {
+                                guard self.progressID == generation else { return }
                                 self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength,
                                                    audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants, markers: markers)
                             }
@@ -377,7 +401,7 @@ final class DictationController {
                             variants: variants, appBundleId: appBundleId, field: field)
                 recordingBar.hide()
                 showBetaQuestions()
-                setHint(L10n.text("提示词 Beta：继续补充或生成"))
+                setHint(L10n.text("需求助手：继续补充或生成"))
                 applyState()
                 return
             }
@@ -409,6 +433,7 @@ final class DictationController {
             entry.explanationMarkers = markers
             entry.personalization = resp.personalization
             entry.variants = variants
+            entry.task = resp.task
             HistoryStore.shared.add(entry)
             if !resp.fallback, resp.translated == nil { dictionary.received(resp.suggestions) }
             if text.isEmpty {
@@ -417,7 +442,7 @@ final class DictationController {
                 applyState()
                 return
             }
-            let failedHint = resp.fallbackReason == "entity-changed" ? L10n.text("名称改写缺少依据，已保留识别原文。") : resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
+            let failedHint = ["entity-changed", "name-kept"].contains(resp.fallbackReason ?? "") ? L10n.text("名称改写缺少依据，已保留识别原文。") : resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
             setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)
@@ -555,7 +580,7 @@ final class DictationController {
     // MARK: Prompt Beta
 
     func showBetaQuestions() {
-        beta.show(hotkey: model.hotkeyLabel)
+        beta.show(hotkey: settings.hotkeyAssistant.enabled ? settings.hotkeyAssistant.name : L10n.text("继续补充按钮"))
     }
 
     /// Explicitly finish clarification; unanswered points stay unconfirmed.
@@ -563,17 +588,20 @@ final class DictationController {
         guard phase == .idle, let pending = betaPending else { return }
         beta.hide()
         phase = .thinking
+        registerEscape()
         recordingBar.showThinking(detail: "")
         applyState()
         let llm = pending.llm
         let language = pending.language
         let variants = pending.variants
+        let generation = UUID(); progressID = generation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.betaSync(sessionId: pending.sessionId, skip: true,
                                                             appBundleId: pending.appBundleId, llm: llm,
                                                             variants: variants) }
             DispatchQueue.main.async {
+                guard self.progressID == generation else { return }
                 self.finishRequest(outcome, appBundleId: pending.appBundleId, language: language,
                                    strength: VoiceStrength.promptbeta.rawValue, audioPath: nil, seconds: nil,
                                    field: pending.field, insert: true, llm: llm, variants: variants)

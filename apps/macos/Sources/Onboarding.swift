@@ -100,7 +100,7 @@ struct OnboardingView: View {
                      text: L10n.text("在任何 App 里按 Fn 说话，再按一下结束。文字写到光标处。")) {
                 VStack(spacing: 14) {
                     AppMarkView(size: 72)
-                    Text(L10n.text("遇到简称或专名，可以补一句全称、用途或拼写。AI 整理会合并补充信息；有歧义时先确认。")).font(.callout).foregroundColor(.secondary)
+                    Text(L10n.text("遇到简称或专名，可补充全称、含义或逐字拼写。听写会结合整段理解，删除只用于确认名称的解释。")).font(.callout).foregroundColor(.secondary)
                 }
             }
         case .localService:

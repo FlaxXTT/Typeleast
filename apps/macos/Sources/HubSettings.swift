@@ -60,6 +60,9 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文。", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
                 HotkeyField(slot: .translate)
             }
+            SettingRow(title:L10n.text("需求助手"),detail:L10n.text("多轮补充需求，主动生成完整提示词。")) {
+                HotkeyField(slot:.assistant)
+            }
             SettingRow(title: L10n.text("粘贴上一条"), detail: nil) {
                 HotkeyField(slot: .pasteLast)
             }
@@ -424,7 +427,7 @@ private struct PermissionRow: View {
 // MARK: - shortcut recorder
 
 enum HotkeySlot {
-    case main, alt, pasteLast, translate
+    case main, alt, pasteLast, translate, assistant
 
     /// The registration slot name (AppDelegate.registerHotKeys).
     var name: String {
@@ -433,6 +436,7 @@ enum HotkeySlot {
         case .alt: return "alt"
         case .pasteLast: return "pasteLast"
         case .translate: return "translate"
+        case .assistant: return "assistant"
         }
     }
 
@@ -442,6 +446,7 @@ enum HotkeySlot {
         case .alt: return \.hotkeyAlt
         case .pasteLast: return \.hotkeyPasteLast
         case .translate: return \.hotkeyTranslate
+        case .assistant: return \.hotkeyAssistant
         }
     }
 }
@@ -499,7 +504,7 @@ struct HotkeyField: View {
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             if event.type == .flagsChanged {
                 // Fn alone is a dictation key only; 翻译 needs a real shortcut.
-                if event.keyCode == FnKeyMonitor.keyCode, !event.modifierFlags.contains(.function), slot != .translate {
+                if event.keyCode == FnKeyMonitor.keyCode, !event.modifierFlags.contains(.function), slot != .translate && slot != .assistant {
                     save(HotKeyBinding.fnDefault)
                 }
                 return event

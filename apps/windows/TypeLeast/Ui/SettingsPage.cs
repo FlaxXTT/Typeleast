@@ -125,6 +125,22 @@ internal sealed class SettingsPage : IPage
             SyncTranslateKey();
         };
 
+        var assistantKey = Theme.Choice(160);
+        assistantKey.Items.Add(new ComboBoxItem { Content = L10n.T("关"), Tag = null });
+        foreach (DictationKey k in Enum.GetValues(typeof(DictationKey))) assistantKey.Items.Add(new ComboBoxItem { Content = TapDetector.Label(k), Tag = k });
+        void SyncAssistantKey() {
+            foreach (ComboBoxItem item in assistantKey.Items) item.IsEnabled = item.Tag is not DictationKey k || (k != s.Hotkey && k != s.TranslateHotkey);
+            assistantKey.SelectedIndex = s.AssistantHotkey is { } key ? (int)key + 1 : 0;
+        }
+        SyncAssistantKey();
+        assistantKey.SelectionChanged += (_, _) => {
+            if (assistantKey.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is DictationKey key && (key == s.Hotkey || key == s.TranslateHotkey)) { SyncAssistantKey(); return; }
+            s.AssistantHotkey = item.Tag as DictationKey?; host.SaveSettings();
+        };
+        hotkey.SelectionChanged += (_, _) => { if (s.AssistantHotkey == s.Hotkey) s.AssistantHotkey = null; SyncAssistantKey(); };
+        translateKey.SelectionChanged += (_, _) => { if (s.AssistantHotkey == s.TranslateHotkey) s.AssistantHotkey = null; SyncAssistantKey(); };
+
         var mic = Theme.Choice(220);
         mic.Items.Add(new ComboBoxItem { Content = L10n.T("系统默认麦克风"), Tag = -1 });
         var devices = Array.Empty<string>();
@@ -195,6 +211,7 @@ internal sealed class SettingsPage : IPage
             Section(L10n.T("快捷键"),
                 Theme.SettingRow(L10n.T("听写快捷键"), Theme.Text(L10n.T("按一下开始，再按一下结束。右 Alt 在部分键盘上是 AltGr，请换键。"), 12, Theme.Grey), hotkey),
                 Theme.SettingRow(L10n.T("翻译快捷键"), Theme.Text(L10n.T("不能与听写键相同。"), 12, Theme.Grey), translateKey),
+                Theme.SettingRow(L10n.T("需求助手"), Theme.Text(L10n.T("多轮补充需求，主动生成完整提示词。"), 12, Theme.Grey), assistantKey),
                 Theme.SettingRow(L10n.T("粘贴上一条"), null, pasteKey),
                 Theme.SettingRow(L10n.T("取消"), null, Theme.Keycaps("Esc"))),
             Section(L10n.T("语言"), languageRows),

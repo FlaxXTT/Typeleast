@@ -12,7 +12,7 @@
 const LETTER_RUN = /(?<![\p{L}\p{N}_])\p{Script=Latin}(?:(?:[ \t]*[-‐–.,，、·][ \t]*\p{Script=Latin})+|(?:[ \t]+\p{Script=Latin})+)(?![\p{L}\p{N}_])/gu;
 const HYPHENS_ONLY = /^\p{L}(?:[ \t]*[-‐–][ \t]*\p{L})+$/u;
 /** Words that announce a spelling. */
-const CUE = /拼法|拼写|拼一下|拼成|拼作|字母|英文是|英文叫|写作|spell|letters?\b/iu;
+const CUE = /拼法|拼写|拼一下|拼成|拼作|字母|单词是|这个词是|英文是|英文叫|写作|spell|letters?\b/iu;
 const CLAUSE_BREAK = /[。！？；;!?\n]/u;
 const MAX_LETTERS = 20;
 const MAX_SPELLINGS = 5;
@@ -34,7 +34,7 @@ function clauseAround(text, start, end) {
  * @returns {Array<{spelled: string, word: string}>} at most five, in order.
  */
 export function spelledWords(text) {
-  const source = String(text ?? "").slice(0, 6000);
+  const source = String(text ?? "").slice(0, 32000);
   const found = [];
   const seen = new Set();
   for (const match of source.matchAll(LETTER_RUN)) {
@@ -42,11 +42,15 @@ export function spelledWords(text) {
     const letters = spelled.replace(/[^\p{L}]/gu, "");
     if (letters.length < 2 || letters.length > MAX_LETTERS) continue;
     const standalone = letters.length >= 3 && HYPHENS_ONLY.test(spelled);
-    if (!standalone && !CUE.test(clauseAround(source, match.index, match.index + spelled.length))) continue;
+    const before = source.slice(Math.max(0, match.index - 48), match.index);
+    const after = source.slice(match.index + spelled.length);
+    const parenthesized = /[（(]\s*$/u.test(before) && /^\s*[）)]/u.test(after)
+      && before.replace(/[（(]\s*$/u, '').match(/([A-Za-z]+)\s*$/u)?.[1]?.toLowerCase() === letters.toLowerCase();
+    if (!standalone && !parenthesized && !CUE.test(clauseAround(source, match.index, match.index + spelled.length))) continue;
     if (seen.has(spelled)) continue;
     seen.add(spelled);
     found.push({ spelled, word: letters });
-    if (found.length === MAX_SPELLINGS) break;
+
   }
-  return found;
+  return found.slice(-MAX_SPELLINGS);
 }

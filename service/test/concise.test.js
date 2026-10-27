@@ -36,10 +36,10 @@ test("精简整理是一档整理强度，旧的提示词档按精简整理处�
 test("精简整理用自己的提示词，带上词典；标准整理不受影响", () => {
   const system = systemPromptFor({ strength: "concise", dictionary: ["TypeLeast"] });
   assert.ok(system.startsWith(CONCISE_PROMPT));
-  assert.match(CONCISE_PROMPT, /积极改写/);
-  assert.match(CONCISE_PROMPT, /数字、否定、例外/);
-  assert.match(CONCISE_PROMPT, /不设角色、背景、任务/);
-  assert.match(CONCISE_PROMPT, /保留用途、对象/);
+  assert.match(CONCISE_PROMPT, /重排/);
+  assert.match(CONCISE_PROMPT, /条件、否定、数字/);
+  assert.match(CONCISE_PROMPT, /不默认摘要/);
+  assert.match(CONCISE_PROMPT, /实质信息、用途/);
   assert.doesNotMatch(system, /Entries:|HARNESS ADDENDUM/);
   const standard = systemPromptFor({ strength: "prompt" });
   assert.doesNotMatch(standard, /# Examples|ROG|LG/, "individual cases belong in tests, not the generalized prompt");
@@ -56,7 +56,7 @@ test("精简整理给模型更多输出空间；旧的提示词档发来时也�
   }
   assert.equal(calls.length, 3, "一次调用完成");
   for (const call of calls) {
-    assert.equal(call.max_tokens, 1600);
+    assert.equal(call.max_tokens, 1800);
     assert.ok(call.messages[0].content.startsWith(CONCISE_PROMPT));
   }
   await svc.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });

@@ -4,11 +4,10 @@
  * lists and pronunciation aliases are ignored, including legacy callers.
  */
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
-import { CONCISE_PROMPT } from "./prompts/concise.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-27.2-cleanup+concise+beta+translate";
+export const PROMPT_VERSION = "2026-10-27.4-dictation+assistant+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -67,7 +66,7 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
  * @returns {string} the system prompt.
  */
 export function systemPromptFor({ dictionary, aliases, fieldContext, spellings, strength, style } = {}) {
-  const base = strength === "concise" ? CONCISE_PROMPT : cleanupSystemPrompt();
+  const base = cleanupSystemPrompt();
   return base + UTTERANCE_RULES + styleBlock(style) + harnessAddendum({ dictionary, aliases, fieldContext, spellings });
 }
 

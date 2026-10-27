@@ -2,7 +2,7 @@ import {createDeadline, ModelCallError} from './llm.js';
 
 /** One operation owns its clock and its single retry, including transport retries. */
 export class CleanupTask {
-  constructor(signal, {now=Date.now, totalMs=60000}={}) {
+  constructor(signal, {now=Date.now, totalMs=180000}={}) {
     this.now=now; this.end=now()+totalMs; this.retries=1;
     this.deadline=createDeadline(signal,totalMs); this.signal=this.deadline.signal;
   }
@@ -14,7 +14,7 @@ export class CleanupTask {
 export function cleanupParameters(text,strength,config={}) {
   const chars=Array.from(text),cjk=chars.filter(c=>/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(c)).length;
   const estimated=Math.ceil(cjk*1.5+(chars.length-cjk)/3);
-  return strength==='concise'?{maxTokens:1600,temperature:1,timeoutMs:25000}:{maxTokens:Math.min(4096,Math.max(1800,Math.ceil(estimated*1.5+256))),temperature:0.8,timeoutMs:Math.min(18000,config.timeoutMs??18000)};
+  return {maxTokens:Math.min(8192,Math.max(1800,Math.ceil(estimated*1.5+256))),temperature:0.3,timeoutMs:Math.min(config.timeoutMs??180000,180000,Math.max(30000,chars.length*30))};
 }
 export function needsCleanupReview(raw,output,metrics={}) {
   const source=Array.from(raw).length;

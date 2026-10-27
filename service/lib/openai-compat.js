@@ -82,6 +82,25 @@ export function noThinkingFields(host) {
 /** Hosts that rejected the thinking switch once; it is not sent to them again. */
 const thinkingSwitchRejected = new Set();
 
+/** Inspect only a bounded structured error code; never retain provider response text. */
+async function contextLimit(response) {
+  if (response.status !== 400 || typeof response.body?.getReader !== 'function') return false;
+  const reader = response.body.getReader();
+  const chunks = []; let size = 0;
+  try {
+    for (;;) {
+      const {done,value} = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 8192) return false;
+      chunks.push(Buffer.from(value));
+    }
+    const error = JSON.parse(Buffer.concat(chunks).toString('utf8'))?.error;
+    return ['context_length_exceeded','context_window_exceeded','input_too_long'].includes(error?.code);
+  } catch { return false; }
+  finally { await reader.cancel().catch(() => {}); }
+}
+
 /** A label for history and /health that identifies the route without the key. */
 export function routeLabel(route) {
   return `custom:${route.host}`;
@@ -125,6 +144,7 @@ export async function completeOpenAI(options) {
         signal: deadline.signal,
       });
       if (!response.ok) {
+        if (await contextLimit(response)) throw new ModelCallError('error','provider context limit exceeded',{code:'CONTEXT_LIMIT'});
         // The body may echo request details; only the status is kept.
         await response.body?.cancel?.().catch?.(() => {});
         // A provider that does not know the thinking switch may answer 400:
@@ -150,7 +170,7 @@ export async function completeOpenAI(options) {
       if (choice?.finish_reason === "length" && text.trim() === "" && !widened && budget !== undefined) {
         if (retryBudget && !retryBudget.retry()) throw new ModelCallError("max-tokens", "model output hit its token limit");
         widened = true;
-        budget = Math.min(4096, budget * 4);
+        budget = Math.max(budget, Math.min(8192, budget * 4));
         attempt -= 1;
         continue;
       }

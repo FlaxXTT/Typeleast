@@ -11,7 +11,7 @@
 ```bash
 node tests/conformance/run.mjs -- node service/bin/typeleast-service.mjs
 node tests/conformance/run.mjs --group translation --json -- node service/bin/typeleast-service.mjs
-node tests/conformance/run.mjs --fixture tests/conformance/v2-asr.json -- node tests/conformance/fake-asr-service.mjs
+node tests/conformance/run.mjs --fixture tests/conformance/v3-asr.json -- node tests/conformance/fake-asr-service.mjs
 ```
 
 另一个实现把 `--` 后的命令换成自己的服务命令。例如 `-- ./my-service`。运行器不使用 shell 执行这个命令。被测程序须接受 `--state-dir DIR --models-dir DIR --port 0`，在标准输出第一行给出 `{"event":"ready","port":数字,"pid":数字,"version":"..."}`，并把令牌写入状态目录的 `api-token`。测试只连接该端口的 `127.0.0.1`。其他日志应写到标准错误。
@@ -42,3 +42,11 @@ v2 将 `concise` 的界面名称改为 AI 整理，并增加待确认名称的�
 ## 服务契约 v2 的变化
 
 v2 将自然整理与 AI 整理的失败交付改为 `text: ""` 和 `clarification.kind: "quality"`，候选只能供用户审阅；插件仅接受风格类型。`v1.json` 与 `v1-asr.json` 保留作旧版行为记录，不作为当前验收要求。新实现须运行 v2 两套用例。
+
+## 当前契约 v3：统一听写
+
+v3 增加 `task`（dictation / translation / assistant）；录音头为 `x-voice-task`。缺少任务字段时，旧普通档位均映射听写，旧 promptbeta 映射需求助手。旧客户端契约文件仍检验历史字段的兼容读取，不代表当前存在档位选择。
+
+默认运行器使用 v3.json；假识别链路使用 v3-asr.json。翻译的第一步不再绕过失败；所有失败交付为空正文及 quality 恢复资料。助手按需每轮最多 3 问，生成一次，不再执行审查修补循环。v1、v2 文件只保留作旧版本记录。
+
+十分钟音频、分段边界、名称依据及预算回归位于 service/test/long-dictation.test.js。它们使用假识别器及假模型，只验证流程，不证明真实语音准确率。

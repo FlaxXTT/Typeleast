@@ -10,7 +10,7 @@
  */
 
 const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/gu;
-import { missingNames } from './entity-guard.js';
+import { missingNames, unsupportedNames } from './entity-guard.js';
 
 const LATIN = /[A-Za-z]/g;
 const WORD = /[A-Za-z0-9][A-Za-z0-9'\u2019_-]*/g;
@@ -554,8 +554,8 @@ export function validateOutput(input) {
 
   // A short name swap is still a factual change. Check before the short-text bypass.
   // Translation and Beta retain their existing independent contracts.
-  if (strength !== 'translate' && strength !== 'promptbeta') {
-    metrics.missingNames = missingNames(raw, text, input.termEvidence ?? []);
+  if (strength !== 'translate' && strength !== 'promptbeta' && input.nameChangesReviewed !== true) {
+    metrics.missingNames = [...new Set([...missingNames(raw, text, input.termEvidence ?? []), ...unsupportedNames(raw,text,input.termEvidence ?? [])])];
     if (metrics.missingNames.length) return { ok: false, reason: 'entity-changed', text, metrics };
   }
 
@@ -618,6 +618,10 @@ export function validateOutput(input) {
   }
 
   if (invented.length > authorised + structural) return { ok: false, reason: "invented-fact", text, metrics };
+
+  // Only the internal whole-source review can waive wording/length heuristics.
+  // Numbers, names and language have already been checked above.
+  if (input.meaningReviewed === true) return {ok:true,text,metrics};
 
   const maxNovelty = THRESHOLDS.preciseNoveltyByStrength[strength] ?? THRESHOLDS.preciseNoveltyByStrength.prompt;
   metrics.preciseNovelty = preciseNovelty(raw, text);

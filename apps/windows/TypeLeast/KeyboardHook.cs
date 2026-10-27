@@ -18,6 +18,9 @@ internal sealed class KeyboardHook : IDisposable
     private readonly TapDetector tap;
     /// <summary>翻译模式's key; null when it is off.</summary>
     private TapDetector? translateTap;
+    private TapDetector? assistantTap;
+    public event Action? AssistantTapped;
+    public void SetAssistantKey(DictationKey? key) { assistantTap = key is { } k ? new TapDetector(TapDetector.VirtualKey(k)) : null; }
 
     /// <summary>A clean tap of the dictation key.</summary>
     public event Action? Tapped;
@@ -89,11 +92,12 @@ internal sealed class KeyboardHook : IDisposable
 
             // A lone Alt tap would open the focused window's menu bar and steal the
             // caret; an unassigned key in between makes Windows ignore it.
-            if (!injected && isDown && (vk == tap.TargetVk || vk == translateTap?.TargetVk) && vk is 0xA4 or 0xA5)
+            if (!injected && isDown && (vk == tap.TargetVk || vk == translateTap?.TargetVk || vk == assistantTap?.TargetVk) && vk is 0xA4 or 0xA5)
                 Native.SendKeys((Native.VK_MENU_MASK, false), (Native.VK_MENU_MASK, true));
 
             var now = DateTime.UtcNow;
             if (tap.OnKey(vk, isDown, injected, now)) Tapped?.Invoke();
+            if (assistantTap?.OnKey(vk, isDown, injected, now) == true) AssistantTapped?.Invoke();
             if (translateTap?.OnKey(vk, isDown, injected, now) == true) TranslateTapped?.Invoke();
         }
         return Native.CallNextHookEx(handle, nCode, wParam, lParam);

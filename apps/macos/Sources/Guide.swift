@@ -17,7 +17,7 @@ enum SettingsGuide {
 
     static var entries: [Entry] {
         [
-            Entry(title: L10n.text("整理模式"), place: L10n.text("侧栏"), page: nil),
+            Entry(title: L10n.text("需求助手"), place: L10n.text("侧栏"), page: nil),
             Entry(title: L10n.text("API Key"), place: L10n.text("设置 › 整理"), page: .settings, category: 1),
             Entry(title: L10n.text("快捷键"), place: L10n.text("设置 › 听写"), page: .settings, category: 0),
             Entry(title: L10n.text("语音模型和下载镜像"), place: L10n.text("设置 › 服务与更新"), page: .settings, category: 4),

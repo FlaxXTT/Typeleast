@@ -18,10 +18,10 @@ internal sealed class BetaPanel : Window
     private readonly StackPanel list = new();
     private readonly TextBlock hint;
     private readonly TextBlock roundLabel = Theme.Text("", 12, Theme.Grey);
-    private readonly UIElement cancelButton, skipButton;
+    private readonly UIElement cancelButton, skipButton, continueButton;
     private string hintText = "";
 
-    public BetaPanel(Action skip, Action cancel)
+    public BetaPanel(Action skip, Action cancel, Action? resume = null)
     {
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -36,16 +36,18 @@ internal sealed class BetaPanel : Window
         SourceInitialized += (_, _) => TypeLeast.Native.MakeNoActivate(new WindowInteropHelper(this).Handle);
 
         var title = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
-        title.Children.Add(Theme.Text(L10n.T("提示词 Beta"), 12, Theme.Accent, bold: true));
+        title.Children.Add(Theme.Text(L10n.T("需求助手"), 12, Theme.Accent, bold: true));
         title.Children.Add(roundLabel);
         hint = Theme.Text("", 11.5, Theme.Grey);
         hint.Margin = new Thickness(0, 10, 0, 12);
         var buttons = new DockPanel { LastChildFill = false };
         cancelButton = Theme.Secondary(L10n.T("取消"), cancel);
+        continueButton = Theme.Secondary(L10n.T("继续补充"), () => resume?.Invoke());
         skipButton = Theme.Primary(L10n.T("生成"), skip);
         DockPanel.SetDock(cancelButton, Dock.Left);
         DockPanel.SetDock(skipButton, Dock.Right);
         buttons.Children.Add(cancelButton);
+        buttons.Children.Add(continueButton);
         buttons.Children.Add(skipButton);
 
         var content = new StackPanel();
@@ -115,7 +117,8 @@ internal sealed class BetaPanel : Window
     {
         hint.Text = status ?? hintText;
         hint.Foreground = status is null ? Theme.Grey : Theme.Accent;
-        cancelButton.IsEnabled = skipButton.IsEnabled = status is null;
+        cancelButton.IsEnabled = true;
+        continueButton.IsEnabled = skipButton.IsEnabled = status is null;
     }
 
     /// <summary>Back to waiting for the next answer, with the same questions.</summary>

@@ -31,7 +31,7 @@ struct ExplanationMarkerPicker: View {
                 Text(L10n.text("关闭")).tag("")
                 ForEach(ExplanationMarkers.visible) { Text($0.label).tag($0.rawValue) }
             }
-            Text(L10n.text("仅用于 AI 整理。开始词与结束词之间的内容只作本次解释，不写入结果，也不成为永久替换规则。"))
+            Text(L10n.text("用于听写。标记内的内容只作本次解释，不写入结果，也不成为永久替换规则。也可直接说明名称或拼写。"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }

@@ -8,11 +8,11 @@ import { UTTERANCE_RULES } from '../lib/utterance-rules.js';
 import { translatePrompt } from '../lib/prompts/translate.js';
 import { STRENGTHS, validateConfig } from '../lib/config.js';
 
-test('the concise tier uses the existing strength field and its own prompt', () => {
+test('legacy strengths use one shared dictation prompt', () => {
   assert.ok(STRENGTHS.includes('concise'));
   assert.deepEqual(validateConfig({ strength: 'concise' }).issues, []);
   assert.ok(systemPromptFor({ strength: 'concise' }).startsWith(CONCISE_PROMPT));
-  assert.match(CONCISE_PROMPT, /仅在用户要求时使用表格/);
+  assert.equal(systemPromptFor({strength:"concise"}),systemPromptFor({strength:"prompt"}));
 });
 
 test('all one-shot cleanup modes receive scoped correction and term-restoration rules', () => {
@@ -20,10 +20,10 @@ test('all one-shot cleanup modes receive scoped correction and term-restoration 
     assert.ok(systemPromptFor({ strength }).includes(UTTERANCE_RULES), strength);
   }
   assert.match(translatePrompt('en'), /已经整理好的原语言文本/);
-  assert.match(UTTERANCE_RULES, /只处理本次口述/);
-  assert.match(UTTERANCE_RULES, /明确撤回/);
+  assert.match(UTTERANCE_RULES, /处理本次口述/);
+  assert.match(UTTERANCE_RULES, /明确改口/);
   assert.match(UTTERANCE_RULES, /引用和强调/);
-  assert.match(UTTERANCE_RULES, /证据不足以解决/);
+  assert.match(UTTERANCE_RULES, /证据不足保留原称呼/);
 });
 
 const samples = [

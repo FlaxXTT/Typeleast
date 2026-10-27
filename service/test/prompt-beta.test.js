@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoicePolishService } from '../lib/service.js';
-import { BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT, BETA_LIMITS,
+import { BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
   hasContent, normaliseQuestions, parseJsonReply } from '../lib/prompts/prompt-beta.js';
 
 const ROUTE = { baseURL: 'https://api.example.com/v1', model: 'm', apiKey: 'test-key' };
@@ -14,7 +14,7 @@ function provider(script = {}) {
     const body = JSON.parse(init.body);
     const system = body.messages[0].content;
     const stage = system === BETA_INTERVIEW_PROMPT ? 'interview' : system === BETA_DRAFT_PROMPT ? 'draft'
-      : system === BETA_REVIEW_PROMPT ? 'review' : system === BETA_PATCH_PROMPT ? 'patch' : 'other';
+      : 'other';
     calls.push({ stage, user: body.messages[1].content });
     const value = script[stage] ?? ({ interview: interview(), draft: DRAFT, review: '{"issues":[]}', patch: DRAFT }[stage]);
     const content = typeof value === 'function' ? await value(calls, init) : value;
@@ -32,18 +32,11 @@ function serviceFor(p, history = []) {
 const send = (service, rawText = REQUEST, extra = {}) => service.polish({ rawText, strength: 'promptbeta', llm: ROUTE, ...extra });
 const finish = (service, id) => send(service, '', { betaSession: id, betaSkip: true });
 
-test('Beta prompts focus on user information and prohibit invented goals, not template completion', () => {
-  assert.match(BETA_INTERVIEW_PROMPT, /每一轮都重新阅读全部对话/);
-  assert.match(BETA_INTERVIEW_PROMPT, /不得做“合理假设”/);
-  assert.match(BETA_DRAFT_PROMPT, /不强制固定章节/);
-  assert.match(BETA_REVIEW_PROMPT, /不限于数字/);
-});
-
 test('clear information waits for explicit generate and still accepts more context', async () => {
   const p = provider({ interview: calls => interview(calls.length === 1 ? [] : ['客户是哪个群体？']) });
   const history = [], s = serviceFor(p, history);
   const a = await send(s);
-  assert.equal(a.text, ''); assert.equal(a.beta.ready, false); assert.equal(a.beta.questions.length,4);
+  assert.equal(a.text, ''); assert.equal(a.beta.ready, true); assert.equal(a.beta.questions.length,0);
   const b = await send(s, '还想发给客户', { betaSession: a.beta.sessionId });
   assert.equal(b.beta.sessionId, a.beta.sessionId); assert.equal(b.beta.ready, false); assert.equal(b.beta.round, 2);
   assert.deepEqual(p.calls.map(c => c.stage), ['interview', 'interview']);
@@ -101,27 +94,6 @@ test('failed follow-up does not commit an unaccepted answer; earlier accepted an
   const failed = await send(s, '本轮未接收', { betaSession: a.beta.sessionId });
   assert.equal(failed.beta.notice, 'output-format');
   assert.deepEqual(s.betaSessions.get(a.beta.sessionId).turns.map(t => t.answer), ['已接收的补充']);
-});
-
-test('malformed review is not treated as approval; user can retry without losing context', async () => {
-  const p = provider({ review: 'looks good' }), history = [], s = serviceFor(p, history);
-  const a = await send(s); const r = await finish(s, a.beta.sessionId);
-  assert.equal(r.text, ''); assert.equal(r.beta.notice, 'output-format');
-  assert.ok(s.betaSessions.has(a.beta.sessionId));
-});
-
-test('a patch is reviewed again before it can be inserted', async () => {
-  let reviews = 0;
-  const p = provider({ review: () => ++reviews === 1 ? '{"issues":[{"type":"invented","quote":"详细纪要","fix":"remove expansion"}]}' : '{"issues":[]}' });
-  const s = serviceFor(p), a = await send(s), done = await finish(s, a.beta.sessionId);
-  assert.equal(done.text, DRAFT); assert.equal(reviews, 2);
-  assert.deepEqual(p.calls.map(c => c.stage), ['interview', 'draft', 'review', 'patch', 'review']);
-});
-
-test('remaining unsupported goals or facts block insertion and retain the session', async () => {
-  const p = provider({ review: '{"issues":[{"type":"invented","quote":"详细纪要","fix":"remove new feature"}]}' });
-  const history = [], s = serviceFor(p, history), a = await send(s), r = await finish(s, a.beta.sessionId);
-  assert.equal(r.text, ''); assert.equal(r.beta.notice, 'beta-validation');
 });
 
 test('new numbers are blocked even if the reviewer misses them', async () => {
@@ -184,7 +156,7 @@ test('accepted rounds refresh the idle expiry and normalize questions', async ()
   const p = provider({ interview: interview(['q', 'q', '', 'b', 'c', 'd', 'e']) }), s = serviceFor(p), a = await send(s);
   s.betaSessions.get(a.beta.sessionId).created = Date.now() - 1000;
   const r = await send(s, '补充内容', { betaSession: a.beta.sessionId });
-  assert.equal(r.beta.questions.length, 4); assert.ok(Date.now() - s.betaSessions.get(a.beta.sessionId).created < 1000);
+  assert.equal(r.beta.questions.length, 3); assert.ok(Date.now() - s.betaSessions.get(a.beta.sessionId).created < 1000);
   assert.equal(hasContent('嗯'), false); assert.equal(parseJsonReply('invalid'), null);
   assert.deepEqual(normaliseQuestions(['x', 'x', '']), ['x']);
 });
@@ -199,7 +171,7 @@ test('the WAV pipeline preserves clarification metadata and suppresses silent ra
   audio.writeUInt32LE(16000, 24); audio.writeUInt32LE(32000, 28); audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34);
   audio.write('data', 36); audio.writeUInt32LE(audio.length - 44, 40);
   const first = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE });
-  assert.ok(first.beta.sessionId); assert.equal(first.text, ''); assert.equal(first.beta.ready, false);assert.equal(first.beta.questions.length,4);
+  assert.ok(first.beta.sessionId); assert.equal(first.text, ''); assert.equal(first.beta.ready, true);assert.equal(first.beta.questions.length,0);
   const silent = await s.transcribeAndPolish({ audio, strength: 'promptbeta', llm: ROUTE, betaSession: first.beta.sessionId });
   assert.equal(silent.beta.notice, 'empty-transcript');
   // A new empty Beta request has no raw ASR token to fall through into a client paste.
@@ -209,33 +181,16 @@ test('the WAV pipeline preserves clarification metadata and suppresses silent ra
 });
 
 
-test('review must cite the current draft, not an old user statement', async () => {
-  const p = provider({ review: '{"issues":[{"type":"contradiction","quote":"先给客户看","fix":"confirm audience"}]}' });
-  const history = [], service = serviceFor(p, history);
-  const first = await send(service);
-  const result = await finish(service, first.beta.sessionId);
-  assert.equal(result.text, '');
-  assert.equal(result.beta.notice, 'output-format');
-  assert.equal(result.beta.sessionId, first.beta.sessionId);
- 
-  assert.equal(p.calls.some(c => c.stage === 'patch'), false, 'do not patch from invalid review evidence');
-});
 
-test('first Beta questions have a fixed order in both UI languages even when the model says ready', async () => {
- for (const [text, language, fragments] of [
-  ['整理工作内容','zh',['联网搜索','背景资料','本地文件','重复性工作']],
-  ['Describe this task','en',['search the web','background materials','local files','repeatable work']],
- ]) {
-  const p=provider(),s=serviceFor(p),first=await send(s,text,{language});
-  assert.equal(first.beta.ready,false);assert.equal(first.beta.questions.length,4);
-  first.beta.questions.forEach((q,i)=>assert.ok(q.includes(fragments[i]),q));
-  assert.equal(p.calls.length,1);
- }
+test('assistant asks only model-identified gaps, capped at three, then generates once', async () => {
+ const p=provider({interview:interview(['用途？','交付？','期限？','已知限制？'])}), s=serviceFor(p);
+ const first=await send(s); assert.equal(first.beta.questions.length,3);
+ assert.equal(first.beta.questions[0],'用途？');
+ const done=await finish(s,first.beta.sessionId); assert.equal(done.text,DRAFT);
+ assert.deepEqual(p.calls.map(x=>x.stage),['interview','draft']);
 });
-test('background answers and source restrictions remain in generation and review inputs',async()=>{
- const p=provider(),s=serviceFor(p),first=await send(s);
- const answer='不允许联网；资料为虚构产品说明，介绍用途；只允许本轮提供的文本，不许读取目录；重复性归档，不创新。';
- await send(s,answer,{betaSession:first.beta.sessionId});await finish(s,first.beta.sessionId);
- for(const stage of ['draft','review'])assert.ok(p.calls.find(c=>c.stage===stage).user.includes(answer),stage);
- assert.deepEqual(p.calls.map(c=>c.stage),['interview','interview','draft','review']);
+test('failed generation retains the accepted conversation for a retry',async()=>{
+ const p=provider({draft:''}),s=serviceFor(p),first=await send(s);
+ const held=await finish(s,first.beta.sessionId); assert.equal(held.text,'');assert.ok(held.beta.sessionId);
+ assert.ok(s.betaSessions.has(first.beta.sessionId));
 });

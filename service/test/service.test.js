@@ -63,19 +63,20 @@ function wavOfSilence(seconds = 0.2) {
   return buffer;
 }
 
-test('dictation never learns model guesses and uses no additional model call', async () => {
+test('a phonetic name guess without current evidence is held and never learned', async () => {
   const model = fakeModel('用 JSON 传输。');
   const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
   const result = await service.transcribeAndPolish({ audio: wavOfSilence(), strength: 'prompt', llm: ROUTE });
-  assert.equal(result.fallback, false);
-  assert.equal(result.text, '用 JSON 传输。');
+  assert.equal(result.fallback, true);
+  assert.equal(result.text, '');
+  assert.equal(result.clarification.reason, 'name-kept');
   assert.deepEqual(result.suggestions, []);
   assert.equal(model.calls.length, 1);
 });
 
 test('optional suggestion failure preserves dictation, does not retry or log user text', async () => {
   const model = fakeModel('用 JSON 传输。');
-  const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
+  const service = makeService({ model, recognizer: fakeRecognizer('用 JSON 传输') });
   const logs = [];
   service.logger = { info: (...args) => logs.push(args), warn: (...args) => logs.push(args), debug: (...args) => logs.push(args) };
   service.suggestionEngine = async () => { throw new Error('private-demo-text'); };
@@ -160,8 +161,8 @@ test("the model prompt is the cleanup prompt plus a dictionary addendum", async 
   await service.polish({ rawText: RAW, strength: "prompt", appHint: "com.apple.mail", llm: ROUTE });
   const [system, user] = model.calls[0].body.messages;
   assert.equal(system.role, "system");
-  assert.match(system.content, /speech recognition transcripts/);
-  assert.match(system.content, /Return only one JSON object/);
+  assert.match(system.content, /整理语音识别文本/);
+  assert.match(system.content, /只返回一个 JSON 对象/);
   // Our constraints ride in a delimited addendum, never woven into the prompt text.
   assert.doesNotMatch(system.content, /=== HARNESS ADDENDUM/);
   assert.doesNotMatch(system.content, /Dictionary entries are spelling hints/);

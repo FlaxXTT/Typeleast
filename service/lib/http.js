@@ -78,6 +78,7 @@ function classify(error) {
     case "invalid-local-model":
     case "invalid-language":
     case "invalid-prompt":
+    case "invalid-task":
       return { status: 400, code };
     case "invalid-audio":
     case "audio-too-large":
@@ -149,6 +150,7 @@ export function createHandler(options) {
           model: state.model,
           speech: state.speech,
           strength: state.strength,
+          task: state.task,
           dictionarySize: state.dictionarySize,
           pending: state.pending,
           queue: state.queue,
@@ -231,10 +233,16 @@ export function createHandler(options) {
         return;
       }
 
+      if (route === "/tasks/progress" && req.method === "GET") {
+        reply(res, 200, service.taskProgress(url.searchParams.get('id'))); return;
+      }
       if (route === "/polish" && req.method === "POST") {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const result = await service.polish({
           rawText: body.text,
+          betaSession: typeof body.betaSession === "string" ? body.betaSession : null,
+          task: body.task,
+          requestId: body.requestId,
           supportsClarification: body.supportsClarification === true,
           explanationMarkers: typeof body.explanationMarkers === "string" ? body.explanationMarkers : null,
           preferenceExamples: Array.isArray(body.preferenceExamples) ? body.preferenceExamples : null,
@@ -252,6 +260,7 @@ export function createHandler(options) {
         // service.polish() records the attempt itself.
         reply(res, 200, {
           requestId: body.requestId ?? null,
+          task: result.task,
           text: result.text,
           raw: result.raw,
           suggestions: result.suggestions ?? [],
@@ -301,6 +310,7 @@ export function createHandler(options) {
         const audio = body.subarray(dictionaryBytes);
         const result = await service.transcribeAndPolish({
           dictionary,
+          task: req.headers["x-voice-task"],
           supportsClarification: req.headers["x-voice-clarification"] === "1",
           explanationMarkers: req.headers["x-voice-explanation-markers"] ?? null,
           requestId: req.headers["x-request-id"] ?? undefined,
@@ -320,10 +330,10 @@ export function createHandler(options) {
       }
 
       // Prompt Beta: generate without answering the questions, or forget them.
-      if ((route === "/prompts/beta/finish" || route === "/prompts/beta/cancel") && req.method === "POST") {
+      if ((["/prompts/beta/finish", "/prompts/beta/cancel", "/assistant/finish", "/assistant/cancel"].includes(route)) && req.method === "POST") {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const sessionId = typeof body?.sessionId === "string" ? body.sessionId : "";
-        if (route === "/prompts/beta/cancel") {
+        if (route.endsWith("/cancel")) {
           reply(res, 200, { ok: true, cancelled: service.cancelBeta(sessionId) });
           return;
         }
@@ -338,7 +348,7 @@ export function createHandler(options) {
           signal: controller.signal,
         });
         reply(res, 200, {
-          requestId: null, text: result.text, raw: result.raw, fallback: result.fallback,
+          requestId: null, task:"assistant", text: result.text, raw: result.raw, fallback: result.fallback,
           fallbackReason: result.reason ?? undefined, model: result.model, provider: result.provider,
           suggestions: result.suggestions ?? [],
           strength: "promptbeta", ms: result.ms, ...(result.beta ? { beta: result.beta } : {}),

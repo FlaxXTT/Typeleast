@@ -1,4 +1,6 @@
-import {betaSetupQuestions} from './prompts/prompt-beta.js';
+import {hasTermExplanation} from './entity-guard.js';
+import {taskFor} from './dictation-task.js';
+import {generateDictation, TEXT_LIMIT} from './long-dictation.js';
 import {CleanupTask, cleanupParameters, needsCleanupReview} from './cleanup-task.js';
 import {CLEANUP_REVIEW_PROMPT, parseCleanupReview} from './prompts/cleanup-review.js';
 import { personalizationContext, applyExplicitRules, requestPolicy, readPolicy } from "./personalization-policy.js";
@@ -32,13 +34,13 @@ import { redactFieldContext, redactSecrets } from "./context.js";
 import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
-import { failureDetail, failureReason, ModelCallError } from "./llm.js";
+import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
 import { normalizeNumbers } from './number-format.js';
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
-  BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS, BETA_PATCH_PROMPT, BETA_REVIEW_PROMPT,
+  BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
   cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
 } from "./prompts/prompt-beta.js";
 import { directTranslatePrompt, TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
@@ -87,10 +89,22 @@ export class VoicePolishService {
     this.recentFailures = [];
     /** Prompt Beta question sessions: id -> { request, spec, questions, created }. */
     this.betaSessions = new Map();
+    this.progress = new Map();
+  }
+
+  setProgress(id, value) {
+    if (typeof id !== 'string' || !/^[A-Za-z0-9-]{1,80}$/.test(id)) return;
+    for (const [key, item] of this.progress) if (Date.now() - item.updated > 600000) this.progress.delete(key);
+    if (!this.progress.has(id) && this.progress.size >= 20) return;
+    this.progress.set(id, {stage:value.stage,completed:value.completed,total:value.total,updated:Date.now()});
+  }
+  taskProgress(id) {
+    const item = this.progress.get(id);
+    return item && Date.now() - item.updated < 600000 ? {stage:item.stage,completed:item.completed,total:item.total} : {stage:'waiting',completed:0,total:0};
   }
 
   get strength() {
-    return this.config.strength ?? "prompt";
+    return "prompt";
   }
 
   /**
@@ -108,6 +122,7 @@ export class VoicePolishService {
       promptSource: "typeleast",
       temperature: this.config.temperature ?? 0.8,
       strength: this.strength,
+      task: "dictation",
       dictionarySize: this.dictionary.length,
       speech,
       stats: { ...this.stats },
@@ -133,14 +148,23 @@ export class VoicePolishService {
    */
   async polish(request) {
     request = { ...request };
+    const taskKind = taskFor(request);
+    if (taskKind !== 'translation') request.translateTo = null;
+    else if (!Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? '')) throw Object.assign(new Error('translation target required'),{code:'invalid-task'});
+    request.task = taskKind;
+    request.strength = taskKind === "assistant" ? "promptbeta" : "prompt";
     const started = Date.now();
     const originalText = String(request.rawText ?? "").trim();
+    if (Array.from(originalText).length > TEXT_LIMIT) return this.qualityQuestion(request,{
+      task:taskKind,raw:originalText,text:originalText,fallback:true,reason:'text-too-long',ms:timing(started,0),
+    });
     // The retired prompt-mode tiers (promptbrief, promptify) are read as 精简整理.
     const strength = canonicalStrength(request.strength ?? this.strength);
-    const explanation = strength === "concise" && !request.translateTo
+    const explanation = strength !== "promptbeta" && !request.translateTo
       ? splitExplanation(originalText, request.explanationMarkers) : { text: originalText, notes: [], used: false };
     const rawText = explanation.text;
     const base = {
+      task: taskKind,
       raw: originalText,
       text: rawText,
       fallback: false,
@@ -149,8 +173,7 @@ export class VoicePolishService {
       provider: null,
       ms: { transcribe: 0, polish: Date.now() - started, total: Date.now() - started },
     };
-    if (explanation.issue) return this.nameQuestion(request, base,
-      { question: "请检查补充信息的开始词和结束词。", evidence: explanation.evidence, kind: "explanation" }, started);
+    // An unmatched marker remains ordinary source text; one-shot modes never ask for a continuation.
     if (explanation.used) base.explanation = { used: true, segments: explanation.notes.length, markerId: request.explanationMarkers };
     if (explanation.used && !/[\p{L}\p{N}]/u.test(rawText)) return { ...base, text: "", contextOnly: true, suggestions: [], reason: "explanation-only" };
     // Skipping Prompt Beta's questions sends no answer at all, which is not an empty dictation.
@@ -185,18 +208,18 @@ export class VoicePolishService {
 
     if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
 
-    const task = new CleanupTask(request.signal);
+    const task = request._cleanupTask ?? new CleanupTask(request.signal);
     let candidate = null;
     try {
     const context = await this.buildContext(request, rawText);
     const safeNotes = explanation.notes.map(s => redactSecrets(s));
     const nameRules = explanationNameRule(rawText, safeNotes);
     context.dictionary.push(...nameRules);
-    const rawExamples = request.preferenceExamples ?? requestPreferences(request.dictionary);
+    const rawExamples = request._translationSource ? [] : request.preferenceExamples ?? requestPreferences(request.dictionary);
     const filteredExamples = (Array.isArray(rawExamples) ? rawExamples : []).filter(x => x && ![x.raw,x.aiText,x.correctedText].some(v => typeof v === "string" && request._personalization.excludedText?.(v)));
     const examples = request._personalization.policy.disabled ? [] : preferenceHints(filteredExamples, rawText);
     request._personalization.trace.references.push(...examples.map(x=>({kind:"example",source:"personal",sourceId:filteredExamples.find(y=>y.raw===x.raw&&y.correctedText===x.correctedText)?.id??"example"})));
-    const style = context.style?.instructions ?? null;
+    const style = request._translationSource ? null : context.style?.instructions ?? null;
     if(style) request._personalization.trace.references.push({kind:'style',source:'extension',sourceId:context.style.sourceId,label:context.style.label});
     // Generic cleanup rules with the current utterance, optional style and cursor context.
     const system = systemPromptFor({
@@ -216,17 +239,15 @@ export class VoicePolishService {
     // The user message is the recognised text alone; the prompt says everything in it is content.
     const user = buildUserMessage({ rawText: outboundText });
 
-    this.stats.modelCalls += 1;
-      const result = await completeOpenAI({
-        route: custom,
-        system,
-        user,
-        // 精简整理 may restructure a long dictation: more room and more time.
-        ...cleanupParameters(rawText,strength,this.config),
-        signal: task.signal,
-        retryBudget: task,
-        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
-      });
+    const parameters = cleanupParameters(rawText, strength, this.config);
+    const call = async (system, user, options = parameters) => {
+      task.assertTime();
+      this.stats.modelCalls += 1;
+      return completeOpenAI({route: custom, system, user, ...options, signal: task.signal,
+        retryBudget: task, ...(this.fetchImpl ? {fetchImpl:this.fetchImpl} : {})});
+    };
+    const result = await generateDictation({source:user, system, call, parameters,
+      progress: value => this.setProgress(request.requestId, value)});
       // The prompt asks for {status,text,reason}; a model may answer
       // with plain prose or malformed JSON instead, and none of that may reach
       // the document. Parse first, then clean, then validate.
@@ -257,18 +278,35 @@ export class VoicePolishService {
           ...base, text: tidy(rawText).text, fallback: true, reason: "explanation-leaked", ms: timing(started, 0),
         });
       }
-      const clarification = nameClarification(parsed.clarification, rawText);
-      if (clarification) return this.nameQuestion(request, base, clarification, started);
-      if (parsed.clarification) return this.recordFallback(request, { ...base, fallback: true, reason: "output-format", ms: timing(started, 0) });
+      if (parsed.clarification) return this.retainSourceName(request, base, rawText, started);
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
       // Deterministic cleanup runs BEFORE validation so the safety checks judge
       // exactly the text that would be inserted.
       const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text)));
       candidate = tidied.text;
-      const verdict = validateOutput({ rawText, output: candidate, strength, termEvidence: context.dictionary });
+      let reviewed = false;
+      const reviewCandidate = async () => {
+        reviewed = true;
+        this.stats.modelCalls += 1;
+        const source = redactSecrets(rawText);
+        const review = await completeOpenAI({route:custom,system:CLEANUP_REVIEW_PROMPT,
+          user:JSON.stringify({source,candidate:redactSecrets(candidate),explanation:safeNotes,mode:strength,fieldContext:context.fieldContext}),
+          maxTokens:1200,temperature:0,timeoutMs:Math.min(60000,Math.max(15000,Array.from(rawText).length*10)),signal:task.signal,retryBudget:task,
+          ...(this.fetchImpl?{fetchImpl:this.fetchImpl}:{})});
+        return parseCleanupReview(review.text,source,redactSecrets(candidate));
+      };
+      let verdict = validateOutput({ rawText, output: candidate, strength, termEvidence: context.dictionary });
       if (!verdict.ok && verdict.reason === "entity-changed") {
-        const evidence = verdict.metrics.missingNames?.[0];
-        if (evidence) return this.nameQuestion(request, base, { question: "请确认这次口述中的名称。", evidence }, started);
+        // A current explanation can resolve a name, but it cannot waive other fact checks.
+        if (!hasTermExplanation(originalText) && !explanation.used) return this.retainSourceName(request, base, rawText, started);
+        const issues = await reviewCandidate();
+        if (issues === null || issues.length) return this.retainSourceName(request, base, rawText, started);
+        verdict = validateOutput({rawText,output:candidate,strength,termEvidence:context.dictionary,nameChangesReviewed:true,meaningReviewed:true});
+      }
+      if (!verdict.ok && ['output-too-short','invented-content'].includes(verdict.reason)) {
+        const issues = reviewed ? null : await reviewCandidate();
+        if (issues === null || issues.length) return this.recordFallback(request,{...base,text:candidate,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
+        verdict = validateOutput({rawText,output:candidate,strength,termEvidence:context.dictionary,meaningReviewed:true});
       }
       if (!verdict.ok) {
         // Keep the candidate for editing, but never expose it as insertable text.
@@ -286,14 +324,9 @@ export class VoicePolishService {
         });
       }
       candidate = verdict.text;
-      if (needsCleanupReview(rawText, candidate, verdict.metrics)) {
-        this.stats.modelCalls += 1;
-        const source = redactSecrets(rawText);
-        const review = await completeOpenAI({route:custom,system:CLEANUP_REVIEW_PROMPT,
-          user:JSON.stringify({source,candidate:redactSecrets(candidate),explanation:safeNotes,fieldContext:context.fieldContext}),
-          maxTokens:800,temperature:0,timeoutMs:10000,signal:task.signal,retryBudget:task,
-          ...(this.fetchImpl?{fetchImpl:this.fetchImpl}:{})});
-        const issues=parseCleanupReview(review.text,source,redactSecrets(candidate));
+      this.setProgress(request.requestId,{stage:'checking',completed:0,total:1});
+      if (!reviewed && needsCleanupReview(rawText, candidate, verdict.metrics)) {
+        const issues = await reviewCandidate();
         if(issues===null||issues.length) return this.recordFallback(request,{...base,text:candidate,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
       }
       task.assertTime();
@@ -330,7 +363,7 @@ export class VoicePolishService {
         attempts: error instanceof ModelCallError ? error.attempts : undefined,
         postprocess: tidyOnly.applied,
       });
-    } finally { task.dispose(); }
+    } finally { if (!request._cleanupTask) task.dispose(); }
   }
 
   /**
@@ -340,90 +373,31 @@ export class VoicePolishService {
    * original inserted.
    */
   async polishTranslate({ request, base, route, started, rawText, target }) {
-    const context = await this.buildContext(request, rawText);
-    const cleanupSystem = systemPromptFor({
-      dictionary: context.dictionary, aliases: context.aliases, spellings: context.spellings,
-      fieldContext: context.fieldContext ?? null, strength: "prompt", style: null,
-    });
-    const variants = target === "en" ? variantInstruction(parseVariants(request.variants)) : "";
-    const redact = text => this.config.redactSecrets === false ? text : redactSecrets(text);
-    const outboundText = redact(rawText);
-    const call = (system, user, temperature) => {
-      this.stats.modelCalls += 1;
-      return completeOpenAI({
-        route, system, user,
-        maxTokens: Math.max(this.config.maxOutputTokens, 1200),
-        temperature,
-        timeoutMs: Math.max(this.config.timeoutMs, 20000),
-        signal: request.signal,
-        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}),
-      });
-    };
+    const task = new CleanupTask(request.signal);
     let cleanedSource = null;
     try {
-      const cleanup = await call(cleanupSystem, buildUserMessage({ rawText: outboundText }), 0.2);
-      const parsed = parsePolishOutput(cleanup.text);
-      if (!parsed.ok) this.stats.jsonFallback += 1;
-      else if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      const clarification = nameClarification(parsed.clarification, rawText);
-      if (clarification) return this.nameQuestion(request, base, clarification, started);
-      if (parsed.clarification) return this.recordFallback(request, { ...base, fallback: true, reason: "output-format", ms: timing(started, 0) });
-      const tidied = parsed.ok ? tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text))) : null;
-      const sourceVerdict = tidied ? validateOutput({ rawText, output: tidied.text, strength: "prompt", termEvidence: context.dictionary }) : null;
-      if (sourceVerdict?.reason === "entity-changed") {
-        return this.nameQuestion(request, base, { question: "请确认这次口述中的名称。", evidence: sourceVerdict.metrics.missingNames[0] }, started);
+      const cleaned = await this.polish({...request, task:'dictation', translateTo:null, variants:null, _translationSource:true, _cleanupTask:task});
+      if (cleaned.fallback || cleaned.clarification || cleaned.contextOnly) {
+        return {...cleaned,task:'translation',translated:target,
+          ...(cleaned.clarification ? {clarification:{...cleaned.clarification,target}} : {})};
       }
-      if (!sourceVerdict?.ok) {
-        const issue = sourceVerdict ? sourceVerdict.reason : `source-output-format:${parsed.failure ?? "unknown"}`;
-        this.logger.warn?.("typeleast: source cleanup unusable (%s); translating the transcript directly", issue);
-        const direct = await call(directTranslatePrompt(target)
-          + harnessAddendum({ dictionary: context.dictionary, aliases: context.aliases, spellings: context.spellings, fieldContext: context.fieldContext ?? null })
-          + variants, outboundText, 0.3);
-        const attempts = cleanup.attempts + direct.attempts;
-        const verdict = validateOutput({ rawText, output: String(direct.text ?? "").trim(), strength: "translate" });
-        if (!verdict.ok) {
-          const tidyOnly = tidy(rawText);
-          return await this.recordFallback(request, {
-            ...base, text: tidyOnly.text, fallback: true, reason: verdict.reason,
-            detail: `${issue}; direct ${describeVerdict(verdict.metrics) ?? verdict.reason}`, ms: timing(started, 0), metrics: verdict.metrics,
-            attempts, postprocess: tidyOnly.applied, translated: target,
-          });
-        }
-        return await this.recordAndReturn(request, {
-          ...base, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
-          usage: { cleanup: cleanup.usage, translation: direct.usage },
-          attempts, translated: target, detail: `direct-after:${issue}`,
-        });
-      }
-      cleanedSource = sourceVerdict.text;
-      const translation = await call(translatePrompt(target) + variants, redact(cleanedSource), 0.3);
-      const verdict = validateOutput({ rawText: cleanedSource, output: String(translation.text ?? "").trim(), strength: "translate" });
-      if (!verdict.ok) {
-        return await this.recordFallback(request, {
-          ...base, text: cleanedSource, fallback: true, reason: verdict.reason,
-          detail: describeVerdict(verdict.metrics), ms: timing(started, 0), metrics: verdict.metrics,
-          attempts: cleanup.attempts + translation.attempts, postprocess: tidied.applied, translated: target,
-        });
-      }
-      return await this.recordAndReturn(request, {
-        ...base, text: verdict.text, ms: timing(started, 0), metrics: verdict.metrics,
-        usage: { cleanup: cleanup.usage, translation: translation.usage },
-        attempts: cleanup.attempts + translation.attempts, translated: target,
-      });
+      cleanedSource = cleaned.text;
+      this.setProgress(request.requestId,{stage:'translating',completed:0,total:1});
+      this.stats.modelCalls += 1;
+      const parameters = cleanupParameters(cleanedSource,'prompt',this.config);
+      const result = await completeOpenAI({route,system:translatePrompt(target)
+        + (target === 'en' ? variantInstruction(parseVariants(request.variants)) : ''),
+        user:this.config.redactSecrets === false ? cleanedSource : redactSecrets(cleanedSource),
+        ...parameters,temperature:0.2,signal:task.signal,retryBudget:task,
+        ...(this.fetchImpl ? {fetchImpl:this.fetchImpl} : {})});
+      const verdict = validateOutput({rawText:cleanedSource,output:String(result.text ?? '').trim(),strength:'translate'});
+      task.assertTime();
+      if (!verdict.ok) return this.recordFallback(request,{...base,text:String(result.text ?? ''),fallback:true,reason:verdict.reason,ms:timing(started,0)});
+      return this.recordAndReturn(request,{...base,text:verdict.text,translated:target,ms:timing(started,0),attempts:result.attempts});
     } catch (error) {
-      const reason = request.signal?.aborted
-        ? "cancelled"
-        : error instanceof ModelCallError ? failureReason(error) : "internal-error";
-      const detail = this.redactDetail(failureDetail(error)).split(route.apiKey || "\u0000").join("[redacted-key]");
-      this.stats.lastError = `${reason}: ${detail}`;
-      this.logger.warn?.("typeleast: translation failed (%s: %s); using the cleaned source when available", reason, detail);
-      const tidyOnly = tidy(rawText);
-      return await this.recordFallback(request, {
-        ...base, text: cleanedSource ?? tidyOnly.text, fallback: true, reason, detail, ms: timing(started, 0),
-        attempts: error instanceof ModelCallError ? error.attempts : undefined,
-        postprocess: cleanedSource === null ? tidyOnly.applied : undefined, translated: target,
-      });
-    }
+      const reason = request.signal?.aborted ? 'cancelled' : task.deadline.timedOut() ? 'model-timeout' : failureReason(error);
+      return this.recordFallback(request,{...base,text:cleanedSource ?? rawText,fallback:true,reason,ms:timing(started,0),translated:target});
+    } finally { task.dispose(); }
   }
 
   /** Keep the whole clarification in memory until the user explicitly generates or cancels. */
@@ -449,7 +423,7 @@ export class VoicePolishService {
       if (rawText.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
       // Do not evict another user's active operation to admit a new one.
       if (this.betaSessions.size >= BETA_LIMITS.sessions) throw Object.assign(new Error('too many clarifications'), { code: 'busy' });
-      session = { request: rawText, turns: [], questions: betaSetupQuestions(rawText,request.language), confirmed: [], created: Date.now(), ready: false };
+      session = { request: rawText, turns: [], questions: [], confirmed: [], created: Date.now(), ready: false };
       this.betaSessions.set(id, session);
     }
     const pending = notice => ({ ...base, text: '', raw: rawText,
@@ -470,7 +444,7 @@ export class VoicePolishService {
           throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
         }
         if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
-        const questions = request.betaSession ? normaliseQuestions(reply.questions) : betaSetupQuestions(rawText,request.language);
+        const questions = normaliseQuestions(reply.questions);
         if (reply.questions.length && !questions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
         session.turns = turns;
         session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
@@ -482,33 +456,15 @@ export class VoicePolishService {
       }
       const material = { request: session.request, spec: session.spec, turns,
         questions: session.questions, skipped: true };
-      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), 3200));
+      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), cleanupParameters(source,'prompt',this.config).maxTokens));
       if (!draft) throw Object.assign(new Error('empty draft'), { code: 'output-format' });
-      const reviewDraft = async text => {
-        const review = parseJsonReply(await call(BETA_REVIEW_PROMPT, reviewMessage({ ...material, draft: text })));
-        if (!review || !Array.isArray(review.issues)) throw Object.assign(new Error('invalid review'), { code: 'output-format' });
-        if (review.issues.some(issue => !issue || typeof issue !== 'object' || typeof issue.type !== 'string')) {
-          throw Object.assign(new Error('invalid review issue'), { code: 'output-format' });
-        }
-        const issueTypes = new Set(['invented', 'missing', 'contradiction', 'ambiguity', 'overemphasis', 'filler']);
-        if (review.issues.some(issue => !issueTypes.has(issue.type) || typeof issue.quote !== 'string'
-          || (issue.type === 'missing' ? issue.quote !== '' : !issue.quote.trim() || !text.includes(issue.quote)))) {
-          throw Object.assign(new Error('review evidence does not match draft'), { code: 'output-format' });
-        }
-        return review.issues.slice(0, 8);
-      };
-      const issues = await reviewDraft(draft);
-      let final = draft;
-      if (issues.length) {
-        final = cleanPromptReply(await call(BETA_PATCH_PROMPT, reviewMessage({ ...material, draft, issues }), 3200));
-        if (!final || (await reviewDraft(final)).length) throw Object.assign(new Error('intent review failed'), { code: 'beta-validation' });
-      }
+      const final = draft;
       const verdict = validateOutput({ rawText: source, output: final, strength: 'promptbeta' });
       if (!verdict.ok) throw Object.assign(new Error('fact check failed'), { code: 'beta-validation' });
       if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
       request.signal?.throwIfAborted();
       const result = await this.recordAndReturn(request, { ...base, raw: source, text: verdict.text,
-        ms: timing(started, 0), metrics: verdict.metrics, beta: { reviewed: true, issues: issues.length, patched: final !== draft } });
+        ms: timing(started, 0), metrics: verdict.metrics, beta: { reviewed: false, issues: 0, patched: false } });
       this.betaSessions.delete(id);
       return result;
     } catch (error) {
@@ -559,8 +515,12 @@ export class VoicePolishService {
     });
     this.recentFailures.length = Math.min(this.recentFailures.length, MAX_RECENT_FAILURES);
     const mode=canonicalStrength(request.strength??this.strength);
-    if(!request.translateTo&&mode!=='promptbeta'&&result.reason!=='cancelled')return this.qualityQuestion(request,result);
+    if(mode!=='promptbeta'&&result.reason!=='cancelled')return this.qualityQuestion(request,result);
     return await this.recordAndReturn(request, result);
+  }
+
+  async retainSourceName(request, base, source, started) {
+    return this.qualityQuestion(request,{...base,text:tidy(source).text,fallback:true,reason:'name-kept',suggestions:[],ms:timing(started,0)});
   }
 
   async qualityQuestion(request,result) {
@@ -590,7 +550,7 @@ export class VoicePolishService {
   }
 
   async recordAndReturn(request, result) {
-    if(result.fallback&&!request.translateTo&&canonicalStrength(request.strength??this.strength)!=="promptbeta"&&result.reason!=="cancelled")return this.qualityQuestion(request,result);
+    if(result.fallback&&canonicalStrength(request.strength??this.strength)!=="promptbeta"&&result.reason!=="cancelled")return this.qualityQuestion(request,result);
     result = applyExplicitRules(result, request._personalization, result.explanation ? splitExplanation(result.raw, request.explanationMarkers).text : result.raw, canonicalStrength(request.strength ?? this.strength));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
@@ -633,8 +593,11 @@ export class VoicePolishService {
         error.code = "invalid-language";
         throw error;
       }
-      const spoken = await this.transcribe(audio, language);
+      this.setProgress(request.requestId,{stage:"recognizing",completed:0,total:0});
+      const spoken = await this.transcribe(audio, language, request.signal);
       const polished = await this.polish({
+        task: request.task,
+        requestId: request.requestId,
         rawText: [clarificationSource(request.dictionary), spoken.text].filter(Boolean).join("\n"),
         supportsClarification: request.supportsClarification === true,
         language: spoken.language ?? language,
@@ -653,6 +616,7 @@ export class VoicePolishService {
       });
       const result = {
         requestId: request.requestId,
+        task: polished.task,
         text: polished.text,
         raw: polished.raw ?? spoken.text,
         fallback: polished.fallback,
@@ -674,6 +638,7 @@ export class VoicePolishService {
         ...(polished.contextOnly ? { contextOnly: true } : {}),
         ...(polished.translated ? { translated: polished.translated } : {}),
       };
+      this.setProgress(request.requestId,{stage:"complete",completed:1,total:1});
       this.stats.dictations += 1;
       if (result.fallback) this.stats.fallback += 1;
       else if (!result.clarification && !result.beta?.sessionId && !result.contextOnly) this.stats.polished += 1;
@@ -688,10 +653,15 @@ export class VoicePolishService {
    * Recognise the audio locally. When the model is not loaded yet this throws
    * speech-not-ready (and loading starts), so the app can say so honestly.
    */
-  async transcribe(audio, language) {
+  async transcribe(audio, language, signal) {
     const started = Date.now();
-    const spoken = await this.recognizer.transcribe(audio, language);
-    return { text: String(spoken.text ?? "").trim(), language: language !== "auto" ? language : (spoken.detectedLanguage ?? spoken.language ?? "auto"), ms: Date.now() - started };
+    const deadline = createDeadline(signal,300000);
+    try {
+      deadline.signal.throwIfAborted();
+      const spoken = await this.recognizer.transcribe(audio, language, deadline.signal);
+      deadline.signal.throwIfAborted();
+      return { text: String(spoken.text ?? "").trim(), language: language !== "auto" ? language : (spoken.detectedLanguage ?? spoken.language ?? "auto"), ms: Date.now() - started };
+    } finally { deadline.dispose(); }
   }
 
   /**

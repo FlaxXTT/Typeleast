@@ -41,8 +41,8 @@ final class Recorder {
     private(set) var startedAt: Date?
     private(set) var truncated = false
 
-    /// Hard cap; auto-finalises when reached (contract: <= 120 s).
-    var maxSeconds: Int = 120
+    /// Hard cap; auto-finalises when reached (contract: <= 600 s).
+    var maxSeconds: Int = 600
     var onAutoStop: (() -> Void)?
     /// Called with the engine just before each recording starts.
     var prepareEngine: ((AVAudioEngine) -> Void)?

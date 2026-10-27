@@ -13,9 +13,11 @@ for(const [input,want] of [['先做，。再说。','先做。再说。'],['先�
 test('punctuation literals, decimal, version, code, paths and numbered lists remain intact',()=>{
  const input='3.14 v1.23.0 https://example.com/a.b /tmp/a.b `x,.` “，。”\n1. First.\n2. Next.\n```js\nx,.\n```';assert.equal(normalizePunctuation(input),input);assert.equal(tidy(input).text,input);
 });
-test('tier parameters are independent and natural budget grows within its cap',()=>{
- assert.deepEqual(cleanupParameters('短句','prompt'),{maxTokens:1800,temperature:0.8,timeoutMs:18000});
- assert.deepEqual(cleanupParameters('短句','concise'),{maxTokens:1600,temperature:1,timeoutMs:25000});assert.equal(cleanupParameters('长'.repeat(5000),'prompt').maxTokens,4096);
+test('legacy strengths share parameters and long output has a bounded growing budget',()=>{
+ assert.deepEqual(cleanupParameters('短句','prompt'),{maxTokens:1800,temperature:0.3,timeoutMs:30000});
+ assert.deepEqual(cleanupParameters('短句','concise'),cleanupParameters('短句','prompt'));
+ assert.equal(cleanupParameters('长'.repeat(5000),'prompt').maxTokens,8192);
+ assert.equal(cleanupParameters('长'.repeat(32000),'prompt').timeoutMs,180000);
 });
 test('one clock owns the operation and a shared retry cannot be spent twice',()=>{
  let now=0;const task=new CleanupTask(undefined,{now:()=>now,totalMs:60000});try{assert.equal(task.remainingMs(),60000);assert.equal(task.retry(),true);assert.equal(task.retry(),false);now=60000;assert.throws(()=>task.assertTime());}finally{task.dispose();}

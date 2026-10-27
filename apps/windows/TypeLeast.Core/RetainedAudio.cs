@@ -20,7 +20,7 @@ public sealed class RetainedAudio
     }
     public void Save(string id, byte[] wav)
     {
-        if (!Wav.IsCanonical(wav) || wav.Length > 44 + 120 * Wav.BytesPerSecond) throw new InvalidDataException("Invalid audio");
+        if (!Wav.IsCanonical(wav) || wav.Length > 44 + 600 * Wav.BytesPerSecond) throw new InvalidDataException("Invalid audio");
         Directory.CreateDirectory(directory);
         if (new DirectoryInfo(directory).Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new UnauthorizedAccessException("Audio link rejected");
         var path = PathFor(id); var sealedAudio = protection.Protect(wav);

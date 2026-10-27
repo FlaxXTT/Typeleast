@@ -236,7 +236,7 @@ final class PillView: NSView {
         case .hidden: return 100
         case .recording:
             return (limit - model.elapsed <= countdownSeconds ? 206 : 168) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
-        case .thinking: return 72 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
+        case .thinking: return 94 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 10) + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:11)]).width))
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
             let width = text.size(withAttributes: [.font: resultFont]).width
@@ -307,7 +307,7 @@ final class PillView: NSView {
         if model.phase == .recording {
             bars = Array(repeating: 0, count: model.history.capacity)
         }
-        cancelButton.isHidden = model.phase != .recording
+        cancelButton.isHidden = model.phase != .recording && model.phase != .thinking
         stopButton.isHidden = model.phase != .recording
         needsLayout = true
     }
@@ -400,7 +400,9 @@ final class PillView: NSView {
     private func drawThinking() {
         // three dots breathing in sequence
         let spacing: CGFloat = 10
-        let centreX: CGFloat = model.badge.isEmpty ? bounds.midX : 36
+        NSColor.white.withAlphaComponent(0.10).setFill()
+        NSBezierPath(ovalIn:cancelRect).fill()
+        let centreX: CGFloat = 56
         for index in 0..<3 {
             let phase = spinnerPhase - CGFloat(index) * 0.9
             let wave = reduceMotion ? 0.6 : (0.35 + 0.65 * (0.5 + 0.5 * sin(phase)))
@@ -412,13 +414,17 @@ final class PillView: NSView {
         }
         if !model.badge.isEmpty {
             let badgeWidth = PillView.badgeWidth(model.badge)
-            let rect = NSRect(x: 62, y: bounds.midY - 8, width: badgeWidth, height: 16)
+            let rect = NSRect(x: 82, y: bounds.midY - 8, width: badgeWidth, height: 16)
             NSColor.systemBlue.withAlphaComponent(0.85).setFill()
             NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
             let font = NSFont.systemFont(ofSize: 10, weight: .bold)
             let textWidth = ceil((model.badge as NSString).size(withAttributes: [.font: font]).width)
             drawText(model.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
                      font: font, color: .white)
+        }
+        if !model.detail.isEmpty {
+            let x: CGFloat = 82 + (model.badge.isEmpty ? 0 : PillView.badgeWidth(model.badge) + 10)
+            drawText(model.detail,x:x,centerY:bounds.midY,width:max(0,bounds.width-x-10),font:.systemFont(ofSize:11),color:.white)
         }
     }
 

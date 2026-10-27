@@ -26,6 +26,7 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var explanationMarkers: String? = nil
     var personalization: PersonalizationTrace? = nil
     var variants: String? = nil
+    var task: String? = nil
 
     var title: String {
         let t = text.isEmpty ? raw : text

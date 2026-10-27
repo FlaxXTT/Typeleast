@@ -22,13 +22,16 @@ public sealed class AppSettings
     public DictationKey Hotkey { get; set; } = DictationKey.RightAlt;
     /// <summary>翻译模式's own key (one tap starts, one tap finishes); null = off.</summary>
     public DictationKey? TranslateHotkey { get; set; }
+    public DictationKey? AssistantHotkey { get; set; }
     /// <summary>Target language code the service knows (en, zh, ja, ko, fr, de, es, pt, it, ru).</summary>
     public string TranslateTarget { get; set; } = "en";
     /// <summary>语言变体: Chinese "hans" / "tw" / "hk", English "us" / "gb".</summary>
     public string ZhVariant { get; set; } = "hans";
     public string EnVariant { get; set; } = "us";
     /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (自然整理), "concise" (AI 整理), or "promptbeta".</summary>
-    public string Strength { get; set; } = "concise";
+    public string Strength { get; set; } = "prompt";
+    public bool UnifiedDictationApplied { get; set; }
+    public void ApplyUnifiedDictation() { if (UnifiedDictationApplied) return; Strength = "prompt"; UnifiedDictationApplied = true; }
     public bool AiCleanupDefaultApplied { get; set; }
     public void ApplyAICleanupDefault()
     {
@@ -145,7 +148,7 @@ public sealed class AppSettings
                 }
                 using(var document=JsonDocument.Parse(File.ReadAllText(path)))VocabularyStorage.Decode(document.RootElement,loaded,protection);
                 loaded.Strength = CleanupModes.Stored(loaded.Strength);
-                loaded.ApplyAICleanupDefault();
+                loaded.ApplyUnifiedDictation();
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
                 loaded.Words ??= new();
@@ -155,6 +158,7 @@ public sealed class AppSettings
                 if (loaded.DictionaryEntries.Any(e => e is null || e.Word is null || e.HeardAs is null || WordEntry.Parse(e.Word, e.HeardAs, e.Source) is null)) throw new JsonException("Invalid dictionary entries");
                 if (!Enum.IsDefined(loaded.Hotkey)) loaded.Hotkey = DictationKey.RightAlt;
                 if (loaded.TranslateHotkey is { } key && !Enum.IsDefined(key)) loaded.TranslateHotkey = null;
+                if (loaded.AssistantHotkey is { } assistant && !Enum.IsDefined(assistant)) loaded.AssistantHotkey = null;
                 // Settings from before structured entries kept plain strings here; read once, no longer written.
                 if (loaded.DictionaryEntries.Count == 0)
                     loaded.DictionaryEntries = loaded.Words.Select(WordEntry.FromLegacy).OfType<WordEntry>().ToList();
@@ -171,6 +175,7 @@ public sealed class AppSettings
                 if (!EnVariants.Contains(loaded.EnVariant)) loaded.EnVariant = "us";
                 // The two keys must differ; the dictation key wins.
                 if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
+                if (loaded.AssistantHotkey == loaded.Hotkey || loaded.AssistantHotkey == loaded.TranslateHotkey) loaded.AssistantHotkey = null;
                 // Learning used to be off by default and was easy to miss: switch it on once.
                 if (loaded.LearningDefaults < 1) { loaded.LearnCorrections = true; loaded.LearningDefaults = 1; }
                 // The old default took Ctrl+Shift+V from every app: move it once.
@@ -182,7 +187,7 @@ public sealed class AppSettings
                 return loaded;
             }
         }
-        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { var fresh = new AppSettings(); fresh.ApplyAICleanupDefault(); return fresh; }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { var fresh = new AppSettings(); fresh.ApplyUnifiedDictation(); return fresh; }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or PlatformNotSupportedException)
         {
             return new AppSettings { PersistenceBlocked = true };
@@ -197,6 +202,7 @@ public sealed class AppSettings
         // Settings written by this version already contain the user's current choice.
         // Only a file from an older version should trigger the one-time default move.
         AiCleanupDefaultApplied = true;
+        ApplyUnifiedDictation();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
         File.WriteAllText(temp, VocabularyStorage.Encode(this, protection));

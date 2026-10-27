@@ -273,8 +273,6 @@ private struct EngineCard: View {
                 Text(L10n.text("引擎")).font(.system(size: 14, weight: .semibold))
                 EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: model.speechSummary)
                 EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: model.modelSummary)
-                EngineRow(symbol: "slider.horizontal.3", title: L10n.text("整理模式"),
-                          value: (VoiceStrength(rawValue: model.settings.strength) ?? .prompt).label)
             }
         }
     }
@@ -414,6 +412,14 @@ struct HistoryRow: View {
         return FileManager.default.fileExists(atPath: path)
     }
 
+    private var mode: VoiceStrength? {
+        guard ["prompt", "concise", "promptbeta", "promptbrief", "promptify", "conservative", "maximal"].contains(entry.strength) else { return nil }
+        return VoiceStrength.stored(entry.strength)
+    }
+    private var modeTint: Color {
+        switch mode { case .concise: return Theme.accent; case .promptbeta: return Theme.style; default: return Theme.success }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Text(Formatters.time.string(from: entry.ts))
@@ -450,9 +456,11 @@ struct HistoryRow: View {
                 }
                 if !compact { PersonalizationDetails(entry: entry) }
                 HStack(spacing: 6) {
-                    Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary)
-                    if entry.fallback { Badge(text: L10n.text("已用原文"), tint: Theme.warning) }
-                    if copied { Badge(text: L10n.text("已复制"), tint: Theme.success) }
+                    Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
+                    if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "需求助手" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
+                    else if let mode { Badge(text: mode.label, tint: modeTint).fixedSize() }
+                    if entry.fallback { Badge(text: L10n.text("已用原文"), tint: Theme.warning).fixedSize() }
+                    if copied { Badge(text: L10n.text("已复制"), tint: Theme.success).fixedSize() }
                 }
             }
             // Reserve the action width. Hover must not change the text wrapping

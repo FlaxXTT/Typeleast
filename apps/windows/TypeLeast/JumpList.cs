@@ -20,14 +20,14 @@ internal static class JumpList
         try
         {
             var list = new System.Windows.Shell.JumpList { ShowFrequentCategory = false, ShowRecentCategory = false };
-            foreach (var code in CleanupModes.Codes)
+            foreach (var code in new[] { "promptbeta" })
                 list.JumpItems.Add(new JumpTask
                 {
-                    Title = (code == current ? "✓ " : "") + CleanupModes.Title(code),
+                    Title = L10n.T("需求助手"),
                     ApplicationPath = exe,
                     IconResourcePath = exe,
                     Arguments = Argument + " " + code,
-                    CustomCategory = L10n.T("整理模式"),
+                    CustomCategory = "TypeLeast",
                 });
             System.Windows.Shell.JumpList.SetJumpList(app, list);
             list.Apply();

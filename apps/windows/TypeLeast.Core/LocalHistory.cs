@@ -5,6 +5,7 @@ namespace TypeLeast.Core;
 
 public sealed class HistoryEntry
 {
+    public string? Task { get; set; }
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public DateTimeOffset Time { get; set; } = DateTimeOffset.Now;
     public string Text { get; set; } = "";

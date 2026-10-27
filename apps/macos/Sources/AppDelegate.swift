@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             if self.onboarding.practice.busy { return (L10n.text("正在练习"), L10n.text("练习结束后再更新。")) }
             if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
             // Restarting would drop the questions and the answers given so far.
-            if self.betaPending != nil { return (L10n.text("提示词 Beta 未结束"), L10n.text("更新前，请先生成或取消提示词 Beta。")) }
+            if self.betaPending != nil { return (L10n.text("需求助手 未结束"), L10n.text("更新前，请先生成或取消需求助手。")) }
             return nil
         },
         setHint: { [weak self] in self?.setHint($0) },
@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     private let instanceLock = InstanceLock()
     private let betaPanel = BetaPanel()
     lazy var beta: BetaController = {
+        betaPanel.onContinue = { [weak self] in self?.startAssistant() }
         betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
         betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
         return BetaController(host: .init(
@@ -345,6 +346,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         if fnWanted { FnKeyMonitor.shared.start() } else { FnKeyMonitor.shared.stop() }
         register("pasteLast", settings.hotkeyPasteLast) { [weak self] in self?.pasteLast() }
         // Fn is reserved for dictation; a translate binding of Fn is ignored.
+        let assistant = settings.hotkeyAssistant
+        if assistant.isFn { centre.unregister(slot:"assistant") } else {
+            register("assistant",assistant) { [weak self] in self?.startAssistant() }
+        }
         let translate = settings.hotkeyTranslate
         if translate.isFn { centre.unregister(slot: "translate") } else {
             register("translate", translate) { [weak self] in self?.translateHotkeyPressed() }
@@ -687,21 +692,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     // MARK: MenuActionTarget
 
+    func startAssistant() {
+        guard !onboarding.practice.acceptsShortcut && !onboarding.practice.busy else { return }
+        guard !settings.needsPractice else { showOnboarding(); return }
+        dictation.toggleAssistant()
+    }
     func setCleanupMode(_ code: String) {
-        guard phase == .idle, VoiceStrength(rawValue: code) != nil, code != settings.strength else { return }
-        if betaPending != nil && code != "promptbeta" {
-            let alert = NSAlert()
-            alert.messageText = L10n.text("结束这次提示词 Beta？")
-            alert.informativeText = L10n.text("切换会结束这次 Beta，未生成的文字不会插入。")
-            alert.addButton(withTitle: L10n.text("取消"))
-            alert.addButton(withTitle: L10n.text("切换模式"))
-            guard alert.runModal() == .alertSecondButtonReturn else { return }
-            dropBeta(notify: false)
-        }
-        dictation.dropNameConfirmation()
-        settings.strength = code
-        model.objectWillChange.send()
-        applyState()
+        if code == "promptbeta" { startAssistant() }
     }
     func menuSetStrength(_ code: String) { setCleanupMode(code) }
 

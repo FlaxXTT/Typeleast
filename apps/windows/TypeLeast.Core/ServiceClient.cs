@@ -60,7 +60,7 @@ public sealed class ServiceClient
     /// <summary>Test seam: when set, the token file is not read.</summary>
     public string? TokenOverride { get; set; }
     public TimeSpan ShortTimeout { get; set; } = TimeSpan.FromSeconds(3);
-    public TimeSpan DictateTimeout { get; set; } = TimeSpan.FromSeconds(120);
+    public TimeSpan DictateTimeout { get; set; } = TimeSpan.FromSeconds(600);
     public TimeSpan BetaTimeout { get; set; } = TimeSpan.FromSeconds(300);
 
     public ServiceClient(string? stateDirectory = null)
@@ -305,14 +305,17 @@ public sealed class ServiceClient
     /// dictation; the service keeps no copy, so there is nothing to keep in sync.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null, object? personalization = null) =>
+        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null, object? personalization = null, Action<TaskProgress>? onProgress = null) =>
         Once(async () =>
         {
+            var requestId = Guid.NewGuid().ToString();
             var headers = new Dictionary<string, string>
             {
+                ["x-request-id"] = requestId,
                 ["x-voice-language"] = language,
                 ["x-voice-app"] = appHint,
                 ["x-voice-strength"] = strength,
+                ["x-voice-task"] = translateTo is not null ? "translation" : strength == "promptbeta" ? "assistant" : "dictation",
                 ["x-voice-clarification"] = "1",
             };
             if (EncodeContextHeader(fieldContext) is { } context) headers["x-voice-context"] = context;
@@ -327,10 +330,28 @@ public sealed class ServiceClient
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             // Prompt Beta makes up to four model calls in one request.
             var timeout = strength == "promptbeta" && DictateTimeout < BetaTimeout ? BetaTimeout : DictateTimeout;
-            var (status, body) = await SendAsync(HttpMethod.Post, "/dictate", content, headers, timeout, ct).ConfigureAwait(false);
+            using var polling = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var progressTask = onProgress is null ? Task.CompletedTask : PollProgress(requestId, onProgress, polling.Token);
+            (HttpStatusCode status, string body) response;
+            try { response = await SendAsync(HttpMethod.Post, "/dictate", content, headers, timeout, ct).ConfigureAwait(false); }
+            finally { polling.Cancel(); await progressTask.ConfigureAwait(false); }
+            var (status, body) = response;
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
             return Decode<DictateResponse>(body);
         });
+
+    private async Task PollProgress(string id, Action<TaskProgress> report, CancellationToken ct)
+    {
+        try {
+            while (true) {
+                await Task.Delay(1000, ct).ConfigureAwait(false);
+                var (status, body) = await SendAsync(HttpMethod.Get, "/tasks/progress?id="+id, null, null, TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
+                if (status != HttpStatusCode.OK) return;
+                var value = Decode<TaskProgress>(body);
+                ct.ThrowIfCancellationRequested(); report(value);
+            }
+        } catch (Exception e) when (e is OperationCanceledException or ServiceException or JsonException) { }
+    }
 
     public Task<DictateResponse> PolishAsync(string text, string language, string strength, LlmRoute? llm, string? translateTo,
         string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null, object? personalization = null) =>
@@ -343,13 +364,13 @@ public sealed class ServiceClient
             foreach (var candidate in (preferenceExamples ?? Array.Empty<object>()).Take(20)) {
                 var next = selected.Append(candidate).ToList();
                 if (JsonSerializer.SerializeToUtf8Bytes(next).Length > 32768) continue;
-                var trial = JsonSerializer.SerializeToUtf8Bytes(new { text, language, strength, llm, translateTo, variants,
+                var trial = JsonSerializer.SerializeToUtf8Bytes(new { text, language, strength, task = translateTo is not null ? "translation" : strength == "promptbeta" ? "assistant" : "dictation", llm, translateTo, variants,
                     fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, explanationMarkers, personalization, preferenceExamples = next });
                 if (trial.Length <= 256 * 1024) selected = next;
             }
-            var json = JsonSerializer.Serialize(new { text, language, strength, llm, translateTo, variants,
+            var json = JsonSerializer.Serialize(new { text, language, strength, task = translateTo is not null ? "translation" : strength == "promptbeta" ? "assistant" : "dictation", llm, translateTo, variants,
                 fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, explanationMarkers, personalization, preferenceExamples = selected }, Json.Options);
-            if(Encoding.UTF8.GetByteCount(json)>256*1024)json=JsonSerializer.Serialize(new {text,language,strength,llm,translateTo,variants,fieldContext=context?.RootElement,dictionary=Array.Empty<object>(),supportsClarification=true,explanationMarkers,personalization=new {version=1,disabled=true}},Json.Options);
+            if(Encoding.UTF8.GetByteCount(json)>256*1024)json=JsonSerializer.Serialize(new {text,language,strength,task=translateTo is not null?"translation":strength=="promptbeta"?"assistant":"dictation",llm,translateTo,variants,fieldContext=context?.RootElement,dictionary=Array.Empty<object>(),supportsClarification=true,explanationMarkers,personalization=new {version=1,disabled=true}},Json.Options);
             var (status, body) = await SendAsync(HttpMethod.Post, "/polish", new StringContent(json, Encoding.UTF8, "application/json"),
                 new Dictionary<string, string>(), DictateTimeout, ct).ConfigureAwait(false);
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
@@ -365,7 +386,7 @@ public sealed class ServiceClient
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
             var json = JsonSerializer.Serialize(new { sessionId });
-            var (status, body) = await SendAsync(HttpMethod.Post, skip ? "/prompts/beta/finish" : "/prompts/beta/cancel",
+            var (status, body) = await SendAsync(HttpMethod.Post, skip ? "/assistant/finish" : "/assistant/cancel",
                 new StringContent(json, Encoding.UTF8, "application/json"), headers, BetaTimeout, ct).ConfigureAwait(false);
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
             return skip ? Decode<DictateResponse>(body) : new DictateResponse();

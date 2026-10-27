@@ -226,7 +226,7 @@ struct InstallSheet: View {
                 }
             }
             Text(plugin.isStyle
-                 ? L10n.text("数据去向：选中后，这段说明随每次自然和AI 整理发给你的模型，影响用词和格式。不增加模型调用。翻译和提示词 Beta 不使用。")
+                 ? L10n.text("数据去向：选中后，风格说明随听写整理发给你的模型，只影响措辞和格式，不增加一次独立调用。翻译和需求助手不使用。")
                  : L10n.text("数据去向：启用后，与本次听写相关的词和读音提示随整理发给你的模型，其余留在本机。不增加模型调用。"))
                 .font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
             HStack {

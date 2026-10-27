@@ -61,8 +61,18 @@ internal sealed class HistoryPage : IPage
                 var reason = Messages.FallbackNote(entry.Reason);
                 var meta = entry.Time.ToLocalTime().ToString("t", L10n.Culture) + (entry.App.Length > 0 ? " · " + entry.App : "")
                     + (reason is not null ? " · " + reason + " (" + DiagnosticEvent.SafeReason(entry.Reason) + ")" : "");
-                list.Children.Add(Theme.Card(Theme.Stack(10, Theme.Text(meta, 12, entry.Fallback ? Theme.Warning : Theme.Grey),
-                    SelectableEntry(entry.Text), PersonalizationViews.Details(host,entry), actions)));
+                var badges = new WrapPanel();
+                void Badge(string title, System.Windows.Media.SolidColorBrush color) {
+                    var badge=Theme.Badge(title,color);badge.Margin=new Thickness(0,0,6,4);badges.Children.Add(badge);
+                }
+                if (entry.Task is { } task) Badge(L10n.T(task=="assistant"?"需求助手":task=="translation"?"翻译":"听写"),task=="assistant"?Theme.Style:Theme.Accent);
+                else if(entry.Request is {Strength:var stored} && stored!="off" && new[]{"prompt","concise","promptbeta","promptbrief","promptify","conservative","maximal"}.Contains(stored)) {
+                    var mode=CleanupModes.Stored(stored);
+                    Badge(CleanupModes.Title(mode),mode=="concise"?Theme.Accent:mode=="promptbeta"?Theme.Style:Theme.Success);
+                }
+                if(entry.Fallback)Badge(L10n.T("已用原文"),Theme.Warning);
+                list.Children.Add(Theme.Card(Theme.Stack(10, Theme.Text(meta, 12, Theme.Grey),
+                    SelectableEntry(entry.Text), PersonalizationViews.Details(host,entry), badges, actions)));
             }
         }
     }
