@@ -78,7 +78,11 @@ internal sealed class AppHost : IDictationHost
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
         Preferences = new PreferenceExamples(System.IO.Path.Combine(AppPaths.StateDirectory(), "app-preferences.sealed"));
-        if(Preferences.VocabularyRemovalComplete&&!Settings.PersistenceBlocked) { try {Settings.Save(settingsPath);}catch { } }
+        var vocabularyCleanupFailed = false;
+        if (Preferences.VocabularyRemovalComplete && !Settings.PersistenceBlocked) {
+            try { Settings.Save(settingsPath); }
+            catch { vocabularyCleanupFailed = true; }
+        }
         Dictionary = new DictionaryController(Settings);
         Plugins = new PluginController(Client, () => Settings.UpdateSource);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
@@ -99,6 +103,10 @@ internal sealed class AppHost : IDictationHost
         bar = new RecordingBar(this);
         dictation = new DictationController(this, app.Dispatcher, hook, bar);
         bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
+        if (vocabularyCleanupFailed) {
+            SettingsSaveError = L10n.T("设置未保存。请检查文件权限和磁盘空间。");
+            Hint = SettingsSaveError;
+        }
         if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件无法读取，文件已保留，暂不覆盖。");
         if (Activity.LastError is not null) Hint = L10n.T("活动文件无法读取，文件已保留。");
         if (History.LastError is not null) Hint = L10n.T("历史无法读写，文件已保留。请检查文件权限。");

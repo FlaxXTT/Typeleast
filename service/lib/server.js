@@ -60,7 +60,7 @@ export async function startService(options = {}) {
       ]);
       const plugins = new PluginStore(join(stateDir, "plugins"));
       await plugins.load();
-      await plugins.migrateTechnicalPack(existingInstallation).catch(() => logger.warn?.("bundled terminology could not be installed"));
+      await plugins.migrateTechnicalPack(existingInstallation).catch(() => logger.warn?.("retired vocabulary cleanup incomplete; original retained"));
       extension = new PluginRuntime(plugins, { version: VERSION });
     } catch (error) {
       logger.warn?.("plugins could not be read (%s)", error?.code ?? "error");
