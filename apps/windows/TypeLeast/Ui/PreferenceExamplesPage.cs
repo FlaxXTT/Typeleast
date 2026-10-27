@@ -31,11 +31,9 @@ internal sealed class DictionaryPage : IPage
         revision=host.Preferences.Revision; pendingCount=host.Preferences.Pending.Count;
         content.Children.Clear();
 
-        content.Children.Add(Theme.Text(L10n.T("偏好示例"),28,bold:true));
-        content.Children.Add(Theme.Text(L10n.T("保存真实识别与用户确认的修改，不自动训练模型。"),13,Theme.Grey));
+        content.Children.Add(Theme.Text(L10n.T("个人偏好"),28,bold:true));
+        content.Children.Add(Theme.Text(L10n.T("让整理参考你确认过的表达。"),13,Theme.Grey));
         content.Children.Add(MarkerPicker(host));
-        content.Children.Add(Theme.Text(L10n.T("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"),12,Theme.Grey));
-        content.Children.Add(Theme.Text(L10n.T("已确认资料独立保存，清空历史不会删除；可在本页删除。"),12,Theme.Grey));
         if (host.Preferences.Problem is not null) content.Children.Add(Theme.Text(L10n.T("偏好资料无法保存或已达上限，原资料已保留。"),12,Theme.Warning));
         if (pendingCount>0) content.Children.Add(Theme.SectionTitle(L10n.T("待确认的修改")));
         foreach (var item in host.Preferences.Pending.ToArray()) {
@@ -55,7 +53,12 @@ internal sealed class DictionaryPage : IPage
                 Theme.Row(8,accept,Theme.Secondary(L10n.T("忽略"),()=>{host.Preferences.Dismiss(item.Id);drafts.Remove(item.Id);Render();})))));
         }
         if (host.Preferences.Entries.Count==0 && pendingCount==0)
-            content.Children.Add(Theme.Text(L10n.T("在历史中选择一条整理记录，点击「记录偏好」，再填写最终修改。"),13,Theme.Grey));
+            content.Children.Add(Theme.Card(Theme.Stack(12,
+                Theme.Text("✎",28,Theme.Grey),
+                Theme.Text(L10n.T("还没有表达示例"),17,bold:true),
+                Theme.Text(L10n.T("从历史记录中选择一次输出，填写并确认你的修改。"),13,Theme.Grey),
+                Theme.Primary(L10n.T("前往历史"),()=>host.ShowWindow(MainWindow.Page.History)))));
+        if(host.Preferences.Entries.Count>0)content.Children.Add(Theme.SectionTitle(L10n.T("已保存的示例")));
         foreach(var item in host.Preferences.Entries) {
             var toggle=Theme.Toggle(item.Enabled,enabled=>{host.Preferences.SetEnabled(item.Id,enabled);Render();});
             content.Children.Add(Theme.Card(Theme.Stack(10,
@@ -64,6 +67,13 @@ internal sealed class DictionaryPage : IPage
                 Theme.SettingRow(L10n.T("启用相关示例"),null,toggle),
                 Theme.Secondary(L10n.T("删除"),()=>{host.Preferences.Remove(item.Id);Render();}))));
         }
+        content.Children.Add(Theme.Card(new Expander {
+            Header=L10n.T("资料如何使用"),
+            Content=Theme.Stack(10,
+                Theme.Text(L10n.T("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"),12,Theme.Grey),
+                Theme.Text(L10n.T("已确认资料独立保存，清空历史不会删除；可在本页删除。"),12,Theme.Grey),
+                Theme.Text(L10n.T("在历史中打开一条记录，选择「记录修改为偏好示例」，再填写最终修改。"),12,Theme.Grey))
+        }));
     }
     private static Expander Details(string text) => new() { Header=L10n.T("处理结果（供对照）"),Content=Theme.Text(text,12,Theme.Grey) };
     public static UIElement MarkerPicker(AppHost host)

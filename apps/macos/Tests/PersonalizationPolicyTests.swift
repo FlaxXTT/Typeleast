@@ -41,23 +41,34 @@ func renderPersonalizationFixtures(output: String) throws {
     let app = NSApplication.shared
     let prefs = PreferenceExamples.shared
     Settings.shared.explanationMarkers = "note"
-    prefs.prepare(historyId: "fixture", raw: "请把报告发给产品团队", aiText: "请将报告发送给产品团队。")
-    for language in ["zh-Hans","en"] {
-        L10n.language = language
-        for dark in [false,true] {
-            app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-            for tab in 0...0 {
-                let model = AppModel()
-                let view = NSHostingView(rootView: DictionaryPage(initialTab: tab).background(Theme.window).environmentObject(model).environment(\.colorScheme, dark ? .dark : .light))
-                let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 720,height: 780),styleMask: [.titled],backing: .buffered,defer: false)
-                window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-                window.contentView = view;view.frame = NSRect(x: 0,y: 0,width: 720,height: 780)
-                window.layoutIfNeeded();RunLoop.current.run(until: Date().addingTimeInterval(0.15))
-                if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-                    view.cacheDisplay(in: view.bounds,to: bitmap)
-                    try bitmap.representation(using: .png,properties: [:])?.write(to: URL(fileURLWithPath: output+"/preferences-\(tab)-\(language)-\(dark ? "dark" : "light").png"))
+    for state in ["empty", "pending", "saved"] {
+        prefs.clearPending()
+        for item in prefs.entries { prefs.remove(item.id) }
+        if state != "empty" {
+            prefs.prepare(historyId: "fixture", raw: "请把报告发给产品团队", aiText: "请将报告发送给产品团队。")
+            if state == "saved", var item = prefs.pending.first {
+                item.correctedText = "请发给产品团队。"
+                _ = prefs.confirm(item)
+            }
+        }
+        for language in ["zh-Hans", "en"] {
+            L10n.language = language
+            for dark in [false, true] {
+                app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                for width in [500, 720] {
+                    let model = AppModel()
+                    let view = NSHostingView(rootView: DictionaryPage().background(Theme.window).environmentObject(model).environment(\.colorScheme, dark ? .dark : .light))
+                    let size = NSSize(width: width, height: 640)
+                    let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+                    window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    window.contentView = view; view.frame = NSRect(origin: .zero, size: size)
+                    window.layoutIfNeeded(); RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+                    guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw NSError(domain: "fixture-render", code: 1) }
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    guard let rendered = bitmap.representation(using: .png, properties: [:]) else { throw NSError(domain: "fixture-render", code: 2) }
+                    try rendered.write(to: URL(fileURLWithPath: output + "/preferences-\(state)-\(width)-\(language)-\(dark ? "dark" : "light").png"))
+                    window.orderOut(nil)
                 }
-                window.orderOut(nil)
             }
         }
     }

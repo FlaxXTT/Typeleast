@@ -4,28 +4,40 @@ import SwiftUI
 struct DictionaryPage: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var examples = PreferenceExamples.shared
-    @State private var selected = 0
-    init(initialTab: Int = 0) { _selected = State(initialValue: initialTab) }
+    // Keep the initializer for existing developer render callers.
+    init(initialTab: Int = 0) {}
     var body: some View {
-        VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Card { ExplanationMarkerPicker() }
-                        Text(L10n.text("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"))
-                            .font(.system(size: 12)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
-                        Text(L10n.text("已确认资料独立保存，清空历史不会删除；可在本页删除。")).font(.system(size: 12)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
-                        if examples.problem != nil {
-                            Text(L10n.text("偏好资料无法保存或已达上限，原资料已保留。"))
-                                .font(.system(size: 12)).foregroundColor(Theme.warning)
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader(title: L10n.text("个人偏好"), subtitle: L10n.text("让整理参考你确认过的表达。"))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Card { ExplanationMarkerPicker() }
+                    if examples.problem != nil {
+                        Text(L10n.text("偏好资料无法保存或已达上限，原资料已保留。"))
+                            .font(.system(size: 12)).foregroundColor(Theme.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if examples.entries.isEmpty && examples.pending.isEmpty {
+                        Card {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Image(systemName: "text.badge.checkmark")
+                                    .font(.system(size: 28)).foregroundColor(Theme.secondary)
+                                    .accessibilityHidden(true)
+                                Text(L10n.text("还没有表达示例")).font(.headline)
+                                Text(L10n.text("从历史记录中选择一次输出，填写并确认你的修改。"))
+                                    .font(.system(size: 13)).foregroundColor(Theme.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button(L10n.text("前往历史")) { model.page = .history }
+                                    .buttonStyle(PrimaryButtonStyle())
+                            }
                         }
-                        if !examples.pending.isEmpty {
-                            Text(L10n.text("待确认的修改")).font(.headline)
-                            ForEach(examples.pending) { item in PreferenceReviewCard(item: item) }
-                        }
-                        if examples.entries.isEmpty && examples.pending.isEmpty {
-                            Text(L10n.text("在历史中选择一条整理记录，点击「记录偏好」，再填写最终修改。"))
-                                .foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
+                    }
+                    if !examples.pending.isEmpty {
+                        Text(L10n.text("待确认的修改")).font(.headline)
+                        ForEach(examples.pending) { item in PreferenceReviewCard(item: item) }
+                    }
+                    if !examples.entries.isEmpty {
+                        Text(L10n.text("已保存的示例")).font(.headline)
                         ForEach(examples.entries) { item in
                             Card {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -38,8 +50,22 @@ struct DictionaryPage: View {
                                 }
                             }
                         }
-                    }.padding(.horizontal, 36).padding(.bottom, 24)
+                    }
+                    Card {
+                        DisclosureGroup(L10n.text("资料如何使用")) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(L10n.text("仅在本机加密保存。只有相关且已确认、启用的短示例会随自然整理或 AI 整理发给当前模型；涉及名称或数值变化的示例不作为自动替换依据。"))
+                                Text(L10n.text("已确认资料独立保存，清空历史不会删除；可在本页删除。"))
+                                Text(L10n.text("在历史中打开一条记录，选择「记录修改为偏好示例」，再填写最终修改。"))
+                            }
+                            .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                            .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
+                        }
+                        .font(.system(size: 13))
+                    }
                 }
+                .padding(.horizontal, 36).padding(.bottom, 24)
+            }
         }
     }
 }
