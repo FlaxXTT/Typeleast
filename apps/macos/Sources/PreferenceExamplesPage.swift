@@ -4,9 +4,19 @@ import SwiftUI
 struct DictionaryPage: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var examples = PreferenceExamples.shared
-    // Keep the initializer for existing developer render callers.
-    init(initialTab: Int = 0) {}
+    @State private var selected: Int
+    init(initialTab: Int = 0) { _selected = State(initialValue: initialTab) }
     var body: some View {
+        VStack(spacing: 0) {
+            ChipPicker(options: [(0, L10n.text("表达示例（{0}）", examples.pending.count)), (1, L10n.text("个人词汇")), (2, L10n.text("排除与高级规则"))], selection: $selected)
+                .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 14)
+            if selected == 1 { PersonalVocabularyPage() }
+            else if selected == 2 { PersonalizationRulesPage() }
+            else { examplesPage }
+        }
+    }
+
+    private var examplesPage: some View {
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: L10n.text("个人偏好"), subtitle: L10n.text("让整理参考你确认过的表达。"))
             ScrollView {

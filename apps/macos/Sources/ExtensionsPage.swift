@@ -1,7 +1,7 @@
 import SwiftUI
 
 // ExtensionsPage.swift - 扩展: installed plugins and the official catalog. Plugins are data
-// (styles); before anything is installed the user sees where its data goes.
+// (dictionary packs, styles); before anything is installed the user sees where its data goes.
 
 private enum ExtensionsTab: Hashable { case installed, market }
 
@@ -73,7 +73,7 @@ private struct PluginMeta: View {
     let plugin: PluginSummary
     var body: some View {
         HStack(spacing: 8) {
-            Badge(text: L10n.text("风格"), tint: plugin.isStyle ? Theme.style : Theme.accent)
+            Badge(text: plugin.isStyle ? L10n.text("风格") : L10n.text("词库"), tint: plugin.isStyle ? Theme.style : Theme.accent)
             Text("v" + plugin.version + " · " + plugin.author).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
             if let source = plugin.source {
                 Text(source == "bundled" ? L10n.text("随应用提供") : (source == "catalog" ? L10n.text("官方目录") : L10n.text("本地导入，未审核。")))

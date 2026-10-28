@@ -11,7 +11,7 @@ struct SelectableText: NSViewRepresentable {
     let color: NSColor
     /// 0 for no limit.
     let maxLines: Int
-    let onAddWord: ((String) -> Void)?
+    let onAddWord: (String) -> Void
     let onPlainClick: () -> Void
 
     func makeNSView(context: Context) -> HistoryTextView {
@@ -87,7 +87,6 @@ final class HistoryTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
-        guard onAddWord != nil else { return menu }
         if let word = selectedWord {
             let item = NSMenuItem(title: L10n.text("把「{0}」加入词典", word), action: #selector(addWord), keyEquivalent: "")
             item.target = self

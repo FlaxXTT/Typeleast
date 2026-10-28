@@ -20,7 +20,7 @@ struct PreferenceExample: Codable, Equatable, Identifiable {
 
 /// Encrypted with the existing history key; pending observations live in memory until confirmed.
 struct PersonalizationArchive: Codable {
-    var formatVersion = 3
+    var formatVersion = 2
     var entries: [PreferenceExample]
     var excluded: [String] = []
     var wordStates: [String: Bool] = [:]
@@ -40,17 +40,16 @@ final class PreferenceExamples: ObservableObject {
     private var locked = false
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        guard let stored = defaults.data(forKey: storageKey) else { VocabularyStorage.purge(defaults); return }
+        guard let stored = defaults.data(forKey: storageKey) else { return }
         guard let key = HistorySeal.key(create: false), let plain = HistorySeal.open(stored, key: key) else {
             locked = true; problem = "preferences-unavailable"; return
         }
         let archive = (try? JSONDecoder().decode(PersonalizationArchive.self, from: plain))
             ?? (try? JSONDecoder().decode([PreferenceExample].self, from: plain)).map { PersonalizationArchive(entries: $0) }
-        guard let archive, [2,3].contains(archive.formatVersion), archive.entries.count <= 100, archive.entries.allSatisfy({ $0.valid && $0.confirmed }), archive.excluded.count <= 512, archive.wordStates.count <= 2000, archive.ruleStates.count <= 2000 else {
+        guard let archive, archive.formatVersion == 2, archive.entries.count <= 100, archive.entries.allSatisfy({ $0.valid && $0.confirmed }), archive.excluded.count <= 512, archive.wordStates.count <= 2000, archive.ruleStates.count <= 2000 else {
             locked = true; problem = "preferences-unavailable"; return
         }
-        entries = archive.entries
-        if (archive.formatVersion == 3 && archive.excluded.isEmpty && archive.wordStates.isEmpty && archive.ruleStates.isEmpty) || persist(entries) { VocabularyStorage.purge(defaults) }
+        entries = archive.entries; excluded = archive.excluded; wordStates = archive.wordStates; ruleStates = archive.ruleStates
     }
     func prepare(historyId: String, raw: String, aiText: String) {
         guard !raw.isEmpty, !aiText.isEmpty, raw.count <= 4000, aiText.count <= 4000 else { problem = "preferences-limit"; return }
@@ -82,7 +81,23 @@ final class PreferenceExamples: ObservableObject {
     }
     func remove(_ id: String) { _ = persist(entries.filter { $0.id != id }) }
     var wireExamples: [[String: Any]] { Array(entries.filter { $0.confirmed && $0.enabled }.prefix(20)).map(\.wire) }
-    func wirePolicy(words: [LocalWord] = [], disabled: Bool = false) -> [String: Any] { ["version":1,"disabled":disabled] }
+    func isExcluded(_ term: String) -> Bool { let key = term.precomposedStringWithCompatibilityMapping.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(); return excluded.contains { $0.precomposedStringWithCompatibilityMapping.lowercased() == key } }
+    func references(_ word: LocalWord) -> Bool { word.localOnly != true && !isExcluded(word.word) && (wordStates[word.id] ?? (word.source == .manual && (word.heardAs?.isEmpty ?? true))) }
+    func replaces(_ word: LocalWord) -> Bool { !isExcluded(word.word) && !isExcluded(word.replacementHeard ?? "") && word.replacementHeard != nil && ruleStates[word.approvalKey] == true }
+    func setReference(_ id: String, _ value: Bool) { let old = wordStates; wordStates[id] = value; if !persist(entries) { wordStates = old } }
+    func setRule(_ word: LocalWord, _ value: Bool) { let old = ruleStates; ruleStates = ruleStates.filter { !$0.key.hasPrefix(word.id + "|") }; ruleStates[word.approvalKey] = value; if !persist(entries) { ruleStates = old } }
+    func exclude(_ term: String) {
+        let term = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, term.count <= 120, excluded.count < 512, !isExcluded(term) else { return }
+        let old = excluded; excluded.append(term); if !persist(entries) { excluded = old }
+    }
+    func restore(_ term: String) { let old = excluded; excluded.removeAll { $0.precomposedStringWithCompatibilityMapping.lowercased() == term.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCompatibilityMapping.lowercased() }; if !persist(entries) { excluded = old } }
+    func wirePolicy(words: [LocalWord], disabled: Bool = false) -> [String: Any] {
+        let rules: [[String: Any]] = words.filter { replaces($0) && ($0.replacementHeard != nil) }.prefix(128).map {
+            ["id": $0.id, "heard": $0.replacementHeard!, "word": $0.word, "enabled": true]
+        }
+        return ["version": 1, "disabled": disabled, "excluded": Array(excluded.prefix(512)), "rules": rules]
+    }
     private func persist(_ next: [PreferenceExample]) -> Bool {
         guard excluded.count <= 512, wordStates.count <= 2000, ruleStates.count <= 2000 else { problem = "preferences-limit"; return false }
         guard !locked, let key = HistorySeal.key(create: true), let plain = try? JSONEncoder().encode(PersonalizationArchive(entries: next, excluded: excluded, wordStates: wordStates, ruleStates: ruleStates)),

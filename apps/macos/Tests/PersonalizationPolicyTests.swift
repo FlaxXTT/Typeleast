@@ -3,34 +3,72 @@ import AppKit
 import SwiftUI
 
 func personalizationPolicyTests() {
-    let suite="typeleast.tests.retired."+UUID().uuidString
-    let defaults=UserDefaults(suiteName:suite)!
-    defer {defaults.removePersistentDomain(forName:suite);KeychainStore.stub=[:];HistorySeal.reset()}
-    KeychainStore.stub=[:];HistorySeal.reset()
-    var example=PreferenceExample(historyId:"fictional",raw:"请把报告发给团队",aiText:"请将报告发送给团队。",correctedText:"请发报告给团队。")
-    example.confirmed=true
-    let key=HistorySeal.key(create:true)!
-    let old=PersonalizationArchive(formatVersion:2,entries:[example],excluded:["Legacy"],wordStates:["old":true],ruleStates:["old-rule":true])
-    defaults.set(HistorySeal.seal(try! JSONEncoder().encode(old),key:key)!,forKey:"voice.preferenceExamples.sealed.v1")
-    defaults.set(Data("retired vocabulary".utf8),forKey:VocabularyStorage.key)
-    defaults.set(["Legacy"],forKey:"voice.dictionary")
-    let preferences=PreferenceExamples(defaults:defaults)
-    checkEq("retirement preserves confirmed expressions",preferences.entries.count,1)
-    check("retirement clears vocabulary payload and legacy words",defaults.object(forKey:VocabularyStorage.key)==nil && defaults.object(forKey:"voice.dictionary")==nil)
-    let plain=HistorySeal.open(defaults.data(forKey:"voice.preferenceExamples.sealed.v1")!,key:key)!
-    let archive=try! JSONDecoder().decode(PersonalizationArchive.self,from:plain)
-    check("mixed archive retains examples without word permissions",archive.formatVersion==3 && archive.entries.count==1 && archive.excluded.isEmpty && archive.ruleStates.isEmpty && archive.wordStates.isEmpty)
-    checkEq("retirement survives another start",PreferenceExamples(defaults:defaults).entries.count,1)
-    let settings=Settings(defaults:defaults)
-    check("retired words cannot be restored by an old setter",!settings.addWord("Legacy",source:.manual) && settings.words.isEmpty)
-    defaults.set(Data("unreadable".utf8),forKey:"voice.preferenceExamples.sealed.v1")
-    defaults.set(Data("retain until examples can be read".utf8),forKey:VocabularyStorage.key)
-    _=PreferenceExamples(defaults:defaults)
-    check("unreadable examples stop destructive mixed cleanup",defaults.data(forKey:VocabularyStorage.key) != nil)
-    let policy=preferences.wirePolicy(disabled:true)
-    check("wire policy has no word permissions",policy["excluded"]==nil && policy["rules"]==nil && policy["disabled"] as? Bool==true)
-    let response=try! JSONDecoder().decode(DictateResponse.self,from:Data("{\"text\":\"\",\"raw\":\"原文\",\"clarification\":{\"question\":\"检查\",\"evidence\":\"\",\"kind\":\"quality\",\"candidate\":\"草稿\",\"reason\":\"incomplete-output\"}}".utf8))
-    check("quality hold preserves editable draft with no insertable text",response.text.isEmpty && response.clarification?.candidate=="草稿")
+    let suite = "typeleast.tests.policy." + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite); KeychainStore.stub = [:]; HistorySeal.reset() }
+    KeychainStore.stub = [:]; HistorySeal.reset()
+    let preferences = PreferenceExamples(defaults: defaults)
+    let path = ProcessInfo.processInfo.environment["TYPELEAST_DICTIONARY_CONTRACT"]!
+    let fixture = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
+    for item in fixture["vocabularyCases"] as! [[String: Any]] {
+        let word = LocalWord(id: item["id"] as! String, word: "Acme", heardAs: item["heard"] as? String, source: LocalWord.Source(rawValue: item["source"] as! String)!, addedAt: Date())
+        checkEq("shared reference authority: " + word.id, preferences.references(word), item["reference"] as! Bool)
+        checkEq("shared replacement authority: " + word.id, preferences.replaces(word), item["replacement"] as! Bool)
+    }
+    var rule = LocalWord(id: "fake-rule", word: "Acme", heardAs: "Acmee", source: .manual, addedAt: Date())
+    check("old manual mapping is not enabled", !preferences.replaces(rule))
+    preferences.setRule(rule, true)
+    check("explicit enable grants a rule", preferences.replaces(rule))
+    preferences.exclude("ＡＣＭＥ")
+    check("fullwidth exclusion pauses rule", !preferences.replaces(rule))
+    preferences.restore("ＡＣＭＥ")
+    check("restore preserves previous approval", preferences.replaces(rule))
+    rule.heardAs = "Another"
+    check("changed rule requires fresh approval", !preferences.replaces(rule))
+    let automatic = LocalWord(id: "fake-auto", word: "Acme", source: .auto, addedAt: Date())
+    check("old automatic terms remain disabled", !preferences.references(automatic))
+    preferences.setReference(automatic.id, true)
+    check("user may confirm old vocabulary", preferences.references(automatic))
+    preferences.exclude("Acme")
+    check("global exclusion pauses personal term", !preferences.references(automatic))
+    let reload = PreferenceExamples(defaults: defaults)
+    check("encrypted overrides survive reload", reload.isExcluded("ACME") && reload.wordStates[automatic.id] == true)
+    let wire = reload.wirePolicy(words: [rule], disabled: true)
+    let payload = ServiceClient.dictateBody(wav: Data([1,2]), dictionary: ["Acme"], personalization: wire)
+    let metadata = try! JSONSerialization.jsonObject(with: payload.body.prefix(payload.dictionaryBytes)) as! [Any]
+    checkEq("one policy block travels in local metadata", metadata.compactMap { $0 as? [String:Any] }.filter { $0["personalization"] != nil }.count, 1)
+    let large = ServiceClient.dictateBody(wav: Data([1,2]), dictionary: Array(repeating: String(repeating: "字", count: 120), count: 2000), personalization: wire)
+    check("large personalization cannot break audio delivery", large.dictionaryBytes < 256 * 1024 && large.body.suffix(2) == Data([1,2]))
+    let small = try! JSONSerialization.jsonObject(with: large.body.prefix(large.dictionaryBytes)) as! [[String:Any]]
+    checkEq("oversized metadata safely disables personalization", (small[0]["personalization"] as? [String:Any])?["disabled"] as? Bool, true)
+    var legacy = PreferenceExample(historyId: "legacy-fixture", raw: "请发报告", aiText: "发送报告。", correctedText: "请发报告。")
+    legacy.confirmed = true
+    let key = HistorySeal.key(create: true)!
+    defaults.set(HistorySeal.seal(try! JSONEncoder().encode([legacy]), key: key)!, forKey: "voice.preferenceExamples.sealed.v1")
+    let upgraded = PreferenceExamples(defaults: defaults)
+    checkEq("legacy encrypted example array remains readable", upgraded.entries.count, 1)
+    upgraded.exclude("Acme")
+    check("legacy records survive saving the new archive", PreferenceExamples(defaults: defaults).entries.first?.historyId == legacy.historyId)
+    defaults.set(Data("broken fixture".utf8), forKey: "voice.preferenceExamples.sealed.v1")
+    let unavailable = PreferenceExamples(defaults: defaults)
+    unavailable.setRule(rule, true)
+    check("failed permission save cannot enable a rule", !unavailable.replaces(rule) && defaults.data(forKey: "voice.preferenceExamples.sealed.v1") == Data("broken fixture".utf8))
+    let vocabularyDefaults = UserDefaults(suiteName: suite + ".vocabulary")!
+    defer { vocabularyDefaults.removePersistentDomain(forName: suite + ".vocabulary") }
+    let legacyWords = [LocalWord(id: "legacy-vocabulary", word: "PrivateFixtureTerm", source: .auto, addedAt: Date())]
+    vocabularyDefaults.set(try! JSONEncoder().encode(legacyWords), forKey: "voice.words.v2")
+    let wordSettings = Settings(defaults: vocabularyDefaults)
+    checkEq("legacy vocabulary survives encrypted migration", wordSettings.words, legacyWords)
+    check("plain vocabulary removed only after encrypted migration", vocabularyDefaults.data(forKey: "voice.words.v2") == nil && vocabularyDefaults.data(forKey: VocabularyStorage.key) != nil)
+    check("vocabulary ciphertext does not contain its plain term", vocabularyDefaults.data(forKey: VocabularyStorage.key)!.range(of: Data("PrivateFixtureTerm".utf8)) == nil)
+    vocabularyDefaults.set(Data("unreadable fixture".utf8), forKey: VocabularyStorage.key)
+    wordSettings.words = []
+    check("unreadable vocabulary is not overwritten", wordSettings.vocabularyProblem != nil && vocabularyDefaults.data(forKey: VocabularyStorage.key) == Data("unreadable fixture".utf8))
+    defaults.set("background", forKey: "voice.explanationMarkers.v1")
+    let settings = Settings(defaults: defaults)
+    checkEq("old marker selection migrates to short form", settings.explanationMarkers, "note")
+    settings.explanationMarkers = ""
+    checkEq("marker opt-out is retained", Settings(defaults: defaults).explanationMarkers, "")
 }
 
 func renderPersonalizationFixtures(output: String) throws {
