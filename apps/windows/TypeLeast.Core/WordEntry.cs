@@ -26,3 +26,43 @@ public sealed class WordEntry
         return parts.Length == 2 ? Parse(parts[1], parts[0]) : Parse(value);
     }
 }
+
+public sealed record WordImport(IReadOnlyList<WordEntry> Valid, int Duplicates, IReadOnlyList<int> InvalidLines)
+{
+    public static WordImport Preview(string csv, IEnumerable<WordEntry> existing)
+    {
+        if (csv.Length > 2 * 1024 * 1024) throw new InvalidDataException("CSV exceeds 2 MiB");
+        var known = existing.Select(x => x.ServiceValue).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var valid = new List<WordEntry>(); var invalid = new List<int>(); var duplicates = 0;
+        var lineNumber = 0;
+        foreach (var line in csv.Replace("\r\n", "\n").Split('\n'))
+        {
+            lineNumber++;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var cells = Cells(line);
+            if (lineNumber == 1 && cells is { Count: > 0 } && cells[0].Trim('\uFEFF').ToLowerInvariant() is "word" or "正确写法") continue;
+            var entry = cells is { Count: >= 1 and <= 2 } ? WordEntry.Parse(cells[0], cells.Count == 2 ? cells[1] : "") : null;
+            if (entry is null) { invalid.Add(lineNumber); continue; }
+            if (!known.Add(entry.ServiceValue)) { duplicates++; continue; }
+            valid.Add(entry);
+        }
+        return new(valid, duplicates, invalid);
+    }
+    private static List<string>? Cells(string line)
+    {
+        var cells = new List<string>(); var text = new StringBuilder(); var quoted = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (c == '"')
+            {
+                if (quoted && i + 1 < line.Length && line[i + 1] == '"') { text.Append('"'); i++; }
+                else quoted = !quoted;
+            }
+            else if (c == ',' && !quoted) { cells.Add(text.ToString()); text.Clear(); }
+            else text.Append(c);
+        }
+        if (quoted) return null;
+        cells.Add(text.ToString()); return cells;
+    }
+}

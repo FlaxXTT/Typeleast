@@ -19,4 +19,32 @@ public static class WordSuggestions
         !(word + heardAs).Any(char.IsControl) && !word.Contains('=') && !heardAs.Contains('=') &&
         !string.IsNullOrWhiteSpace(word) && !string.IsNullOrWhiteSpace(heardAs);
 
+    /// <summary>Use only service-filtered pairs. Never replace a user's spelling or revive a deleted word.</summary>
+    public static bool ApplyAutomatic(AppSettings settings, IEnumerable<SuggestionCandidate> candidates)
+    {
+        return false; // Legacy candidates stay stored; no automatic learning.
+    }
+
+    public static void RememberDeletion(AppSettings settings, IEnumerable<WordEntry> removed) =>
+        settings.DismissedSuggestions = settings.DismissedSuggestions.Concat(removed.Select(e => e.Word.ToLowerInvariant()))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>Add one sighting: words already in the dictionary or ignored are left out; the newest first.</summary>
+    public static List<WordSuggestion> Merge(IEnumerable<WordSuggestion> list, string word, string heardAs, DateTime now,
+        ISet<string> known, ISet<string> dismissed)
+    {
+        var key = word.ToLowerInvariant();
+        var output = list.ToList();
+        if (known.Contains(key) || dismissed.Contains(key)) return output;
+        var index = output.FindIndex(s => s.Word.Equals(word, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0)
+        {
+            var seen = output[index];
+            output.RemoveAt(index);
+            output.Insert(0, new WordSuggestion { Word = seen.Word, HeardAs = seen.HeardAs, Count = seen.Count + 1, LastSeen = now });
+        }
+        else output.Insert(0, new WordSuggestion { Word = word, HeardAs = heardAs, Count = 1, LastSeen = now });
+        return output.Take(Limit).ToList();
+    }
+
 }

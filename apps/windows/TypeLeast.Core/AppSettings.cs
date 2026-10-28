@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Nodes;
 
 namespace TypeLeast.Core;
 
@@ -131,11 +130,7 @@ public sealed class AppSettings
     {
         try
         {
-            // Ignore retired payloads before typed decoding, so even malformed old words
-            // cannot reset unrelated settings or require a vocabulary decryption key.
-            var documentNode = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-            foreach (var key in documentNode.Select(x => x.Key).Where(x => new[] {"dictionaryEntries","wordSuggestions","dismissedSuggestions","words","protectedVocabulary"}.Contains(x, StringComparer.OrdinalIgnoreCase)).ToArray()) documentNode.Remove(key);
-            var loaded = JsonSerializer.Deserialize<AppSettings>(documentNode.ToJsonString(), Json.Options);
+            var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Json.Options);
             if (loaded is not null)
             {
                 using (var document = JsonDocument.Parse(File.ReadAllText(path))) {

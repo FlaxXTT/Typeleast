@@ -79,11 +79,8 @@ internal sealed class AppHost : IDictationHost
         Settings = AppSettings.Load(settingsPath);
         Preferences = new PreferenceExamples(System.IO.Path.Combine(AppPaths.StateDirectory(), "app-preferences.sealed"));
         var vocabularyCleanupFailed = false;
-        if (Preferences.VocabularyRemovalComplete && !Settings.PersistenceBlocked) {
-            try { Settings.Save(settingsPath); }
-            catch { vocabularyCleanupFailed = true; }
-        }
-        Dictionary = new DictionaryController(Settings);
+        Dictionary = new DictionaryController(Settings, Preferences, SaveSettings, SetHint,
+            (inserted, edited) => Client.LearnedWordAsync(inserted, edited));
         Plugins = new PluginController(Client, () => Settings.UpdateSource);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);

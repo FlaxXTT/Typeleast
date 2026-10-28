@@ -8,7 +8,8 @@ using TypeLeast.Core;
 namespace TypeLeast.Ui;
 
 /// <summary>
-/// 扩展: installed plugins and the official catalog. Plugins are data (styles); before anything is installed the user sees where its data goes. The market tab
+/// 扩展: installed plugins and the official catalog. Plugins are data (dictionary packs,
+/// styles); before anything is installed the user sees where its data goes. The market tab
 /// reads the catalog once each time it is opened, never in the background.
 /// </summary>
 internal sealed class ExtensionsPage : IPage
@@ -103,7 +104,7 @@ internal sealed class ExtensionsPage : IPage
 
     private static Border Card(PluginSummary plugin, UIElement action)
     {
-        var badge = Theme.Badge(L10n.T("风格"), plugin.IsStyle ? Theme.Style : Theme.Accent);
+        var badge = Theme.Badge(plugin.IsStyle ? L10n.T("风格") : L10n.T("词库"), plugin.IsStyle ? Theme.Style : Theme.Accent);
         var meta = Theme.Row(8, badge, Theme.Text("v" + plugin.Version + " · " + plugin.Author, 12, Theme.Grey, wrap: false));
         var source = plugin.Source is null ? null : Theme.Text(plugin.Source == "bundled" ? L10n.T("随应用提供") : plugin.Source == "catalog" ? L10n.T("官方目录") : L10n.T("本地导入，未审核。"), 12, plugin.Source == "file" ? Theme.Warning : Theme.Grey);
         var stack = Theme.Stack(6, Theme.Text(plugin.Title, 15, bold: true), meta);
