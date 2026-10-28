@@ -139,8 +139,10 @@ class P
         Check(!host.IsMicrophoneTesting, "ending an idle microphone test opens no device");
         host.Cancel();
         Check(host.Phase == DictationPhase.Idle, "cancel idle remains idle");
+        // Cleanup has one mode: an old tier selection no longer changes it.
+        var mode = host.Settings.Strength;
         host.SetStrength("concise");
-        Check(host.Settings.Strength == "concise", "mode routed through controller");
+        Check(host.Settings.Strength == mode, "a tier selection does not change the single mode");
         var beta = new BetaController(new ServiceClient(), () => { });
         var options = new DictationOptions("zh", "promptbeta", null, null, null, true, "clipboardOnly", false, false);
         var first = new DictateResponse { Beta = new BetaInfo { SessionId = "round1" } };
