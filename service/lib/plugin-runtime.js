@@ -10,8 +10,14 @@ export class PluginRuntime {
   }
 
   referenceData() {
+    const terms=[], aliases=[];
+    for(const plugin of this.store.plugins?.values?.() ?? []) {
+      if(!this.store.state.plugins[plugin.id]?.enabled || plugin.type!=='dictionary')continue;
+      for(const term of plugin.terms)terms.push({word:term,sourceId:plugin.id,label:plugin.name});
+      for(const alias of plugin.aliases??[])aliases.push({...alias,sourceId:plugin.id,label:plugin.name});
+    }
     const active=this.store.activeStyle?.();
-    return {style:active?{instructions:active.instructions,sourceId:active.id,label:active.name}:null};
+    return {terms,aliases,style:active?{instructions:active.instructions,sourceId:active.id,label:active.name}:null};
   }
 
   state() {

@@ -9,7 +9,7 @@ test("an empty configuration is valid and returns the documented key set", () =>
   const result = validateConfig({});
   assert.deepEqual(result.issues, []);
   assert.deepEqual(Object.keys(result.value).sort(), [
-    "language", "maxAudioBytes", "maxDurationSeconds",
+    "dictionary", "language", "maxAudioBytes", "maxDurationSeconds",
     "maxOutputTokens", "numThreads", "redactSecrets", "strength", "temperature", "timeoutMs",
   ]);
   assert.equal(result.value.temperature, 0.8, "keeps the existing sampling temperature default");
@@ -43,7 +43,7 @@ test("bad values are reported and keep their defaults, never fatal", () => {
     [{ nope: 1 }, /unknown configuration key/, null],
     [{ strength: "aggressive" }, /must be one of conservative, prompt/, ["strength", "prompt"]],
     [{ redactSecrets: "yes" }, /must be a boolean/, ["redactSecrets", true]],
-    [{ dictionary: [1, 2] }, /unknown configuration key/, null],
+    [{ dictionary: [1, 2] }, /array of strings/, ["dictionary", []]],
     [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 180000]],
     [{ timeoutMs: 100 }, /at least 1000/, ["timeoutMs", 180000]],
     [{ maxAudioBytes: 10 }, /WAV header size/, ["maxAudioBytes", 25165824]],
@@ -76,8 +76,7 @@ test("config.json is read from the state directory; missing or malformed means d
     await writeFile(join(dir, "config.json"), JSON.stringify({ timeoutMs: 15000, dictionary: ["TypeLeast"] }));
     const loaded = await loadConfig(dir);
     assert.equal(loaded.value.timeoutMs, 15000);
-    assert.equal(loaded.value.dictionary, undefined);
-    assert.deepEqual(JSON.parse(await readFile(join(dir, "config.json"), "utf8")), {timeoutMs:15000});
+    assert.deepEqual(loaded.value.dictionary, ["TypeLeast"]);
     await writeFile(join(dir, "config.json"), "{ not json");
     const broken = await loadConfig(dir);
     assert.equal(broken.value.timeoutMs, 180000);

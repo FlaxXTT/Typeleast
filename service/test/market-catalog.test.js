@@ -10,5 +10,6 @@ test('the published catalog is built from market/plugins and passes the app chec
   const catalog = validateCatalog(JSON.parse(committed));
   assert.equal(catalog.rejected, 0);
   assert.ok(catalog.plugins.length >= 1);
-  assert.ok(catalog.plugins.every(p=>p.type==='style'));
+  const bundled = JSON.parse(await readFile(new URL('../lib/bundled/typeleast.tech-terms.typeleast-plugin', import.meta.url), 'utf8'));
+  assert.deepEqual(catalog.plugins.find(p => p.id === 'typeleast.tech-terms'), bundled, 'the bundled and market copies must agree');
 });

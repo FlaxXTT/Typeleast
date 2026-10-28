@@ -26,7 +26,7 @@ test("the addendum carries only the dictionary and the non-empty parts of the fi
   });
   const [upstream, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
   assert.equal(upstream.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES).trimEnd());
-  assert.doesNotMatch(addendum, /Entries:|DeepSeek/);
+  assert.match(addendum, /Entries: DeepSeek \| 得普=DeepSeek/);
   assert.match(addendum, /Window title: "New Message"/);
   assert.match(addendum, /Text before the cursor: "Hi Emma,"/);
   assert.doesNotMatch(addendum, /Selected text|Text after the cursor/, "empty parts are left out");

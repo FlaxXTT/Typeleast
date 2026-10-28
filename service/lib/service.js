@@ -27,6 +27,7 @@ import { nameClarification, clarificationSource, clarificationRule } from "./nam
  *
  * @module typeleast-service/service
  */
+import { wordSuggestions } from "./word-suggestions.js";
 import { spelledWords } from "./spelling.js";
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -37,7 +38,7 @@ import { parsePolishOutput } from "./parse-output.js";
 import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
 import { normalizeNumbers } from './number-format.js';
-import { tidy } from "./tidy.js";
+import { normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
@@ -72,6 +73,7 @@ export class VoicePolishService {
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
     /** Optional extension port. Core dictation works when it is absent. */
+    this.suggestionEngine = options.suggestionEngine ?? wordSuggestions;
     this.extension = options.extension ?? null;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
     this.pending = 0;
@@ -80,8 +82,8 @@ export class VoicePolishService {
     /** The route of the most recent cleanup, for /health: "custom:<host>" and model id. */
     this.lastRoute = { provider: null, model: null };
     this.startedAt = Date.now();
-    /** Legacy wire field remains empty; persistent vocabulary is retired. */
-    this.dictionary = [];
+    /** Entries from config.json; each request adds the app's own dictionary (dictionaryFrom). */
+    this.dictionary = [...(this.config.dictionary ?? [])];
     // dictations/polished/fallback/lastMs count /dictate; modelCalls and
     // modelFallbacks count every polish() that reached the model, /polish included.
     this.stats = { dictations: 0, polished: 0, fallback: 0, lastError: null, lastMs: null, modelCalls: 0, modelFallbacks: 0, jsonFallback: 0, jsonRecovered: 0 };
@@ -671,7 +673,7 @@ export class VoicePolishService {
   async buildContext(request, rawText) {
     const redact = this.config.redactSecrets !== false;
     const fieldContext = request.fieldContext ?? null;
-    const own = [];
+    const own = dictionaryFrom(this.dictionary, request.dictionary);
     let data;
     try { data = await personalizationContext(request, own, this.extension, rawText); }
     catch {
@@ -733,7 +735,22 @@ export const DICTIONARY_LIMITS = { entries: 2000, entryLength: 120 };
  * @param {unknown} sent - the app's list from the request.
  * @returns {string[]} entries to use.
  */
-export function dictionaryFrom() { return []; }
+export function dictionaryFrom(configured, sent) {
+  const entries = [...configured];
+  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
+    let value = typeof entry === "string" ? entry : "";
+    if (entry && typeof entry === "object" && typeof entry.word === "string") {
+      const word = entry.word.trim();
+      const heard = typeof entry.heardAs === "string" ? entry.heardAs.trim() : "";
+      // Structured automatic entries cannot smuggle a legacy A=B rule in the word field.
+      if (!word || /[=\p{Cc}]/u.test(word + heard) || word.length + heard.length > DICTIONARY_LIMITS.entryLength - 1) continue;
+      value = (entry.source === "manual" && heard ? heard + "=" : "") + word;
+    }
+    const trimmed = value.trim().split("=").at(-1).trim().slice(0, DICTIONARY_LIMITS.entryLength);
+    if (trimmed.length > 0 && !entries.includes(trimmed)) entries.push(trimmed);
+  }
+  return entries;
+}
 
 /**
  * Entries the user marked 「不发给模型」 arrive as {"local": "heard=word"} (or {"local": "word"})
@@ -741,7 +758,18 @@ export function dictionaryFrom() { return []; }
  * spelling become replacements made on this computer.
  * @returns {Array<[string, string]>} heard-as and correct spellings.
  */
-export function localEntriesFrom() { return []; }
+export function localEntriesFrom(sent) {
+  const pairs = [];
+  for (const entry of Array.isArray(sent) ? sent.slice(0, DICTIONARY_LIMITS.entries) : []) {
+    if (entry?.source === "auto") continue;
+    const text = entry && typeof entry === "object" && typeof entry.local === "string" ? entry.local.trim().slice(0, DICTIONARY_LIMITS.entryLength) : "";
+    const split = text.indexOf("=");
+    if (split <= 0) continue;
+    const heard = text.slice(0, split).trim(), word = text.slice(split + 1).trim();
+    if (heard && word && heard !== word) pairs.push([heard, word]);
+  }
+  return pairs;
+}
 
 /** Marked entries that are only a spelling (no "heard=" part). */
 export function localSpellingsFrom(sent) {
@@ -754,7 +782,15 @@ export function localSpellingsFrom(sent) {
 }
 
 /** Replace heard-as spellings: anywhere for Chinese, as whole words (any case) for latin. */
-export function applyLocalEntries(text) { return text; }
+export function applyLocalEntries(text, pairs) {
+  if (!pairs.length || typeof text !== "string" || !text) return text;
+  let out = text;
+  for (const [heard, word] of pairs) {
+    if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(heard)) out = out.split(heard).join(word);
+    else out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${heard.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "giu"), () => word);
+  }
+  return out;
+}
 
 /** Narrow an unknown throwable to a printable message. */
 function message(error) {

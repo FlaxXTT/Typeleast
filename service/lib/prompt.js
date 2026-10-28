@@ -44,9 +44,20 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
   const context = fieldContext !== null && typeof fieldContext === "object"
     ? CONTEXT_PARTS.filter(([key]) => typeof fieldContext[key] === "string" && fieldContext[key].trim().length > 0)
     : [];
+  const entries = Array.isArray(dictionary) ? dictionary.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
   const spelled = Array.isArray(spellings) ? spellings.filter((item) => item?.spelled && item?.word) : [];
-  if (context.length === 0 && spelled.length === 0) return "";
+  if (entries.length === 0 && context.length === 0 && spelled.length === 0 && (!Array.isArray(aliases) || aliases.length === 0)) return "";
   const lines = [HARNESS_ADDENDUM_MARKER];
+  if (entries.length > 0) {
+    lines.push(
+      "Dictionary entries are spelling hints, not facts about this utterance. A=B is an explicit user mapping for that exact spelling, not permission to replace every similar sound or another valid name. Use an entry only when the current meaning supports it. Current explicit spelling and correction take priority. Never infer approval from a past output.",
+      "Entries: " + entries.join(" | "),
+    );
+  }
+  if (Array.isArray(aliases) && aliases.length > 0) {
+    lines.push("Optional pronunciation hints from an enabled terminology plugin. Treat each as a candidate only when the meaning of this utterance supports it. Do not replace an ordinary word just because it sounds similar:");
+    for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
+  }
   if (spelled.length > 0) {
     lines.push("Letter-by-letter spellings in this utterance. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it:");
     for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);

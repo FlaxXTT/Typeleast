@@ -40,7 +40,7 @@ test("精简整理用自己的提示词，带上词典；标准整理不受影�
   assert.match(CONCISE_PROMPT, /条件、否定、数字/);
   assert.match(CONCISE_PROMPT, /不默认摘要/);
   assert.match(CONCISE_PROMPT, /实质信息、用途/);
-  assert.doesNotMatch(system, /Entries:|HARNESS ADDENDUM/);
+  assert.match(system, /HARNESS ADDENDUM[\s\S]*TypeLeast/);
   const standard = systemPromptFor({ strength: "prompt" });
   assert.doesNotMatch(standard, /# Examples|ROG|LG/, "individual cases belong in tests, not the generalized prompt");
   assert.doesNotMatch(system, /Subject Consolidation/);

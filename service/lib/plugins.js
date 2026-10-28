@@ -1,23 +1,40 @@
 /**
- * Style plugins are bounded JSON data. They provide wording instructions for natural
- * and AI cleanup; they cannot execute code or access local files. The official catalog
- * is read only when requested by a client. Managed legacy vocabulary packs are retired.
+ * Plugins, version 1: data only. A plugin is one JSON file (".typeleast-plugin") that is
+ * either a dictionary pack (terms) or a style (extra wording/format instructions for
+ * 标准/精简整理). Nothing in a plugin runs: the service checks the file, stores it, and at
+ * dictation time adds the enabled packs' terms to the dictionary (still filtered to the
+ * terms a dictation mentions) and the selected style's instructions to the one model call.
+ *
+ * The official catalog is a static file published from the repository (market/) and read
+ * only from official addresses, only when the user opens the market.
+ *
+ * @module typeleast-service/plugins
  */
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { redactSecrets } from "./context.js";
+import { safeCaseTerms } from "./term-hints.js";
 
 export const PLUGIN_FORMAT = "typeleast-plugin";
 export const CATALOG_FORMAT = "typeleast-catalog";
 
 export const PLUGIN_LIMITS = {
   fileBytes: 256 * 1024,
+  terms: 2000,
+  termChars: 120,
+  aliases: 200,
+  aliasChars: 80,
+  aliasCues: 8,
+  cueChars: 40,
   instructionsBytes: 8 * 1024,
   nameChars: 40,
   descriptionChars: 200,
   authorChars: 60,
   urlChars: 200,
+  /** All enabled packs together. */
+  enabledTerms: 10000,
+  enabledAliases: 1000,
   catalogBytes: 2 * 1024 * 1024,
   catalogPlugins: 500,
 };
@@ -56,6 +73,7 @@ const VERSION = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/;
 const LICENSE = /^(?:[A-Za-z0-9.+-]{1,40}|LicenseRef-[A-Za-z0-9.-]{1,40})$/;
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
 const FIELDS = {
+  dictionary: ["format", "formatVersion", "id", "version", "type", "name", "description", "author", "license", "homepage", "terms"],
   style: ["format", "formatVersion", "id", "version", "type", "name", "description", "author", "license", "homepage", "instructions"],
 };
 
@@ -79,9 +97,9 @@ export function validatePlugin(value) {
   const fail = (path, code) => { issues.push({ path, code }); };
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, issues: [{ path: "", code: "not-an-object" }] };
   if (value.format !== PLUGIN_FORMAT) fail("format", "unknown-format");
-  if (value.formatVersion !== 1) fail("formatVersion", "unsupported-version");
-  if (value.type !== "style") return { ok: false, issues: [...issues, { path: "type", code: "unknown-type" }] };
-  const allowed = FIELDS.style;
+  if (value.formatVersion !== 1 && !(value.formatVersion === 2 && value.type === "dictionary")) fail("formatVersion", "unsupported-version");
+  if (!Object.hasOwn(FIELDS, value.type)) return { ok: false, issues: [...issues, { path: "type", code: "unknown-type" }] };
+  const allowed = value.formatVersion === 2 && value.type === "dictionary" ? [...FIELDS.dictionary, "aliases"] : FIELDS[value.type];
   for (const key of Object.keys(value)) if (!allowed.includes(key)) fail(key, "unknown-field");
   if (typeof value.id !== "string" || !ID.test(value.id)) fail("id", "invalid-id");
   if (typeof value.version !== "string" || !VERSION.test(value.version)) fail("version", "invalid-version");
@@ -99,9 +117,60 @@ export function validatePlugin(value) {
   if (typeof value.license !== "string" || !LICENSE.test(value.license)) fail("license", "invalid-license");
   if (value.homepage !== undefined && (typeof value.homepage !== "string" || !/^https:\/\/[^\s]+$/.test(value.homepage) || value.homepage.length > PLUGIN_LIMITS.urlChars)) fail("homepage", "invalid-url");
 
-  const instructions = typeof value.instructions === "string" ? value.instructions.trim() : "";
+  let terms;
+  let instructions;
+  let aliases;
+  if (value.type === "dictionary") {
+    if (!Array.isArray(value.terms) || value.terms.length === 0 || value.terms.length > PLUGIN_LIMITS.terms) fail("terms", "invalid-count");
+    else {
+      const seen = new Set();
+      terms = [];
+      value.terms.forEach((term, i) => {
+        if (typeof term !== "string") return fail(`terms[${i}]`, "invalid-term");
+        const t = term.trim();
+        // Packs offer spellings only; "heard=word" rules stay the user's own.
+        if (!t || length(t) > PLUGIN_LIMITS.termChars || t.length > PLUGIN_LIMITS.termChars || t.includes("=") || /[\r\n\t]/.test(t) || CONTROL.test(t)) return fail(`terms[${i}]`, "invalid-term");
+        if (secretShaped(t)) return fail(`terms[${i}]`, "secret-shaped");
+        const key = t.toLowerCase();
+        if (seen.has(key)) return fail(`terms[${i}]`, "duplicate-term");
+        seen.add(key);
+        terms.push(t);
+      });
+    }
+    if (value.formatVersion === 2) {
+      aliases = [];
+      if (value.aliases !== undefined && (!Array.isArray(value.aliases) || value.aliases.length > PLUGIN_LIMITS.aliases)) fail("aliases", "invalid-count");
+      else if (Array.isArray(value.aliases)) {
+        const heardKeys = new Set();
+        value.aliases.forEach((alias, i) => {
+          const path = `aliases[${i}]`;
+          if (!alias || typeof alias !== "object" || Array.isArray(alias)) return fail(path, "invalid-alias");
+          for (const key of Object.keys(alias)) if (!["heard", "term", "cues", "blockers"].includes(key)) fail(`${path}.${key}`, "unknown-field");
+          const validText = (s, max) => typeof s === "string" && s.trim() === s && length(s) >= 2 && length(s) <= max &&
+            /^[\p{L}\p{N}\p{M} ._+#/-]+$/u.test(s) && !secretShaped(s);
+          if (!validText(alias.heard, PLUGIN_LIMITS.aliasChars)) fail(`${path}.heard`, "invalid-text");
+          if (!validText(alias.term, PLUGIN_LIMITS.termChars) || !terms?.some(t => t === alias.term)) fail(`${path}.term`, "unknown-term");
+          if (!Array.isArray(alias.cues) || alias.cues.length < 1 || alias.cues.length > PLUGIN_LIMITS.aliasCues ||
+            alias.cues.some(cue => !validText(cue, PLUGIN_LIMITS.cueChars))) fail(`${path}.cues`, "invalid-cues");
+          if (alias.blockers !== undefined && (!Array.isArray(alias.blockers) || alias.blockers.length > PLUGIN_LIMITS.aliasCues ||
+            alias.blockers.some(cue => !validText(cue, PLUGIN_LIMITS.cueChars)))) fail(`${path}.blockers`, "invalid-blockers");
+          if (typeof alias.heard === "string" && typeof alias.term === "string") {
+            const key = `${alias.heard.toLowerCase()}=${alias.term.toLowerCase()}`;
+            if (heardKeys.has(key)) fail(path, "duplicate-alias");
+            heardKeys.add(key);
+          }
+          if (validText(alias.heard, PLUGIN_LIMITS.aliasChars) && validText(alias.term, PLUGIN_LIMITS.termChars) && Array.isArray(alias.cues) && alias.cues.every(cue => validText(cue, PLUGIN_LIMITS.cueChars)) &&
+            (alias.blockers === undefined || (Array.isArray(alias.blockers) && alias.blockers.every(cue => validText(cue, PLUGIN_LIMITS.cueChars))))) {
+            aliases.push({ heard: alias.heard, term: alias.term, cues: alias.cues, ...(alias.blockers ? { blockers: alias.blockers } : {}) });
+          }
+        });
+      }
+    }
+  } else {
+    instructions = typeof value.instructions === "string" ? value.instructions.trim() : "";
     if (!instructions || Buffer.byteLength(instructions, "utf8") > PLUGIN_LIMITS.instructionsBytes || CONTROL.test(instructions)) fail("instructions", "invalid-instructions");
     else if (secretShaped(instructions)) fail("instructions", "secret-shaped");
+  }
   if (issues.length) return { ok: false, issues: issues.slice(0, 20) };
   return {
     ok: true,
@@ -111,7 +180,7 @@ export function validatePlugin(value) {
       description: { "zh-Hans": value.description["zh-Hans"].trim(), en: value.description.en.trim() },
       author: value.author.trim(), license: value.license,
       ...(value.homepage ? { homepage: value.homepage } : {}),
-      instructions,
+      ...(terms ? { terms, ...(value.formatVersion === 2 ? { aliases } : {}) } : { instructions }),
     },
   };
 }
@@ -137,7 +206,9 @@ export function summarize(plugin) {
   return {
     id: plugin.id, digest: pluginDigest(plugin), version: plugin.version, type: plugin.type, name: plugin.name, description: plugin.description,
     author: plugin.author, license: plugin.license, homepage: plugin.homepage ?? null,
-    instructions: plugin.instructions,
+    ...(plugin.type === "dictionary"
+      ? { termCount: plugin.terms.length, termsPreview: plugin.terms.slice(0, 30), ...(plugin.formatVersion === 2 ? { aliasCount: plugin.aliases.length, aliasesPreview: plugin.aliases.slice(0, 12) } : {}) }
+      : { instructions: plugin.instructions }),
   };
 }
 
@@ -162,7 +233,7 @@ export class PluginStore {
       const parsed = JSON.parse(await readFile(join(this.dir, "state.json"), "utf8"));
       if (parsed && typeof parsed === "object" && parsed.plugins && typeof parsed.plugins === "object") {
         this.state = { formatVersion: 1, plugins: parsed.plugins, style: typeof parsed.style === "string" ? parsed.style : null,
-          vocabularyRemoved: parsed.vocabularyRemoved === true, technicalMigration: parsed.technicalMigration === true };
+          technicalMigration: parsed.technicalMigration === true };
       }
     } catch { /* no state yet, or unreadable: start with every plugin off */ }
     let names = [];
@@ -197,19 +268,25 @@ export class PluginStore {
   }
 
   /** One-time local upgrade. Never fetch the catalog or re-enable a user's disabled pack. */
-  async migrateTechnicalPack() {
-    // A previous pack must never be reinstalled. Cleanup is retried after a failed write.
-    if(this.state.vocabularyRemoved)return;
-    await this.change(async()=>{
-      const names=await readdir(this.dir);
-      let incomplete=false;
-      for(const name of names) {
-        if(!name.endsWith('.typeleast-plugin'))continue;
-        let value;try{value=JSON.parse(await readFile(join(this.dir,name),'utf8'));}catch{incomplete=true;continue;}
-        if(value?.type==='dictionary') {await rm(join(this.dir,name));this.plugins.delete(value.id);delete this.state.plugins[value.id];this.problems=this.problems.filter(id=>id!==value.id);}
+  async migrateTechnicalPack(existingInstallation) {
+    if (this.state.technicalMigration) return;
+    let bundled = null;
+    if (existingInstallation) {
+      const text = await readFile(new URL('./bundled/typeleast.tech-terms.typeleast-plugin', import.meta.url), 'utf8');
+      const parsed = parsePlugin(text);
+      if (!parsed.ok || parsed.plugin.id !== 'typeleast.tech-terms') throw new Error('bundled terminology is invalid');
+      bundled = parsed.plugin;
+    }
+    await this.change(async () => {
+      if (bundled && !this.state.plugins[bundled.id]) {
+        if (!this.plugins.has(bundled.id)) {
+          this.checkTermBudget(bundled);
+          await this.writeAtomic(`${bundled.id}.typeleast-plugin`, JSON.stringify(bundled, null, 2) + '\n');
+          this.plugins.set(bundled.id, bundled);
+        }
+        this.state.plugins[bundled.id] = { source: 'bundled', enabled: true };
       }
-      await rm(join(this.dir,'catalog-cache.json'),{force:true});
-      this.state.vocabularyRemoved=!incomplete;this.state.technicalMigration=true;
+      this.state.technicalMigration = true;
     });
   }
 
@@ -217,22 +294,56 @@ export class PluginStore {
     return [...this.plugins.values()].sort((a, b) => a.id.localeCompare(b.id)).map((plugin) => ({
       ...summarize(plugin),
       source: this.state.plugins[plugin.id]?.source ?? "file",
-      enabled: this.state.style === plugin.id,
+      enabled: plugin.type === "dictionary" ? this.state.plugins[plugin.id]?.enabled === true : this.state.style === plugin.id,
     }));
+  }
+
+  enabledTermCount(except) {
+    let total = 0;
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.id !== except && this.state.plugins[plugin.id]?.enabled) total += plugin.terms.length;
+    }
+    return total;
+  }
+
+  enabledAliasCount(except) {
+    let total = 0;
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.id !== except && this.state.plugins[plugin.id]?.enabled) total += plugin.aliases?.length ?? 0;
+    }
+    return total;
+  }
+
+  checkTermBudget(plugin) {
+    if (plugin.terms.length + this.enabledTermCount(plugin.id) > PLUGIN_LIMITS.enabledTerms) {
+      throw Object.assign(new Error("too many enabled terms"), { code: "plugin-terms-limit", status: 409 });
+    }
+    if ((plugin.aliases?.length ?? 0) + this.enabledAliasCount(plugin.id) > PLUGIN_LIMITS.enabledAliases) {
+      throw Object.assign(new Error("too many enabled pronunciation aliases"), { code: "plugin-aliases-limit", status: 409 });
+    }
   }
 
   /** Install or update; `enable` turns a pack on or selects a style. */
   install(plugin, { enable = false, source = "file" } = {}) {
     return this.change(async () => {
-      if(plugin.type!=="style")throw Object.assign(new Error("unsupported plugin type"),{code:"plugin-invalid"});
+      const wasEnabled = plugin.type === "dictionary" ? this.state.plugins[plugin.id]?.enabled === true : this.state.style === plugin.id;
+      const on = enable || wasEnabled;
+      if (plugin.type === "dictionary" && on) this.checkTermBudget(plugin);
       await this.writeAtomic(`${plugin.id}.typeleast-plugin`, JSON.stringify(plugin, null, 2) + "\n");
       this.plugins.set(plugin.id, plugin);
-      this.state.plugins[plugin.id] = {source};
+      this.state.plugins[plugin.id] = { source, ...(plugin.type === "dictionary" ? { enabled: on } : {}) };
       if (plugin.type === "style" && enable) this.state.style = plugin.id;
     });
   }
 
-  setEnabled() { throw Object.assign(new Error('dictionary packs removed'),{code:'plugin-not-found',status:404}); }
+  setEnabled(id, enabled) {
+    return this.change(async () => {
+      const plugin = this.plugins.get(id);
+      if (!plugin || plugin.type !== "dictionary") throw Object.assign(new Error("no such pack"), { code: "plugin-not-found", status: 404 });
+      if (enabled) this.checkTermBudget(plugin);
+      this.state.plugins[id] = { ...this.state.plugins[id], enabled: Boolean(enabled) };
+    });
+  }
 
   selectStyle(id) {
     return this.change(async () => {
@@ -266,6 +377,35 @@ export class PluginStore {
     } catch {
       return null;
     }
+  }
+
+  /** Terms of the enabled packs, for the dictionary of one call. */
+  activeTerms() {
+    const out = [];
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && this.state.plugins[plugin.id]?.enabled) out.push(...plugin.terms);
+    }
+    return out;
+  }
+
+  /** Bounded, literal pronunciation hints from enabled version-2 packs. */
+  activeAliases() {
+    const out = [];
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.formatVersion === 2 && this.state.plugins[plugin.id]?.enabled) out.push(...plugin.aliases);
+    }
+    return out;
+  }
+
+  /** Version-2 terms are curated for safe exact-token capitalisation in raw mode. */
+  activeCaseTerms() {
+    const out = new Map();
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === "dictionary" && plugin.formatVersion === 2 && this.state.plugins[plugin.id]?.enabled) {
+        for (const term of safeCaseTerms(plugin.terms)) if (!out.has(term.toLowerCase())) out.set(term.toLowerCase(), term);
+      }
+    }
+    return [...out.values()];
   }
 
   /** The selected style, if any. */

@@ -72,12 +72,12 @@ test('fabricated clarification evidence cannot release an unsupported name', asy
 
 test('automatic dictionary entries cannot authorise replacing a valid different name', () => {
   const auto = dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG', source: 'auto' }]);
-  assert.deepEqual(auto, []);
+  assert.deepEqual(auto, ['ROG']);
   assert.deepEqual(dictionaryFrom([], [{ word: 'LG=ROG', source: 'auto' }]), []);
   assert.deepEqual(dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG=ROG', source: 'manual' }]), []);
   assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', auto), ['LG']);
   const manual = dictionaryFrom([], [{ word: 'ROG', heardAs: 'LG', source: 'manual' }]);
-  assert.deepEqual(manual, []);
+  assert.deepEqual(manual, ['ROG']);
   assert.deepEqual(missingNames('LG 电脑', 'ROG 电脑', manual), ['LG']);
 });
 
@@ -174,6 +174,6 @@ test('HTTP voice continuation carries current confirmation, without teaching a p
 
 test('automatic local rules and repeated ambiguous names cannot force broad replacement', () => {
   assert.deepEqual(localEntriesFrom([{ local: 'LG=ROG', source: 'auto' }]), []);
-  assert.deepEqual(localEntriesFrom([{ local: 'LG=ROG', source: 'manual' }]), []);
+  assert.deepEqual(localEntriesFrom([{ local: 'LG=ROG', source: 'manual' }]), [['LG', 'ROG']]);
   assert.deepEqual(clarificationRule([{ clarificationSource: 'LG 电脑和 LG 屏幕', clarificationEvidence: 'LG' }], 'ROG'), []);
 });

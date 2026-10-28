@@ -15,7 +15,7 @@
  *
  * @module typeleast-service/config
  */
-import { readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const STRENGTHS = ["conservative", "prompt", "maximal", "concise", "promptbeta"];
@@ -39,6 +39,7 @@ const FIELDS = {
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
   maxAudioBytes: { kind: "integer", default: 24 * 1024 * 1024, help: "Largest accepted WAV body." },
   maxDurationSeconds: { kind: "integer", default: 600, help: "Longest accepted recording." },
+  dictionary: { kind: "stringArray", default: [], help: "Words whose spelling must be preserved verbatim." },
   redactSecrets: { kind: "boolean", default: true, help: "Strip key-shaped strings from model context." },
 };
 
@@ -135,14 +136,5 @@ export async function loadConfig(stateDir) {
       return result;
     }
   }
-  let cleanupIssue=null;
-  if(parsed&&typeof parsed==='object'&&Object.hasOwn(parsed,'dictionary')) {
-    delete parsed.dictionary;
-    const temporary=join(stateDir,CONFIG_FILE+'.retire.tmp');
-    try {await writeFile(temporary,JSON.stringify(parsed,null,2)+'\n',{mode:0o600});await rename(temporary,join(stateDir,CONFIG_FILE));}
-    catch {cleanupIssue={message:'retired vocabulary cleanup incomplete; original retained',path:['dictionary']};await unlink(temporary).catch(()=>{});}
-  }
-  const result=validateConfig(parsed);
-  if(cleanupIssue)result.issues.push(cleanupIssue);
-  return result;
+  return validateConfig(parsed);
 }

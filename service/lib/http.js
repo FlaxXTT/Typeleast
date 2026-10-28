@@ -15,6 +15,8 @@ import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
 
+import { learnedWord } from "./edit-correction.js";
+
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
 /** The app's dictionary, sent with each dictation ahead of the audio (2000 entries of up to 120 characters). */
@@ -285,9 +287,10 @@ export function createHandler(options) {
       }
 
       if (route === "/learned-word" && req.method === "POST") {
-        // Retired vocabulary route: consume legacy input but never learn or persist it.
+        // A fix the user made right after a paste: the word to add to the dictionary, or null.
+        // The field text is only compared here, never stored or logged.
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
-        reply(res, 200, { word: null });
+        reply(res, 200, { word: await learnedWord(body?.inserted, body?.edited) });
         return;
       }
 

@@ -105,12 +105,12 @@ test('an existing state gets bundled terminology once without a market request',
     const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
     try {
       const pack = handle.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms');
-      assert.equal(pack, undefined);
-      assert.equal(handle.service.extension.store.state.vocabularyRemoved,true);
-
+      assert.equal(pack?.enabled, true);
+      assert.equal(pack?.source, 'bundled');
+      await handle.service.extension.store.setEnabled(pack.id, false);
     } finally { await handle.close(); }
     const again = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
-    try { assert.equal(again.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms'), undefined); }
+    try { assert.equal(again.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms')?.enabled, false); }
     finally { await again.close(); }
   });
 });
