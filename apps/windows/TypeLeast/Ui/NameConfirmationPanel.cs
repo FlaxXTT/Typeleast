@@ -30,7 +30,7 @@ internal static class NameConfirmationPanel
             window.Close();
             if (restore) Native.SetForegroundWindow(previous);
         }
-        var row = Theme.Row(8,
+        Panel row = Theme.Row(8,
             Theme.Primary(L10n.T("使用修改内容"), () => Finish("edit", editor.Text.Trim())),
             Theme.Secondary(L10n.T("继续口述"), () => Finish("supplement")),
             Theme.Secondary(L10n.T("保留原文"), () => Finish("original")),
