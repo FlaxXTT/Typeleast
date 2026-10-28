@@ -175,8 +175,8 @@ Windows code signing via SignPath Foundation is currently pending approval.
 - **翻译**：先整理，再翻译，支持 10 种目标语言。至少两次模型调用；长文分块或完整性检查可能增加调用。
 - **名称解释与拼写**：可随口补充全称、含义或逐字拼写，也可使用可选解释标记。只为确认名称的内容不写入结果；用途、预算及其他实质条件保留。
 - **失败恢复**：不自动插入半截正文或识别原文；可重试、查看修改、使用识别原文或取消，无需重新录音。
-- **个人偏好**：保存用户确认的表达示例，本机加密，仅在相关时使用。个人词汇、自动学词和强制替换已移除，不自动训练模型。
-- **扩展**：仅提供表达风格。插件不运行代码。见[插件规范](docs/插件规范.md)和 [market/README.md](market/README.md)。
+- **个人偏好**：分开管理表达示例、个人词汇和排除与高级规则。资料在本机加密保存，只发送本次相关且已启用的参考；不自动训练模型。
+- **扩展**：词库和风格。插件不运行代码。见[插件规范](docs/插件规范.md)和 [market/README.md](market/README.md)。
 - **语言**：简体、台湾繁体、香港繁体；美式或英式拼写。界面语言在设置里改，重启后生效。
 - **历史**：加密存在本机。
 
@@ -224,14 +224,15 @@ Windows code signing via SignPath Foundation is currently pending approval.
 <summary><b>隐私</b></summary>
 
 - **音频不上传。** 识别后删除。开启「保留录音」时，加密保存约 5 分钟，用于重试。
-- **发给模型的内容**：识别出的文字及本次解释段，只参考相关、已确认且启用的短偏好示例。长文分块会重复发送必要依据，不新增音频上传。开启「参考光标附近的文字」时，加上光标附近的文字和窗口标题。像密钥和密码的内容先删除。
+- **发给模型的内容**：识别出的文字、词典里与本次相关的词及本次解释段，只参考相关、已确认且启用的短偏好示例。长文分块会重复发送必要依据，不新增音频上传。开启「参考光标附近的文字」时，加上光标附近的文字和窗口标题。像密钥和密码的内容先删除。
+- **标记「不发给模型」的词**：不会发出。
 - **风格插件**：说明随每次整理发出。
 - **剪贴板**：粘贴时使用剪贴板，之后恢复。剪贴板工具可能会记录文字。
 - **本机服务**：只监听 `127.0.0.1`，每个请求要带本机令牌。
 
 | | macOS | Windows |
 |---|---|---|
-| 设置、历史、表达偏好、日志 | `~/Library/Application Support/TypeLeast/`、`~/Library/Logs/TypeLeast/` | `%APPDATA%\TypeLeast\` |
+| 设置、历史、词典、日志 | `~/Library/Application Support/TypeLeast/`、`~/Library/Logs/TypeLeast/` | `%APPDATA%\TypeLeast\` |
 | 语音模型 | `~/Library/Application Support/TypeLeast/models/` | `%LOCALAPPDATA%\TypeLeast\models\` |
 | API Key | 钥匙串：`TypeLeast.llm-api-key` | 凭据管理器：`TypeLeast.llm-api-key/…` |
 
@@ -320,7 +321,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 | 目录 | 内容 |
 |---|---|
-| [`service/`](service/) | 本地服务（Node.js）：识别、整理、校验、表达偏好 |
+| [`service/`](service/) | 本地服务（Node.js）：识别、整理、校验、历史、词典 |
 | [`apps/macos/`](apps/macos/) | macOS App（Swift） |
 | [`apps/windows/`](apps/windows/) | Windows App（C# / WPF） |
 | [`site/`](site/) | 官网 |

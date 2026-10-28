@@ -76,11 +76,14 @@ network only in these cases:
   after the computer wakes, or at the next launch after a crash).
 - **Text cleanup (optional).** If the user enters an API key for a language model provider of their choice
   (for example DeepSeek, OpenAI, Moonshot, Zhipu, Alibaba DashScope, OpenRouter, or a local Ollama), the app sends
-  that provider the recognized text. Personal vocabulary, dictionary packs and persistent replacement rules have
-  been removed. Relevant, confirmed and enabled wording examples may guide natural or AI cleanup, but cannot
-  supply facts. A selected style affects wording only. Long or suspiciously incomplete results may be reviewed
-  once by the same provider, using the redacted current source and candidate. This can add one model call;
-  temporary failures may use one shared retry. No centralized collection or automatic training is performed.
+  that provider the recognized text and those of the user's dictionary words that the dictation mentions (spelled
+  the same or sounding alike); unrelated dictionary words are not sent. Sound matching reduces what is sent but can
+  misjudge. Personal exclusions filter vocabulary and aliases from all sources. Entries marked 不发给模型 are
+  not sent as vocabulary references; local replacements require individual approval and current-input validation.
+  Only relevant, confirmed and enabled wording examples are sent with natural or AI cleanup. They guide expression,
+  not the facts of the current dictation. A selected style affects wording only. Long or suspiciously incomplete
+  results may be reviewed once by the same provider, using the redacted current source and candidate. This can add
+  one model call; temporary failures may use one shared retry. There is no centralized collection or automatic model training.
   When the user turns on 参考输入框里的内容
   (off by default), also the text near the cursor and the window title. Values that look like keys or passwords
   are removed first. The provider's own privacy policy applies to that data. Without an API key, nothing is sent.
@@ -89,7 +92,8 @@ network only in these cases:
   (`huggingface.co`) or the mirror the user selects (`hf-mirror.com`).
 - **Plugin market.** Only when the user opens 插件市场 (or presses refresh), the app reads the official plugin
   catalog once, from the website or the official GitHub address; the request carries no user data. Installed plugins
-  are style instructions only; selected instructions are sent with that cleanup request to the user's chosen provider, as described above.
+  are data only (dictionary terms or style instructions); the terms a dictation mentions and the selected style
+  instructions are sent with that cleanup request to the user's chosen provider, as described above.
 - **Update checks.** The app reads the public release list from the GitHub API (`api.github.com`) and downloads
   update files from `github.com`. When that download is slow or stalls, it falls back to public GitHub download
   mirrors (`ghfast.top`, `gh-proxy.com`, `gh-proxy.org`, `gh.llkk.cc`; 设置 → 更新下载源 can turn this off). The
@@ -101,8 +105,8 @@ network only in these cases:
 Learning corrections reads the field the dictation was pasted into for up to two minutes when enabled.
 It records no keystrokes and creates only a pending, in-memory wording example. The user must confirm it before
 it is saved or becomes eligible for a later relevant request. No mode automatically adds dictionary entries.
-Expression examples are encrypted locally. Retired vocabulary and permissions are removed during upgrade;
-unreadable mixed archives are retained so confirmed examples are not lost. Source records follow encrypted history retention. Retry without personalization
+Personal vocabulary, examples, exclusions and replacement approvals are encrypted locally; unreadable data is
+retained and cannot be overwritten. Source records follow encrypted history retention. Retry without personalization
 sends the saved transcript to the selected cleanup provider again, without preferences, packs or new cursor context.
 The local service listens only on `127.0.0.1`. API keys are stored in Windows Credential Manager (macOS: Keychain)
 and are never written to logs. Settings, history and logs stay on the computer, in `%APPDATA%\TypeLeast\` and
