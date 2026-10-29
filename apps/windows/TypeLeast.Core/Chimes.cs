@@ -1,38 +1,34 @@
 namespace TypeLeast.Core;
 
 /// <summary>
-/// The two cue sounds, synthesised in memory as WAV files (no system sounds).
-/// Start: two soft, mid notes rising (E5 then A5), the same as the Mac app's StartChime.
-/// Stop: two soft, lower notes going down (B4 then E4), slower attack and no bright
-/// partial, so it sounds rounder and duller than the start.
+/// The two cue sounds, synthesised in memory as WAV files (no system sounds): a blunt "嘟嘟",
+/// the same as the Mac app's StartChime. Start rises (G4 then C5), stop falls (C5 then G4).
+/// Pure sine notes with a soft 12 ms attack and a short rounded decay, so they sound dull, not sharp.
 /// </summary>
 public static class Chimes
 {
     public const int SampleRate = 44100;
 
-    public static byte[] Start() => Render(0.30, 0.09, 0.006, 0.08, (0.0, 659.3, 0.20), (0.07, 880.0, 0.22));
+    public static byte[] Start() => Render((0.0, 392.0), (0.11, 523.3));
 
-    public static byte[] Stop() => Render(0.30, 0.070, 0.008, 0.0, (0.0, 493.9, 0.34), (0.085, 329.6, 0.38));
+    public static byte[] Stop() => Render((0.0, 523.3), (0.11, 392.0));
 
-    /// <param name="decay">Exponential decay time of each note, seconds.</param>
-    /// <param name="attack">Linear attack, seconds.</param>
-    /// <param name="octave">Level of the octave partial (brightness).</param>
-    private static byte[] Render(double seconds, double decay, double attack, double octave, params (double Start, double Frequency, double Peak)[] notes)
+    private static byte[] Render(params (double Start, double Frequency)[] notes)
     {
+        const double seconds = 0.26, length = 0.095, peak = 0.22;
         var total = (int)(SampleRate * seconds);
         var pcm = new byte[total * 2];
         for (var i = 0; i < total; i++)
         {
             var t = (double)i / SampleRate;
             var v = 0.0;
-            foreach (var (start, frequency, peak) in notes)
+            foreach (var (start, frequency) in notes)
             {
-                if (t < start) continue;
+                if (t < start || t >= start + length) continue;
                 var local = t - start;
-                var envelope = Math.Min(1.0, local / attack) * Math.Exp(-local / decay);
-                v += peak * envelope * (Math.Sin(2 * Math.PI * frequency * local) + octave * Math.Sin(4 * Math.PI * frequency * local));
+                var envelope = Math.Min(1.0, local / 0.012) * Math.Min(1.0, (length - local) / 0.025) * Math.Exp(-local / 0.12);
+                v += peak * envelope * Math.Sin(2 * Math.PI * frequency * local);
             }
-            v *= Math.Min(1.0, (total - i) / (SampleRate * 0.03)); // 30 ms fade-out: no click at the end
             BitConverter.TryWriteBytes(pcm.AsSpan(i * 2, 2), (short)(Math.Clamp(v, -1.0, 1.0) * short.MaxValue));
         }
         return Wav(pcm);

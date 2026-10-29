@@ -560,7 +560,8 @@ final class DictationController {
             StartChime.sound?.stop()
             StartChime.sound?.play()
         } else {
-            NSSound(named: NSSound.Name("Pop"))?.play()
+            StartChime.stopSound?.stop()
+            StartChime.stopSound?.play()
         }
     }
 

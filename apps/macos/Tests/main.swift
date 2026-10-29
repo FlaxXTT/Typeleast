@@ -947,23 +947,28 @@ do {
     check("the token lives in the state folder", ServiceClient().tokenPath.hasSuffix("TypeLeast/api-token") || ProcessInfo.processInfo.environment["TYPELEAST_HOME"] != nil)
 }
 
-// MARK: 21. the recording-start chime is short, soft and starts promptly
+// MARK: 21. the cue sounds are a blunt 嘟嘟: low, soft, rising to start and falling to stop
 do {
-    let pcm = StartChime.pcm()
-    let samples: [Int16] = pcm.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
+    func samples(_ pcm: Data) -> [Int16] { pcm.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) } }
     let rate = Int(StartChime.sampleRate)
-    check("the chime lasts under a third of a second", samples.count == Int(Double(rate) * 0.30))
-    let peak = samples.map { abs(Int($0)) }.max() ?? 0
-    check("the chime is audible but quiet", peak > 5000 && peak < Int(Int16.max) / 2)
-    let attack = samples.prefix(rate * 12 / 1000).map { abs(Int($0)) }.max() ?? 0
-    check("the chime reaches full level within 12 ms (no slow fade-in)", attack > peak / 3)
-    let first = Array(samples.prefix(rate * 70 / 1000))
-    var crossings = 0
-    for i in 1..<first.count where (first[i - 1] < 0) != (first[i] < 0) { crossings += 1 }
-    check("the chime's pitch is mid-range, not shrill", crossings > 2 * 500 * 70 / 1000 && crossings < 2 * 1000 * 70 / 1000)
-    let tail = samples.suffix(rate / 100).map { abs(Int($0)) }.max() ?? 0
-    check("the chime has died away by the end", tail < peak / 20)
-    check("the chime is a valid WAV", Wav.parse(Wav.wrap(pcm: pcm, sampleRate: StartChime.sampleRate)) != nil)
+    /// Zero crossings over a window, as a rough pitch in Hz.
+    func pitch(_ s: [Int16], from: Double, to: Double) -> Int {
+        let part = Array(s[Int(from * Double(rate))..<Int(to * Double(rate))])
+        var crossings = 0
+        for i in 1..<part.count where (part[i - 1] < 0) != (part[i] < 0) { crossings += 1 }
+        return Int(Double(crossings) / 2 / (to - from))
+    }
+    let start = samples(StartChime.pcm()), stop = samples(StartChime.stopPCM())
+    check("the cues last about a quarter of a second", start.count == Int(Double(rate) * 0.26) && stop.count == start.count)
+    let peak = start.map { abs(Int($0)) }.max() ?? 0
+    check("the cues are audible but quiet", peak > 4000 && peak < Int(Int16.max) / 3)
+    let low = pitch(start, from: 0.02, to: 0.08), high = pitch(start, from: 0.13, to: 0.19)
+    check("the start cue rises", high > low)
+    check("…and stays low, not shrill", low > 300 && high < 600)
+    check("the stop cue falls", pitch(stop, from: 0.02, to: 0.08) > pitch(stop, from: 0.13, to: 0.19))
+    let tail = start.suffix(rate / 100).map { abs(Int($0)) }.max() ?? 0
+    check("the cues have died away by the end", tail < peak / 20)
+    check("the cue is a valid WAV", Wav.parse(Wav.wrap(pcm: StartChime.pcm(), sampleRate: StartChime.sampleRate)) != nil)
 }
 
 // MARK: 22. in-app update: versions, the right download, checksums
