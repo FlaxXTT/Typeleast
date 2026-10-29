@@ -7,7 +7,7 @@ import { cleanupSystemPrompt } from "./prompts/cleanup.js";
 import { UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-27.4-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-10-29.1-dictation+assistant+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];

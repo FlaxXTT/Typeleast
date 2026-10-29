@@ -38,7 +38,7 @@ import { parsePolishOutput } from "./parse-output.js";
 import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, validateOutput } from "./validate.js";
 import { normalizeNumbers } from './number-format.js';
-import { normalizeTermCase, tidy } from "./tidy.js";
+import { joinSpacedCapitals, normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
@@ -164,7 +164,8 @@ export class VoicePolishService {
     const strength = canonicalStrength(request.strength ?? this.strength);
     const explanation = strength !== "promptbeta" && !request.translateTo
       ? splitExplanation(originalText, request.explanationMarkers) : { text: originalText, notes: [], used: false };
-    const rawText = explanation.text;
+    // Recognisers often space out spelled capitals ("L G"); the model and the checks see one word.
+    const rawText = joinSpacedCapitals(explanation.text);
     const base = {
       task: taskKind,
       raw: originalText,

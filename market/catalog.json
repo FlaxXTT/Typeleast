@@ -126,7 +126,7 @@
       "format": "typeleast-plugin",
       "formatVersion": 2,
       "id": "typeleast.tech-terms",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "type": "dictionary",
       "name": {
         "zh-Hans": "技术术语与读音",
@@ -173,7 +173,18 @@
         "HTML",
         "CSS",
         "HTTP",
-        "SDK"
+        "SDK",
+        "Codex",
+        "Jira",
+        "Notion",
+        "Figma",
+        "OKR",
+        "REPL",
+        "OAuth",
+        "LLM",
+        "RAG",
+        "REST API",
+        "CI"
       ],
       "aliases": [
         {
@@ -381,6 +392,65 @@
             "前端",
             "package",
             "install"
+          ]
+        },
+        {
+          "heard": "codecs",
+          "term": "Codex",
+          "cues": [
+            "插件",
+            "Chrome",
+            "OpenAI",
+            "浏览器",
+            "代码",
+            "CLI"
+          ],
+          "blockers": [
+            "视频",
+            "音频",
+            "编码器",
+            "解码"
+          ]
+        },
+        {
+          "heard": "扣得克斯",
+          "term": "Codex",
+          "cues": [
+            "插件",
+            "Chrome",
+            "OpenAI",
+            "浏览器",
+            "代码",
+            "CLI"
+          ]
+        },
+        {
+          "heard": "jar",
+          "term": "Jira",
+          "cues": [
+            "board",
+            "看板",
+            "工单",
+            "issue",
+            "ticket"
+          ],
+          "blockers": [
+            "Java",
+            "maven",
+            "打包",
+            "jar 包",
+            "jar包"
+          ]
+        },
+        {
+          "heard": "吉拉",
+          "term": "Jira",
+          "cues": [
+            "board",
+            "看板",
+            "工单",
+            "issue",
+            "ticket"
           ]
         }
       ]

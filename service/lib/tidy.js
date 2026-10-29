@@ -204,6 +204,14 @@ export function tidy(text) {
  * Exact-token case correction from an enabled version-2 dictionary pack.
  * The caller must exclude names that are also ordinary English words.
  */
+/**
+ * Letters a recogniser spelled out with spaces ("L G", "H T T P") are one word.
+ * Only capital letters, joined by single spaces, are merged.
+ */
+export function joinSpacedCapitals(text) {
+  return String(text ?? "").replace(/(?<![A-Za-z])[A-Z](?: [A-Z])+(?![A-Za-z])/g, (run) => run.replaceAll(" ", ""));
+}
+
 export function normalizeTermCase(text, terms = []) {
   let out = String(text ?? "");
   const sourceLower = out.toLowerCase();
