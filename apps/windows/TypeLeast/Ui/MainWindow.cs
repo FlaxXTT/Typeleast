@@ -186,11 +186,10 @@ internal sealed class HomePage : IPage
     private readonly TextBlock hint = Theme.Text("", 12.5, Theme.Grey);
     private readonly StackPanel checklist = new();
     private readonly Border setupCard;
-    private readonly System.Windows.Controls.Primitives.UniformGrid stats = new() { Columns = 4 };
+    private readonly ContentControl insights = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel recent = new();
     private readonly TextBlock engine = Theme.Text("", 12, Theme.Grey);
     private readonly ContentControl keycaps = new();
-    private readonly System.Windows.Controls.Border activityCard = Theme.Card(new StackPanel());
 
     public UIElement View => root;
 
@@ -204,17 +203,14 @@ internal sealed class HomePage : IPage
             Theme.Text(L10n.T("在输入框按一下说话，再按一下结束。"), 13, Theme.Grey),
             Theme.Row(10, tryButton, hint));
         root.Children.Add(Theme.Card(hero, 24));
-        setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("完成设置"), 14, bold: true), checklist));
+        setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("设置位置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
-        root.Children.Add(GuideViews.Card(host, window.Open));
-        root.Children.Add(stats);
+        root.Children.Add(insights);
         root.Children.Insert(0, Theme.Text(L10n.T(DateTime.Now.Hour is >= 5 and < 12 ? "早上好" : DateTime.Now.Hour is >= 12 and < 18 ? "下午好" : "晚上好"), 28, bold: true));
         root.Children.Insert(1, keycaps);
-        root.Children.Add(activityCard);
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.SettingRow(L10n.T("最近历史"), null,
             Theme.Secondary(L10n.T("查看全部"), () => window.ShowPage(MainWindow.Page.History))), recent)));
         root.Children.Add(Theme.Card(engine));
-        stats.SizeChanged += (_, _) => LayoutStats();
     }
 
     public void Refresh()
@@ -245,39 +241,20 @@ internal sealed class HomePage : IPage
             host.LlmConfigured ? host.ModelSummary : "",
             (L10n.T("打开设置"), openSettings)));
         checklist.Children.Add(Item(host.MicrophoneReady == true, L10n.T("麦克风"), L10n.T("录不到声音？请在「设置 → 隐私和安全性 → 麦克风」允许桌面应用"),
-            (L10n.T("打开设置"), openPrivacy), showActionWhenDone: true));
+            (L10n.T("打开设置"), openPrivacy)));
+        // Only what is not set up yet; the card disappears once everything works.
+        foreach (var done in checklist.Children.OfType<Grid>().Where(g => g.Tag is true).ToList()) checklist.Children.Remove(done);
         setupCard.Visibility = running && speech?.Ready == true && host.LlmConfigured && host.MicrophoneReady == true ? Visibility.Collapsed : Visibility.Visible;
 
-        var (count, chars, seconds) = host.History.Stats();
-        stats.Children.Clear();
-        foreach (var (title, value) in new[] { (L10n.T("听写字数"), chars.ToString("N0")),
-            (L10n.T("估算节省时间"), Math.Max(0, chars / 40.0 - seconds / 60).ToString("F1") + " " + L10n.T("分钟")),
-            (L10n.T("说话速度"), (seconds > 0 ? chars * 60 / seconds : 0).ToString("F0") + " " + L10n.T("字/分钟")),
-            (L10n.T("听写次数"), count.ToString("N0")) })
-        {
-            var tile = Theme.Card(Theme.Stack(8, Theme.Text(title, 12, Theme.Grey), Theme.Text(value, 21, bold: true)));
-            stats.Children.Add(tile);
-        }
-        LayoutStats();
+        insights.Content = ActivityView.Insights(host.Activity, host.History.Stats(), DateTime.Now);
         recent.Children.Clear();
         foreach (var entry in host.History.Entries.Take(3)) recent.Children.Add(Theme.Text(entry.Time.ToLocalTime().ToString("g", L10n.Culture) + "  " + entry.Text, 13));
         if (recent.Children.Count == 0) recent.Children.Add(Theme.Text(L10n.T("没有听写记录。"), 13, Theme.Grey));
-        activityCard.Child = ActivityView.Build(host.Activity, DateTime.Now);
-    }
-
-    /// <summary>Two or four equal tiles (two in English, or when narrow) with 8 px gaps, filling the row.</summary>
-    private void LayoutStats()
-    {
-        var columns = L10n.Language == "en" || (stats.ActualWidth > 0 && stats.ActualWidth < 650) ? 2 : 4;
-        stats.Columns = columns;
-        for (var i = 0; i < stats.Children.Count; i++)
-            if (stats.Children[i] is FrameworkElement tile)
-                tile.Margin = new Thickness(i % columns == 0 ? 0 : 4, 0, i % columns == columns - 1 ? 0 : 4, 12);
     }
 
     private static Grid Item(bool done, string title, string detail, (string Label, Action Run)? action, bool showActionWhenDone = false)
     {
-        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2), Tag = done };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
