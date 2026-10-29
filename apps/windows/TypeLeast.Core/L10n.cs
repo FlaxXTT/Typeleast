@@ -247,6 +247,7 @@ public static class L10n
         ["自动加词"] = "Learn words",
         ["粘贴后你改过的词加入词典。"] = "Words you fix after a paste go into the dictionary.",
         ["试说一句"] = "Try a sentence",
+        ["转录已取消"] = "Transcription cancelled",
         ["读下面这句，中途改口。结果只在这里显示。"] = "Read this, changing your mind midway. The result shows only here.",
         ["技术术语"] = "Tech terms",
         ["练习结束后再更新。"] = "Finish practice before updating.",

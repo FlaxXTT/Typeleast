@@ -50,6 +50,9 @@ internal sealed class DictationController
     private Task<FieldTarget>? targetFieldTask;
     private Task<byte[]?>? recordingContextTask;
     private readonly System.Diagnostics.Stopwatch micClock = new();
+    /// <summary>A dictation cancelled a moment ago, kept in memory until 撤销 sends it on or the toast goes away.</summary>
+    private (byte[] Wav, double Seconds, DictationOptions Options, IntPtr Window, string App, Task<FieldTarget>? Field, Task<byte[]?>? Context)? cancelled;
+    private LearnedToast? cancelToast;
     public DictationPhase Phase { get; private set; } = DictationPhase.Idle;
     public bool IsMicrophoneTesting { get; private set; }
     public bool? MicrophoneReady { get; set; }
@@ -84,7 +87,7 @@ internal sealed class DictationController
     private (string Source, IntPtr Window, string App, FieldTarget? Field, byte[]? Context, DictationOptions Options, string Evidence)? clarificationPending;
     private bool resumeClarification;
 
-    public void Shutdown() { operations.Cancel(); recorder.Cancel(); clarificationPending = null; }
+    public void Shutdown() { operations.Cancel(); recorder.Cancel(); clarificationPending = null; cancelToast?.Finish(); DropCancelled(); }
 
     public bool StartMicrophoneTest()
     {
@@ -167,6 +170,7 @@ internal sealed class DictationController
     private void StartRecording()
     {
         if (quitting) return;
+        cancelToast?.Finish();
         if (!ServiceUp || Speech?.Ready != true)
         {
             bar.ShowResult(Messages.SpeechProblem(Speech) is { Length: > 0 } p ? p : L10n.T("本地服务未就绪"), warning: true);
@@ -234,20 +238,56 @@ internal sealed class DictationController
 
     public void Cancel()
     {
+        var wasTesting = IsMicrophoneTesting;
+        var hadClarification = clarificationPending is not null;
         clarificationPending = null; resumeClarification = false;
         Dictionary.StopWatching();
         ducking.Dispose(); IsMicrophoneTesting = false;
         var preserveBeta = Phase == DictationPhase.Recording && beta.Session is not null;
+        // A dictation can be taken back for a few seconds; an assistant answer or a name confirmation cannot.
+        var keep = Phase == DictationPhase.Recording && !wasTesting && !hadClarification && recordingOptions is { Strength: "prompt" };
         var lease = operations.Active;
         operations.Cancel();
-        recorder.Cancel();
+        byte[]? wav = null; double seconds = 0;
+        if (keep) (wav, seconds) = recorder.Stop(); else recorder.Cancel();
         if (Phase == DictationPhase.Recording && lease is not null) lease.Dispose();
         hook.SwallowEscape = false;
         translating = null;
         Phase = DictationPhase.Idle;
         if (preserveBeta) beta.Resume(); else DropBeta();
-        bar.ShowResult(L10n.T("已取消"), warning: false);
+        if (wav is not null && seconds >= 0.3 && recordingOptions is { } options)
+        {
+            cancelled = (wav, seconds, options, targetWindow, targetApp, targetFieldTask, recordingContextTask);
+            bar.Dismiss();
+            cancelToast ??= new LearnedToast();
+            cancelToast.Show(L10n.T("转录已取消"), ResumeCancelled, DropCancelled);
+        }
+        else
+        {
+            if (wav is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav);
+            bar.ShowResult(L10n.T("已取消"), warning: false);
+        }
         Raise();
+    }
+
+    /// <summary>撤销 on 「转录已取消」: the kept recording is transcribed as if it had been finished.</summary>
+    private void ResumeCancelled()
+    {
+        if (cancelled is not { } held) return;
+        cancelled = null;
+        if (Phase != DictationPhase.Idle || quitting || operations.TryBegin() is not { } operation)
+        { System.Security.Cryptography.CryptographicOperations.ZeroMemory(held.Wav); return; }
+        targetWindow = held.Window; targetApp = held.App; targetField = null; recordingContext = null;
+        targetFieldTask = held.Field; recordingContextTask = held.Context;
+        _ = Send(operation, held.Options, held.Wav, held.Seconds);
+    }
+
+    /// <summary>The toast went away, a new recording started or the app quits: the kept recording is wiped.</summary>
+    public void DropCancelled()
+    {
+        if (cancelled is not { } held) return;
+        cancelled = null;
+        System.Security.Cryptography.CryptographicOperations.ZeroMemory(held.Wav);
     }
 
     private async Task StopAndSend()
@@ -256,6 +296,11 @@ internal sealed class DictationController
         var (wav, seconds) = recorder.Stop();
         ducking.Dispose();
         if (Settings.PlaySounds) Sounds.Stop();
+        await Send(operation, options, wav, seconds);
+    }
+
+    private async Task Send(OperationTracker.Lease operation, DictationOptions options, byte[] wav, double seconds)
+    {
         hook.SwallowEscape = false;
         var held = clarificationPending;
         clarificationPending = null;

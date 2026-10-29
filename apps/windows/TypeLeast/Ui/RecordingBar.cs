@@ -58,6 +58,9 @@ internal sealed class RecordingBar : Window
         Top = area.Bottom - ActualHeight - 16;
     }
 
+    /// <summary>Hide at once (a toast takes its place).</summary>
+    public void Dismiss() { hideTimer.Stop(); StopAnimation(); Hide(); }
+
     private void ShowBar()
     {
         hideTimer.Stop();
@@ -129,15 +132,13 @@ internal sealed class PillView : FrameworkElement
 {
     private enum Look { Recording, Thinking, Result }
 
-    private const double PillHeight = 34, Button = 22, Inset = 6, BarCount = 17, BarWidth = 2, BarGap = 3, WaveHeight = 18;
+    private const double PillHeight = 38, Button = 30, Inset = 4, BarCount = 15, BarWidth = 2.2, BarGap = 3, WaveHeight = 22;
     private static readonly Brush Capsule = Theme.Hex("#EB161616");
     private static readonly Pen Edge = new(Theme.Hex("#26FFFFFF"), 1);
     private static readonly Brush White = Brushes.White;
-    private static readonly Brush SoftWhite = Theme.Hex("#1FFFFFFF");
-    private static readonly Brush HoverWhite = Theme.Hex("#33FFFFFF");
+    private static readonly Brush SoftWhite = Theme.Hex("#38FFFFFF");
+    private static readonly Brush HoverWhite = Theme.Hex("#4DFFFFFF");
     private static readonly Brush Ink = Theme.Hex("#161616");
-    private static readonly Brush Live = Theme.Hex("#FF453A");
-    private static readonly Brush Waiting = Theme.Hex("#8C8C8C");
     private static readonly Brush Badge = Theme.Hex("#3E9BE9");
     private static readonly Brush Orange = Theme.Hex("#F0A04B");
     private static readonly Brush Green = Theme.Hex("#4CC27A");
@@ -228,8 +229,8 @@ internal sealed class PillView : FrameworkElement
     {
         double width = look switch
         {
-            // ×, gap, live dot, gap, waveform, [badge], [countdown], gap, stop
-            Look.Recording => Inset + Button + 10 + 6 + 10 + WaveWidth + (badge.Length > 0 ? 8 + BadgeWidth : 0) + (countdown is null ? 0 : 8 + 22) + 12 + Button + Inset,
+            // ×, gap, waveform, [badge], [countdown], gap, finish
+            Look.Recording => Inset + Button + 10 + WaveWidth + (badge.Length > 0 ? 8 + BadgeWidth : 0) + (countdown is null ? 0 : 8 + 22) + 12 + Button + Inset,
             Look.Thinking => Inset + Button + 14 + 26 + (text.Length > 0 ? 10 + Math.Min(200, Text(text, 12, Face, White).Width) : 0) + 16,
             _ => Math.Min(340, 36 + Text(text, 12, Face, White).Width + 16),
         };
@@ -252,18 +253,20 @@ internal sealed class PillView : FrameworkElement
                 cancelRect = new Rect(Inset, mid - Button / 2, Button, Button);
                 stopRect = new Rect(w - Inset - Button, mid - Button / 2, Button, Button);
                 DrawCancel(dc);
-                // stop: a white disc with a small dark rounded square, exactly centred
+                // finish: a white disc with a dark check mark, exactly centred
                 var stopCentre = Centre(stopRect);
                 dc.DrawEllipse(overStop ? White : StopDisc, null, stopCentre, Button / 2, Button / 2);
-                dc.DrawRoundedRectangle(Ink, null, new Rect(stopCentre.X - 3.5, stopCentre.Y - 3.5, 7, 7), 1.6, 1.6);
-                // the microphone is on: a small red dot that brightens with the voice
-                var dot = new Point(cancelRect.Right + 10 + 3, mid);
-                dc.PushOpacity(listening ? 0.55 + 0.45 * Math.Min(1, level * 1.4) : 1);
-                dc.DrawEllipse(listening ? Live : Waiting, null, dot, 3, 3);
-                dc.Pop();
+                var tick = new StreamGeometry();
+                using (var g = tick.Open())
+                {
+                    g.BeginFigure(new Point(stopCentre.X - 6, stopCentre.Y - 0.2), false, false);
+                    g.LineTo(new Point(stopCentre.X - 2, stopCentre.Y + 4), true, true);
+                    g.LineTo(new Point(stopCentre.X + 6.2, stopCentre.Y - 4.6), true, true);
+                }
+                dc.DrawGeometry(null, new Pen(Ink, 2.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, tick);
                 if (!listening) dc.PushOpacity(0.4);
                 // waveform: mirrored bars, one colour, snapped to whole device pixels
-                var x = dot.X + 3 + 10;
+                var x = cancelRect.Right + 10;
                 var barWidth = Math.Max(1 / scale, Snap(BarWidth));
                 for (var i = 0; i < bars.Length; i++)
                 {
@@ -335,13 +338,13 @@ internal sealed class PillView : FrameworkElement
         }
     }
 
-    /// <summary>A soft disc with an × made of two strokes, both centred on the disc.</summary>
+    /// <summary>A grey disc with a white × made of two strokes, both centred on the disc.</summary>
     private void DrawCancel(DrawingContext dc)
     {
         var c = Centre(cancelRect);
         dc.DrawEllipse(overCancel ? HoverWhite : SoftWhite, null, c, Button / 2, Button / 2);
-        var pen = new Pen(Glyph, 1.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-        const double arm = 3.4;
+        var pen = new Pen(White, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        const double arm = 5;
         dc.DrawLine(pen, new Point(c.X - arm, c.Y - arm), new Point(c.X + arm, c.Y + arm));
         dc.DrawLine(pen, new Point(c.X - arm, c.Y + arm), new Point(c.X + arm, c.Y - arm));
     }
