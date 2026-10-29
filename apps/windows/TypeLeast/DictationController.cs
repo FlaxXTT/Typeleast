@@ -202,7 +202,7 @@ internal sealed class DictationController
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target
             ? L10n.T("翻译") + " →" + target.ToUpperInvariant()
-            : L10n.T(assistantRecording ? "提示词模式" : "听写"));
+            : assistantRecording ? L10n.T("提示词模式") : "");
         Raise();
         Dictionary.DictationStarting();
         recordingOptions = new DictationOptions(Settings.Language, assistantRecording ? "promptbeta" : "prompt", translating, Settings.VariantsHeader, ActiveRoute, "autoPaste", Settings.LearnCorrections);

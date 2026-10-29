@@ -204,7 +204,7 @@ final class PillView: NSView {
     var limitSeconds: Double = 120
     static let countdownSeconds: Double = 15
     /// How many of the most recent levels the waveform shows (about 1.5 s at 20 Hz).
-    static let visibleBars = 18
+    static let visibleBars = 12
 
     var model = RecordingBarModel() {
         didSet {
@@ -219,9 +219,9 @@ final class PillView: NSView {
     private var spinnerPhase: CGFloat = 0
     private var pulse: CGFloat = 0
 
-    static let height: CGFloat = 36
+    static let height: CGFloat = 34
     /// Diameter of the cancel (left) and finish (right) buttons.
-    static let buttonSize: CGFloat = 28
+    static let buttonSize: CGFloat = 26
     static func badgeWidth(_ text: String) -> CGFloat {
         guard !text.isEmpty else { return 0 }
         let font = NSFont.systemFont(ofSize: 10, weight: .bold)
@@ -235,7 +235,7 @@ final class PillView: NSView {
         switch model.phase {
         case .hidden: return 100
         case .recording:
-            return (limit - model.elapsed <= countdownSeconds ? 182 : 144) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
+            return (limit - model.elapsed <= countdownSeconds ? 154 : 116) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
         case .thinking: return 94 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 10) + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:11)]).width))
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -368,7 +368,7 @@ final class PillView: NSView {
         check.stroke()
 
         let remaining = limitSeconds - model.elapsed
-        var waveRight = stopRect.minX - 10
+        var waveRight = stopRect.minX - 8
         if remaining <= PillView.countdownSeconds {
             let label = RecordingBarFormat.elapsed(max(0, remaining))
             drawText(label, x: stopRect.minX - 44, centerY: bounds.midY, width: 36,
@@ -387,7 +387,7 @@ final class PillView: NSView {
                      font: font, color: .white)
             waveRight = rect.minX - 6
         }
-        let waveLeft = cancelRect.maxX + 10
+        let waveLeft = cancelRect.maxX + 8
         let waveHeight = bounds.height - 14
         drawWaveform(NSRect(x: waveLeft, y: bounds.midY - waveHeight / 2,
                             width: waveRight - waveLeft, height: waveHeight))

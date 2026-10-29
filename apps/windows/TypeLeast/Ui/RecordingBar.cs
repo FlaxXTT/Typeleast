@@ -132,7 +132,7 @@ internal sealed class PillView : FrameworkElement
 {
     private enum Look { Recording, Thinking, Result }
 
-    private const double PillHeight = 38, Button = 30, Inset = 4, BarCount = 15, BarWidth = 2.2, BarGap = 3, WaveHeight = 22;
+    private const double PillHeight = 36, Button = 28, Inset = 4, BarCount = 11, BarWidth = 2.2, BarGap = 3, WaveHeight = 20;
     private static readonly Brush Capsule = Theme.Hex("#EB161616");
     private static readonly Pen Edge = new(Theme.Hex("#26FFFFFF"), 1);
     private static readonly Brush White = Brushes.White;
