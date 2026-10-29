@@ -13,6 +13,8 @@ function decimal(s) {
   if (/[万亿][一二三四五六七八九两]$/u.test(whole) || /万亿/u.test(whole)) return null;
   const n = chineseNumeral(whole.replaceAll('〇', '零'));
   if (n === null || !Number.isSafeInteger(n)) return null;
+  // A bare unit such as 万 is not zero.
+  if (n === 0 && !/[零〇]/u.test(whole)) return null;
   const digits = fraction === undefined ? '' : '.' + [...fraction].map(c => '零一二三四五六七八九'.indexOf(c === '〇' ? '零' : c)).join('');
   return (negative ? '-' : '') + n + digits;
 }
@@ -33,6 +35,8 @@ function convert(text) {
     const after = source.slice(offset + whole.length);
     const nearby = source.slice(Math.max(0, offset - 3), offset + whole.length + 8);
     if (IDIOM.test(nearby)) return whole;
+    // 万 after a written number is its unit (1.5万, 2 万元), not a number of its own.
+    if (/[\d.]\s*$/u.test(before)) return whole;
     const cue = /(?:编号|验证码|代码|号码|版本|版本号|数量|金额)\s*(?:是|为|[:：])?\s*$/u.test(before);
     // Ordinal words and ambiguous unit boundaries are not measured quantities.
     if (/第\s*$/u.test(before) || (whole.endsWith('千') && after.startsWith('克'))) return whole;
