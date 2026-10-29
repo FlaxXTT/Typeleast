@@ -2,6 +2,13 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.24.4（2026-10-29）
+
+发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 37。
+
+- 提示音改为钝化的「嘟嘟」：开始录音上扬，结束录音下降；更低、更柔、更小声。Mac 结束音不再用系统 Pop。
+- 整理：口述拼出的大写字母和全大写缩写也对照上下文核对，上下文明确指向已知名称或术语时改正。
+
 ## 1.24.3（2026-10-29）
 
 发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 36。
