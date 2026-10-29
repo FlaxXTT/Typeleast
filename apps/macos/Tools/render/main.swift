@@ -185,6 +185,12 @@ for (name, configure) in [
     snapshot(backdrop, size: backdrop.frame.size, name: name, dark: false)
 }
 
+// The cleanup model form as it appears in the onboarding.
+do {
+    let view = NSHostingView(rootView: ModelSection().environmentObject(model).frame(width: 440).padding(30).background(Theme.window))
+    snapshot(view, size: view.fittingSize, name: "onboarding-model", dark: false)
+}
+
 // The onboarding practice step, idle.
 do {
     let view = NSHostingView(rootView: OnboardingPracticeView(practice: OnboardingPracticeController()).environmentObject(model)

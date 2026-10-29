@@ -69,6 +69,8 @@ struct OnboardingView: View {
     @StateObject private var meter = MicMeter()
     @State private var tryText = ""
     @State private var globeConfirmed = false
+    /// The cleanup model form stays open once shown, even after the key is saved.
+    @State private var modelFormShown = false
     private let poll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -119,12 +121,17 @@ struct OnboardingView: View {
                         }
                     }
                     SpeechModelOptions()
-                    OnboardingCheck(done: model.llmConfigured, title: model.settings.needsPractice ? L10n.text("整理模型（练习必需）") : L10n.text("整理模型（可稍后设置）"),
-                                    detail: model.llmConfigured ? model.modelSummary : L10n.text("请在设置中配置整理模型，完成真实语音和整理练习。")) {
-                        EmptyView()
+                    // Filled in right here: it is the same setting the Settings page shows.
+                    if modelFormShown {
+                        ModelSection()
+                    } else {
+                        OnboardingCheck(done: model.llmConfigured, title: L10n.text("整理模型"), detail: model.modelSummary) {
+                            EmptyView()
+                        }
                     }
                 }
                 .frame(width: 440)
+                .onAppear { if !model.llmConfigured { modelFormShown = true } }
             }
         case .microphone:
             StepView(symbol: "mic.fill", title: L10n.text("允许麦克风"),
