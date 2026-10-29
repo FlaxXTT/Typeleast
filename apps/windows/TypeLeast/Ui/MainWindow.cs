@@ -223,6 +223,7 @@ internal sealed class HomePage : IPage
         tryButton.Content = host.Phase == DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("试一下");
         tryButton.IsEnabled = host.Phase != DictationPhase.Thinking;
         hint.Text = host.Hint;
+        hint.Visibility = string.IsNullOrEmpty(host.Hint) ? Visibility.Collapsed : Visibility.Visible;
 
         checklist.Children.Clear();
         var running = host.Service.State == ServiceManager.Phase.Running;
