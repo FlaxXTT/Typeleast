@@ -32,7 +32,7 @@ export const CONFIG_FILE = "config.json";
 /** Field declarations: default, kind and help. */
 const FIELDS = {
   maxOutputTokens: { kind: "integer", default: 800, help: "Upper bound for the polished text." },
-  timeoutMs: { kind: "integer", default: 180000, help: "Maximum per-call cleanup time; actual time scales with input within the shared 180-second budget." },
+  timeoutMs: { kind: "integer", default: 300000, help: "Maximum per-call cleanup time; actual time scales with input within the shared 300-second budget." },
   strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "prompt (自然整理) uses the general cleanup prompt. conservative and maximal are legacy validation levels. concise (AI 整理) keeps the intent and constraints in fewer words. Retired off reads as prompt; retired promptbrief and promptify read as concise. promptbeta (提示词 Beta) clarifies information over multiple rounds." },
   temperature: { kind: "number", default: 0.8, help: "Sampling temperature. Keeps the existing default; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },

@@ -17,10 +17,10 @@ test('legacy strengths share parameters and long output has a bounded growing bu
  assert.deepEqual(cleanupParameters('短句','prompt'),{maxTokens:1800,temperature:0.3,timeoutMs:30000});
  assert.deepEqual(cleanupParameters('短句','concise'),cleanupParameters('短句','prompt'));
  assert.equal(cleanupParameters('长'.repeat(5000),'prompt').maxTokens,8192);
- assert.equal(cleanupParameters('长'.repeat(32000),'prompt').timeoutMs,180000);
+ assert.equal(cleanupParameters('长'.repeat(32000),'prompt').timeoutMs,300000);
 });
 test('one clock owns the operation and a shared retry cannot be spent twice',()=>{
- let now=0;const task=new CleanupTask(undefined,{now:()=>now,totalMs:60000});try{assert.equal(task.remainingMs(),60000);assert.equal(task.retry(),true);assert.equal(task.retry(),false);now=60000;assert.throws(()=>task.assertTime());}finally{task.dispose();}
+ let now=0;const task=new CleanupTask(undefined,{now:()=>now,totalMs:60000});try{assert.equal(task.remainingMs(),60000);assert.equal(task.retry(),true);assert.equal(task.retry(),true);assert.equal(task.retry(),true);assert.equal(task.retry(),false);now=60000;assert.throws(()=>task.assertTime());}finally{task.dispose();}
 });
 test('risk review includes long text, suspicious compression and omitted condition cues',()=>{
  assert.equal(needsCleanupReview('普通短句','普通短句。'),false);assert.equal(needsCleanupReview('长'.repeat(600),'长'),true);assert.equal(needsCleanupReview('有意义的内容'.repeat(20),'内容。'),true);
@@ -42,11 +42,13 @@ test('review accepts legitimate aggressive rewriting without another rewrite cal
  const s=service(async()=>++calls===1?reply('{"status":"ok","text":"请合并重复说明。"}'):reply('{"issues":[]}'));
  const r=await s.polish({rawText:raw,strength:'concise',llm:route});assert.equal(calls,2);assert.equal(r.text,'请合并重复说明。');assert.equal(r.fallback,false);
 });
-test('transient transport retry shares a single allowance across model calls',async()=>{
+test('transient transport retry shares one bounded allowance across model calls',async()=>{
  const task=new CleanupTask();let calls=0;try{
  const fetchImpl=async()=>{calls++;throw Error('fixture outage');};
  await assert.rejects(completeOpenAI({route:normalizeRoute(route),system:'s',user:'u',timeoutMs:10,retryBudget:task,signal:task.signal,fetchImpl}));assert.equal(calls,2);
- await assert.rejects(completeOpenAI({route:normalizeRoute(route),system:'s',user:'u',timeoutMs:10,retryBudget:task,signal:task.signal,fetchImpl}));assert.equal(calls,3);
+ await assert.rejects(completeOpenAI({route:normalizeRoute(route),system:'s',user:'u',timeoutMs:10,retryBudget:task,signal:task.signal,fetchImpl}));assert.equal(calls,4);
+ await assert.rejects(completeOpenAI({route:normalizeRoute(route),system:'s',user:'u',timeoutMs:10,retryBudget:task,signal:task.signal,fetchImpl}));assert.equal(calls,6);
+ await assert.rejects(completeOpenAI({route:normalizeRoute(route),system:'s',user:'u',timeoutMs:10,retryBudget:task,signal:task.signal,fetchImpl}));assert.equal(calls,7,'three retries in all');
  }finally{task.dispose();}
 });
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {partitionText, parseEvidence, generateDictation, copiedTail, TEXT_LIMIT} from '../lib/long-dictation.js';
+import {partitionText, parseEvidence, generateDictation, joinParts, PARALLEL, TEXT_LIMIT} from '../lib/long-dictation.js';
 import {taskFor} from '../lib/dictation-task.js';
 import {VoicePolishService} from '../lib/service.js';
 import {LocalRecognizer} from '../lib/asr.js';
@@ -24,7 +24,7 @@ test('cross-segment evidence must quote this complete source', () => {
   assert.equal(parseEvidence('{"evidence":[{"quote":"","meaning":"改名"}]}','原文'),null);
 });
 
-test('long generation is serial and receives late corrections in every part', async () => {
+test('long generation runs a few parts at once and gives late corrections to every part', async () => {
   const source='这是要完整保留的内容。'.repeat(600)+'最后纠正：项目名拼作 Z E P H Y R。';
   const evidence=[{quote:'项目名拼作 Z E P H Y R',meaning:'项目名为 ZEPHYR'}];
   let active=0,maxActive=0;const inputs=[], stages=[];
@@ -35,7 +35,7 @@ test('long generation is serial and receives late corrections in every part', as
     else {const part=JSON.parse(user);inputs.push(part);text=JSON.stringify({status:'ok',text:part.text});}
     active--;return {text,attempts:1};
   }});
-  assert.equal(maxActive,1);assert.equal(result.segmented,true);
+  assert.ok(maxActive>1&&maxActive<=PARALLEL);assert.equal(result.segmented,true);
   assert.ok(inputs.length>2);assert.ok(inputs.every(x=>x.evidence[0].quote===evidence[0].quote));
   assert.ok(stages.some(x=>x.completed===inputs.length&&x.total===inputs.length));
   assert.ok(JSON.parse(result.text).text.endsWith('Z E P H Y R。'));
@@ -48,7 +48,7 @@ test('failure in any part never releases a partial result',async()=>{
     if(calls===2)return {text:'{"status":"ok","text":"第一部分。"}'};
     throw Error('fixture interruption');
   }}),/fixture interruption/);
-  assert.equal(calls,3);
+  assert.ok(calls>=3);
 });
 
 test('legacy strengths select the same task; explicit invalid tasks fail closed',()=>{
@@ -106,29 +106,24 @@ test('progress contains stage counts only, expires, and never contains text',()=
   s.progress.get('fixture-id').updated=0;assert.equal(s.taskProgress('fixture-id').stage,'waiting');
 });
 
-const RAMBLE = Array.from({length: 58}, (_, i) => `然后第${i + 1}个事情就是我们那个要把报表的格式再调整一下嗯还有就是要跟进客户的反馈`).join('，');
-
-test('a cleanup whose second half copies the transcript is detected', () => {
-  const structured = '本次要处理三类事情：\n1. 调整报表格式。\n2. 跟进客户反馈。\n3. 每周汇总进度。'.repeat(12);
-  assert.equal(copiedTail(RAMBLE, structured), false, 'a structured rewrite is not a copy');
-  const lazy = structured.slice(0, 200) + RAMBLE.slice(Math.floor(RAMBLE.length / 2));
-  assert.equal(copiedTail(RAMBLE, lazy), true, 'a verbatim tail is a copy');
-  assert.equal(copiedTail('短', '短'), false, 'short answers are never judged');
+test('parts that split a numbered list keep counting', () => {
+  assert.equal(joinParts(['要点：\n1. 甲\n2. 乙', '1. 丙\n2. 丁\n\n结论。']), '要点：\n1. 甲\n2. 乙\n3. 丙\n4. 丁\n\n结论。');
+  assert.equal(joinParts(['第一段。', '1. 新列表']), '第一段。\n\n1. 新列表', 'a list after prose starts at 1');
 });
 
-test('a long single answer that copies its second half is redone in parts', async () => {
-  const source = RAMBLE.slice(0, 2300);
-  const lazy = JSON.stringify({status: 'ok', text: '要点：\n1. 调整报表格式。\n' + source.slice(1000)});
-  const calls = [];
+test('long parts are cleaned in parallel with overlapping neighbours as context', async () => {
+  const source = Array.from({length: 160}, (_, i) => `第${i + 1}件事要跟进客户反馈并调整报表格式。`).join('');
+  let active = 0, peak = 0; const messages = [];
   const call = async (system, user) => {
-    calls.push(user);
-    if (calls.length === 1) return {text: lazy};
-    if (calls.length === 2) return {text: '{"evidence":[]}'};
-    return {text: JSON.stringify({status: 'ok', text: '1. 调整报表格式。\n2. 跟进客户反馈。'})};
+    if (system.includes('提取明确的名称依据')) return {text: '{"evidence":[]}'};
+    messages.push(JSON.parse(user)); active++; peak = Math.max(peak, active);
+    await new Promise(r => setTimeout(r, 10)); active--;
+    return {text: JSON.stringify({status: 'ok', text: '1. 跟进客户反馈。'})};
   };
   const result = await generateDictation({source, system: 'S', call, parameters: {}});
   assert.equal(result.segmented, true);
-  assert.ok(calls.length >= 4, 'evidence plus at least two parts');
-  const second = JSON.parse(calls[3]);
-  assert.ok(second.previousEnd.includes('跟进客户反馈'), 'each part continues from the previous one');
+  assert.ok(messages.length >= 2 && peak > 1 && peak <= PARALLEL, `peak ${peak}`);
+  const second = messages.find(m => m.part === 2);
+  assert.ok(second.before.length > 0 && source.includes(second.before), 'the previous part is given as context');
+  assert.ok(messages.find(m => m.part === 1).after.length > 0, 'the next part is given as context');
 });

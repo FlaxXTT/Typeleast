@@ -242,12 +242,18 @@ export class VoicePolishService {
       return completeOpenAI({route: custom, system, user, ...options, signal: task.signal,
         retryBudget: task, ...(this.fetchImpl ? {fetchImpl:this.fetchImpl} : {})});
     };
-    const result = await generateDictation({source:user, system, call, parameters,
+    let result = await generateDictation({source:user, system, call, parameters,
       progress: value => this.setProgress(request.requestId, value)});
       // The prompt asks for {status,text,reason}; a model may answer
       // with plain prose or malformed JSON instead, and none of that may reach
       // the document. Parse first, then clean, then validate.
-      const parsed = parsePolishOutput(result.text);
+      let parsed = parsePolishOutput(result.text);
+      // An unusable whole answer is redone in parts before anything falls back.
+      if (!parsed.ok && !result.segmented && Array.from(rawText).length >= 200) {
+        result = await generateDictation({source:user, system, call, parameters, force:true,
+          progress: value => this.setProgress(request.requestId, value)});
+        parsed = parsePolishOutput(result.text);
+      }
       if (!parsed.ok) {
         this.stats.jsonFallback += 1;
         this.stats.modelFallbacks += 1;
@@ -310,11 +316,11 @@ export class VoicePolishService {
         return this.polish({ ...request, _languageRetry: true });
       }
       if (!verdict.ok) {
-        // Nothing waits on the user: a result that only failed a fact or name check is
-        // inserted and marked uncertain; a truncated or wrong-language one is replaced by
-        // the tidied transcript.
+        // Nothing waits on the user, and a cleaned result is always preferred over the transcript:
+        // whatever check it failed, it is inserted and marked uncertain. Only an empty answer
+        // falls back to the tidied transcript.
         const tidyOnly = tidy(rawText);
-        const unusable = ["language-changed", "output-too-short", "empty-output"].includes(verdict.reason);
+        const unusable = !candidate?.trim();
         return await this.recordFallback(request, {
           ...base,
           text: unusable ? tidyOnly.text : candidate,
