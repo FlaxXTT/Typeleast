@@ -134,10 +134,10 @@ test("the model prompt is the cleanup prompt plus a dictionary addendum", async 
   const [system, user] = model.calls[0].body.messages;
   assert.equal(system.role, "system");
   assert.match(system.content, /整理语音识别文本/);
-  assert.match(system.content, /只返回一个 JSON 对象/);
+  assert.match(system.content, /整个回复是一个 JSON 对象/);
   // Our constraints ride in a delimited addendum, never woven into the prompt text.
   assert.match(system.content, /=== HARNESS ADDENDUM \(not part of the upstream prompt\) ===/);
-  assert.match(system.content, /Dictionary entries are spelling hints/);
+  assert.match(system.content, /Dictionary entries from the user/);
   assert.match(system.content, /Entries: Wednesday$/m);
   // The user message is the recognised text alone.
   assert.equal(user.role, "user");

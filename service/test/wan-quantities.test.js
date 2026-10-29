@@ -1,13 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeNumbers } from "../lib/number-format.js";
 import { inventedFacts, validateOutput } from "../lib/validate.js";
-
-test("万 after a written number keeps its unit", () => {
-  assert.equal(normalizeNumbers("预算1.5万元左右。"), "预算1.5万元左右。");
-  assert.equal(normalizeNumbers("预算不超过 2 万元。"), "预算不超过 2 万元。");
-  assert.equal(normalizeNumbers("一共十三个人。"), "一共13个人。", "ordinary conversions still apply");
-});
 
 test("一万五, 两万 and their written forms state the same value", () => {
   assert.deepEqual(inventedFacts("预算一万五左右", "预算 15000 元左右"), []);

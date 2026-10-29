@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { joinSpacedCapitals } from "../lib/tidy.js";
 import { relevantAliases } from "../lib/term-hints.js";
 import { cleanupSystemPrompt } from "../lib/prompts/cleanup.js";
-import { UTTERANCE_RULES } from "../lib/utterance-rules.js";
+import { JSON_OUTPUT, UTTERANCE_RULES } from "../lib/utterance-rules.js";
 
 test("capitals a recogniser spaced out are joined; words are not", () => {
   assert.equal(joinSpacedCapitals("帮我查一下L G那款显示器"), "帮我查一下LG那款显示器");
@@ -22,6 +22,6 @@ test("new pack hints apply only in their context", () => {
 });
 
 test("the prompt keeps explained names, lists parallel items, writes spoken symbols and keeps English", () => {
-  const prompt = cleanupSystemPrompt() + UTTERANCE_RULES;
-  for (const rule of ["被解释的名称本身保留", "编号列表", "点写 .", "代码块", "结果也用英文"]) assert.ok(prompt.includes(rule), rule);
+  const prompt = cleanupSystemPrompt() + UTTERANCE_RULES + JSON_OUTPUT;
+  for (const rule of ["被解释的名称本身保留", "编号列表", "点写 .", "代码块", "沿用口述的语言"]) assert.ok(prompt.includes(rule), rule);
 });

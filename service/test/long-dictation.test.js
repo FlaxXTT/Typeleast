@@ -115,7 +115,7 @@ test('long parts are cleaned in parallel with overlapping neighbours as context'
   const source = Array.from({length: 160}, (_, i) => `第${i + 1}件事要跟进客户反馈并调整报表格式。`).join('');
   let active = 0, peak = 0; const messages = [];
   const call = async (system, user) => {
-    if (system.includes('提取明确的名称依据')) return {text: '{"evidence":[]}'};
+    if (system.includes('提取名称依据')) return {text: '{"evidence":[]}'};
     messages.push(JSON.parse(user)); active++; peak = Math.max(peak, active);
     await new Promise(r => setTimeout(r, 10)); active--;
     return {text: JSON.stringify({status: 'ok', text: '1. 跟进客户反馈。'})};

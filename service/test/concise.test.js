@@ -37,9 +37,8 @@ test("精简整理用自己的提示词，带上词典；标准整理不受影�
   const system = systemPromptFor({ strength: "concise", dictionary: ["TypeLeast"] });
   assert.ok(system.startsWith(CONCISE_PROMPT));
   assert.match(CONCISE_PROMPT, /重排/);
-  assert.match(CONCISE_PROMPT, /条件、否定、数字/);
-  assert.match(CONCISE_PROMPT, /不默认摘要/);
-  assert.match(CONCISE_PROMPT, /实质信息、用途/);
+  assert.match(CONCISE_PROMPT, /篇幅随内容而定/);
+  assert.match(system, /实质信息和表达意图/);
   assert.match(system, /HARNESS ADDENDUM[\s\S]*TypeLeast/);
   const standard = systemPromptFor({ strength: "prompt" });
   assert.doesNotMatch(standard, /# Examples|ROG|LG/, "individual cases belong in tests, not the generalized prompt");

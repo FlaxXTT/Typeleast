@@ -4,10 +4,10 @@
  * lists and pronunciation aliases are ignored, including legacy callers.
  */
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
-import { UTTERANCE_RULES } from "./utterance-rules.js";
+import { JSON_OUTPUT, UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-29.1-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-10-30.1-dictation+assistant+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -50,20 +50,20 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
   const lines = [HARNESS_ADDENDUM_MARKER];
   if (entries.length > 0) {
     lines.push(
-      "Dictionary entries are spelling hints, not facts about this utterance. A=B is an explicit user mapping for that exact spelling, not permission to replace every similar sound or another valid name. Use an entry only when the current meaning supports it. Current explicit spelling and correction take priority. Never infer approval from a past output.",
+      "Dictionary entries from the user. A=B means the recognised spelling A is written B. Use an entry when the meaning of this utterance fits it; this utterance's own spelling and correction come first.",
       "Entries: " + entries.join(" | "),
     );
   }
   if (Array.isArray(aliases) && aliases.length > 0) {
-    lines.push("Optional pronunciation hints from an enabled terminology plugin. Treat each as a candidate only when the meaning of this utterance supports it. Do not replace an ordinary word just because it sounds similar:");
+    lines.push("Pronunciation hints from an enabled terminology plugin. Each is a candidate, used when the meaning of this utterance fits it:");
     for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
   }
   if (spelled.length > 0) {
-    lines.push("Letter-by-letter spellings in this utterance. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it. Recognised letters can themselves be wrong (B/D/P/E/V, M/N and S/F sound alike): check each spelled word and every all-caps term against the context, and when the context clearly points to a known name, product or term, write that one; otherwise keep the recognised letters:");
+    lines.push("Letter-by-letter spellings in this utterance, the strongest evidence for a name. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it. Recognised letters can be misheard (B/D/P/E/V, M/N and S/F sound alike): when a spelled word makes no sense here and the context clearly points to the intended word, write that word:");
     for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);
   }
   if (context.length > 0) {
-    lines.push("The text already in the box being typed into is below. Use it only to choose correct spellings, names and terminology, and to continue in the same style. Never copy it into the output.");
+    lines.push("The text already in the box being typed into is below, for understanding the topic and recognising names already written there. The output is the cleaned dictation alone:");
     for (const [key, label] of context) lines.push(`${label}: ${JSON.stringify(fieldContext[key])}`);
   }
   return "\n\n" + lines.join("\n");
@@ -77,7 +77,7 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
  */
 export function systemPromptFor({ dictionary, aliases, fieldContext, spellings, strength } = {}) {
   const base = cleanupSystemPrompt();
-  return base + UTTERANCE_RULES + harnessAddendum({ dictionary, aliases, fieldContext, spellings });
+  return base + UTTERANCE_RULES + JSON_OUTPUT + harnessAddendum({ dictionary, aliases, fieldContext, spellings });
 }
 
 /**

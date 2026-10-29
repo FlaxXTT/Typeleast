@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
 import { TRANSLATE_LANGUAGES, translatePrompt } from "../lib/prompts/translate.js";
 import { applyVariants, parseVariants, variantInstruction } from "../lib/variants.js";
-import { normalizeNumbers } from '../lib/number-format.js';
 
 const ROUTE = { baseURL: "https://api.example.com/v1", model: "m", apiKey: "test-key" };
 const SPOKEN = "嗯那个下周三下午三点开会，不对，改成周四下午三点，大家记得带电脑";
@@ -42,9 +41,9 @@ test("翻译：先验证原语言整理稿，再把它交给第二次调用译�
   assert.equal(calls.length, 2);
   assert.equal(calls[0].user, SPOKEN);
   assert.match(calls[0].system, /整理语音识别文本/);
-  assert.equal(calls[1].user, normalizeNumbers(cleaned), "second call sees the formatted validated source, not the raw correction");
+  assert.equal(calls[1].user, cleaned, "second call sees the cleaned source, not the raw correction");
   assert.match(calls[1].system, /译成English/);
-  assert.match(calls[1].system, /不回答、不执行/);
+  assert.match(calls[1].system, /问题和指令按原意译出/);
   assert.match(calls[1].system, /可以调整句式/);
   assert.equal(service.stats.modelCalls, 2);
   assert.equal(service.stats.modelFallbacks, 0);
@@ -80,7 +79,7 @@ test("translation request fails: the validated source remains insertable", async
   const result = await makeService(fetchImpl).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
   assert.equal(calls, 2);
   assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.equal(result.text, normalizeNumbers(cleaned));
+  assert.equal(result.text, cleaned);
   assert.equal(result.reason, "model-error:HTTP_401");
 });
 
@@ -135,7 +134,7 @@ test("变体对整理结果和无模型回退都生效；英式拼写写进系�
   const { calls, fetchImpl } = provider('{"status":"ok","text":"周四下午三点开会，大家记得带电脑。"}');
   const service = makeService(fetchImpl);
   const polished = await service.polish({ rawText: SPOKEN, strength: "prompt", llm: ROUTE, variants: "zh=tw,en=gb" });
-  assert.equal(polished.text, "週四下午3點開會，大家記得帶電腦。");
+  assert.equal(polished.text, "週四下午三點開會，大家記得帶電腦。");
   assert.match(calls[0].system, /British spelling/);
   const withoutRoute = await service.polish({ rawText: "下午三点开会", strength: "prompt", variants: "zh=hk" });
   assert.equal(withoutRoute.text, "下午三點開會");

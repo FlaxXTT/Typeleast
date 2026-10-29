@@ -5,7 +5,7 @@ import { systemPromptFor } from '../lib/prompt.js';
 import { validateOutput } from '../lib/validate.js';
 import { CONCISE_PROMPT } from '../lib/prompts/concise.js';
 import { UTTERANCE_RULES } from '../lib/utterance-rules.js';
-import { translatePrompt } from '../lib/prompts/translate.js';
+import { directTranslatePrompt, translatePrompt } from '../lib/prompts/translate.js';
 import { STRENGTHS, validateConfig } from '../lib/config.js';
 
 test('legacy strengths use one shared dictation prompt', () => {
@@ -19,12 +19,20 @@ test('all one-shot cleanup modes receive scoped correction and term-restoration 
   for (const strength of ['prompt', 'conservative', 'maximal', 'concise']) {
     assert.ok(systemPromptFor({ strength }).includes(UTTERANCE_RULES), strength);
   }
-  assert.match(translatePrompt('en'), /已经整理好的原语言文本/);
+  assert.match(translatePrompt('en'), /已经整理好的文本/);
   assert.match(UTTERANCE_RULES, /处理本次口述/);
-  assert.match(UTTERANCE_RULES, /明确改口/);
-  assert.match(UTTERANCE_RULES, /引用和强调/);
-  assert.match(UTTERANCE_RULES, /证据不足保留识别结果/);
-  assert.match(UTTERANCE_RULES, /明确拼出的，也要对照上下文核对/);
+  assert.match(UTTERANCE_RULES, /改口/);
+  assert.match(UTTERANCE_RULES, /实质信息和表达意图/);
+  assert.match(UTTERANCE_RULES, /依据按可靠程度依次是本次明确拼写或改正/);
+  assert.match(UTTERANCE_RULES, /识别结果本身是说得通的真实名称时照写/);
+});
+
+test('the JSON reply format belongs to dictation only', () => {
+  assert.match(systemPromptFor({}), /"status"/);
+  assert.doesNotMatch(UTTERANCE_RULES, /"status"|JSON/);
+  assert.doesNotMatch(translatePrompt('en'), /"status"|JSON/);
+  assert.doesNotMatch(directTranslatePrompt('en'), /"status"|JSON/);
+  assert.match(directTranslatePrompt('en'), /实质信息和表达意图/);
 });
 
 const samples = [

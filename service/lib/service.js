@@ -34,7 +34,6 @@ import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
 import { restoreApproximateNumbers, unwrap } from "./validate.js";
-import { normalizeNumbers } from './number-format.js';
 import { joinSpacedCapitals, normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
@@ -279,9 +278,9 @@ export class VoicePolishService {
       }
       if (parsed.clarification) return this.retainSourceName(request, base, rawText, started, parsed.text);
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      // Only fixed formatting follows the model: numbers, punctuation, a wrapper a chatty model may
+      // Only fixed formatting follows the model: approximate numbers, punctuation, a wrapper a chatty model may
       // add. The cleaned text is inserted as the model wrote it; nothing judges or replaces it.
-      const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, unwrap(parsed.text).text)));
+      const tidied = tidy(restoreApproximateNumbers(rawText, unwrap(parsed.text).text));
       candidate = tidied.text.trim();
       if (!candidate) {
         const tidyOnly = tidy(rawText);
