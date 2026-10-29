@@ -90,10 +90,8 @@ network only in these cases:
   获取列表 (list the provider's models) asks the same provider for its model list.
 - **Speech model download.** When the user downloads a speech model, the files are fetched from Hugging Face
   (`huggingface.co`) or the mirror the user selects (`hf-mirror.com`).
-- **Plugin market.** Only when the user opens 插件市场 (or presses refresh), the app reads the official plugin
-  catalog once, from the website or the official GitHub address; the request carries no user data. Installed plugins
-  are data only (dictionary terms or style instructions); the terms a dictation mentions and the selected style
-  instructions are sent with that cleanup request to the user's chosen provider, as described above.
+- **Dictionary packs.** The bundled terminology pack is data only; the terms a dictation mentions are sent with that
+  cleanup request to the user's chosen provider, as described above. The app reads no plugin catalog.
 - **Update checks.** The app reads the public release list from the GitHub API (`api.github.com`) and downloads
   update files from `github.com`. When that download is slow or stalls, it falls back to public GitHub download
   mirrors (`ghfast.top`, `gh-proxy.com`, `gh-proxy.org`, `gh.llkk.cc`; 设置 → 更新下载源 can turn this off). The

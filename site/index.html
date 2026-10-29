@@ -222,7 +222,6 @@ footer a { color: var(--ink-2); }
     <a class="link" href="#prompt" data-i18n="nav.prompt">提示词</a>
     <a class="link" href="#features" data-i18n="nav.features">功能</a>
     <a class="link" href="#privacy" data-i18n="nav.privacy">隐私</a>
-    <a class="link" href="extensions.html" data-i18n="nav.ext">扩展</a>
     <a class="link" data-link="repo" href="#">GitHub</a>
     <a class="btn small" href="#download" data-i18n="nav.download">下载</a>
   </div>
@@ -354,7 +353,7 @@ footer a { color: var(--ink-2); }
       <div class="tile"><div class="big" data-i18n="t3.big">3 种模式</div><h3 data-i18n="t3.h">整理模式</h3><p data-i18n="t3.p">自然、精简、提示词 Beta。</p></div>
       <div class="tile"><div class="big" data-i18n="t4.big">词典</div><h3 data-i18n="t4.h">名字按你的写法</h3><p data-i18n="t4.p">德普西克 → DeepSeek</p></div>
       <div class="tile"><div class="big" data-i18n="t5.big">4 个模型</div><h3 data-i18n="t5.h">本机识别</h3><p data-i18n="t5.p">中英混说、粤语、方言。</p></div>
-      <div class="tile"><div class="big" data-i18n="t6.big">繁 · 简</div><h3 data-i18n="t6.h">你的写法</h3><p data-i18n="t6.p">简体或繁体，美式或英式。</p></div>
+      <div class="tile"><div class="big" data-i18n="t6.big">繁 · 简</div><h3 data-i18n="t6.h">你的写法</h3><p data-i18n="t6.p">简体或繁体。</p></div>
       <div class="tile"><div class="big" data-i18n="t7.big">你的 Key</div><h3 data-i18n="t7.h">你选的模型</h3><p data-i18n="t7.p">支持 DeepSeek、Kimi、Ollama 等。</p></div>
       <div class="tile"><div class="big sheen" data-i18n="t8.big">¥0</div><h3 data-i18n="t8.h">免费</h3><p data-i18n="t8.p">不订阅，不限次数。</p></div>
     </div>
@@ -401,22 +400,6 @@ footer a { color: var(--ink-2); }
       <div class="card" data-fx="rise" data-depth="2"><h3 data-i18n="pf.2h">Key 存在系统里</h3><p data-i18n="pf.2p">不进文件，不进日志。</p></div>
       <div class="card" data-fx="rise" data-depth="3"><h3 data-i18n="pf.3h">历史加密</h3><p data-i18n="pf.3p">只存本机，可关闭。</p></div>
     </div>
-  </div>
-</section>
-
-<section id="extensions">
-  <div class="wrap center">
-    <div class="zoom" data-fx="zoom">
-      <p class="eyebrow" data-i18n="ext.eyebrow">插件扩展</p>
-      <h2 data-i18n="ext.title">词库和<span class="sheen">风格</span></h2>
-      <p class="lead" data-i18n="ext.lead">术语写对，格式由你定。</p>
-    </div>
-    <div class="trio">
-      <div class="card" data-fx="rise" data-depth="1"><div class="k" data-i18n="ext.1k">词库</div><h3 data-i18n="ext.1h">术语写对</h3><p data-i18n="ext.1p">例如 Kubernetes</p></div>
-      <div class="card" data-fx="rise" data-depth="2"><div class="k" data-i18n="ext.2k">风格</div><h3 data-i18n="ext.2h">固定格式</h3><p data-i18n="ext.2p">例如工作邮件</p></div>
-      <div class="card" data-fx="rise" data-depth="3"><div class="k" data-i18n="ext.3k">自己做</div><h3 data-i18n="ext.3h">一个文件</h3><p data-i18n="ext.3p">无需代码</p></div>
-    </div>
-    <p style="margin-top:40px"><a class="btn" href="extensions.html" data-i18n="ext.go">插件市场</a></p>
   </div>
 </section>
 
@@ -485,13 +468,7 @@ const EN = {
   "longfilm.video": "Full 72-second TypeLeast product film",
   "title": "TypeLeast · Free voice input for the AI era. Write your best prompts.",
   "description": "Free voice input for Mac and Windows. Speech is recognized on your computer and text is inserted at the cursor. Add details over several turns to write more complete prompts.",
-  "nav.prompt": "Prompts", "nav.features": "Features", "nav.privacy": "Privacy", "nav.ext": "Extensions", "nav.download": "Download",
-  "ext.eyebrow": "Extensions", "ext.title": "Dictionary packs and <span class=\"sheen\">styles</span>",
-  "ext.lead": "Correct terms. Your format.",
-  "ext.1k": "Dictionary pack", "ext.1h": "Correct terms", "ext.1p": "Example: Kubernetes",
-  "ext.2k": "Style", "ext.2h": "Fixed format", "ext.2p": "Example: work email",
-  "ext.3k": "Make your own", "ext.3h": "One file", "ext.3p": "No code",
-  "ext.go": "Plugin market",
+  "nav.prompt": "Prompts", "nav.features": "Features", "nav.privacy": "Privacy", "nav.download": "Download",
   "hero.title": "<span>Speak.</span> <span class=\"sheen\">Get text.</span>",
   "hero.lead": "Press the key and speak. Press again. The text goes to your cursor.",
   "hero.download": "Free download", "hero.more": "Prompt Beta", "hero.fine": "Free · No account · Mac and Windows",
@@ -533,7 +510,7 @@ const EN = {
   "t3.big": "3 modes", "t3.h": "Cleanup modes", "t3.p": "Natural, Concise, Prompt Beta.",
   "t4.big": "Dictionary", "t4.h": "Your spelling for names", "t4.p": "deep seek → DeepSeek",
   "t5.big": "4 models", "t5.h": "Local recognition", "t5.p": "Mixed Chinese and English, Cantonese, dialects.",
-  "t6.big": "US · UK", "t6.h": "Your spelling", "t6.p": "US or UK. Simplified or Traditional.",
+  "t6.big": "繁 · 简", "t6.h": "Your script", "t6.p": "Simplified or Traditional.",
   "t7.big": "Your key", "t7.h": "Your model", "t7.p": "DeepSeek, Kimi, Ollama and more.",
   "t8.big": "$0", "t8.h": "Free", "t8.p": "No subscription. No limits.",
   "gal.title": "Native apps", "gal.lead": "Light and dark mode.",
