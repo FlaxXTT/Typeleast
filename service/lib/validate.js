@@ -228,6 +228,15 @@ export function factTokens(text) {
   for (const [run] of source.matchAll(new RegExp(`(?<![${CN_ANY}])[零〇一二三四五六七八九]{3,}(?![${CN_ANY}])`, "gu"))) {
     set.add("N:" + Array.from(run).map((c) => CN_DIGITS[c]).join(""));
   }
+  // 万 quantities: "一万五" (15000), "两万" (20000), "1.5 万" and "15000" state one value.
+  // A number written before 万 is its coefficient, not a value of its own.
+  source = source.replace(/(\d+(?:\.\d+)?)\s*万(?!亿)/g, (m, x) => { set.add("N:" + Math.round(Number(x) * 10000)); return " ".repeat(m.length); });
+  source = source.replace(/([一二三四五六七八九十两]{1,3})万(?:([一二三四五六七八九两])千?)?(?![十百千万亿])/gu, (m, head, tail) => {
+    const value = chineseNumeral(head);
+    if (value === null) return m;
+    set.add("N:" + (value * 10000 + (tail ? CN_DIGITS[tail] * 1000 : 0)));
+    return " ".repeat(m.length);
+  });
   // Arabic digits and Chinese numerals both count, and both normalise to the
   // same value: "两个平台" and "2 个平台" state the same fact, so rewriting one
   // into the other is not fabrication.
