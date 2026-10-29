@@ -16,7 +16,7 @@ namespace TypeLeast.Ui;
 /// </summary>
 internal sealed class MainWindow : Window
 {
-    public enum Page { Home, History, Dictionary, Extensions, Settings }
+    public enum Page { Home, History, Dictionary, Settings }
 
     private readonly AppHost host;
     private readonly Dictionary<Page, Button> nav = new();
@@ -49,7 +49,7 @@ internal sealed class MainWindow : Window
         brand.Margin = new Thickness(20, 22, 0, 18);
         DockPanel.SetDock(brand, Dock.Top);
         side.Children.Add(brand);
-        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("个人偏好")), (Page.Extensions, L10n.T("扩展")) })
+        foreach (var (page, label) in new[] { (Page.Home, L10n.T("首页")), (Page.History, L10n.T("历史")), (Page.Dictionary, L10n.T("词典")) })
         {
             var b = NavButton(label, () => ShowPage(page));
             DockPanel.SetDock(b, Dock.Top);
@@ -152,7 +152,6 @@ internal sealed class MainWindow : Window
                 Page.Home => new HomePage(host, this),
                 Page.History => new HistoryPage(host),
                 Page.Dictionary => new DictionaryPage(host),
-                Page.Extensions => new ExtensionsPage(host, this),
                 _ => new SettingsPage(host),
             };
             pages[page] = view;
@@ -164,8 +163,6 @@ internal sealed class MainWindow : Window
 
     private void Refresh()
     {
-        if(nav.TryGetValue(Page.Dictionary,out var preferenceButton))
-            preferenceButton.Content=L10n.T("个人偏好")+(host.Preferences.Pending.Count>0?" · "+host.Preferences.Pending.Count:"");
         badgeDot.Fill = host.ServiceUp ? Theme.Success : Theme.Warning;
         badgeText.Text = host.ServiceUp ? L10n.T("本地服务就绪") : host.ServiceSummary;
         if (pages.TryGetValue(current, out var view)) view.Refresh();

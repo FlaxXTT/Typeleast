@@ -24,9 +24,8 @@ public sealed class AppSettings
     public DictationKey? AssistantHotkey { get; set; }
     /// <summary>Target language code the service knows (en, zh, ja, ko, fr, de, es, pt, it, ru).</summary>
     public string TranslateTarget { get; set; } = "en";
-    /// <summary>语言变体: Chinese "hans" / "tw" / "hk", English "us" / "gb".</summary>
+    /// <summary>中文字形: "hans" / "tw" / "hk".</summary>
     public string ZhVariant { get; set; } = "hans";
-    public string EnVariant { get; set; } = "us";
     /// <summary>A code from <see cref="CleanupModes.Codes"/>: "prompt" (自然整理), "concise" (AI 整理), or "promptbeta".</summary>
     public string Strength { get; set; } = "prompt";
     public bool UnifiedDictationApplied { get; set; }
@@ -47,7 +46,6 @@ public sealed class AppSettings
     public string ModelMirror { get; set; } = "";
     public string NodePath { get; set; } = "";
     public bool LaunchAtLogin { get; set; }
-    public bool RestoreClipboard { get; set; } = true;
     /// <summary>更新提醒: a found version is offered with 立即更新 / 稍后. Nothing installs by itself.</summary>
     public bool AutoUpdate { get; set; } = true;
     /// <summary>auto, github or mirror (UpdateSources).</summary>
@@ -55,8 +53,6 @@ public sealed class AppSettings
     public bool OnboardingDone { get; set; }
     public bool PracticeGateRequired { get; set; } = true;
     [System.Text.Json.Serialization.JsonIgnore] public bool NeedsPractice => PracticeGateRequired && !OnboardingDone;
-    public string ExplanationMarkers { get; set; } = "";
-    public bool ShortMarkersMigrated { get; set; }
     /// <summary>The home page's 「设置在哪」 card was dismissed with 知道了.</summary>
     public bool GuideDismissed { get; set; }
     /// <summary>-1 = the system default microphone.</summary>
@@ -66,7 +62,6 @@ public sealed class AppSettings
     public string HistoryRetention { get; set; } = "forever";
     /// <summary>Keep each recording for five minutes (RetainedAudio.Lifetime) for History's retry; the stored name is older.</summary>
     public bool KeepAudio24h { get; set; }
-    public string InsertionMode { get; set; } = "autoPaste";
     public string Appearance { get; set; } = "system";
     public bool ShowInTaskbar { get; set; } = true;
     public bool ShowIdleBar { get; set; }
@@ -79,7 +74,6 @@ public sealed class AppSettings
     public List<WordSuggestion> WordSuggestions { get; set; } = new();
     /// <summary>Suggestions the user ignored (lowercase), never offered again.</summary>
     public List<string> DismissedSuggestions { get; set; } = new();
-    public bool FormattedLists { get; set; }
     public bool PlaySounds { get; set; } = true;
     public bool MuteOtherAudio { get; set; }
     /// <summary>Ctrl+Shift+V is paste in terminals and paste-as-plain-text in browsers and Office,
@@ -97,11 +91,10 @@ public sealed class AppSettings
 
     public static readonly string[] TranslateTargets = { "en", "zh", "ja", "ko", "fr", "de", "es", "pt", "it", "ru" };
     public static readonly string[] ZhVariants = { "hans", "tw", "hk" };
-    public static readonly string[] EnVariants = { "us", "gb" };
 
-    /// <summary>Sent with every request ("zh=tw,en=gb"); null while both are the defaults.</summary>
+    /// <summary>Sent with every request ("zh=tw"); null for simplified Chinese.</summary>
     [JsonIgnore]
-    public string? VariantsHeader => ZhVariant == "hans" && EnVariant == "us" ? null : $"zh={ZhVariant},en={EnVariant}";
+    public string? VariantsHeader => ZhVariant == "hans" ? null : $"zh={ZhVariant}";
 
     [JsonIgnore]
     public string LlmBaseUrl
@@ -137,10 +130,6 @@ public sealed class AppSettings
                     if (!document.RootElement.EnumerateObject().Any(x => string.Equals(x.Name, "PracticeGateRequired", StringComparison.OrdinalIgnoreCase)))
                         loaded.PracticeGateRequired = false;
                 }
-                if(!loaded.ShortMarkersMigrated) {
-                    if(new[]{"background","explanation","aside"}.Contains(loaded.ExplanationMarkers))loaded.ExplanationMarkers="note";
-                    loaded.ShortMarkersMigrated=true;
-                }
                 using(var document=JsonDocument.Parse(File.ReadAllText(path)))VocabularyStorage.Decode(document.RootElement,loaded,protection);
                 loaded.Strength = CleanupModes.Stored(loaded.Strength);
                 loaded.ApplyUnifiedDictation();
@@ -159,15 +148,12 @@ public sealed class AppSettings
                     loaded.DictionaryEntries = loaded.Words.Select(WordEntry.FromLegacy).OfType<WordEntry>().ToList();
                 loaded.Words = new();
                 if (!new[] { "forever", "year", "month", "week", "day", "never" }.Contains(loaded.HistoryRetention)) loaded.HistoryRetention = "forever";
-                if (!new[] { "autoPaste", "clipboardOnly", "preview" }.Contains(loaded.InsertionMode)) loaded.InsertionMode = "autoPaste";
                 if (!new[] { "system", "light", "dark" }.Contains(loaded.Appearance)) loaded.Appearance = "system";
                 if (!UpdateSources.Modes.Contains(loaded.UpdateSource)) loaded.UpdateSource = "auto";
                 loaded.InterfaceLanguage = L10n.Normalize(loaded.InterfaceLanguage);
-                if (!new[] { "note", "background", "explanation", "aside" }.Contains(loaded.ExplanationMarkers)) loaded.ExplanationMarkers = "";
                 if (!new[] { "auto", "zh", "en", "yue", "ja", "ko" }.Contains(loaded.Language)) loaded.Language = "auto";
                 if (!TranslateTargets.Contains(loaded.TranslateTarget)) loaded.TranslateTarget = "en";
                 if (!ZhVariants.Contains(loaded.ZhVariant)) loaded.ZhVariant = "hans";
-                if (!EnVariants.Contains(loaded.EnVariant)) loaded.EnVariant = "us";
                 // The two keys must differ; the dictation key wins.
                 if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
                 if (loaded.AssistantHotkey == loaded.Hotkey || loaded.AssistantHotkey == loaded.TranslateHotkey) loaded.AssistantHotkey = null;

@@ -272,30 +272,10 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
     stub.Reply = (200, "{\"plugins\":[{\"id\":\"example.dev-terms\",\"version\":\"1.0.0\",\"type\":\"dictionary\",\"name\":{\"zh-Hans\":\"开发术语\",\"en\":\"Dev terms\"},\"description\":{\"zh-Hans\":\"术语。\",\"en\":\"Terms.\"},\"author\":\"Example\",\"license\":\"CC0-1.0\",\"termCount\":3,\"source\":\"catalog\",\"enabled\":true}],\"style\":null,\"problems\":[]}");
     var plugins = await client.GetPluginsAsync();
     Eq("installed plugins decode", plugins.Plugins[0].Id, "example.dev-terms");
-    Check("…with their switch and source", plugins.Plugins[0].Enabled == true && plugins.Plugins[0].Source == "catalog" && !plugins.Plugins[0].IsStyle);
+    Check("…with their switch and source", plugins.Plugins[0].Enabled == true && plugins.Plugins[0].Source == "catalog");
     Eq("plugins path", stub.LastPath, "/api/voice-polish/plugins");
-    await client.InstallPluginAsync(System.Text.Encoding.UTF8.GetBytes("{\"format\":\"typeleast-plugin\"}"), enable: true, digest: "abc");
-    Eq("install carries the switch and the fingerprint of what was shown", stub.LastPath, "/api/voice-polish/plugins?enable=1&digest=abc");
-    Eq("…and the file itself as the body", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"format\":\"typeleast-plugin\"}");
     await client.SetPluginEnabledAsync("example.dev-terms", false);
     Eq("a switch is a PUT on the plugin", stub.LastMethod + " " + stub.LastPath, "PUT /api/voice-polish/plugins/example.dev-terms");
-    await client.SelectStyleAsync(null);
-    Eq("no style is sent as null", System.Text.Encoding.UTF8.GetString(stub.LastBody), "{\"id\":null}");
-    await client.InstallCatalogPluginAsync("example.formal", false, "def");
-    Eq("a catalog install sends the fingerprint it showed", JsonSerializer.Deserialize<JsonElement>(stub.LastBody).GetProperty("digest").GetString(), "def");
-    Eq("a changed plugin is explained", PluginMessages.Describe("plugin-changed"), L10n.T("插件已变化。请重新查看后再安装"));
-    await client.RemovePluginAsync("example.dev-terms");
-    Eq("uninstall is a DELETE", stub.LastMethod, "DELETE");
-    stub.Reply = (400, "{\"error\":\"not a valid plugin\",\"code\":\"plugin-invalid\",\"issues\":[]}");
-    try { await client.InspectPluginAsync(new byte[] { 1 }); Check("an invalid file is refused", false); }
-    catch (ServiceException e) { Eq("an invalid file is explained", PluginMessages.Describe(e), L10n.T("这不是插件文件")); }
-    stub.Reply = (200, "{\"ok\":false,\"code\":\"market-offline\",\"source\":null,\"fetchedAt\":null,\"plugins\":[]}");
-    var market = await client.GetPluginCatalogAsync();
-    Check("an offline market is reported, not an error", !market.Ok && PluginMessages.Describe(market.Code) == L10n.T("无法获取插件目录，请检查网络"));
-    Eq("the market follows the update source setting", stub.LastPath, "/api/voice-polish/plugins/catalog?sources=auto");
-    stub.Reply = (200, "{\"ok\":true,\"source\":\"fastly.jsdelivr.net\",\"mirrored\":true,\"fetchedAt\":null,\"plugins\":[]}");
-    var mirrored = await client.GetPluginCatalogAsync("mirror");
-    Check("a catalog read through a mirror is marked", mirrored.Mirrored && stub.LastPath == "/api/voice-polish/plugins/catalog?sources=mirror");
 
     // Entries marked 「不发给模型」 go to the local service as {"local": entry}, after the ordinary ones.
     var (marked, markedBytes) = ServiceClient.DictateBody(new byte[] { 1, 2 }, new[] { "DeepSeek" }, new[] { "张为=章伟" });
@@ -470,11 +450,11 @@ Console.WriteLine();
         "{\"text\":\"Hello\",\"raw\":\"你好\",\"fallback\":false,\"translated\":\"en\"}")!;
     Eq("the translated language is read", translated.Translated, "en");
     Eq("default variants send nothing", new AppSettings().VariantsHeader, null);
-    Eq("chosen variants make the header", new AppSettings { ZhVariant = "tw", EnVariant = "gb" }.VariantsHeader, "zh=tw,en=gb");
+    Eq("a chosen variant makes the header", new AppSettings { ZhVariant = "tw" }.VariantsHeader, "zh=tw");
     var path = Path.Combine(Path.GetTempPath(), "typeleast-translate-" + Guid.NewGuid() + ".json");
     try
     {
-        new AppSettings { TranslateHotkey = DictationKey.F8, TranslateTarget = "ja", ZhVariant = "hk", EnVariant = "gb" }.Save(path, TestHistoryProtection.Shared);
+        new AppSettings { TranslateHotkey = DictationKey.F8, TranslateTarget = "ja", ZhVariant = "hk" }.Save(path, TestHistoryProtection.Shared);
         var loaded = LoadSettings(path);
         Eq("the translate key survives a reload", loaded.TranslateHotkey, (DictationKey?)DictationKey.F8);
         Eq("the target survives a reload", loaded.TranslateTarget, "ja");

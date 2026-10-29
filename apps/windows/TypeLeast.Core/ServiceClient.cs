@@ -277,20 +277,13 @@ public sealed class ServiceClient
 
     /// <summary>The body of /dictate: the dictionary as JSON (its length in x-voice-dictionary-bytes), then the WAV.
     /// Entries marked 「不发给模型」 go as {"local": entry}; the service never passes those to a model.</summary>
-    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, IReadOnlyCollection<object>? preferenceExamples = null, object? personalization = null)
+    public static (byte[] Body, int DictionaryBytes) DictateBody(byte[] wav, IReadOnlyCollection<string>? dictionary, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, object? personalization = null)
     {
         var entries = new List<object>();
         if (dictionary is not null) entries.AddRange(dictionary);
         if (localOnly is not null) entries.AddRange(localOnly.Select(entry => new Dictionary<string, string> { ["local"] = entry }));
         if (clarificationSource is not null) entries.Add(new { clarificationSource, clarificationEvidence });
         if(personalization is not null)entries.Add(new {personalization=JsonSerializer.SerializeToUtf8Bytes(personalization).Length<=131072?personalization:new {version=1,disabled=true}});
-        var selected = new List<object>();
-        foreach (var candidate in (preferenceExamples ?? Array.Empty<object>()).Take(20)) {
-            var next = selected.Append(candidate).ToList();
-            if (JsonSerializer.SerializeToUtf8Bytes(next).Length > 32768 || JsonSerializer.SerializeToUtf8Bytes(entries.Append(new { preferenceExamples = next })).Length > 256 * 1024) continue;
-            selected = next;
-        }
-        if (selected.Count > 0) entries.Add(new { preferenceExamples = selected });
         if (entries.Count == 0) return (wav, 0);
         var json = JsonSerializer.SerializeToUtf8Bytes(entries);
         if(json.Length>256*1024) {
@@ -305,7 +298,7 @@ public sealed class ServiceClient
     /// dictation; the service keeps no copy, so there is nothing to keep in sync.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null, object? personalization = null, Action<TaskProgress>? onProgress = null) =>
+        string? translateTo = null, string? variants = null, IReadOnlyCollection<string>? dictionary = null, IReadOnlyCollection<string>? localOnly = null, string? clarificationSource = null, string? clarificationEvidence = null, object? personalization = null, Action<TaskProgress>? onProgress = null) =>
         Once(async () =>
         {
             var requestId = Guid.NewGuid().ToString();
@@ -320,11 +313,10 @@ public sealed class ServiceClient
             };
             if (EncodeContextHeader(fieldContext) is { } context) headers["x-voice-context"] = context;
             if (EncodeRouteHeader(llm) is { } route) headers["x-voice-llm"] = route;
-            if (!string.IsNullOrEmpty(explanationMarkers)) headers["x-voice-explanation-markers"] = explanationMarkers;
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
-            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly, clarificationSource, clarificationEvidence, preferenceExamples, personalization);
+            var (payload, dictionaryBytes) = DictateBody(wav, dictionary, localOnly, clarificationSource, clarificationEvidence, personalization);
             headers["x-voice-dictionary-bytes"] = dictionaryBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var content = new ByteArrayContent(payload);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
@@ -354,23 +346,15 @@ public sealed class ServiceClient
     }
 
     public Task<DictateResponse> PolishAsync(string text, string language, string strength, LlmRoute? llm, string? translateTo,
-        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null, string? explanationMarkers = null, IReadOnlyCollection<object>? preferenceExamples = null, object? personalization = null) =>
+        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null, object? personalization = null) =>
         Once(async () =>
         {
             var entries = new List<object>(dictionary);
             entries.AddRange(localOnly.Select(entry => new { local = entry }));
             using var context = fieldContext is null ? null : JsonDocument.Parse(fieldContext);
-            var selected = new List<object>();
-            foreach (var candidate in (preferenceExamples ?? Array.Empty<object>()).Take(20)) {
-                var next = selected.Append(candidate).ToList();
-                if (JsonSerializer.SerializeToUtf8Bytes(next).Length > 32768) continue;
-                var trial = JsonSerializer.SerializeToUtf8Bytes(new { text, language, strength, task = translateTo is not null ? "translation" : strength == "promptbeta" ? "assistant" : "dictation", llm, translateTo, variants,
-                    fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, explanationMarkers, personalization, preferenceExamples = next });
-                if (trial.Length <= 256 * 1024) selected = next;
-            }
             var json = JsonSerializer.Serialize(new { text, language, strength, task = translateTo is not null ? "translation" : strength == "promptbeta" ? "assistant" : "dictation", llm, translateTo, variants,
-                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, explanationMarkers, personalization, preferenceExamples = selected }, Json.Options);
-            if(Encoding.UTF8.GetByteCount(json)>256*1024)json=JsonSerializer.Serialize(new {text,language,strength,task=translateTo is not null?"translation":strength=="promptbeta"?"assistant":"dictation",llm,translateTo,variants,fieldContext=context?.RootElement,dictionary=Array.Empty<object>(),supportsClarification=true,explanationMarkers,personalization=new {version=1,disabled=true}},Json.Options);
+                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, personalization }, Json.Options);
+            if(Encoding.UTF8.GetByteCount(json)>256*1024)json=JsonSerializer.Serialize(new {text,language,strength,task=translateTo is not null?"translation":strength=="promptbeta"?"assistant":"dictation",llm,translateTo,variants,fieldContext=context?.RootElement,dictionary=Array.Empty<object>(),supportsClarification=true,personalization=new {version=1,disabled=true}},Json.Options);
             var (status, body) = await SendAsync(HttpMethod.Post, "/polish", new StringContent(json, Encoding.UTF8, "application/json"),
                 new Dictionary<string, string>(), DictateTimeout, ct).ConfigureAwait(false);
             if (status != HttpStatusCode.OK) throw HttpError(status, body);
@@ -462,24 +446,8 @@ public sealed class ServiceClient
     private static byte[] JsonBody(object value) => JsonSerializer.SerializeToUtf8Bytes(value);
 
     public Task<PluginState> GetPluginsAsync(CancellationToken ct = default) => PluginRequest<PluginState>(HttpMethod.Get, "", ct: ct);
-    /// <summary>Check a plugin file without installing it.</summary>
-    public Task<PluginInspection> InspectPluginAsync(byte[] file, CancellationToken ct = default) => PluginRequest<PluginInspection>(HttpMethod.Post, "/inspect", file, ct: ct);
-    /// <summary>Install the file the confirmation showed; <paramref name="digest"/> is its fingerprint from the inspection.</summary>
-    public Task<PluginState> InstallPluginAsync(byte[] file, bool enable, string digest, CancellationToken ct = default) =>
-        PluginRequest<PluginState>(HttpMethod.Post, "?enable=" + (enable ? "1" : "0") + "&digest=" + Uri.EscapeDataString(digest), file, ct: ct);
-    /// <summary>Install the catalog entry the confirmation showed; a changed entry is refused (plugin-changed).</summary>
-    public Task<PluginState> InstallCatalogPluginAsync(string id, bool enable, string digest, CancellationToken ct = default) =>
-        PluginRequest<PluginState>(HttpMethod.Post, "/catalog/install", JsonBody(new { id, enable, digest }), ct: ct);
     public Task<PluginState> SetPluginEnabledAsync(string id, bool enabled, CancellationToken ct = default) =>
         PluginRequest<PluginState>(HttpMethod.Put, "/" + Uri.EscapeDataString(id), JsonBody(new { enabled }), ct: ct);
-    public Task<PluginState> SelectStyleAsync(string? id, CancellationToken ct = default) =>
-        PluginRequest<PluginState>(HttpMethod.Put, "/style", JsonBody(new { id }), ct: ct);
-    public Task<PluginState> RemovePluginAsync(string id, CancellationToken ct = default) =>
-        PluginRequest<PluginState>(HttpMethod.Delete, "/" + Uri.EscapeDataString(id), ct: ct);
-    /// <summary>Read the catalog once: official addresses first, public mirrors as <paramref name="sources"/>
-    /// (the 更新下载源 setting: auto, github or mirror) allows.</summary>
-    public Task<PluginCatalog> GetPluginCatalogAsync(string sources = "auto", CancellationToken ct = default) =>
-        PluginRequest<PluginCatalog>(HttpMethod.Get, "/catalog?sources=" + Uri.EscapeDataString(sources), timeout: TimeSpan.FromSeconds(30), ct: ct);
 
     /// <summary>The provider's model ids, from its OpenAI-compatible GET /models (called directly).</summary>
     public static async Task<List<string>> ListModelsAsync(LlmRoute route, CancellationToken ct = default)

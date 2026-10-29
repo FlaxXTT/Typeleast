@@ -14,8 +14,8 @@ internal sealed class Onboarding : Window
     private readonly OnboardingPracticeController practice;
     private int step;
     private bool finishing;
-    private string reviewDraft="",shownOutput="",shownMarker="";
-    private readonly string[] titles={"欢迎使用 TypeLeast","准备本地服务和模型","麦克风与权限","Windows 快捷键","麦克风测试","完成三组真实语音练习","设置位置","准备完成"};
+    private string shownOutput="";
+    private readonly string[] titles={"欢迎使用 TypeLeast","准备本地服务和模型","麦克风与权限","Windows 快捷键","麦克风测试","试说一句","设置位置","准备完成"};
     public bool PracticeActive => IsVisible&&step==5;
     public bool PracticeBusy => practice.Busy;
     public Onboarding(AppHost host)
@@ -32,28 +32,27 @@ internal sealed class Onboarding : Window
     private void OnClosing(object? sender,CancelEventArgs e) {if(host.Settings.NeedsPractice&&!finishing&&!host.QuittingForSetup)e.Cancel=true;}
     public void HandleShortcut(){if(PracticeActive)practice.Toggle();else Activate();}
     public void CancelPractice()=>practice.Cancel();
-    private void Refresh(){if(!practice.Busy && (step==1 || (step==5 && shownMarker!=host.Settings.ExplanationMarkers)))Render();}
+    private void Refresh(){if(!practice.Busy && step==1)Render();}
     private void PracticeChanged()
     {
-        if(shownOutput!=practice.Output){shownOutput=practice.Output;reviewDraft=practice.Output;}
+        if(shownOutput!=practice.Output)shownOutput=practice.Output;
         if(step==5)Render();
     }
-    private bool Complete=>practice.Progress.Complete&&practice.Progress.MarkerId==host.Settings.ExplanationMarkers;
+    private bool Complete=>practice.Progress.Complete;
     private bool CanContinue=>!practice.Busy&&(!host.Settings.NeedsPractice||step switch {
         1=>host.LlmConfigured&&host.Speech?.Ready==true,
-        5 or 7=>Complete&&!string.IsNullOrEmpty(host.Settings.ExplanationMarkers),
+        5 or 7=>Complete,
         _=>true,
     });
     private void Render()
     {
-        shownMarker=host.Settings.ExplanationMarkers;
         content.Children.Clear();content.Children.Add(Theme.Text($"{step+1} / {titles.Length}",12,Theme.Grey));
         content.Children.Add(Theme.Text(L10n.T(titles[step]),25,bold:true));
         var description=step switch {
             1=>host.ServiceSummary,
             2=>L10n.T("需要麦克风权限才能完成真实语音练习。"),
             3=>L10n.T("按听写键开始，再按一下结束。Esc 取消。"),
-            5=>L10n.T("需要真实识别和整理通过。练习只在此显示，不粘贴、不保存历史，也不加入正式偏好。"),
+            5=>L10n.T("读下面这句，中途改口。结果只在这里显示。"),
             _=>"",
         };
         if(description.Length>0)content.Children.Add(Theme.Text(description,14,Theme.Grey));
@@ -74,11 +73,6 @@ internal sealed class Onboarding : Window
     }
     private void RenderPractice()
     {
-        var markers=DictionaryPage.MarkerPicker(host);markers.IsEnabled=!practice.Busy;content.Children.Add(markers);
-        var exercise=Theme.Choice(300);
-        foreach(var title in new[]{"1. 改口与条件","2. 解释与正文","3. 确认修改"})exercise.Items.Add(L10n.T(title));
-        exercise.SelectedIndex=practice.Exercise;exercise.IsEnabled=!practice.Busy;
-        exercise.SelectionChanged+=(_,_)=>{practice.Exercise=exercise.SelectedIndex;Render();};content.Children.Add(exercise);
         content.Children.Add(Theme.Card(Theme.Text(practice.Sample,14)));
         var record=Theme.Primary(L10n.T(practice.Recording?"停止并整理":"开始录音"),practice.Toggle);record.IsEnabled=!practice.Thinking;
         var cancel=Theme.Secondary(L10n.T("取消"),practice.Cancel);cancel.IsEnabled=practice.Busy;
@@ -86,12 +80,5 @@ internal sealed class Onboarding : Window
         content.Children.Add(Theme.Text(practice.Status,12,Theme.Grey));
         if(practice.Raw.Length>0){content.Children.Add(Theme.Text(L10n.T("识别原文"),12,Theme.Grey));content.Children.Add(Theme.Text(practice.Raw,13));}
         if(practice.Output.Length>0){content.Children.Add(Theme.Text(L10n.T("整理结果"),12,Theme.Grey));content.Children.Add(Theme.Text(practice.Output,13));}
-        if(practice.Exercise==2&&practice.Output.Length>0){
-            content.Children.Add(Theme.Text(L10n.T("修改至少一处表达，再确认。此处只演示偏好确认，不保存练习资料。"),12,Theme.Grey));
-            var editor=new TextBox {Text=reviewDraft,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,MinHeight=80,MaxHeight=160,MaxLength=4000,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
-            editor.TextChanged+=(_,_)=>reviewDraft=editor.Text;content.Children.Add(editor);
-            var confirm=Theme.Secondary(L10n.T("确认修改"),()=>practice.ConfirmReview(reviewDraft));confirm.IsEnabled=!practice.Busy;content.Children.Add(confirm);
-        }
-        content.Children.Add(Theme.Text(L10n.T("已完成 {0} / 3",practice.Progress.Completed.Count),13,bold:true));
     }
 }

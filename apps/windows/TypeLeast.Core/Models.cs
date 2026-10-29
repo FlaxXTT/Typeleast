@@ -216,13 +216,10 @@ public sealed class LearnedWordResult
     [JsonPropertyName("word")] public string? Word { get; set; }
 }
 
-/// <summary>A plugin as the service describes it: installed (Source, Enabled), in the catalog
-/// (InstalledVersion) or being inspected before install.</summary>
+/// <summary>An installed plugin as the service describes it.</summary>
 public sealed class PluginSummary
 {
     [JsonPropertyName("id")] public string Id { get; set; } = "";
-    /// <summary>Fingerprint of the whole content; sent back when installing what was shown.</summary>
-    [JsonPropertyName("digest")] public string Digest { get; set; } = "";
     [JsonPropertyName("version")] public string Version { get; set; } = "";
     [JsonPropertyName("type")] public string Type { get; set; } = "";
     [JsonPropertyName("name")] public Dictionary<string, string> Name { get; set; } = new();
@@ -234,12 +231,9 @@ public sealed class PluginSummary
     [JsonPropertyName("termsPreview")] public List<string>? TermsPreview { get; set; }
     [JsonPropertyName("aliasCount")] public int? AliasCount { get; set; }
     [JsonPropertyName("aliasesPreview")] public List<PluginAliasPreview>? AliasesPreview { get; set; }
-    [JsonPropertyName("instructions")] public string? Instructions { get; set; }
     [JsonPropertyName("source")] public string? Source { get; set; }
     [JsonPropertyName("enabled")] public bool? Enabled { get; set; }
-    [JsonPropertyName("installedVersion")] public string? InstalledVersion { get; set; }
 
-    [JsonIgnore] public bool IsStyle => Type == "style";
     [JsonIgnore] public string Title => Name.GetValueOrDefault(L10n.Language == "en" ? "en" : "zh-Hans") ?? Id;
     [JsonIgnore] public string Summary => Description.GetValueOrDefault(L10n.Language == "en" ? "en" : "zh-Hans") ?? "";
 }
@@ -260,38 +254,14 @@ public sealed class PluginState
     [JsonPropertyName("problems")] public List<string>? Problems { get; set; }
 }
 
-/// <summary>Answer of GET /plugins/catalog; on failure Plugins is the last catalog read.</summary>
-public sealed class PluginCatalog
-{
-    [JsonPropertyName("ok")] public bool Ok { get; set; }
-    [JsonPropertyName("code")] public string? Code { get; set; }
-    [JsonPropertyName("source")] public string? Source { get; set; }
-    /// <summary>Read through a public mirror rather than an official address.</summary>
-    [JsonPropertyName("mirrored")] public bool Mirrored { get; set; }
-    [JsonPropertyName("fetchedAt")] public string? FetchedAt { get; set; }
-    [JsonPropertyName("plugins")] public List<PluginSummary> Plugins { get; set; } = new();
-}
-
-/// <summary>Answer of POST /plugins/inspect.</summary>
-public sealed class PluginInspection
-{
-    [JsonPropertyName("plugin")] public PluginSummary Plugin { get; set; } = new();
-    [JsonPropertyName("installedVersion")] public string? InstalledVersion { get; set; }
-}
-
-/// <summary>What the Extensions page says for a plugin error code.</summary>
+/// <summary>What the Dictionary page says for a plugin error code.</summary>
 public static class PluginMessages
 {
     public static string Describe(string? code) => code switch
     {
-        "plugin-invalid" => L10n.T("这不是插件文件"),
         "plugin-terms-limit" => L10n.T("已启用的词库合计最多 10000 个词"),
         "plugin-aliases-limit" => L10n.T("已启用的读音提示合计最多 1000 条"),
         "plugin-not-found" => L10n.T("找不到插件，请刷新"),
-        "plugin-changed" => L10n.T("插件已变化。请重新查看后再安装"),
-        "market-protocol-unsupported" => L10n.T("无法读取此目录，请更新 TypeLeast"),
-        "market-too-large" => L10n.T("插件目录太大"),
-        "market-offline" => L10n.T("无法获取插件目录，请检查网络"),
         _ => L10n.T("没有完成，请重试"),
     };
 

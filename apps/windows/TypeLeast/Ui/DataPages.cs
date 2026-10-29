@@ -14,7 +14,7 @@ internal sealed class HistoryPage : IPage
     private readonly StackPanel root = new(), list = new();
     private readonly TextBox search = Theme.Input("", 280);
     private readonly ComboBox filter = Theme.Choice(180);
-    private long revision = -1, preferenceRevision=-1;
+    private long revision = -1;
     public UIElement View => root;
     public HistoryPage(AppHost host)
     {
@@ -33,10 +33,10 @@ internal sealed class HistoryPage : IPage
         search.TextChanged += (_, _) => Render(); filter.SelectionChanged += (_, _) => Render();
         Refresh();
     }
-    public void Refresh() { if (revision != host.History.Revision || preferenceRevision!=host.Preferences.Revision) Render(); }
+    public void Refresh() { if (revision != host.History.Revision) Render(); }
     private void Render()
     {
-        revision = host.History.Revision; preferenceRevision=host.Preferences.Revision; list.Children.Clear();
+        revision = host.History.Revision; list.Children.Clear();
         var query = search.Text.Trim();
         var entries = host.History.Entries.Where(e => (filter.SelectedIndex != 1 || !e.Fallback && e.Reason != "strength-off")
             && (filter.SelectedIndex != 2 || e.Fallback || e.Reason == "strength-off")
@@ -52,11 +52,6 @@ internal sealed class HistoryPage : IPage
                     Theme.Secondary(L10n.T("删除"), () => host.DeleteHistory(entry.Id)));
                 var retry = Theme.Secondary(L10n.T("用录音重试"), () => _ = host.RetryHistory(entry));
                 retry.IsEnabled = host.Phase == DictationPhase.Idle && host.CanRetry(entry);
-                if (!string.IsNullOrEmpty(entry.Raw)) actions.Children.Add(Theme.Secondary(L10n.T("记录偏好"), () => {
-                    host.Preferences.Prepare(entry.Id, entry.Raw, entry.Text); host.ShowWindow(MainWindow.Page.Dictionary);
-                }));
-                var plainRetry=Theme.Secondary(L10n.T("仅本次关闭个性化重试"),()=>_ = host.RetryHistory(entry,true));
-                plainRetry.IsEnabled=host.Phase==DictationPhase.Idle&&!string.IsNullOrEmpty(entry.Raw)&&entry.Request is {Strength:not "promptbeta"};plainRetry.ToolTip=L10n.T("会再次调用整理模型，结果复制到剪贴板。");actions.Children.Add(plainRetry);
                 retry.ToolTip = L10n.T("需要 5 分钟内的录音。Beta 记录不能重试。结果复制到剪贴板。"); actions.Children.Add(retry);
                 var reason = Messages.FallbackNote(entry.Reason);
                 var meta = entry.Time.ToLocalTime().ToString("t", L10n.Culture) + (entry.App.Length > 0 ? " · " + entry.App : "")
@@ -72,7 +67,7 @@ internal sealed class HistoryPage : IPage
                 }
                 if(entry.Fallback)Badge(L10n.T("已用原文"),Theme.Warning);
                 list.Children.Add(Theme.Card(Theme.Stack(10, Theme.Text(meta, 12, Theme.Grey),
-                    SelectableEntry(entry.Text), PersonalizationViews.Details(host,entry), badges, actions)));
+                    SelectableEntry(entry.Text), badges, actions)));
             }
         }
     }
@@ -111,7 +106,7 @@ internal sealed class ManualDictionaryPage : IPage
     {
         this.host = host;
         root.Children.Add(Theme.Text(L10n.T("词典"), 28, bold: true));
-        root.Children.Add(Theme.Text(L10n.T("这里保留旧词汇与导入工具。旧自动词汇和替换默认停用，请在个人偏好中逐条确认启用。"), 12, Theme.Grey));
+        root.Children.Add(Theme.Text(L10n.T("说过的名称写对。你改过的词会自动加入。"), 12, Theme.Grey));
         foreach (var label in new[] { "全部", "自动添加", "手动添加" }) filter.Items.Add(L10n.T(label)); filter.SelectedIndex = 0;
         search.ToolTip = L10n.T("搜索词典"); System.Windows.Automation.AutomationProperties.SetName(search, L10n.T("搜索词典"));
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.Row(8, filter, search), Theme.Row(8,

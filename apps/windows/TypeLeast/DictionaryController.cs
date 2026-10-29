@@ -12,16 +12,22 @@ namespace TypeLeast;
 /// (WordSuggestions), a word picked in History, and the "已加入词典 · 撤销" toast. The words live in
 /// the settings and go with every dictation.
 /// </summary>
-internal sealed class DictionaryController(AppSettings settings, PreferenceExamples preferences, Func<bool> save, Action<string> setHint,
+internal sealed class DictionaryController(AppSettings settings, Func<bool> save, Action<string> setHint, Func<bool> quitting,
     Func<string, string, Task<string?>> learnedWord)
 {
     private readonly EditLearner learner = new(learnedWord);
+    private LearnedToast? toast;
 
     /// <summary>Sent with every dictation: "word" or "heard=word"; the service passes on only those a dictation mentions.</summary>
-    public string[] ServiceEntries => settings.DictionaryEntries.Where(e => !e.LocalOnly && preferences.References(e)).Select(e => e.Word).ToArray();
+    public string[] ServiceEntries => settings.DictionaryEntries.Where(e => !e.LocalOnly).Select(e => e.ServiceValue).ToArray();
 
     /// <summary>Entries marked 「不发给模型」: the service only fixes their heard-as spellings locally.</summary>
-    public string[] LocalEntries => Array.Empty<string>();
+    public string[] LocalEntries => settings.DictionaryEntries.Where(e => e.LocalOnly).Select(e => e.ServiceValue).ToArray();
+
+    /// <summary>The service's per-request policy: each word's heard-as spelling is a fixed replacement.</summary>
+    public object Policy() => new { version = 1, disabled = false, excluded = Array.Empty<string>(),
+        rules = settings.DictionaryEntries.Where(e => e.ReplacementHeard is not null).Take(128)
+            .Select(e => new { id = e.Id, heard = e.ReplacementHeard, word = e.Word, enabled = true }).ToArray() };
 
     public void AddWord(string entry)
     {
@@ -52,9 +58,9 @@ internal sealed class DictionaryController(AppSettings settings, PreferenceExamp
     }
 
     /// <summary>A paste landed in <paramref name="field"/>: watch it for a fix of <paramref name="text"/>.</summary>
-    public void Pasted(FieldTarget field, string text, Action<string>? onRevision = null)
+    public void Pasted(FieldTarget field, string text)
     {
-        if (settings.LearnCorrections && onRevision is not null) learner.Start(field, text, Learned, onRevision);
+        if (settings.LearnCorrections) learner.Start(field, text, Learned);
     }
 
     /// <summary>The next dictation starts: judge the last fix now.</summary>
@@ -80,5 +86,17 @@ internal sealed class DictionaryController(AppSettings settings, PreferenceExamp
 
     /// <summary>A word the user corrected after a dictation: added as a spelling to prefer (never a
     /// replacement rule), unless it is already there; the toast can take it back.</summary>
-    private void Learned(string word) { /* Only confirmed whole revisions become preferences. */ }
+    private void Learned(string word)
+    {
+        if (!settings.LearnCorrections || quitting()) return;
+        if (settings.DictionaryEntries.Any(e => string.Equals(e.Word, word, StringComparison.OrdinalIgnoreCase))) return;
+        if (WordEntry.Parse(word, "", "auto") is not { } entry || !SaveWord(entry)) return;
+        setHint(L10n.T("已把「{0}」加入词典", word));
+        toast ??= new LearnedToast();
+        toast.Show(L10n.T("已把「{0}」加入词典", word), () =>
+        {
+            RemoveWord(entry.Id);
+            setHint(L10n.T("已从词典删除「{0}」", word));
+        });
+    }
 }

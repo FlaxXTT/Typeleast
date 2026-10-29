@@ -80,18 +80,11 @@ internal sealed class SettingsPage : IPage
         zhVariant.SelectedIndex = Array.IndexOf(AppSettings.ZhVariants, s.ZhVariant);
         zhVariant.SelectionChanged += (_, _) => { if (zhVariant.SelectedItem is ComboBoxItem { Tag: string v }) { s.ZhVariant = v; host.SaveSettings(); } };
 
-        var enVariant = Theme.Choice(160);
-        foreach (var (code, label) in new[] { ("us", L10n.T("美式")), ("gb", L10n.T("英式")) })
-            enVariant.Items.Add(new ComboBoxItem { Content = label, Tag = code });
-        enVariant.SelectedIndex = Array.IndexOf(AppSettings.EnVariants, s.EnVariant);
-        enVariant.SelectionChanged += (_, _) => { if (enVariant.SelectedItem is ComboBoxItem { Tag: string v }) { s.EnVariant = v; host.SaveSettings(); } };
-
         var languageRows = new UIElement[]
         {
             Theme.SettingRow(L10n.T("听写语言"), null, dictationLanguage),
-            Theme.SettingRow(L10n.T("翻译成"), Theme.Text(L10n.T("不用风格插件。"), 12, Theme.Grey), translateTarget),
+            Theme.SettingRow(L10n.T("翻译成"), null, translateTarget),
             Theme.SettingRow(L10n.T("中文字形"), null, zhVariant),
-            Theme.SettingRow(L10n.T("英文拼写"), null, enVariant),
         };
 
         // ---- dictation
@@ -149,7 +142,6 @@ internal sealed class SettingsPage : IPage
         mic.SelectedIndex = s.MicrophoneDevice >= 0 && s.MicrophoneDevice < devices.Length ? s.MicrophoneDevice + 1 : 0;
         mic.SelectionChanged += (_, _) => { if (mic.SelectedItem is ComboBoxItem { Tag: int v }) { s.MicrophoneDevice = v; host.SaveSettings(); } };
 
-        var restore = Theme.Toggle(s.RestoreClipboard, value => { s.RestoreClipboard = value; host.SaveSettings(); });
         var login = Theme.Toggle(s.LaunchAtLogin, value => { s.LaunchAtLogin = value; if (host.SaveSettings()) Autostart.Apply(value); });
         var pasteKey = Theme.Choice(180);
         foreach (var code in new[] { "CtrlShiftAltV", "CtrlShiftV", "CtrlAltV", "off" })
@@ -186,11 +178,6 @@ internal sealed class SettingsPage : IPage
             Theme.Row(10, test, llmStatus),
             missing);
 
-        var insertion = Theme.Choice(200);
-        var insertionCodes = new[] { "autoPaste", "clipboardOnly", "preview" };
-        foreach (var label in new[] { "自动粘贴", "仅复制", "先预览" }) insertion.Items.Add(L10n.T(label));
-        insertion.SelectedIndex = Array.IndexOf(insertionCodes, s.InsertionMode);
-        insertion.SelectionChanged += (_, _) => { if (insertion.SelectedIndex >= 0) { s.InsertionMode = insertionCodes[insertion.SelectedIndex]; host.SaveSettings(); } };
         var appearance = Theme.Choice(180); var appearances = new[] { "system", "light", "dark" };
         foreach (var label in new[] { "跟随系统", "浅色", "深色" }) appearance.Items.Add(L10n.T(label));
         appearance.SelectedIndex = Array.IndexOf(appearances, s.Appearance);
@@ -224,12 +211,8 @@ internal sealed class SettingsPage : IPage
             modelSection,
             Section(L10n.T("整理选项"),
                 Theme.SettingRow(L10n.T("参考输入框内容"), null, Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("修改学习"), Theme.Text(L10n.T("各模式的修改先确认再保存为偏好，不自动添加词汇。关闭后不观察修改。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; if (host.SaveSettings() && v) host.Dictionary.Received(Array.Empty<SuggestionCandidate>()); })),
-                Theme.SettingRow(L10n.T("编号列表"), null, Theme.Toggle(s.FormattedLists, v => { s.FormattedLists = v; host.SaveSettings(); }))));
+                Theme.SettingRow(L10n.T("自动加词"), Theme.Text(L10n.T("粘贴后你改过的词加入词典。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; if (host.SaveSettings() && !v) host.Dictionary.StopWatching(); }))));
         AddTab(L10n.T("通用"),
-            Section(L10n.T("插入"),
-                Theme.SettingRow(L10n.T("插入方式"), null, insertion),
-                Theme.SettingRow(L10n.T("恢复剪贴板"), null, restore)),
             Section(L10n.T("外观与启动"),
                 Theme.SettingRow(L10n.T("界面语言"), Theme.Text(L10n.T("重启后生效。"), 12, Theme.Grey), uiLanguage),
                 Theme.SettingRow(L10n.T("外观"), null, appearance),
