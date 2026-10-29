@@ -206,15 +206,19 @@ enum AppMark {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let inset = rect.width * 0.08
             let box = rect.insetBy(dx: inset, dy: inset)
-            let path = NSBezierPath(roundedRect: box, xRadius: box.width * 0.23, yRadius: box.width * 0.23)
-            NSColor(srgbRed: 0.08, green: 0.075, blue: 0.075, alpha: 1).setFill()
+            // A white tile with a hairline edge, so it still reads on white backgrounds.
+            let path = NSBezierPath(roundedRect: box.insetBy(dx: 0.5, dy: 0.5), xRadius: box.width * 0.23, yRadius: box.width * 0.23)
+            NSColor.white.setFill()
             path.fill()
+            NSColor(white: 0, alpha: 0.12).setStroke()
+            path.lineWidth = max(1, box.width * 0.012)
+            path.stroke()
             let heights: [CGFloat] = [0.26, 0.48, 0.70, 0.48, 0.26]
             let barWidth = box.width * 0.085
             let gap = box.width * 0.065
             let total = CGFloat(heights.count) * barWidth + CGFloat(heights.count - 1) * gap
             var x = box.midX - total / 2
-            NSColor.white.setFill()
+            NSColor(srgbRed: 0.08, green: 0.075, blue: 0.075, alpha: 1).setFill()
             for h in heights {
                 let height = box.height * h
                 let bar = NSRect(x: x, y: box.midY - height / 2, width: barWidth, height: height)
