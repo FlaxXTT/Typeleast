@@ -81,6 +81,8 @@ struct SettingsPage: View {
                       isOn: model.setting(\.readFieldContext))
             ToggleRow(title: L10n.text("自动加词"), detail: L10n.text("粘贴后你改过的词加入词典。"),
                       isOn: model.setting(\.autoLearn))
+            ToggleRow(title: L10n.text("选中提示词时拆解"), detail: L10n.text("选中一长段文字后，旁边出现拆解按钮。点了才发送。"),
+                      isOn: model.setting(\.selectionBreakdown))
         }
     }
 

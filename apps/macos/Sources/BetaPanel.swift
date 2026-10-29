@@ -10,6 +10,8 @@ final class BetaPanel {
     var onContinue: (() -> Void)?
     var onSkip: (() -> Void)?
     var onCancel: (() -> Void)?
+    /// A chosen or typed answer, sent without recording.
+    var onAnswer: ((String) -> Void)?
 
     private var shown: (info: BetaInfo, hotkey: String)?
 
@@ -27,6 +29,7 @@ final class BetaPanel {
         shown = (info, hotkey)
         let view = BetaQuestionsView(info: info, hotkey: hotkey, busy: busy,
                                      resume: { [weak self] in self?.onContinue?() },
+                                     answer: { [weak self] in self?.onAnswer?($0) },
                                      skip: { [weak self] in self?.onSkip?() },
                                      cancel: { [weak self] in self?.onCancel?() })
         let host = NSHostingView(rootView: view)
@@ -66,47 +69,98 @@ struct BetaQuestionsView: View {
     let hotkey: String
     var busy: String? = nil
     var resume: () -> Void = {}
+    var answer: (String) -> Void = { _ in }
     let skip: () -> Void
     let cancel: () -> Void
+    @State private var chosen: [String: String] = [:]
+
+    /// One-click answers for the boundary questions the service asks first.
+    static func choices(for question: String) -> [String] {
+        if question.contains("联网") || question.contains("search the web") {
+            return [L10n.text("全部文件，可联网"), L10n.text("全部文件，仅本地"), L10n.text("只读我指定的文件")]
+        }
+        if question.contains("创新") || question.contains("new ideas") { return [L10n.text("创新探索"), L10n.text("重复执行")] }
+        if question.contains("轮子") || question.contains("existing projects") { return [L10n.text("先找已有项目"), L10n.text("不用找")] }
+        return []
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("提示词模式 · 第 {0} 轮", info.round ?? 1))
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
-            Text(info.ready == true ? L10n.text("已清楚。可继续补充或生成。") : L10n.text("先说清信息"))
-                .font(.system(size: 12)).foregroundColor(Theme.secondary)
-            Text(L10n.text("不使用表达示例、光标上下文和英式拼写。")).font(.system(size: 11)).foregroundColor(Theme.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
+                    if let goals = info.goals, !goals.isEmpty {
+                        section(L10n.text("核心目的"), goals)
+                    }
                     if let confirmed = info.confirmed, !confirmed.isEmpty {
-                        Text(L10n.text("我的理解，请核对")).font(.system(size: 12, weight: .semibold))
-                        ForEach(Array(confirmed.enumerated()), id: \.offset) { _, text in
-                            Text("• " + text).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
-                        }
+                        section(info.goals?.isEmpty == false ? L10n.text("关键细节") : L10n.text("我的理解，请核对"), confirmed)
                     }
                     if let questions = info.questions, !questions.isEmpty {
-                        Text(L10n.text("缺少的信息")).font(.system(size: 12, weight: .semibold)).padding(.top, 4)
+                        Text(L10n.text("需要你说明")).font(.system(size: 12, weight: .semibold)).padding(.top, 4)
                         ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
-                            Text(String(index + 1) + ". " + question).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(String(index + 1) + ". " + question).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                                let options = BetaQuestionsView.choices(for: question)
+                                if !options.isEmpty {
+                                    HStack(spacing: 6) {
+                                        ForEach(options, id: \.self) { option in
+                                            Button(option) { chosen[question] = chosen[question] == option ? nil : option }
+                                                .buttonStyle(ChoiceChipStyle(selected: chosen[question] == option))
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(height: 240)
+            }.frame(height: 300)
             if let notice = info.notice {
                 Text(BetaMessages.notice(notice)).font(.system(size: 12)).foregroundColor(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(busy ?? L10n.text("按 {0} 继续补充，点「生成」结束。", hotkey))
+            Text(busy ?? L10n.text("点选或按 {0} 语音补充，点「生成」结束。", hotkey))
                 .font(.system(size: 11.5)).foregroundColor(busy == nil ? Theme.secondary : Theme.accent)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(L10n.text("取消"), action: cancel).buttonStyle(SecondaryButtonStyle())
-                Button(L10n.text("继续补充"), action:resume).buttonStyle(SecondaryButtonStyle()).disabled(busy != nil)
+                if chosen.isEmpty {
+                    Button(L10n.text("语音补充"), action: resume).buttonStyle(SecondaryButtonStyle()).disabled(busy != nil)
+                } else {
+                    Button(L10n.text("发送选择")) {
+                        let questions = info.questions ?? []
+                        answer(questions.compactMap { q in chosen[q].map { q + " " + $0 } }.joined(separator: "\n"))
+                        chosen = [:]
+                    }.buttonStyle(SecondaryButtonStyle()).disabled(busy != nil)
+                }
                 Spacer()
                 Button(L10n.text("生成"), action: skip).buttonStyle(PrimaryButtonStyle()).disabled(busy != nil)
             }
         }
         .padding(EdgeInsets(top: 30, leading: 20, bottom: 18, trailing: 20))
         .frame(width: 440, alignment: .leading)
+    }
+
+    private func section(_ title: String, _ lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.system(size: 12, weight: .semibold))
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, text in
+                Text("• " + text).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// A small pill that stays highlighted once chosen.
+private struct ChoiceChipStyle: ButtonStyle {
+    let selected: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(selected ? Theme.inkInverse : Theme.ink)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Capsule().fill(selected ? Theme.ink : Theme.card))
+            .overlay(Capsule().stroke(Theme.border))
+            .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }

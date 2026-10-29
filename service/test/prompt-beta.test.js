@@ -197,8 +197,22 @@ test('failed generation retains the accepted conversation for a retry',async()=>
 
 test('the two boundary questions come first, once, unless the user already covered them', () => {
   assert.deepEqual(boundaryQuestions('帮我写一份产品介绍'), [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh]);
-  assert.deepEqual(boundaryQuestions('帮我写产品介绍，可以联网查资料，要有创意'), []);
+  assert.deepEqual(boundaryQuestions('帮我写产品介绍，可以联网查资料，要有创意'), [BOUNDARY_QUESTIONS.reuse.zh], 'creative work asks about existing projects');
+  assert.deepEqual(boundaryQuestions('帮我写产品介绍，可以联网查资料，按模板重复做'), [], 'routine work does not');
+  assert.deepEqual(boundaryQuestions('帮我做个创新的工具，可以联网，先看看有没有开源项目'), [], 'already covered');
   assert.deepEqual(boundaryQuestions('Write a product page'), [BOUNDARY_QUESTIONS.scope.en, BOUNDARY_QUESTIONS.nature.en]);
   const turns = [{ questions: [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh], answer: '不确定' }];
   assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', turns), [], 'an unsure answer is not asked again');
+});
+
+test('a selected prompt is broken down into goals and details before any question', async () => {
+  const calls = [];
+  const service = new VoicePolishService({ recognizer: { snapshot: () => ({ ready: true }) }, config: { strength: 'prompt', dictionary: [], timeoutMs: 5000, maxOutputTokens: 800, redactSecrets: true },
+    fetchImpl: async (_, init) => { const body = JSON.parse(init.body); calls.push(body.messages[0].content);
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ goal: '写产品介绍', goals: ['介绍新功能', '吸引试用'], confirmed: ['面向开发者', '不超过 500 字'], questions: [] }) }, finish_reason: 'stop' }] }) }; } });
+  const r = await service.polish({ rawText: '你是一名资深文案。请为我们的开发者工具写一篇产品介绍，介绍新功能并吸引试用，面向开发者，不超过 500 字。', strength: 'promptbeta', source: 'selection', llm: ROUTE });
+  assert.match(calls[0], /现成的提示词/);
+  assert.deepEqual(r.beta.goals, ['介绍新功能', '吸引试用']);
+  assert.deepEqual(r.beta.confirmed, ['面向开发者', '不超过 500 字']);
+  assert.equal(r.beta.questions[0], BOUNDARY_QUESTIONS.scope.zh, 'the boundaries are still asked first');
 });

@@ -254,6 +254,8 @@ struct BetaInfo: Codable, Equatable {
     var sessionId: String?
     var questions: [String]?
     var confirmed: [String]?
+    /// 拆解提示词: the selected prompt's core goals, before its details (confirmed).
+    var goals: [String]?
     var round: Int?
     var ready: Bool?
     var notice: String?
@@ -686,7 +688,7 @@ final class ServiceClient {
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], fieldContext: Data? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = [], personalization: [String: Any]? = nil) throws -> DictateResponse {
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, dictionary: [String], localOnly: [String], fieldContext: Data? = nil, explanationMarkers: String? = nil, preferenceExamples: [[String: Any]] = [], personalization: [String: Any]? = nil, betaSession: String? = nil, source: String? = nil) throws -> DictateResponse {
         let generation = epoch()
         return try withPortRetry { try withTokenRetry { token in
             let entries: [Any] = dictionary + localOnly.map { ["local": $0] }
@@ -696,6 +698,8 @@ final class ServiceClient {
             if let fieldContext, let context = try? JSONSerialization.jsonObject(with: fieldContext) { body["fieldContext"] = context }
             if let translateTo { body["translateTo"] = translateTo }
             if let variants { body["variants"] = variants }
+            if let betaSession { body["betaSession"] = betaSession }
+            if let source { body["source"] = source }
             if let explanationMarkers { body["explanationMarkers"] = explanationMarkers }
             if let personalization { body["personalization"] = personalization }
             var selected: [[String: Any]] = []

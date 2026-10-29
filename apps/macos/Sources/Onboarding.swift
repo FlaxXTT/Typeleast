@@ -58,7 +58,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 }
 
 private enum OnboardingStep: Int, CaseIterable {
-    case welcome, localService, microphone, accessibility, globeKey, micTest, tryIt, guide, done
+    case welcome, localService, microphone, accessibility, globeKey, micTest, tryIt, translate, promptMode, guide, done
 }
 
 struct OnboardingView: View {
@@ -165,6 +165,19 @@ struct OnboardingView: View {
             }
         case .tryIt:
             OnboardingPracticeView(practice: practice)
+        case .translate:
+            TranslatePracticeView(practice: practice)
+        case .promptMode:
+            StepView(symbol: "text.bubble", title: L10n.text("提示词模式"),
+                     text: L10n.text("双击 {0} 进入：说出需求，它先问清范围，再生成完整提示词。", model.hotkeyLabel)) {
+                VStack(spacing: 14) {
+                    Text(L10n.text("拿到一段别人写的长提示词？选中它，旁边会出现「用 TypeLeast 拆解提示词」，先告诉你它想做什么、有哪些要求。"))
+                        .font(.system(size: 13)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(L10n.text("拆解一段示例提示词")) { model.actions?.breakdownSample() }
+                        .buttonStyle(SecondaryButtonStyle()).disabled(!model.llmConfigured)
+                }
+            }
         case .guide:
             StepView(symbol: "map", title: L10n.text("设置位置"),
                      text: "") {
@@ -284,5 +297,39 @@ private struct OnboardingCheck<Trailing: View>: View {
             Spacer()
             if !done { trailing() }
         }
+    }
+}
+
+/// 翻译成其他语言: pick a language, then say the sample in Chinese and get it back translated.
+private struct TranslatePracticeView: View {
+    @EnvironmentObject var model: AppModel
+    @ObservedObject var practice: OnboardingPracticeController
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text(L10n.text("说中文，写成其他语言")).font(.system(size: 24, weight: .bold))
+            Text(L10n.text("平时按 {0} 翻译。现在选一种语言，读下面这句试试。", HotKeyCentre.describe(keyCode: model.settings.hotkeyTranslate.keyCode, modifiers: model.settings.hotkeyTranslate.modifiers)))
+                .font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+            Picker("", selection: model.setting(\.translateTarget)) {
+                ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+            }.labelsHidden().frame(width: 180).disabled(practice.busy)
+            Text(practice.translateSample)
+                .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
+                .padding(.horizontal, 18).padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+            Button(practice.phase == .recording ? L10n.text("停止并翻译") : L10n.text("开始录音")) { practice.toggle() }
+                .buttonStyle(PrimaryButtonStyle()).disabled(practice.phase == .thinking)
+            if !practice.status.isEmpty {
+                Text(practice.status).font(.system(size: 13)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+            }
+            if !practice.output.isEmpty {
+                Text(practice.output).font(.system(size: 14)).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(14)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+            }
+        }
+        .onAppear { practice.translateTo = model.settings.translateTarget; practice.acceptsShortcut = true; practice.reset() }
+        .onChange(of: model.settings.translateTarget) { practice.translateTo = $0 }
+        .onDisappear { practice.translateTo = nil; practice.acceptsShortcut = false; practice.cancel() }
     }
 }

@@ -53,9 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var skipGlobalHotkeys = false
     private let instanceLock = InstanceLock()
     private let betaPanel = BetaPanel()
+    private let selectionWatcher = SelectionWatcher()
     lazy var beta: BetaController = {
         betaPanel.onContinue = { [weak self] in self?.startAssistant() }
         betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
+        betaPanel.onAnswer = { [weak self] in self?.dictation.answerBeta($0) }
         betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
         return BetaController(host: .init(
             show: { [weak self] info, key in self?.betaPanel.show(info: info, hotkey: key) },
@@ -122,6 +124,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         })
         applyGeneralSettings()
         registerHotKeys()
+        if !isolatedTestRun {
+            selectionWatcher.enabled = { [weak self] in self?.settings.selectionBreakdown == true && self?.settings.needsPractice == false }
+            selectionWatcher.onBreakdown = { [weak self] text, app in self?.dictation.startBreakdown(text, appBundleId: app) }
+            selectionWatcher.start()
+        }
         updates.scheduleChecks()
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
@@ -599,6 +606,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     // MARK: AppActions (called from the windows)
 
     func addWordFromHistory(_ word: String) { dictionary.addFromHistory(word) }
+
+    func breakdownSample() {
+        dictation.startBreakdown(L10n.text("你是一名资深产品经理。请为一款面向大学生的记账 App 写一份需求文档，包含目标用户、核心功能、首版范围和成功指标。语气专业但易读，控制在 1500 字以内。"), appBundleId: "tutorial")
+    }
 
     func checkForUpdates(interactive: Bool) { updates.check(interactive: interactive) }
 

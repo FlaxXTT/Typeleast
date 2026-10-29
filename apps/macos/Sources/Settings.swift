@@ -257,6 +257,12 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.strength"); changed() }
     }
 
+    /// After a long drag-selection, offer 「用 TypeLeast 拆解提示词」 next to it (read on this Mac only).
+    var selectionBreakdown: Bool {
+        get { bool("voice.selectionBreakdown", default: true) }
+        set { d.set(newValue, forKey: "voice.selectionBreakdown"); changed() }
+    }
+
     /// Read the text around the cursor at dictation start and send it as context.
     var readFieldContext: Bool {
         // Off by default (as on Windows): when on, text near the cursor and the window

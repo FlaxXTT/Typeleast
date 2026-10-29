@@ -40,7 +40,7 @@ import { normalizeNumbers } from './number-format.js';
 import { joinSpacedCapitals, normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
-  BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
+  BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
   boundaryQuestions, cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
 } from "./prompts/prompt-beta.js";
 import { directTranslatePrompt, TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
@@ -430,11 +430,11 @@ export class VoicePolishService {
       if (rawText.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
       // Do not evict another user's active operation to admit a new one.
       if (this.betaSessions.size >= BETA_LIMITS.sessions) throw Object.assign(new Error('too many clarifications'), { code: 'busy' });
-      session = { request: rawText, turns: [], questions: [], confirmed: [], created: Date.now(), ready: false };
+      session = { request: rawText, turns: [], questions: [], confirmed: [], goals: [], selection: request.source === 'selection', created: Date.now(), ready: false };
       this.betaSessions.set(id, session);
     }
     const pending = notice => ({ ...base, text: '', raw: rawText,
-      beta: { sessionId: id, questions: session.questions, confirmed: session.confirmed,
+      beta: { sessionId: id, questions: session.questions, confirmed: session.confirmed, goals: session.goals ?? [],
         round: session.turns.length + 1, ready: session.ready, ...(notice ? { notice } : {}) }, ms: timing(started, 0) });
     if (request.betaSession && !skip && !hasContent(rawText)) return pending('empty-transcript');
     const turns = [...session.turns];
@@ -446,7 +446,7 @@ export class VoicePolishService {
     session.controller = new AbortController();
     try {
       if (!skip) {
-        const reply = parseJsonReply(await call(BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns)));
+        const reply = parseJsonReply(await call(session.selection ? BETA_BREAKDOWN_PROMPT : BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns)));
         if (!reply || !Array.isArray(reply.questions) || !Array.isArray(reply.confirmed)) {
           throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
         }
@@ -457,7 +457,8 @@ export class VoicePolishService {
         const questions = normaliseQuestions([...boundaryQuestions(session.request, turns), ...modelQuestions]);
         session.turns = turns;
         session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
-        session.confirmed = reply.confirmed.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, 6);
+        session.confirmed = reply.confirmed.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, session.selection ? 8 : 6);
+        if (Array.isArray(reply.goals)) session.goals = reply.goals.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 200)).filter(Boolean).slice(0, 5);
         session.questions = questions;
         session.ready = session.questions.length === 0;
         session.created = Date.now();

@@ -244,6 +244,7 @@ export function createHandler(options) {
           rawText: body.text,
           betaSession: typeof body.betaSession === "string" ? body.betaSession : null,
           task: body.task,
+          source: body.source === 'selection' ? 'selection' : null,
           requestId: body.requestId,
           supportsClarification: body.supportsClarification === true,
           explanationMarkers: typeof body.explanationMarkers === "string" ? body.explanationMarkers : null,

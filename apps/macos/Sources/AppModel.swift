@@ -35,6 +35,8 @@ protocol AppActions: AnyObject {
     func addWordFromHistory(_ word: String)
     func setCleanupMode(_ code: String)
     func startAssistant()
+    /// The onboarding's 拆解一段示例提示词: opens 提示词模式 on a sample prompt.
+    func breakdownSample()
     func toggleDictation()
     func pasteLast()
     func copyEntry(id: String, raw: Bool)

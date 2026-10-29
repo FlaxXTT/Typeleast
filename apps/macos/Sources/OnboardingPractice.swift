@@ -31,6 +31,8 @@ final class OnboardingPracticeController: ObservableObject {
     private var generation = 0
     private var pendingAudio: URL?
     var acceptsShortcut = false
+    /// The language to translate into, while the translation step is shown; nil for plain dictation.
+    var translateTo: String?
     init(settings: Settings = .shared, client: ServiceClient = .shared) {
         self.settings = settings; self.client = client
         recorder.maxSeconds = 40
@@ -38,6 +40,7 @@ final class OnboardingPracticeController: ObservableObject {
     }
     var complete: Bool { progress.complete }
     var busy: Bool { phase != .idle }
+    var translateSample: String { L10n.language == "en" ? "Let's meet tomorrow at three and bring the report." : "明天下午三点开会，记得带上报告。" }
     var sample: String {
         L10n.language == "en" ? "Send the report on Tuesday, no wait, on Thursday. Keep it under 3 pages." : "嗯，把报告周三发，不对，改成周四，不超过三页。"
     }
@@ -73,7 +76,7 @@ final class OnboardingPracticeController: ObservableObject {
             let recording = try recorder.finish()
             guard let route = settings.activeLLMRoute else { try? FileManager.default.removeItem(at: recording.url); status = L10n.text("请先配置可用的整理模型。"); phase = .idle; return }
             pendingAudio = recording.url
-            let language = settings.language
+            let language = settings.language, target = translateTo
             let token = generation
             phase = .thinking; status = ""
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -82,7 +85,7 @@ final class OnboardingPracticeController: ObservableObject {
                     let wav = try Data(contentsOf: recording.url)
                     try? FileManager.default.removeItem(at: recording.url)
                     return try self?.client.dictateSync(wav: wav, language: language, appBundleId: "tutorial", strength: "concise",
-                        llm: route) ?? DictateResponse()
+                        llm: route, translateTo: target) ?? DictateResponse()
                 }
                 DispatchQueue.main.async {
                     guard let self, self.generation == token else { return }

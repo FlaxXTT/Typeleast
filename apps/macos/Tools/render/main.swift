@@ -192,6 +192,17 @@ do {
     snapshot(view, size: view.fittingSize, name: "onboarding-practice", dark: false)
 }
 
+// 提示词模式 after breaking down a selected prompt.
+do {
+    let info = BetaInfo(sessionId: "fixture", questions: [L10n.text("AI 可以读取哪些文件或资料？可以联网检索吗？"), L10n.text("这件事需要创新、探索新做法，还是按既定方式重复执行？")],
+                        confirmed: [L10n.text("面向大学生"), L10n.text("包含目标用户、核心功能、首版范围和成功指标"), L10n.text("控制在 1500 字以内")],
+                        goals: [L10n.text("写一份记账 App 的需求文档"), L10n.text("让团队对首版范围达成一致")], round: 1, ready: false)
+    let view = NSHostingView(rootView: BetaQuestionsView(info: info, hotkey: "fn", skip: {}, cancel: {}).background(Theme.card))
+    snapshot(view, size: view.fittingSize, name: "prompt-breakdown", dark: false)
+    let button = NSHostingView(rootView: BreakdownButtonView(action: {}).padding(10).background(Color(white: 0.9)))
+    snapshot(button, size: button.fittingSize, name: "breakdown-button", dark: false)
+}
+
 // The undo toast after a cancelled recording.
 do {
     let toast = NSHostingView(rootView: LearnedToastView(message: L10n.text("转录已取消"), undo: {}).padding(12))
