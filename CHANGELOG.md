@@ -2,6 +2,12 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.24.1（2026-10-29）
+
+发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 34。
+
+- 修复 Mac 1.24.0 启动即退出：菜单栏菜单缺了三项。请从官网或 Releases 重新下载安装。
+
 ## 1.24.0（2026-10-29）
 
 发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 33。

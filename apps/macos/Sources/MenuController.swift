@@ -79,10 +79,17 @@ final class MenuController: NSObject, NSMenuDelegate {
         let assistant = item(L10n.text("需求助手"), #selector(onMode(_:)))
         assistant.representedObject = "promptbeta"
         menu.addItem(assistant)
+        hintItem = item("", nil)
+        hintItem.isEnabled = false
+        menu.addItem(hintItem)
+        axItem = item(L10n.text("自动粘贴需要辅助功能权限，点此允许"), #selector(onAccessibility))
+        menu.addItem(axItem)
+        launchItem = item(L10n.text("重启本地服务"), #selector(onLaunch))
+        menu.addItem(launchItem)
         menu.addItem(.separator())
         menu.addItem(item(L10n.text("打开 TypeLeast"), #selector(onOpenHome)))
         menu.addItem(item(L10n.text("历史…"), #selector(onOpenHistory)))
-        menu.addItem(item(L10n.text("个人偏好"), #selector(onOpenDictionary)))
+        menu.addItem(item(L10n.text("词典"), #selector(onOpenDictionary)))
         let settings = item(L10n.text("设置…"), #selector(onOpenSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)

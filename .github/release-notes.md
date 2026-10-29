@@ -3,6 +3,7 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
+- 修复 Mac 1.24.0 打开即退出。1.24.0 无法打开时，请从官网重新下载安装。
 - 新图标：白底黑条。
 - 新录音条：灰底 ✕ 取消、白底 ✓ 完成。取消后 6 秒内可撤销。
 - 设置只剩听写、模型、通用三页；少用的放进「高级」。
@@ -13,6 +14,7 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
+- Fixed Mac 1.24.0 quitting at launch. If 1.24.0 does not open, download and install again from the site.
 - New icon: black bars on white.
 - New recording bar: grey ✕ to cancel, white ✓ to finish. Undo a cancel within 6 seconds.
 - Settings are now three tabs: Dictation, Models, General, with rarely used items under Advanced.
@@ -26,9 +28,9 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 
 | 电脑 | 安装包 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.24.0-macOS-AppleSilicon.dmg` 或 `.zip` |
-| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.24.0-Windows-x64-Setup.exe` 或 `TypeLeast-1.24.0-Windows-x64-Portable.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.24.1-macOS-AppleSilicon.dmg` 或 `.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.24.1-Windows-x64-Setup.exe` 或 `TypeLeast-1.24.1-Windows-x64-Portable.zip` |
 
-Mac 构建号 33。旧的风格设置不再生效；旧词典数据保留。
+Mac 构建号 34。旧的风格设置不再生效；旧词典数据保留。
 
 [完整记录](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md) · [代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)

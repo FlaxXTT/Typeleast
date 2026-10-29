@@ -1686,6 +1686,17 @@ do {
     }
 }
 
+// The menu bar menu builds every item it later updates (a missing one stops the app at launch).
+do {
+    let menu = MenuController()
+    var state = MenuState()
+    menu.apply(state)
+    state.hint = "fixture"; state.serviceUp = true; state.accessibilityTrusted = true; state.phase = .recording
+    menu.apply(state)
+    check("the menu applies every state without a missing item", menu.menu.items.count > 5)
+    NSStatusBar.system.removeStatusItem(menu.statusItem)
+}
+
 // AI cleanup migration and vocabulary provenance use a dedicated preference domain.
 do {
     let suite = "typeleast.tests.ai-cleanup." + UUID().uuidString
