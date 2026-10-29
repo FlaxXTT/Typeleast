@@ -341,7 +341,6 @@ internal sealed class DictationController
     private async Task<DictateResponse?> ConfirmName(DictateResponse result, DictationOptions options, OperationTracker.Lease operation)
     {
         while (result.Clarification is { } clarification) {
-            options = options with {WithoutPersonalization=clarification.PersonalizationDisabled??options.WithoutPersonalization};
             bar.Hide();
             var choice = await NameConfirmationPanel.Show(clarification.Kind=="quality"?CleanupIssue.Message(clarification.Reason):L10n.T("需要确认：{0}", clarification.Evidence), clarification.Kind=="quality"?(clarification.Candidate??result.Raw):result.Raw, operation.Token, clarification.Kind);
             if (!operations.IsCurrent(operation)) return null;
