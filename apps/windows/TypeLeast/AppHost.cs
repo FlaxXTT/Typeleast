@@ -231,6 +231,9 @@ internal sealed class AppHost : IDictationHost
         ShowWindow(MainWindow.Page.Home);return true;
     }
 
+    /// <summary>The onboarding's 拆解一段示例提示词: opens 提示词模式 on a sample prompt.</summary>
+    public Task BreakdownSample() => dictation.StartBreakdown(L10n.T("你是一名资深产品经理。请为一款面向大学生的记账 App 写一份需求文档，包含目标用户、核心功能、首版范围和成功指标。语气专业但易读，控制在 1500 字以内。"));
+
     public void ShowOnboarding()
     {
         if (onboarding is null) { onboarding = new Onboarding(this); onboarding.Closed += (_, _) => onboarding = null; }

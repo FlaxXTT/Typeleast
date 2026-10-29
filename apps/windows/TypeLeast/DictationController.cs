@@ -79,7 +79,7 @@ internal sealed class DictationController
     public DictationController(IDictationHost host, System.Windows.Threading.Dispatcher dispatcher, KeyboardHook hook, RecordingBar bar)
     {
         this.host = host; this.dispatcher = dispatcher; this.hook = hook; this.bar = bar;
-        beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers(), ToggleAssistant);
+        beta = new BetaController(Client, () => _ = FinishBetaWithoutAnswers(), ToggleAssistant, text => _ = AnswerBeta(text));
         recorder.AudioStarted += OnAudioStarted;
         recorder.LimitReached += () => dispatcher.InvokeAsync(() => { if (Phase == DictationPhase.Recording) _ = StopAndSend(); });
         recorder.RecordingFailed += () => dispatcher.InvokeAsync(() => { Cancel(); MicrophoneReady = false; SetHint(L10n.T("麦克风断开或录音出错，请重新选择设备。")); });
@@ -162,8 +162,74 @@ internal sealed class DictationController
                 translating = translateTo;
                 StartRecording();
                 break;
-            case DictationPhase.Recording: _ = StopAndSend(); break;
+            case DictationPhase.Recording:
+                // A second press right after the first (a double tap) turns this recording into 提示词模式.
+                if (!assistantRecording && translating is null && translateTo is null && micClock.Elapsed < DoubleTapWindow && recordingOptions is { } options)
+                {
+                    assistantRecording = true;
+                    recordingOptions = options with { Strength = "promptbeta" };
+                    bar.ShowRecording(recorder, L10n.T("提示词模式"));
+                    return;
+                }
+                _ = StopAndSend(); break;
             default: break; // still cleaning up the last one
+        }
+    }
+
+    /// <summary>Two presses within this time are a double tap.</summary>
+    private static readonly TimeSpan DoubleTapWindow = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>拆解提示词: a prompt starts 提示词模式 as its first input; the finished prompt is copied, not pasted.</summary>
+    public async Task StartBreakdown(string text)
+    {
+        if (Phase != DictationPhase.Idle || ActiveRoute is null) { if (ActiveRoute is null) SetHint(L10n.T("请先配置可用的整理模型。")); return; }
+        var operation = operations.TryBegin();
+        if (operation is null) return;
+        if (beta.Session is not null) beta.Drop();
+        var options = new DictationOptions(Settings.Language, "promptbeta", null, Settings.VariantsHeader, ActiveRoute, "clipboardOnly");
+        targetWindow = IntPtr.Zero; targetApp = "tutorial"; targetField = null;
+        Phase = DictationPhase.Thinking; hook.SwallowEscape = true; bar.ShowThinking(); Raise();
+        try
+        {
+            var result = await Client.PolishAsync(text, options.Language, "promptbeta", options.Route, null, options.Variants,
+                Array.Empty<string>(), Array.Empty<string>(), operation.Token, source: "selection");
+            if (operations.IsCurrent(operation) && !ShowBetaQuestions(result, options)) bar.ShowResult(L10n.T("没有完成，请重试"), true);
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (ServiceException) { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("没有完成，请重试"), true); }
+        finally
+        {
+            if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; Raise(); }
+            operations.Complete(operation);
+        }
+    }
+
+    /// <summary>A chosen answer to the open questions (the quick choices in the panel), sent without recording.</summary>
+    public async Task AnswerBeta(string text)
+    {
+        if (Phase != DictationPhase.Idle || beta.Session is not { } id || beta.Options is not { } options) return;
+        var operation = operations.TryBegin();
+        if (operation is null) return;
+        beta.SetBusy(L10n.T("正在更新…"));
+        Phase = DictationPhase.Thinking; hook.SwallowEscape = true; Raise();
+        try
+        {
+            var result = await Client.PolishAsync(text, options.Language, "promptbeta", options.Route, null, options.Variants,
+                Array.Empty<string>(), Array.Empty<string>(), operation.Token, betaSession: id);
+            if (operations.IsCurrent(operation) && !ShowBetaQuestions(result, options)) beta.Resume();
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (ServiceException e)
+        {
+            if (operations.IsCurrent(operation)) {
+                if (e.Status == 410) ClearBeta(); else beta.Resume();
+                bar.ShowResult(e.Status == 410 ? L10n.T("问题已过期，请重新说需求") : L10n.T("没有完成，请重试"), true);
+            }
+        }
+        finally
+        {
+            if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; Raise(); }
+            operations.Complete(operation);
         }
     }
 

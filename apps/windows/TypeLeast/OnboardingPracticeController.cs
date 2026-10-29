@@ -17,6 +17,9 @@ internal sealed class OnboardingPracticeController
     private CancellationTokenSource? request;
     private int generation;
     public PracticeProgress Progress { get; private set; } = new();
+    /// <summary>The language to translate into while the translation step is shown; null for plain dictation.</summary>
+    public string? TranslateTo { get; set; }
+    public string TranslateSample => L10n.Culture.TwoLetterISOLanguageName=="en" ? "Let's meet tomorrow at three and bring the report." : "明天下午三点开会，记得带上报告。";
     public bool Recording { get; private set; }
     public bool Thinking { get; private set; }
     public bool Busy => Recording||Thinking;
@@ -49,7 +52,7 @@ internal sealed class OnboardingPracticeController
         request=new CancellationTokenSource();var cancellation=request;
         try {
             var result=await host.Client.DictateAsync(wav,host.Settings.Language,"tutorial","concise",host.ActiveRoute,
-                ct:cancellation.Token);
+                ct:cancellation.Token,translateTo:TranslateTo);
             if(generation!=token)return;
             Raw=result.Raw;Output=result.Text;
             Output=result.InsertableText;

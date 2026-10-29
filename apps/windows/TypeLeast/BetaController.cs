@@ -11,6 +11,7 @@ internal sealed class BetaController
     private readonly ServiceClient client;
     private readonly Action finish;
     private readonly Action? resume;
+    private readonly Action<string>? answer;
     private BetaPanel? panel;
     public string? Session { get; private set; }
     public IntPtr Window { get; private set; }
@@ -18,7 +19,7 @@ internal sealed class BetaController
     public FieldTarget? Field { get; private set; }
     public DictationOptions? Options { get; private set; }
 
-    public BetaController(ServiceClient client, Action finish, Action? resume = null) { this.client = client; this.finish = finish; this.resume = resume; }
+    public BetaController(ServiceClient client, Action finish, Action? resume = null, Action<string>? answer = null) { this.client = client; this.finish = finish; this.resume = resume; this.answer = answer; }
     public bool Show(DictateResponse result, DictationOptions options, IntPtr window, string app,
                      FieldTarget? field, string hotkey)
     {
@@ -26,7 +27,7 @@ internal sealed class BetaController
         if (Session is null) { Window = window; App = app; Field = field; }
         Session = id;
         Options = options;
-        panel ??= new BetaPanel(finish, Drop, resume);
+        panel ??= new BetaPanel(finish, Drop, resume, answer);
         panel.ShowQuestions(result.Beta, hotkey);
         return true;
     }

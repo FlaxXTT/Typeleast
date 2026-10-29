@@ -346,14 +346,14 @@ public sealed class ServiceClient
     }
 
     public Task<DictateResponse> PolishAsync(string text, string language, string strength, LlmRoute? llm, string? translateTo,
-        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null, object? personalization = null) =>
+        string? variants, IReadOnlyCollection<string> dictionary, IReadOnlyCollection<string> localOnly, CancellationToken ct, byte[]? fieldContext = null, object? personalization = null, string? betaSession = null, string? source = null) =>
         Once(async () =>
         {
             var entries = new List<object>(dictionary);
             entries.AddRange(localOnly.Select(entry => new { local = entry }));
             using var context = fieldContext is null ? null : JsonDocument.Parse(fieldContext);
             var json = JsonSerializer.Serialize(new { text, language, strength, task = translateTo is not null ? "translation" : strength == "promptbeta" ? "assistant" : "dictation", llm, translateTo, variants,
-                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, personalization }, Json.Options);
+                fieldContext = context?.RootElement, dictionary = entries, supportsClarification = true, personalization, betaSession, source }, Json.Options);
             if(Encoding.UTF8.GetByteCount(json)>256*1024)json=JsonSerializer.Serialize(new {text,language,strength,task=translateTo is not null?"translation":strength=="promptbeta"?"assistant":"dictation",llm,translateTo,variants,fieldContext=context?.RootElement,dictionary=Array.Empty<object>(),supportsClarification=true,personalization=new {version=1,disabled=true}},Json.Options);
             var (status, body) = await SendAsync(HttpMethod.Post, "/polish", new StringContent(json, Encoding.UTF8, "application/json"),
                 new Dictionary<string, string>(), DictateTimeout, ct).ConfigureAwait(false);

@@ -103,6 +103,8 @@ public sealed class BetaInfo
     [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
     [JsonPropertyName("questions")] public List<string>? Questions { get; set; }
     [JsonPropertyName("confirmed")] public List<string>? Confirmed { get; set; }
+    /// <summary>拆解提示词: the selected prompt's core goals, before its details (Confirmed).</summary>
+    [JsonPropertyName("goals")] public List<string>? Goals { get; set; }
     [JsonPropertyName("round")] public int? Round { get; set; }
     [JsonPropertyName("ready")] public bool? Ready { get; set; }
     [JsonPropertyName("notice")] public string? Notice { get; set; }
