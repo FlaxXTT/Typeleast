@@ -109,6 +109,6 @@ export async function generateDictation({source, system, call, parameters, progr
       if (attempt >= 1) throw new ModelCallError('error','invalid segment output',{code:'output-format'});
     }
   });
-  // The caller validates and reviews the merged candidate against the entire source.
+  // The caller applies the fixed formatting to the merged text and inserts it.
   return {text:JSON.stringify({status:'ok',text:joinParts(drafts)}),attempts,segmented:true};
 }
