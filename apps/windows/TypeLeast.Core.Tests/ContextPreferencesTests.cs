@@ -17,11 +17,11 @@ internal static class ContextPreferencesTests
             Assert("finished tutorial persists",!LoadSettings(settingsPath).NeedsPractice);
             var progress=new PracticeProgress();
             var response=new DictateResponse {Raw="周三，不对，周四，不超过三页",Text="周四，不超过 3 页。"};
-            Assert("tutorial rejects missing model evidence",!progress.Accept(response,2));
-            response.Model="fictional-model";response.Ms=new MsBreakdown {Transcribe=10,Polish=20,Total=30};
+            Assert("a short recording is asked again",progress.Accept(response,0.3)==PracticeProgress.Outcome.TooShort);
             response.Fallback=true;
-            Assert("fallback cannot pass tutorial",!progress.Accept(response,2)&&!progress.Complete);response.Fallback=false;
-            Assert("tutorial accepts real-chain evidence",progress.Accept(response,2)&&progress.Complete);
+            Assert("a failed cleanup does not pass",progress.Accept(response,2)==PracticeProgress.Outcome.NotCleaned&&!progress.Complete);response.Fallback=false;
+            response.Text="周四交，不超过三页。";
+            Assert("any recognised and cleaned sentence passes",progress.Accept(response,2)==PracticeProgress.Outcome.Passed&&progress.Complete);
             response.ContextOnly=true;
             Assert("context-only response is never insertable",response.InsertableText=="");
         } finally {Directory.Delete(directory,true);}

@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using TypeLeast.Core;
 
 namespace TypeLeast.Ui;
@@ -29,7 +30,8 @@ internal sealed class Onboarding : Window
         Closed+=(_,_)=>{host.Changed-=Refresh;practice.Changed-=PracticeChanged;practice.Cancel();};
         Render();
     }
-    private void OnClosing(object? sender,CancelEventArgs e) {if(host.Settings.NeedsPractice&&!finishing&&!host.QuittingForSetup)e.Cancel=true;}
+    /// <summary>Closing the window is the same as 跳过引导.</summary>
+    private void OnClosing(object? sender,CancelEventArgs e) {if(!finishing&&!host.QuittingForSetup){finishing=true;host.CompleteOnboarding(true);}}
     public void HandleShortcut(){if(PracticeActive)practice.Toggle();else Activate();}
     public void CancelPractice()=>practice.Cancel();
     private void Refresh(){if(!practice.Busy && step==1)Render();}
@@ -39,11 +41,8 @@ internal sealed class Onboarding : Window
         if(step==5)Render();
     }
     private bool Complete=>practice.Progress.Complete;
-    private bool CanContinue=>!practice.Busy&&(!host.Settings.NeedsPractice||step switch {
-        1=>host.LlmConfigured&&host.Speech?.Ready==true,
-        5 or 7=>Complete,
-        _=>true,
-    });
+    /// <summary>下一步 waits for what the step is about; 跳过这步 never does.</summary>
+    private bool CanContinue=>!practice.Busy&&(step!=5||Complete);
     private void Render()
     {
         content.Children.Clear();content.Children.Add(Theme.Text($"{step+1} / {titles.Length}",12,Theme.Grey));
@@ -52,7 +51,7 @@ internal sealed class Onboarding : Window
             1=>host.ServiceSummary,
             2=>L10n.T("需要麦克风权限才能完成真实语音练习。"),
             3=>L10n.T("按听写键开始，再按一下结束。Esc 取消。"),
-            5=>L10n.T("读下面这句，中途改口。结果只在这里显示。"),
+            5=>L10n.T("按听写键或点下面的录音条，读这句话。"),
             _=>"",
         };
         if(description.Length>0)content.Children.Add(Theme.Text(description,14,Theme.Grey));
@@ -64,21 +63,44 @@ internal sealed class Onboarding : Window
         if(step==6)content.Children.Add(Theme.Card(GuideViews.List(null)));
         var next=Theme.Primary(L10n.T(step==titles.Length-1?"完成":"下一步"),()=>{
             if(!CanContinue)return;
-            if(step==titles.Length-1){if(host.CompleteOnboarding(Complete)){finishing=true;Close();}}
+            if(step==titles.Length-1){if(host.CompleteOnboarding(true)){finishing=true;Close();}}
             else{step++;Render();}
         });next.IsEnabled=CanContinue;
         var back=Theme.Secondary(L10n.T("上一步"),()=>{if(step>0&&!practice.Busy){step--;Render();}});back.IsEnabled=step>0&&!practice.Busy;
-        content.Children.Add(Theme.Row(8,back,next));
-        if(host.Settings.NeedsPractice)content.Children.Add(Theme.Row(8,Theme.Secondary(L10n.T("打开设置"),()=>host.ShowWindow(MainWindow.Page.Settings)),Theme.Secondary(L10n.T("退出应用"),host.Quit)));
+        // Every step can be skipped, and so can the whole guide.
+        var row=Theme.Row(8,back,next);
+        if(step<titles.Length-1){
+            var skipStep=Theme.Secondary(L10n.T("跳过这步"),()=>{if(!practice.Busy){step++;Render();}});skipStep.IsEnabled=!practice.Busy;
+            var skipAll=Theme.Secondary(L10n.T("跳过引导"),()=>{practice.Cancel();if(host.CompleteOnboarding(true)){finishing=true;Close();}});skipAll.IsEnabled=!practice.Busy;
+            if(step>0)row.Children.Add(skipStep);
+            row.Children.Add(skipAll);
+        }
+        content.Children.Add(row);
     }
     private void RenderPractice()
     {
         content.Children.Add(Theme.Card(Theme.Text(practice.Sample,14)));
-        var record=Theme.Primary(L10n.T(practice.Recording?"停止并整理":"开始录音"),practice.Toggle);record.IsEnabled=!practice.Thinking;
-        var cancel=Theme.Secondary(L10n.T("取消"),practice.Cancel);cancel.IsEnabled=practice.Busy;
-        content.Children.Add(Theme.Row(8,record,cancel));
-        content.Children.Add(Theme.Text(practice.Status,12,Theme.Grey));
-        if(practice.Raw.Length>0){content.Children.Add(Theme.Text(L10n.T("识别原文"),12,Theme.Grey));content.Children.Add(Theme.Text(practice.Raw,13));}
-        if(practice.Output.Length>0){content.Children.Add(Theme.Text(L10n.T("整理结果"),12,Theme.Grey));content.Children.Add(Theme.Text(practice.Output,13));}
+        // The same dark pill as in daily use: click or press the dictation key; ✓ finishes, ✕ cancels.
+        var pill=new Border {Background=Theme.Hex("#171717"),CornerRadius=new CornerRadius(20),Padding=new Thickness(4),HorizontalAlignment=HorizontalAlignment.Left,Cursor=System.Windows.Input.Cursors.Hand};
+        UIElement Circle(string glyph,bool filled,Action act){
+            var b=new Border {Width=30,Height=30,CornerRadius=new CornerRadius(15),Background=filled?Brushes.White:Theme.Hex("#38FFFFFF"),Cursor=System.Windows.Input.Cursors.Hand,
+                Child=new TextBlock {Text=glyph,Foreground=filled?Theme.Hex("#171717"):Brushes.White,FontWeight=FontWeights.Bold,FontSize=13,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center}};
+            b.MouseLeftButtonUp+=(_,e)=>{e.Handled=true;act();};return b;
+        }
+        var inner=new StackPanel {Orientation=Orientation.Horizontal};
+        if(practice.Recording){
+            inner.Children.Add(Circle("✕",false,practice.Cancel));
+            inner.Children.Add(new TextBlock {Text=L10n.T("正在听…"),Foreground=Brushes.White,FontSize=13,Margin=new Thickness(14,0,14,0),VerticalAlignment=VerticalAlignment.Center});
+            inner.Children.Add(Circle("✓",true,practice.Toggle));
+        } else if(practice.Thinking){
+            inner.Children.Add(new TextBlock {Text="• • •",Foreground=Brushes.White,FontSize=14,Margin=new Thickness(22,5,22,5),VerticalAlignment=VerticalAlignment.Center});
+        } else {
+            inner.Children.Add(Circle("🎤",false,practice.Toggle));
+            inner.Children.Add(new TextBlock {Text=L10n.T(Complete?"再试一次":"点这里开始"),Foreground=Brushes.White,FontWeight=FontWeights.SemiBold,FontSize=13,Margin=new Thickness(10,0,12,0),VerticalAlignment=VerticalAlignment.Center});
+            pill.MouseLeftButtonUp+=(_,_)=>practice.Toggle();
+        }
+        pill.Child=inner;content.Children.Add(pill);
+        if(practice.Status.Length>0)content.Children.Add(Theme.Text(practice.Status,13,Complete?Theme.Success:Theme.Grey));
+        if(practice.Output.Length>0){content.Children.Add(Theme.Text(L10n.T("整理结果"),12,Theme.Grey));content.Children.Add(Theme.Card(Theme.Text(practice.Output,14)));}
     }
 }

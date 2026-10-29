@@ -225,7 +225,6 @@ internal sealed class AppHost : IDictationHost
     }
     public bool CompleteOnboarding(bool practiced)
     {
-        if(Settings.NeedsPractice&&!practiced)return false;
         var previous=Settings.OnboardingDone;var gate=Settings.PracticeGateRequired;
         Settings.OnboardingDone=true;Settings.PracticeGateRequired=false;
         if(!SaveSettings()){Settings.OnboardingDone=previous;Settings.PracticeGateRequired=gate;return false;}

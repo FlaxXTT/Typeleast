@@ -37,7 +37,7 @@ internal sealed class OnboardingPracticeController
     {
         if(Recording){_ = Stop();return;}if(Thinking)return;
         if(host.ActiveRoute is null){Status=L10n.T("请先配置可用的整理模型。");Changed?.Invoke();return;}
-        try {Raw="";Output="";recorder.Start(host.Settings.MicrophoneDevice);Recording=true;Status=L10n.T("正在听…");}
+        try {Raw="";Output="";recorder.Start(host.Settings.MicrophoneDevice);Recording=true;Status="";}
         catch(InvalidOperationException){Status=L10n.T("打不开麦克风，请检查设备和权限。");Recording=false;}
         Changed?.Invoke();
     }
@@ -52,9 +52,15 @@ internal sealed class OnboardingPracticeController
                 ct:cancellation.Token);
             if(generation!=token)return;
             Raw=result.Raw;Output=result.Text;
-            Status=Progress.Accept(result,seconds)?L10n.T("识别与整理通过。"):L10n.T("练习未通过，请检查识别结果和模型后重试。");
+            Output=result.InsertableText;
+            Status=Progress.Accept(result,seconds) switch {
+                PracticeProgress.Outcome.Passed=>L10n.T("通过了。点「继续」。"),
+                PracticeProgress.Outcome.TooShort=>L10n.T("录音太短，请再说一次。"),
+                PracticeProgress.Outcome.NothingHeard=>L10n.T("没听清，请再说一次。"),
+                _=>L10n.T("识别到了，但整理没完成。请检查整理模型和 API Key。"),
+            };
         } catch(OperationCanceledException)when(cancellation.IsCancellationRequested){}
-        catch(ServiceException){if(generation==token)Status=L10n.T("练习未通过，请检查服务和模型后重试。");}
+        catch(ServiceException e){if(generation==token)Status=L10n.T("没有完成：")+DiagnosticEvent.SafeReason(e.Code);}
         finally {
             CryptographicOperations.ZeroMemory(wav);cancellation.Dispose();
             if(generation==token){request=null;Thinking=false;Changed?.Invoke();}
