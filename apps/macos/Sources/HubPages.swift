@@ -83,15 +83,12 @@ struct HomePage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                PageHeader(title: greeting, subtitle: L10n.text("说话，不用打字。任何 App 都能用。"))
+                PageHeader(title: greeting)
                 VStack(alignment: .leading, spacing: 18) {
                     HeroCard()
-                    if !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceUp || !model.llmConfigured {
-                        SetupCard()
-                    }
-                    if !model.settings.guideDismissed { GuideCard() }
-                    StatsRow(stats: model.stats)
-                    ActivityCard()
+                    // Only what is not set up yet; nothing once everything works.
+                    if SetupCard.pending(model) { SetupCard() }
+                    InsightsPanel()
                     RecentCard()
                     EngineCard()
                 }
@@ -131,10 +128,15 @@ private struct HeroCard: View {
 private struct SetupCard: View {
     @EnvironmentObject var model: AppModel
 
+    static func pending(_ model: AppModel) -> Bool {
+        !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceState.isRunning
+            || model.speech?.ready != true || !model.llmConfigured
+    }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text(L10n.text("完成设置")).font(.system(size: 14, weight: .semibold))
+                Text(L10n.text("设置位置")).font(.system(size: 14, weight: .semibold))
                 SetupRow(done: model.micStatus == .authorized, title: L10n.text("麦克风"),
                          detail: "",
                          action: model.micStatus == .denied ? L10n.text("打开设置") : L10n.text("允许")) {
@@ -177,7 +179,12 @@ private struct SetupRow: View {
     let action: String
     let perform: () -> Void
 
+    /// A finished step is not shown at all.
     var body: some View {
+        if !done { row }
+    }
+
+    private var row: some View {
         HStack(spacing: 12) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 16))
@@ -191,40 +198,6 @@ private struct SetupRow: View {
             Spacer()
             if !done && !action.isEmpty {
                 Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
-            }
-        }
-    }
-}
-
-private struct StatsRow: View {
-    let stats: DictationStats
-
-    var body: some View {
-        let saved = Formatters.duration(stats.savedSeconds)
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: L10n.language == "en" ? 2 : 4), alignment: .leading, spacing: 12) {
-            StatTile(value: Formatters.number(stats.words), unit: L10n.text("字"), label: L10n.text("听写字数"))
-            StatTile(value: saved.0, unit: saved.1, label: L10n.text("节省的时间"))
-            StatTile(value: Formatters.number(stats.wordsPerMinute), unit: L10n.text("字/分钟"), label: L10n.text("说话速度"))
-            StatTile(value: Formatters.number(stats.dictations), unit: L10n.text("次"), label: L10n.text("听写次数"))
-        }
-    }
-}
-
-private struct StatTile: View {
-    let value: String
-    let unit: String
-    let label: String
-
-    var body: some View {
-        Card(padding: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(label).font(.system(size: 12)).foregroundColor(Theme.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value).font(.system(size: 26, weight: .bold, design: .rounded))
-                        .lineLimit(1).minimumScaleFactor(0.6).fixedSize(horizontal: true, vertical: false)
-                    Text(unit).font(.system(size: 12)).foregroundColor(Theme.secondary)
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                }
             }
         }
     }

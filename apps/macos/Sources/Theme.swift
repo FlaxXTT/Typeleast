@@ -35,6 +35,14 @@ enum Theme {
     static let warning = dynamic(hex(0xD9822B), hex(0xF0A04B))
 
     static let radius: CGFloat = 14
+
+    /// The Home insights: white tiles on a lightly dotted panel, and the heatmap's blues.
+    static let tile = dynamic(hex(0xFFFFFF), hex(0x262525))
+    static let panel = dynamic(hex(0xF7F7F6), hex(0x1F1E1E))
+    static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
+    static let heatEmpty = dynamic(hex(0xF1F1EF), hex(0x2C2B2B))
+    static let heat = [dynamic(hex(0xE6EBFD), hex(0x26304F)), dynamic(hex(0xC3CEF9), hex(0x34458A)),
+                       dynamic(hex(0x9BAEF3), hex(0x4A63C9)), dynamic(hex(0x4468EC), hex(0x6E8BF5))]
 }
 
 /// A rounded, softly filled container.
