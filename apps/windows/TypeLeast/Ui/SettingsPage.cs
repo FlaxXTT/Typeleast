@@ -193,7 +193,7 @@ internal sealed class SettingsPage : IPage
         RefreshUpdateButton();
         if (host.Updates.Available is { } pending) updateStatus.Text = L10n.T("有新版本 {0}。", pending.Version);
 
-        // Five tabs, each a few cards that put related settings together.
+        // Three tabs, each a few cards that put related settings together.
         AddTab(L10n.T("听写"),
             Section(L10n.T("快捷键"),
                 Theme.SettingRow(L10n.T("听写快捷键"), Theme.Text(L10n.T("按一下开始，再按一下结束。右 Alt 在部分键盘上是 AltGr，请换键。"), 12, Theme.Grey), hotkey),
@@ -206,12 +206,15 @@ internal sealed class SettingsPage : IPage
                 Theme.SettingRow(L10n.T("麦克风"), null, mic),
                 Theme.SettingRow(L10n.T("麦克风测试"), null, Theme.Secondary(L10n.T("开始测试"), () => MicrophoneTestPanel.Show(host))),
                 Theme.SettingRow(L10n.T("提示音"), null, Theme.Toggle(s.PlaySounds, v => { s.PlaySounds = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("听写时静音"), null, Theme.Toggle(s.MuteOtherAudio, v => { s.MuteOtherAudio = v; host.SaveSettings(); }))));
-        AddTab(L10n.T("整理"),
-            modelSection,
+                Theme.SettingRow(L10n.T("听写时静音"), null, Theme.Toggle(s.MuteOtherAudio, v => { s.MuteOtherAudio = v; host.SaveSettings(); }))),
             Section(L10n.T("整理选项"),
                 Theme.SettingRow(L10n.T("参考输入框内容"), null, Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("自动加词"), Theme.Text(L10n.T("粘贴后你改过的词加入词典。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; if (host.SaveSettings() && !v) host.Dictionary.StopWatching(); }))));
+        AddTab(L10n.T("模型"),
+            modelSection,
+            Section(L10n.T("语音模型"),
+                Theme.SettingRow(L10n.T("当前识别模型"), speechStatus, Theme.Row(8, progress, downloadButton))),
+            speechModels.View);
         AddTab(L10n.T("通用"),
             Section(L10n.T("外观与启动"),
                 Theme.SettingRow(L10n.T("界面语言"), Theme.Text(L10n.T("重启后生效。"), 12, Theme.Grey), uiLanguage),
@@ -219,27 +222,21 @@ internal sealed class SettingsPage : IPage
                 Theme.SettingRow(L10n.T("登录时启动"), null, login),
                 Theme.SettingRow(L10n.T("任务栏显示主窗口"), null, Theme.Toggle(s.ShowInTaskbar, v => { s.ShowInTaskbar = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("语音条"), null, Theme.Toggle(s.ShowIdleBar, v => { s.ShowIdleBar = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("新手引导"), null, Theme.Secondary(L10n.T("打开新手引导"), host.ShowOnboarding))));
-        AddTab(L10n.T("隐私与权限"),
-            Section(L10n.T("隐私与数据"),
-                Theme.SettingRow(L10n.T("历史保留"), null, Controls.Retention(host)),
+                Theme.SettingRow(L10n.T("新手引导"), null, Theme.Secondary(L10n.T("打开新手引导"), host.ShowOnboarding))),
+            Section(L10n.T("隐私与权限"),
                 Theme.SettingRow(L10n.T("保留录音 5 分钟"), null, Theme.Toggle(s.KeepAudio24h, v => { s.KeepAudio24h = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("删除全部记录"), null, Theme.Secondary(L10n.T("清空历史与活动"), () => { if (MessageBox.Show(L10n.T("删除全部历史、统计和录音？无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory(); }))),
-            Section(L10n.T("权限"),
                 Theme.SettingRow(L10n.T("麦克风"), microphoneStatus, Theme.Secondary(L10n.T("打开系统权限"), () => Shell.Open("ms-settings:privacy-microphone"))),
-                Theme.SettingRow(L10n.T("键盘与插入"), keyboardStatus, Theme.Text(L10n.T("在管理员窗口中粘贴可能失败，请手动粘贴。"), 12, Theme.Grey))));
-        AddTab(L10n.T("服务与更新"),
-            Section(L10n.T("本地服务"),
-                Theme.SettingRow(L10n.T("本地服务"), serviceStatus, Theme.Row(8, chooseNode, Theme.Secondary(L10n.T("重新启动"), host.RestartService))),
-                Theme.SettingRow(L10n.T("当前识别模型"), speechStatus, Theme.Row(8, progress, downloadButton)),
-                Theme.SettingRow(L10n.T("模型下载镜像（可选）"), null, Theme.Row(8, mirror, useMirror))),
-            speechModels.View,
+                Theme.SettingRow(L10n.T("键盘与插入"), keyboardStatus, Theme.Text(L10n.T("在管理员窗口中粘贴可能失败，请手动粘贴。"), 12, Theme.Grey))),
             Section(L10n.T("版本与更新"),
                 Theme.SettingRow("TypeLeast " + version, updateStatus,
                     Theme.Row(8, Theme.Secondary(L10n.T("检查更新"), () => _ = CheckUpdates()), installUpdate)),
                 Theme.SettingRow(L10n.T("更新提醒"), null,
-                    Theme.Toggle(s.AutoUpdate, v => { s.AutoUpdate = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("下载源"), null, UpdateSourceChoice(s)),
+                    Theme.Toggle(s.AutoUpdate, v => { s.AutoUpdate = v; host.SaveSettings(); }))),
+            // What most people never need: the local service, and where downloads come from.
+            Section(L10n.T("高级"),
+                Theme.SettingRow(L10n.T("本地服务"), serviceStatus, Theme.Row(8, chooseNode, Theme.Secondary(L10n.T("重新启动"), host.RestartService))),
+                Theme.SettingRow(L10n.T("模型下载镜像（可选）"), null, Theme.Row(8, mirror, useMirror)),
+                Theme.SettingRow(L10n.T("更新下载源"), null, UpdateSourceChoice(s)),
                 Theme.SettingRow(L10n.T("数据文件夹"), Theme.Text(L10n.T("识别：本机（sherpa-onnx）· 整理：你的模型"), 12, Theme.Grey),
                     Theme.Secondary(L10n.T("打开数据文件夹"), () => Shell.Open(AppPaths.StateDirectory())))));
         DockPanel.SetDock(root, Dock.Top); surface.Children.Add(root);

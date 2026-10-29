@@ -15,6 +15,8 @@ internal sealed class SpeechModelsPanel
     private string signature = "";
     private bool otherExpanded;
     private readonly TextBlock problem = Theme.Text("", 12, Theme.Grey);
+    /// <summary>Shown first to someone who has not chosen yet: small and quick to download.</summary>
+    private const string Recommended = "qwen3-asr-0.6b";
     public SpeechModelsPanel(AppHost host) { this.host = host; }
 
     public void Refresh()
@@ -24,13 +26,15 @@ internal sealed class SpeechModelsPanel
         if (signature != next || View.Children.Count == 0) {
             signature = next; rows.Clear(); View.Children.Clear();
             View.Children.Add(Theme.SectionTitle(L10n.T("语音模型")));
-            View.Children.Add(Theme.Text(L10n.T("选择模型与精度后再下载。不会自动选择或下载。"), 12, Theme.Grey));
-            foreach (var m in catalog.Models.Where(m => m.Category == "primary" || m.Id == "qwen3-asr-0.6b")) AddRow(View, m);
+            // One model up front: the one in use, or the recommended small one; the rest are one click away.
+            var featured = catalog.Models.FirstOrDefault(m => m.Id == catalog.ActiveModelId && m.Installed) ?? catalog.Models.FirstOrDefault(m => m.Id == Recommended);
+            if (featured is not null) AddRow(View, featured);
             var others = Theme.Stack(10);
             others.Children.Add(Theme.Text(L10n.T("自行下载兼容的 ONNX 文件，再选择目录配置。不会搬动或删除原文件。"), 12, Theme.Grey));
             others.Children.Add(Theme.Secondary(L10n.T("导入本地模型"), () => new LocalSpeechModelImport(host).Show()));
-            foreach (var m in catalog.Models.Where(m => m.Category == "other" || m.Category is null && m.Id != "qwen3-asr-0.6b")) AddRow(others, m);
-            var expand = new Expander { Header = L10n.T("其他模型"), Content = others, Foreground = Theme.Ink, IsExpanded = otherExpanded, Margin = new Thickness(0, 10, 0, 10) };
+            foreach (var m in catalog.Models.Where(m => m.Id != featured?.Id)) AddRow(others, m);
+            var busyInOthers = catalog.Operation is { Running: true } op && op.ModelId != featured?.Id;
+            var expand = new Expander { Header = L10n.T("更多模型"), Content = others, Foreground = Theme.Ink, IsExpanded = otherExpanded || busyInOthers, Margin = new Thickness(0, 10, 0, 10) };
             expand.Expanded += (_, _) => otherExpanded = true; expand.Collapsed += (_, _) => otherExpanded = false;
             View.Children.Add(expand); View.Children.Add(problem);
         }
@@ -53,7 +57,7 @@ internal sealed class SpeechModelsPanel
         }
         problem.Text = catalog.Notice is not null ? L10n.T("所选模型不可用，请重新选择。") : "";
         if (catalog.Operation is { } pending && !catalog.Models.Any(m => m.Id == pending.ModelId))
-            problem.Text = pending.Running ? L10n.T("等待或加载中…") : pending.Phase == "error" ? pending.Problem : L10n.T("配置完成。请在其他模型中选择使用。");
+            problem.Text = pending.Running ? L10n.T("等待或加载中…") : pending.Phase == "error" ? pending.Problem : L10n.T("配置完成。请在更多模型中选择使用。");
     }
     private void AddRow(StackPanel target, SpeechModelOption m)
     {
@@ -72,7 +76,7 @@ internal sealed class SpeechModelsPanel
         if (!string.IsNullOrEmpty(m.SourceUrl)) tools.Children.Add(Theme.Secondary(L10n.T("模型来源与下载"), () => Shell.Open(m.SourceUrl)));
         tools.Children.Add(progress); tools.Children.Add(cancel);
         if (m.Registered && host.SpeechCatalog?.ActiveModelId != id) tools.Children.Add(Theme.Secondary(L10n.T("移除登记"), () => _ = LocalAction("local/remove", id)));
-        var card = Theme.Stack(6, Theme.SettingRow(m.Name, null, action));
+        var card = Theme.Stack(6, Theme.SettingRow(m.Name + (id == Recommended ? " · " + L10n.T("推荐") : ""), null, action));
         if (m.Category == "primary" || id == "qwen3-asr-0.6b") card.Children.Add(Theme.Text(id.Contains("1.7b") ? L10n.T("多语种 · 中英混说 · 较大容量") : L10n.T("多语种 · 中英混说 · 较小体积"), 12, Theme.Grey));
         else card.Children.Add(Theme.Text(id switch { "sensevoice-small" => L10n.T("轻量 · 快速 · 五语种"), "fireredasr2-ctc" => L10n.T("中文 · 方言 · CTC"), "fun-asr-nano" => L10n.T("中英日 · 混说 · 口音"), _ => L10n.T("兼容导入 · 本地识别") }, 12, Theme.Grey));
         card.Children.Add(state); card.Children.Add(tools); target.Children.Add(Theme.Card(card));

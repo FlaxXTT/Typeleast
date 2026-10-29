@@ -946,8 +946,8 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     var entries = SettingsGuide.Entries;
     Eq("the guide lists six places", entries.Count, 6);
     Check("every guide entry says where it is", entries.All(e => e.Place.Length > 0));
-    Eq("the API key lives under Settings › Cleanup", entries.First(e => e.Title == L10n.T("API Key")).Tab, 1);
-    Eq("the mirror lives under Settings › Service and updates", entries.First(e => e.Title == L10n.T("语音模型和下载镜像")).Tab, 4);
+    Eq("the API key lives under Settings › Models", entries.First(e => e.Title == L10n.T("API Key")).Tab, 1);
+    Eq("the speech model lives under Settings › Models", entries.First(e => e.Title == L10n.T("语音模型")).Tab, 1);
     SpeechStatus Speech(string json) => JsonSerializer.Deserialize<SpeechStatus>(json, Json.Options)!;
     Check("an unreachable host is a network failure", ModelMirror.NetworkFailure(Speech("""{"phase":"error","error":"could not reach huggingface.co: fetch failed"}""")));
     Check("a failed catalog download is a network failure", ModelMirror.NetworkFailure(Speech("""{"phase":"ready","operation":{"modelId":"x","phase":"error","error":"download-failed"}}""")));

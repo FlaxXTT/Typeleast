@@ -1,7 +1,7 @@
 namespace TypeLeast.Core;
 
 /// <summary>The settings people most often cannot find, for the home-page card and the setup guide.
-/// Tab is the Settings tab (0 听写, 1 整理, 2 通用, 3 隐私与权限, 4 服务与更新); Page "" is the sidebar itself.</summary>
+/// Tab is the Settings tab (0 听写, 1 模型, 2 通用); Page "" is the sidebar itself.</summary>
 public static class SettingsGuide
 {
     public sealed record Entry(string Title, string Place, string Page, int Tab = 0);
@@ -9,11 +9,11 @@ public static class SettingsGuide
     public static IReadOnlyList<Entry> Entries => new Entry[]
     {
         new(L10n.T("需求助手"), L10n.T("侧栏"), ""),
-        new(L10n.T("API Key"), L10n.T("设置 › 整理"), "settings", 1),
+        new(L10n.T("API Key"), L10n.T("设置 › 模型"), "settings", 1),
         new(L10n.T("快捷键"), L10n.T("设置 › 听写"), "settings", 0),
-        new(L10n.T("语音模型和下载镜像"), L10n.T("设置 › 服务与更新"), "settings", 4),
-        new(L10n.T("个人偏好"), L10n.T("侧栏 › 个人偏好"), "dictionary"),
-        new(L10n.T("麦克风"), L10n.T("设置 › 隐私与权限"), "settings", 3),
+        new(L10n.T("语音模型"), L10n.T("设置 › 模型"), "settings", 1),
+        new(L10n.T("词典"), L10n.T("侧栏 › 词典"), "dictionary"),
+        new(L10n.T("麦克风"), L10n.T("设置 › 通用"), "settings", 2),
     };
 }
 
