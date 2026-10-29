@@ -559,7 +559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func downloadModels() {
-        model.settingsCategory = 4
+        model.settingsCategory = 1
         hub.show(page: .settings)
     }
 

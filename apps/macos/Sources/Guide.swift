@@ -4,8 +4,8 @@ import AppKit
 // Guide.swift - help for new users: where the settings people look for live (home-page card
 // and a setup step), and what to do when the speech model cannot be downloaded.
 
-/// The settings people most often cannot find. `category` is the Settings tab (0 听写, 1 整理,
-/// 2 通用, 3 隐私与权限, 4 服务与更新); a nil page means the sidebar itself.
+/// The settings people most often cannot find. `category` is the Settings tab (0 听写, 1 模型,
+/// 2 通用); a nil page means the sidebar itself.
 enum SettingsGuide {
     struct Entry: Identifiable {
         let title: String
@@ -18,11 +18,11 @@ enum SettingsGuide {
     static var entries: [Entry] {
         [
             Entry(title: L10n.text("需求助手"), place: L10n.text("侧栏"), page: nil),
-            Entry(title: L10n.text("API Key"), place: L10n.text("设置 › 整理"), page: .settings, category: 1),
+            Entry(title: L10n.text("API Key"), place: L10n.text("设置 › 模型"), page: .settings, category: 1),
             Entry(title: L10n.text("快捷键"), place: L10n.text("设置 › 听写"), page: .settings, category: 0),
-            Entry(title: L10n.text("语音模型和下载镜像"), place: L10n.text("设置 › 服务与更新"), page: .settings, category: 4),
-            Entry(title: L10n.text("个人偏好"), place: L10n.text("侧栏 › 个人偏好"), page: .dictionary),
-            Entry(title: L10n.text("麦克风和辅助功能"), place: L10n.text("设置 › 隐私与权限"), page: .settings, category: 3),
+            Entry(title: L10n.text("语音模型"), place: L10n.text("设置 › 模型"), page: .settings, category: 1),
+            Entry(title: L10n.text("词典"), place: L10n.text("侧栏 › 词典"), page: .dictionary),
+            Entry(title: L10n.text("麦克风和辅助功能"), place: L10n.text("设置 › 通用"), page: .settings, category: 2),
         ]
     }
 

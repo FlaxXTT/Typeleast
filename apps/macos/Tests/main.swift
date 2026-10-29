@@ -1622,8 +1622,8 @@ do {
     let entries = SettingsGuide.entries
     checkEq("the guide lists six places", entries.count, 6)
     check("every guide entry says where it is", entries.allSatisfy { !$0.place.isEmpty })
-    checkEq("the API key lives under Settings › Cleanup", entries.first { $0.title == L10n.text("API Key") }?.category, 1)
-    checkEq("the mirror lives under Settings › Service and updates", entries.first { $0.title == L10n.text("语音模型和下载镜像") }?.category, 4)
+    checkEq("the API key lives under Settings › Models", entries.first { $0.title == L10n.text("API Key") }?.category, 1)
+    checkEq("the speech model lives under Settings › Models", entries.first { $0.title == L10n.text("语音模型") }?.category, 1)
     let model = AppModel.shared
     let before = (model.page, model.settingsCategory)
     SettingsGuide.open(entries[1], in: model)

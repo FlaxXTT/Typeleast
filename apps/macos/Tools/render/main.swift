@@ -138,7 +138,7 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODELS_ONLY"] == "1" {
 
 if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_FOCUS"] == "settings" {
     for dark in [false, true] {
-        for category in 0..<5 {
+        for category in 0..<3 {
             model.settingsCategory = category
             model.page = .settings
             snapshot(NSHostingView(rootView: HubRootView().environmentObject(model)),

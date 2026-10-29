@@ -2,6 +2,8 @@ import SwiftUI
 import AppKit
 
 struct SpeechModelOptions: View {
+    /// Shown first to someone who has not chosen yet: small and quick to download.
+    static let recommended = "qwen3-asr-0.6b"
     @EnvironmentObject var model: AppModel
     @State private var otherExpanded = false
     @State private var importing = false
@@ -10,27 +12,27 @@ struct SpeechModelOptions: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L10n.text("语音模型")).font(.headline)
-            Text(L10n.text("选择模型与精度后再下载。不会自动选择或下载。"))
-                .font(.caption).foregroundColor(Theme.secondary)
             if let catalog = model.speechCatalog {
                 if catalog.notice != nil { Text(L10n.text("所选模型不可用，请重新选择。" )).foregroundColor(Theme.warning).font(.caption) }
-                ForEach(catalog.models.filter { $0.category == "primary" || $0.id == "qwen3-asr-0.6b" }) { entry in
-                    modelRow(entry, catalog: catalog)
-                }
-                DisclosureGroup(isExpanded: $otherExpanded) {
+                // One model up front: the one in use, or the recommended small one; the rest are one click away.
+                let featured = catalog.models.first { $0.id == catalog.activeModelId && $0.installed } ?? catalog.models.first { $0.id == SpeechModelOptions.recommended }
+                if let featured { modelRow(featured, catalog: catalog) }
+                let others = catalog.models.filter { $0.id != featured?.id }
+                let busyInOthers = others.contains { $0.id == catalog.operation?.modelId && catalog.operation?.running == true }
+                DisclosureGroup(isExpanded: Binding(get: { otherExpanded || busyInOthers }, set: { otherExpanded = $0 })) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(L10n.text("自行下载兼容的 ONNX 文件，再选择目录配置。不会搬动或删除原文件。"))
                             .font(.caption).foregroundColor(Theme.secondary)
                         Button(L10n.text("导入本地模型")) { importing = true }
                             .buttonStyle(SecondaryButtonStyle()).disabled(model.phase != .idle || catalog.operation?.running == true)
-                        ForEach(catalog.models.filter { $0.category == "other" || ($0.category == nil && $0.id != "qwen3-asr-0.6b") }) { entry in
+                        ForEach(others) { entry in
                             modelRow(entry, catalog: catalog)
                         }
                     }.padding(.top, 8)
-                } label: { Text(L10n.text("其他模型")) }
+                } label: { Text(L10n.text("更多模型")) }
                 if !localProblem.isEmpty { Text(localProblem).font(.caption).foregroundColor(Theme.warning) }
                 if let op = catalog.operation, !catalog.models.contains(where: { $0.id == op.modelId }) {
-                    Text(op.running ? L10n.text("等待或加载中…") : op.phase == "error" ? op.problem : L10n.text("配置完成。请在其他模型中选择使用。"))
+                    Text(op.running ? L10n.text("等待或加载中…") : op.phase == "error" ? op.problem : L10n.text("配置完成。请在更多模型中选择使用。"))
                         .font(.caption).foregroundColor(Theme.secondary)
                 }
             } else {
@@ -47,7 +49,7 @@ struct SpeechModelOptions: View {
         let configured = primary || entry.registered == true || selected
         let download = primary && (!entry.installed || operation?.error == "checksum-mismatch")
         VStack(alignment: .leading, spacing: 7) {
-            SettingRow(title: entry.name, detail: nil) {
+            SettingRow(title: entry.name + (entry.id == SpeechModelOptions.recommended ? " · " + L10n.text("推荐") : ""), detail: nil) {
                 if configured || entry.installed {
                     Button(selected ? L10n.text("使用中") : !configured ? L10n.text("一键配置") : download ? L10n.text("下载并使用") : L10n.text("使用")) {
                         if configured { model.actions?.manageSpeechModel(id: entry.id, download: download, cancel: false) }

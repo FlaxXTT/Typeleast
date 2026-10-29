@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-// HubSettings.swift - the Settings page: Keyboard shortcuts, Cleanup, Language, Audio,
-// Insertion, General, Privacy, Permissions and Service, as titled sections of cards.
+// HubSettings.swift - the Settings page in three tabs: 听写 (shortcuts, language, audio, cleanup
+// options), 模型 (cleanup model, speech model) and 通用 (general, privacy, permissions, updates,
+// and 高级 for the local service and download sources), as titled sections of cards.
 
 struct SettingsPage: View {
     @EnvironmentObject var model: AppModel
@@ -11,7 +12,7 @@ struct SettingsPage: View {
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
 
-    private let categories = ["听写", "整理", "通用", "隐私与权限", "服务与更新"]
+    private let categories = ["听写", "模型", "通用"]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,12 +28,9 @@ struct SettingsPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     switch model.settingsCategory {
-                    case 0: shortcuts; language; audio
-                    case 1:
-                        ModelSection(); cleanup
-                    case 2: general
-                    case 3: privacy; permissions
-                    default: service
+                    case 0: shortcuts; language; audio; cleanup
+                    case 1: ModelSection(); speech
+                    default: general; privacy; permissions; updates; advanced
                     }
                 }
                 .padding(.horizontal, 36).padding(.bottom, 32)
@@ -174,15 +172,6 @@ struct SettingsPage: View {
 
     private var privacy: some View {
         SettingsSection(title: L10n.text("隐私与数据")) {
-            SettingRow(title: L10n.text("保留历史"), detail: nil) {
-                Picker("", selection: model.setting(\.historyRetention, then: {
-                    HistoryStore.shared.applyRetention(Settings.shared.historyRetention)
-                })) {
-                    ForEach(HistoryRetention.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .labelsHidden()
-                .frame(width: 130)
-            }
             ToggleRow(title: L10n.text("保留录音 5 分钟"), detail: nil,
                       isOn: model.setting(\.keepAudio24h))
             NoteRow(symbol: "lock", text: L10n.text("音频不出本机。只有文字发给模型，密码和密钥先去掉。"), action: nil, perform: nil)
@@ -201,8 +190,24 @@ struct SettingsPage: View {
         }
     }
 
-    private var service: some View {
-        SettingsSection(title: L10n.text("本地服务")) {
+    private var speech: some View {
+        SpeechModelOptions()
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+    }
+
+    private var updates: some View {
+        SettingsSection(title: L10n.text("版本与更新")) {
+            SettingRow(title: L10n.text("当前版本 ") + Updater.currentVersion, detail: L10n.text("一键更新，权限保留。")) {
+                Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
+            }
+        }
+    }
+
+    /// What most people never need: the local service, and where downloads come from.
+    private var advanced: some View {
+        SettingsSection(title: L10n.text("高级")) {
             SettingRow(title: model.serviceSummary,
                        detail: model.nodeDescription.isEmpty ? "" : "Node.js " + model.nodeDescription) {
                 HStack(spacing: 8) {
@@ -214,7 +219,6 @@ struct SettingsPage: View {
                     Button(L10n.text("重新启动")) { model.actions?.restartService() }.buttonStyle(SecondaryButtonStyle())
                 }
             }
-            SpeechModelOptions()
             SettingRow(title: L10n.text("模型下载镜像（可选）"),
                        detail: nil) {
                 HStack(spacing: 8) {
@@ -227,10 +231,7 @@ struct SettingsPage: View {
                     }
                 }
             }
-            SettingRow(title: L10n.text("版本与更新"), detail: L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。一键更新，权限保留。")) {
-                Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
-            }
-            SettingRow(title: L10n.text("下载源"),
+            SettingRow(title: L10n.text("更新下载源"),
                        detail: nil) {
                 Picker("", selection: model.setting(\.updateSource)) {
                     Text(L10n.text("自动（GitHub 慢时用镜像）")).tag("auto")
