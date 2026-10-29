@@ -205,7 +205,7 @@ export function tidy(text) {
  * The caller must exclude names that are also ordinary English words.
  */
 /**
- * Letters a recogniser spelled out with spaces ("L G", "H T T P") are one word.
+ * Capital letters a recogniser spelled out with spaces are one word.
  * Only capital letters, joined by single spaces, are merged.
  */
 export function joinSpacedCapitals(text) {

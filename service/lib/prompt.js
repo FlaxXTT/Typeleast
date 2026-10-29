@@ -59,7 +59,7 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
     for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
   }
   if (spelled.length > 0) {
-    lines.push("Letter-by-letter spellings in this utterance, the strongest evidence for a name. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it. Recognised letters can be misheard (B/D/P/E/V, M/N and S/F sound alike): when a spelled word makes no sense here and the context clearly points to the intended word, write that word:");
+    lines.push("Letter-by-letter spellings in this utterance, the strongest evidence for a name. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it. Recognised letters can be misheard: when a spelled word makes no sense here and the context clearly points to the intended word, write that word:");
     for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);
   }
   if (context.length > 0) {

@@ -23,5 +23,5 @@ test("new pack hints apply only in their context", () => {
 
 test("the prompt keeps explained names, lists parallel items, writes spoken symbols and keeps English", () => {
   const prompt = cleanupSystemPrompt() + UTTERANCE_RULES + JSON_OUTPUT;
-  for (const rule of ["被解释的名称本身保留", "编号列表", "点写 .", "代码块", "沿用口述的语言"]) assert.ok(prompt.includes(rule), rule);
+  for (const rule of ["被解释的名称本身保留", "编号列表", "念出的符号写成对应的符号", "代码块", "沿用口述的语言"]) assert.ok(prompt.includes(rule), rule);
 });

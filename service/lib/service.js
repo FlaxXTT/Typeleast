@@ -160,7 +160,7 @@ export class VoicePolishService {
     const strength = canonicalStrength(request.strength ?? this.strength);
     const explanation = strength !== "promptbeta" && !request.translateTo
       ? splitExplanation(originalText, request.explanationMarkers) : { text: originalText, notes: [], used: false };
-    // Recognisers often space out spelled capitals ("L G"); the model and the checks see one word.
+    // Recognisers often space out spelled capitals; the model sees one word.
     const rawText = joinSpacedCapitals(explanation.text);
     const base = {
       task: taskKind,

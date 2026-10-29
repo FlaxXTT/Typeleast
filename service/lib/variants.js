@@ -30,7 +30,7 @@ export function parseVariants(value) {
 /** A line for the system prompt, or "" when the default spelling is wanted. */
 export function variantInstruction(variants) {
   return variants?.en === "gb"
-    ? "\n\nWhen the output contains English, use British spelling and vocabulary (colour, organise, centre, flat)."
+    ? "\n\nWhen the output contains English, use British spelling and vocabulary."
     : "";
 }
 
