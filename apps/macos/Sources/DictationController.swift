@@ -466,7 +466,7 @@ final class DictationController {
                 return
             }
             let failedHint = resp.uncertain == true ? L10n.text("已插入，可能有误，可在历史中修改") : ["entity-changed", "name-kept"].contains(resp.fallbackReason ?? "") ? L10n.text("名称改写缺少依据，已保留识别原文。") : resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
-            setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
+            setHint(resp.fallback || resp.uncertain == true ? failedHint : nil, warning: resp.fallback || resp.uncertain == true)
             if insert {
                 let counts = DictationStats.countWords(text)
                 ActivityLog.shared.record(words: counts.cjk + counts.latin)

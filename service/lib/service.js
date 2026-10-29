@@ -389,7 +389,8 @@ export class VoicePolishService {
     let cleanedSource = null;
     try {
       const cleaned = await this.polish({...request, task:'dictation', translateTo:null, variants:null, _translationSource:true, _cleanupTask:task});
-      if (cleaned.fallback || cleaned.clarification || cleaned.contextOnly) {
+      // An uncertain source is not translated: the checked source text is inserted instead.
+      if (cleaned.fallback || cleaned.uncertain || cleaned.clarification || cleaned.contextOnly) {
         return {...cleaned,task:'translation',translated:target,
           ...(cleaned.clarification ? {clarification:{...cleaned.clarification,target}} : {})};
       }
@@ -530,6 +531,9 @@ export class VoicePolishService {
       ms: result.ms.polish,
     });
     this.recentFailures.length = Math.min(this.recentFailures.length, MAX_RECENT_FAILURES);
+    // A cleaned result that only failed a check is still the cleaned result: it is inserted as one,
+    // marked uncertain, and is not reported as the original transcript.
+    if (result.uncertain) result = { ...result, fallback: false };
     return await this.recordAndReturn(request, result);
   }
 

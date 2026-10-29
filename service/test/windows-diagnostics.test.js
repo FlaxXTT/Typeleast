@@ -30,7 +30,7 @@ for (const scenario of ["timeout", "length", "format", "validation", "auth", "ne
     const service = new VoicePolishService({ config: { timeoutMs: 20, maxOutputTokens: 800, strength: "prompt", redactSecrets: true, dictionary: [] },
       recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl });
     const result = await service.polish({ rawText: raw, strength: "prompt", llm: route });
-    assert.equal(result.fallback, true);
+    assert.ok(result.fallback || result.uncertain, 'not a clean pass');
     assert.notEqual(result.text, '', 'a result is inserted, never held');assert.ok(result.raw.includes("Wednesday"));assert.equal(result.clarification, undefined);
     const expected = { timeout: "model-timeout", length: "model-max-tokens", format: "output-format", auth: "model-error:HTTP_401", network: "model-error:NETWORK" };
     if (expected[scenario]) assert.equal(result.reason, expected[scenario]);
