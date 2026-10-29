@@ -190,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func applicationWillTerminate(_ notification: Notification) {
         recorder.cancel()
+        dictation.dropCancelledRecording()
         onboarding.practice.cancel()
         OutputMuter.shared.restore()
         recordingBar.hide()

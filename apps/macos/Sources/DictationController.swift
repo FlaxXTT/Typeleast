@@ -47,6 +47,9 @@ final class DictationController {
     private var pendingField: FocusedField?
     private var progressID = UUID()
     private var pendingAssistant = false
+    /// A recording cancelled a moment ago, kept until 撤销 sends it on or the toast goes away.
+    private var heldRecording: (url: URL, seconds: Double, app: String, field: FocusedField?, language: String, keep: Bool, translateTo: String?)?
+    private let cancelToast = LearnedToast()
     private var pendingTranslate: String?
     private let namePanel = NameConfirmationPanel()
     private var clarificationSource: String?
@@ -101,6 +104,7 @@ final class DictationController {
 
     func beginCapture() {
         progressID = UUID()
+        cancelToast.finish()
         // The previous dictation's field is checked for corrections before a new one starts.
         dictionary.dictationStarting()
         // Contract: frontmost bundle id is captured BEFORE recording starts.
@@ -209,7 +213,19 @@ final class DictationController {
         case .recording:
             unregisterEscape()
             stopTick()
-            recorder.cancel()
+            // A dictation can be taken back for a few seconds; an assistant answer cannot.
+            if !pendingAssistant, let r = try? recorder.finish() {
+                heldRecording = (r.url, r.seconds, pendingAppBundleId, pendingField, settings.language,
+                                 settings.keepAudio24h && settings.historyRetention.seconds != 0, pendingTranslate)
+                cancelToast.show(message: L10n.text("转录已取消"),
+                                 undo: { [weak self] in self?.resumeHeldRecording() },
+                                 expired: { [weak self] in self?.discardHeldRecording() })
+                setHint(nil)
+            } else {
+                recorder.cancel()
+                setHint(L10n.text("已取消，录音已删除"))
+            }
+            pendingAssistant = false
             OutputMuter.shared.restore()
             phase = .idle
             recordingStartedAt = nil
@@ -217,7 +233,6 @@ final class DictationController {
             recordingBar.hide()
             pendingTranslate = nil
             if betaPending != nil { showBetaQuestions() }
-            setHint(L10n.text("已取消，录音已删除"))
             applyState()
             updateIdleBar()
         case .thinking:
@@ -230,6 +245,25 @@ final class DictationController {
         case .idle:
             break
         }
+    }
+
+    /// 撤销 on 「转录已取消」: the kept recording is transcribed as if it had been finished.
+    private func resumeHeldRecording() {
+        guard let held = heldRecording else { return }
+        heldRecording = nil
+        guard phase == .idle else { try? FileManager.default.removeItem(at: held.url); return }
+        sendToServer(audioURL: held.url, appBundleId: held.app, language: held.language, strength: "prompt",
+                     keepAudioPath: held.keep ? held.url.path : nil, seconds: held.seconds, field: held.field,
+                     insert: true, deleteWhenDone: !held.keep, translateTo: held.translateTo)
+    }
+
+    /// Quitting: a recording waiting on 撤销 is deleted now.
+    func dropCancelledRecording() { cancelToast.finish() }
+
+    private func discardHeldRecording() {
+        guard let held = heldRecording else { return }
+        heldRecording = nil
+        try? FileManager.default.removeItem(at: held.url)
     }
 
     // MARK: server

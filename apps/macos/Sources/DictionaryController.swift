@@ -66,7 +66,7 @@ final class DictionaryController {
         guard settings.autoLearn, settings.addWord(word, source: .auto),
               let id = settings.words.first(where: { $0.word == word })?.id else { return }
         setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
-        toast.show(word: word) { [weak self] in
+        toast.show(message: L10n.text("已把「") + word + L10n.text("」加入词典")) { [weak self] in
             guard let self else { return }
             self.settings.removeWord(id: id)
             self.setHint(L10n.text("已从词典删除「{0}」", word))

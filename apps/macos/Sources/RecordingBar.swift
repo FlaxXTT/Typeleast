@@ -204,7 +204,7 @@ final class PillView: NSView {
     var limitSeconds: Double = 120
     static let countdownSeconds: Double = 15
     /// How many of the most recent levels the waveform shows (about 1.5 s at 20 Hz).
-    static let visibleBars = 30
+    static let visibleBars = 18
 
     var model = RecordingBarModel() {
         didSet {
@@ -219,9 +219,9 @@ final class PillView: NSView {
     private var spinnerPhase: CGFloat = 0
     private var pulse: CGFloat = 0
 
-    static let height: CGFloat = 32
-    /// Diameter of the cancel (left) and stop (right) buttons.
-    static let buttonSize: CGFloat = 20
+    static let height: CGFloat = 36
+    /// Diameter of the cancel (left) and finish (right) buttons.
+    static let buttonSize: CGFloat = 28
     static func badgeWidth(_ text: String) -> CGFloat {
         guard !text.isEmpty else { return 0 }
         let font = NSFont.systemFont(ofSize: 10, weight: .bold)
@@ -235,7 +235,7 @@ final class PillView: NSView {
         switch model.phase {
         case .hidden: return 100
         case .recording:
-            return (limit - model.elapsed <= countdownSeconds ? 206 : 168) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
+            return (limit - model.elapsed <= countdownSeconds ? 182 : 144) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
         case .thinking: return 94 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 10) + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:11)]).width))
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -248,7 +248,7 @@ final class PillView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         bars = Array(repeating: 0, count: LevelHistory.defaultCapacity)
-        configure(cancelButton, glyph: "✕", tip: L10n.text("取消听写（Esc）"), action: #selector(cancelPressed))
+        configure(cancelButton, glyph: "", tip: L10n.text("取消听写（Esc）"), action: #selector(cancelPressed))
         configure(stopButton, glyph: "", tip: L10n.text("结束并整理"), action: #selector(stopPressed))
         addSubview(cancelButton)
         addSubview(stopButton)
@@ -278,11 +278,11 @@ final class PillView: NSView {
 
     private var cancelRect: NSRect {
         let size = PillView.buttonSize
-        return NSRect(x: 6, y: (bounds.height - size) / 2, width: size, height: size)
+        return NSRect(x: 4, y: (bounds.height - size) / 2, width: size, height: size)
     }
     private var stopRect: NSRect {
         let size = PillView.buttonSize
-        return NSRect(x: bounds.width - size - 6, y: (bounds.height - size) / 2, width: size, height: size)
+        return NSRect(x: bounds.width - size - 4, y: (bounds.height - size) / 2, width: size, height: size)
     }
 
     override func layout() {
@@ -352,27 +352,23 @@ final class PillView: NSView {
     // MARK: state looks
 
     private func drawRecording() {
-        // cancel: a soft circle behind the × glyph
-        NSColor.white.withAlphaComponent(0.10).setFill()
-        NSBezierPath(ovalIn: cancelRect).fill()
-
-        // stop: a white disc with a dark rounded square, the "finish" affordance
-        NSColor.white.withAlphaComponent(0.95).setFill()
+        drawCancel()
+        // finish: a white disc with a dark check mark
+        NSColor.white.setFill()
         NSBezierPath(ovalIn: stopRect).fill()
-        let square = NSRect(x: stopRect.midX - 3.5, y: stopRect.midY - 3.5, width: 7, height: 7)
-        NSColor(calibratedWhite: 0.09, alpha: 1).setFill()
-        NSBezierPath(roundedRect: square, xRadius: 1.5, yRadius: 1.5).fill()
-
-        // the microphone is live: a small red dot that brightens with the voice
-        let live = reduceMotion ? 0.5 : min(1, pulse * 1.4)
-        let dotRadius: CGFloat = 2.6
-        let dotCentre = NSPoint(x: cancelRect.maxX + 9, y: bounds.midY)
-        NSColor.systemRed.withAlphaComponent(0.6 + 0.4 * live).setFill()
-        NSBezierPath(ovalIn: NSRect(x: dotCentre.x - dotRadius, y: dotCentre.y - dotRadius,
-                                    width: dotRadius * 2, height: dotRadius * 2)).fill()
+        let c = NSPoint(x: stopRect.midX, y: stopRect.midY)
+        let check = NSBezierPath()
+        check.move(to: NSPoint(x: c.x - 5.5, y: c.y + 0.2))
+        check.line(to: NSPoint(x: c.x - 1.8, y: c.y - 3.8))
+        check.line(to: NSPoint(x: c.x + 5.8, y: c.y + 4.4))
+        check.lineWidth = 2.2
+        check.lineCapStyle = .round
+        check.lineJoinStyle = .round
+        NSColor(calibratedWhite: 0.09, alpha: 1).setStroke()
+        check.stroke()
 
         let remaining = limitSeconds - model.elapsed
-        var waveRight = stopRect.minX - 8
+        var waveRight = stopRect.minX - 10
         if remaining <= PillView.countdownSeconds {
             let label = RecordingBarFormat.elapsed(max(0, remaining))
             drawText(label, x: stopRect.minX - 44, centerY: bounds.midY, width: 36,
@@ -391,8 +387,8 @@ final class PillView: NSView {
                      font: font, color: .white)
             waveRight = rect.minX - 6
         }
-        let waveLeft = dotCentre.x + dotRadius + 7
-        let waveHeight = bounds.height - 8
+        let waveLeft = cancelRect.maxX + 10
+        let waveHeight = bounds.height - 14
         drawWaveform(NSRect(x: waveLeft, y: bounds.midY - waveHeight / 2,
                             width: waveRight - waveLeft, height: waveHeight))
     }
@@ -400,8 +396,7 @@ final class PillView: NSView {
     private func drawThinking() {
         // three dots breathing in sequence
         let spacing: CGFloat = 10
-        NSColor.white.withAlphaComponent(0.10).setFill()
-        NSBezierPath(ovalIn:cancelRect).fill()
+        drawCancel()
         let centreX: CGFloat = 56
         for index in 0..<3 {
             let phase = spinnerPhase - CGFloat(index) * 0.9
@@ -462,23 +457,35 @@ final class PillView: NSView {
 
     // MARK: drawing primitives
 
-    /// Thin vertical lines, mirrored around the centre line, newest on the right.
-    /// Older samples fade out; silent samples are short and dim, so silence reads as
-    /// a dotted line and speech as tall bright strokes.
+    /// A grey disc with a white ×.
+    private func drawCancel() {
+        NSColor.white.withAlphaComponent(0.22).setFill()
+        NSBezierPath(ovalIn: cancelRect).fill()
+        let c = NSPoint(x: cancelRect.midX, y: cancelRect.midY), r: CGFloat = 4.6
+        let cross = NSBezierPath()
+        cross.move(to: NSPoint(x: c.x - r, y: c.y - r)); cross.line(to: NSPoint(x: c.x + r, y: c.y + r))
+        cross.move(to: NSPoint(x: c.x - r, y: c.y + r)); cross.line(to: NSPoint(x: c.x + r, y: c.y - r))
+        cross.lineWidth = 2
+        cross.lineCapStyle = .round
+        NSColor.white.setStroke()
+        cross.stroke()
+    }
+
+    /// Thin white vertical lines, mirrored around the centre line, newest on the right.
+    /// Silent samples are short and dimmer, so silence reads as a dotted line.
     private func drawWaveform(_ rect: NSRect) {
         guard !bars.isEmpty, rect.width > 4 else { return }
         let shown = Array(bars.suffix(PillView.visibleBars))
         let slot = rect.width / CGFloat(shown.count)
-        let lineWidth = min(1.6, max(1.0, slot * 0.45))
+        let lineWidth = min(2.2, max(1.2, slot * 0.5))
         let silent = CGFloat(RecordingBarFormat.silenceFloor)
         for (index, value) in shown.enumerated() {
             let x = rect.minX + slot * CGFloat(index) + (slot - lineWidth) / 2
             let magnitude = CGFloat(value)
             let height = max(lineWidth, magnitude * rect.height)
             let line = NSRect(x: x, y: rect.midY - height / 2, width: lineWidth, height: height)
-            let age = CGFloat(index + 1) / CGFloat(shown.count)        // 0 oldest ... 1 newest
             let voiced = magnitude > silent + 0.02
-            let alpha = (voiced ? 0.45 + 0.55 * age : 0.22 + 0.18 * age)
+            let alpha: CGFloat = voiced ? 1 : 0.55
             NSColor.white.withAlphaComponent(alpha).setFill()
             NSBezierPath(roundedRect: line, xRadius: lineWidth / 2, yRadius: lineWidth / 2).fill()
         }
