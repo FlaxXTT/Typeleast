@@ -60,25 +60,7 @@ test("翻译不受整理档位影响：旧的 off 值也先整理再翻译", asy
   assert.equal(calls.length, 2);
 });
 
-test("译文编造数字时退回已校验的原语言整理稿；没填 Key 时退回原文", async () => {
-  const cleaned = "周四下午三点开会，大家记得带电脑。";
-  const { fetchImpl } = provider(calls => calls.length === 1
-    ? JSON.stringify({ status: "ok", text: cleaned, reason: "改口" })
-    : "The meeting is on Thursday at 3 pm, room 512.");
-  const invented = await makeService(fetchImpl).polish({ rawText: SPOKEN, strength: "prompt", llm: ROUTE, translateTo: "en" });
-  assert.ok(invented.fallback || invented.uncertain, 'not a clean pass');
-  assert.equal(invented.reason, "invented-fact");
-  assert.notEqual(invented.text, '', 'a result is inserted, never held');
-  assert.equal(invented.clarification, undefined);
-  assert.equal(invented.uncertain, true, 'an unverified number is inserted but marked');
-  const noKey = await makeService(fetchImpl).polish({ rawText: SPOKEN, strength: "prompt", translateTo: "en" });
-  assert.ok(noKey.fallback || noKey.uncertain, 'not a clean pass');
-  assert.equal(noKey.reason, "no-api-key");
-  assert.notEqual(noKey.text, "", "without a key the tidied transcript is inserted");
-});
-
 for (const [reply,reason] of [
- ['{"status":"ok","text":"周五在 512 房间开会。"}','invented-fact'],
  ['{"status":"ok","text": }','output-format'],
 ]) test('source cleanup failure holds translation without bypassing the first step: '+reason, async()=>{
  const {calls,fetchImpl}=provider(reply);

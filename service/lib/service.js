@@ -1,8 +1,6 @@
-import {hasTermExplanation} from './entity-guard.js';
 import {taskFor} from './dictation-task.js';
 import {generateDictation, TEXT_LIMIT} from './long-dictation.js';
-import {CleanupTask, cleanupParameters, needsCleanupReview} from './cleanup-task.js';
-import {CLEANUP_REVIEW_PROMPT, parseCleanupReview} from './prompts/cleanup-review.js';
+import {CleanupTask, cleanupParameters} from './cleanup-task.js';
 import { personalizationContext, applyExplicitRules, requestPolicy, readPolicy } from "./personalization-policy.js";
 import { splitExplanation, explanationNameRule, explanationInstruction } from "./explanation-context.js";
 import { nameClarification, clarificationSource, clarificationRule } from "./name-clarification.js";
@@ -35,7 +33,7 @@ import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } 
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
-import { restoreApproximateNumbers, validateOutput } from "./validate.js";
+import { restoreApproximateNumbers, unwrap } from "./validate.js";
 import { normalizeNumbers } from './number-format.js';
 import { joinSpacedCapitals, normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
@@ -225,8 +223,7 @@ export class VoicePolishService {
       spellings: context.spellings,
       strength,
     }) + explanationInstruction(safeNotes)
-      + variantInstruction(parseVariants(request.variants))
-      + (request._languageRetry ? "\n\nThe previous answer changed the language. Write the result in the same language the speaker used; keep English that was spoken in English." : "");
+      + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
     // already redacted by buildContext. The text the user finally gets is what
@@ -282,70 +279,20 @@ export class VoicePolishService {
       }
       if (parsed.clarification) return this.retainSourceName(request, base, rawText, started, parsed.text);
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      // Deterministic cleanup runs BEFORE validation so the safety checks judge
-      // exactly the text that would be inserted.
-      const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, parsed.text)));
-      candidate = tidied.text;
-      let reviewed = false;
-      const reviewCandidate = async () => {
-        reviewed = true;
-        this.stats.modelCalls += 1;
-        const source = redactSecrets(rawText);
-        const review = await completeOpenAI({route:custom,system:CLEANUP_REVIEW_PROMPT,
-          user:JSON.stringify({source,candidate:redactSecrets(candidate),explanation:safeNotes,mode:strength,fieldContext:context.fieldContext}),
-          maxTokens:1200,temperature:0,timeoutMs:Math.min(60000,Math.max(15000,Array.from(rawText).length*10)),signal:task.signal,retryBudget:task,
-          ...(this.fetchImpl?{fetchImpl:this.fetchImpl}:{})});
-        return parseCleanupReview(review.text,source,redactSecrets(candidate));
-      };
-      let verdict = validateOutput({ rawText, output: candidate, strength, termEvidence: context.dictionary });
-      if (!verdict.ok && verdict.reason === "entity-changed") {
-        // A current explanation can resolve a name, but it cannot waive other fact checks.
-        if (!hasTermExplanation(originalText) && !explanation.used) return this.retainSourceName(request, base, rawText, started, candidate);
-        const issues = await reviewCandidate();
-        if (issues === null || issues.length) return this.retainSourceName(request, base, rawText, started, candidate);
-        verdict = validateOutput({rawText,output:candidate,strength,termEvidence:context.dictionary,nameChangesReviewed:true,meaningReviewed:true});
-      }
-      if (!verdict.ok && ['output-too-short','invented-content'].includes(verdict.reason)) {
-        const issues = reviewed ? null : await reviewCandidate();
-        if (issues === null || issues.length) return this.recordFallback(request,{...base,text:candidate,uncertain:true,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
-        verdict = validateOutput({rawText,output:candidate,strength,termEvidence:context.dictionary,meaningReviewed:true});
-      }
-      // A changed language is retried once before anything is inserted.
-      if (!verdict.ok && verdict.reason === "language-changed" && !request._languageRetry) {
-        task.dispose();
-        return this.polish({ ...request, _languageRetry: true });
-      }
-      if (!verdict.ok) {
-        // Nothing waits on the user, and a cleaned result is always preferred over the transcript:
-        // whatever check it failed, it is inserted and marked uncertain. Only an empty answer
-        // falls back to the tidied transcript.
+      // Only fixed formatting follows the model: numbers, punctuation, a wrapper a chatty model may
+      // add. The cleaned text is inserted as the model wrote it; nothing judges or replaces it.
+      const tidied = tidy(normalizeNumbers(restoreApproximateNumbers(rawText, unwrap(parsed.text).text)));
+      candidate = tidied.text.trim();
+      if (!candidate) {
         const tidyOnly = tidy(rawText);
-        const unusable = !candidate?.trim();
-        return await this.recordFallback(request, {
-          ...base,
-          text: unusable ? tidyOnly.text : candidate,
-          ...(unusable ? {} : { uncertain: true }),
-          fallback: true,
-          reason: verdict.reason,
-          detail: describeVerdict(verdict.metrics),
-          ms: timing(started, 0),
-          metrics: verdict.metrics,
-          attempts: result.attempts,
-          postprocess: tidyOnly.applied,
-        });
-      }
-      candidate = verdict.text;
-      this.setProgress(request.requestId,{stage:'checking',completed:0,total:1});
-      if (!reviewed && needsCleanupReview(rawText, candidate, verdict.metrics)) {
-        const issues = await reviewCandidate();
-        if(issues===null||issues.length) return this.recordFallback(request,{...base,text:candidate,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
+        return await this.recordFallback(request, { ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",
+          ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
       }
       task.assertTime();
       return await this.recordAndReturn(request, {
         ...base,
-        text: verdict.text,
+        text: candidate,
         ms: timing(started, 0),
-        metrics: verdict.metrics,
         usage: result.usage,
         attempts: result.attempts,
         postprocess: tidied.applied,
@@ -403,11 +350,11 @@ export class VoicePolishService {
         user:this.config.redactSecrets === false ? cleanedSource : redactSecrets(cleanedSource),
         ...parameters,temperature:0.2,signal:task.signal,retryBudget:task,
         ...(this.fetchImpl ? {fetchImpl:this.fetchImpl} : {})});
-      const verdict = validateOutput({rawText:cleanedSource,output:String(result.text ?? '').trim(),strength:'translate'});
+      const translated = unwrap(String(result.text ?? '')).text.trim();
       task.assertTime();
-      // A translation that failed only the number check is inserted and marked, like dictation.
-      if (!verdict.ok) return this.recordFallback(request,{...base,text:String(result.text ?? ''),uncertain:true,translated:target,fallback:true,reason:verdict.reason,ms:timing(started,0)});
-      return this.recordAndReturn(request,{...base,text:verdict.text,translated:target,ms:timing(started,0),attempts:result.attempts});
+      // An empty translation leaves the cleaned source; anything else is inserted as written.
+      if (!translated) return this.recordFallback(request,{...base,text:cleanedSource,fallback:true,reason:'empty-output',ms:timing(started,0)});
+      return this.recordAndReturn(request,{...base,text:translated,translated:target,ms:timing(started,0),attempts:result.attempts});
     } catch (error) {
       const reason = request.signal?.aborted ? 'cancelled' : task.deadline.timedOut() ? 'model-timeout' : failureReason(error);
       return this.recordFallback(request,{...base,text:cleanedSource ?? rawText,fallback:true,reason,ms:timing(started,0),translated:target});
@@ -475,13 +422,10 @@ export class VoicePolishService {
         questions: session.questions, skipped: true };
       const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), cleanupParameters(source,'prompt',this.config).maxTokens));
       if (!draft) throw Object.assign(new Error('empty draft'), { code: 'output-format' });
-      const final = draft;
-      const verdict = validateOutput({ rawText: source, output: final, strength: 'promptbeta' });
-      if (!verdict.ok) throw Object.assign(new Error('fact check failed'), { code: 'beta-validation' });
       if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
       request.signal?.throwIfAborted();
-      const result = await this.recordAndReturn(request, { ...base, raw: source, text: verdict.text,
-        ms: timing(started, 0), metrics: verdict.metrics, beta: { reviewed: false, issues: 0, patched: false } });
+      const result = await this.recordAndReturn(request, { ...base, raw: source, text: unwrap(draft).text.trim(),
+        ms: timing(started, 0), beta: { reviewed: false, issues: 0, patched: false } });
       this.betaSessions.delete(id);
       return result;
     } catch (error) {
@@ -727,20 +671,6 @@ function timing(started, transcribeMs) {
   return { transcribe: Math.round(transcribeMs), polish, total: Math.round(transcribeMs) + polish };
 }
 
-/**
- * Summarise why the validator rejected an answer, using only measurements:
- * the invented tokens themselves are dictated content and stay out of it.
- * @param {object} metrics - validateOutput() metrics.
- * @returns {string|null} e.g. "ratio=1.42 coverage=0.61 novelty=0.52 inventedFacts=2".
- */
-function describeVerdict(metrics) {
-  const parts = [];
-  for (const [label, value] of [["ratio", metrics?.ratio], ["coverage", metrics?.coverage], ["novelty", metrics?.preciseNovelty]]) {
-    if (typeof value === "number" && Number.isFinite(value)) parts.push(`${label}=${value.toFixed(2)}`);
-  }
-  if (Array.isArray(metrics?.inventedFacts) && metrics.inventedFacts.length > 0) parts.push(`inventedFacts=${metrics.inventedFacts.length}`);
-  return parts.length > 0 ? parts.join(" ") : null;
-}
 
 /** Longest dictionary a request may carry, and longest entry. */
 export const DICTIONARY_LIMITS = { entries: 2000, entryLength: 120 };

@@ -16,9 +16,3 @@ export function cleanupParameters(text,strength,config={}) {
   const estimated=Math.ceil(cjk*1.5+(chars.length-cjk)/3);
   return {maxTokens:Math.min(8192,Math.max(1800,Math.ceil(estimated*1.5+256))),temperature:0.3,timeoutMs:Math.min(config.timeoutMs??300000,300000,Math.max(30000,chars.length*40))};
 }
-export function needsCleanupReview(raw,output,metrics={}) {
-  const source=Array.from(raw).length;
-  const meaningful=s=>(String(s).match(/[\p{L}\p{N}]/gu)??[]).length;
-  const constraints=/(?:不要|不能|不得|除非|只有|不超过|\b(?:must not|unless|only if|do not)\b)/iu;
-  return source>=600||(meaningful(raw)>=80&&constraints.test(raw)&&!constraints.test(output))||(meaningful(raw)>=80&&meaningful(output)/meaningful(raw)<0.35)||metrics.suspectedOmission===true;
-}

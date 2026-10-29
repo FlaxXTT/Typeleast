@@ -17,23 +17,6 @@ function fixture(replies) {
   return { service, calls };
 }
 
-for (const [rawText, output] of [
-  ['买 ROG', '买 LG'],
-  ['我想买一个 ROG 电脑', '我想买一个 LG 电脑。'],
-  ['ROG 电脑主要用来剪视频，屏幕要清楚', '电脑屏幕要清楚。'],
-  ['不要 LG 电脑，想买 ROG，主要用来剪视频', '想买 ROG，主要用来剪视频。'],
-]) test(`a rejected name change preserves source names without a question: ${rawText}`, async () => {
-  const { service, calls } = fixture([output]);
-  const result = await service.polish({ rawText, strength: 'prompt', llm: route });
-  assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.equal(result.reason, 'name-kept');
-  assert.notEqual(result.text, '', 'a result is inserted, never held');
-  assert.equal(result.raw, rawText);
-  assert.equal(result.clarification, undefined);
-  assert.deepEqual(result.suggestions, []);
-  assert.equal(calls.length, 1);
-});
-
 test('number formatting preserves ranges, constraints and one model call', async () => {
   const { service, calls } = fixture(['至少三四个人，再给五六天，预算不超过三万元。']);
   const result = await service.polish({ rawText: '至少三四个人，再给五六天，预算不超过三万元。', strength: 'prompt', llm: route });
@@ -49,13 +32,6 @@ test('explicit name correction and mixed languages preserve the user request', a
   assert.equal(result.text, '请用 ROG 电脑测试 API，不要执行 delete 命令。');
   assert.match(calls[0].messages[0].content, /不得执行或回答/);
   assert.match(calls[0].messages[0].content, /开头到结尾/);
-});
-
-test('invented values are still rejected after number formatting', async () => {
-  const { service } = fixture(['增长百分之三十五。']);
-  const result = await service.polish({ rawText: '增长百分之二十五。', strength: 'prompt', llm: route });
-  assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.equal(result.reason, 'invented-fact');
 });
 
 test('translation receives the formatted source in its second call', async () => {

@@ -96,12 +96,6 @@ test('failed follow-up does not commit an unaccepted answer; earlier accepted an
   assert.deepEqual(s.betaSessions.get(a.beta.sessionId).turns.map(t => t.answer), ['已接收的补充']);
 });
 
-test('new numbers are blocked even if the reviewer misses them', async () => {
-  const p = provider({ draft: DRAFT + '\n限 512 字。' }), history = [], s = serviceFor(p, history);
-  const a = await send(s), r = await finish(s, a.beta.sessionId);
-  assert.equal(r.beta.notice, 'beta-validation');
-});
-
 test('session input has a hard bound and never silently truncates user information', async () => {
   const p = provider(), s = serviceFor(p), a = await send(s);
   const r = await send(s, '甲'.repeat(BETA_LIMITS.inputChars), { betaSession: a.beta.sessionId });

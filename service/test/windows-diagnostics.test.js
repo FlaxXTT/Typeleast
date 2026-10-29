@@ -8,7 +8,7 @@ const raw = "Send the report on Wednesday with the three documents.";
 const reply = (content, finish = "stop") => ({ ok: true, status: 200,
   json: async () => ({ choices: [{ message: { content }, finish_reason: finish }] }) });
 
-for (const scenario of ["timeout", "length", "format", "validation", "auth", "network"]) {
+for (const scenario of ["timeout", "length", "format", "auth", "network"]) {
   test(`successful ping does not prove dictation success: ${scenario}`, async () => {
     const budgets = [];
     const fetchImpl = async (_url, init) => {

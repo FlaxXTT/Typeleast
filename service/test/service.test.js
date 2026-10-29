@@ -63,18 +63,6 @@ function wavOfSilence(seconds = 0.2) {
   return buffer;
 }
 
-test('a phonetic name guess without current evidence is held and never learned', async () => {
-  const model = fakeModel('用 JSON 传输。');
-  const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
-  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), strength: 'prompt', llm: ROUTE });
-  assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.notEqual(result.text, '', 'a result is inserted, never held');
-  assert.ok(['name-kept', 'entity-changed'].includes(result.fallbackReason), result.fallbackReason);
-  assert.equal(result.uncertain, true, 'marked so the user can check it');
-  assert.deepEqual(result.suggestions, []);
-  assert.equal(model.calls.length, 1);
-});
-
 test('optional suggestion failure preserves dictation, does not retry or log user text', async () => {
   const model = fakeModel('用 JSON 传输。');
   const service = makeService({ model, recognizer: fakeRecognizer('用 JSON 传输') });
@@ -120,23 +108,6 @@ test("a clean transcript is polished with the user's own route", async () => {
   assert.equal(model.calls[0].body.model, "chat-model");
   assert.equal(service.snapshot().provider, "custom:api.example.com", "/health names the last route, never the key");
   assert.ok(!JSON.stringify(service.snapshot()).includes(ROUTE.apiKey));
-});
-
-test("legacy cleanup selections send only the owner's prompt and cannot restore the removed prompt", async () => {
-  assert.deepEqual(readdirSync(new URL("../lib/prompts/", import.meta.url)).sort(),
-    ["cleanup-review.js", "cleanup.js", "concise.js", "prompt-beta.js", "translate.js"], "only the project's own prompts ship");
-  for (const strength of ["prompt", "conservative", "maximal"]) {
-    const model = fakeModel("我们周三开会。");
-    const service = makeService({ model, config: { strength, promptSource: "legacy-article" } });
-    const result = await service.polish({ rawText: "我们周三开会。", strength, llm: ROUTE });
-    assert.equal(result.fallback, false, strength);
-    assert.equal(model.calls.length, 1, strength);
-    assert.deepEqual(model.calls[0].body.messages, [
-      { role: "system", content: CLEANUP_PROMPT + UTTERANCE_RULES },
-      { role: "user", content: "我们周三开会。" },
-    ], strength);
-    assert.equal(service.snapshot().promptSource, "typeleast");
-  }
 });
 
 test("without an API key the tidied transcript is held and nothing is called", async () => {
@@ -264,32 +235,6 @@ test("a caller that goes away is reported as cancelled", async () => {
   const result = await service.polish({ rawText: RAW, strength: "prompt", signal: controller.signal, llm: ROUTE });
   assert.ok(result.fallback || result.uncertain, 'not a clean pass');
   assert.equal(result.reason, "cancelled");
-});
-
-test("an answer that invents content is held for editing and never inserted", async () => {
-  const service = makeService({ model: fakeModel("We should send the report on Tuesday, then follow up in 3 days.") });
-  const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
-  assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.equal(result.reason, "invented-fact");
-  assert.equal(result.text, "We should send the report on Tuesday, then follow up in 3 days.");
-  // The detail carries measurements only, never the invented tokens themselves.
-  assert.match(result.detail, /inventedFacts=1/);
-  assert.ok(!result.detail.includes("3 days"));
-  assert.notEqual(result.text, '', 'a result is inserted, never held');
-  assert.equal(result.clarification, undefined);
-});
-
-test("a rejected answer retains the candidate and original for manual correction", async () => {
-  const raw = "呃，我们周三把报告发出去吧。";
-  const service = makeService({ model: fakeModel("我们周三把报告发出去，然后3天后跟进。") });
-  const result = await service.polish({ rawText: raw, strength: "prompt", llm: ROUTE });
-  assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.equal(result.reason, "invented-fact");
-  assert.equal(result.raw, raw);
-  assert.equal(result.text, "我们周三把报告发出去，然后3天后跟进。");
-  assert.deepEqual(result.postprocess, ["strip-particles"]);
-  assert.notEqual(result.text, '', 'a result is inserted, never held');
-  assert.equal(result.clarification, undefined);
 });
 
 test("recent fallbacks are kept for /health, newest first and capped at five", async () => {

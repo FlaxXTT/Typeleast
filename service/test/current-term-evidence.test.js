@@ -8,18 +8,3 @@ function fixture(replies) {
   calls.push(JSON.parse(init.body));return {ok:true,status:200,json:async()=>({choices:[{message:{content:replies.shift()},finish_reason:'stop'}]})};
  }})};
 }
-test('a current free-form term explanation can resolve an ASR name through one bounded review',async()=>{
- const f=fixture(['{"status":"ok","text":"我想买 ROG 电脑。"}','{"issues":[]}']);
- const r=await f.service.polish({rawText:'我想买 LG 电脑，我说的这个词指的是玩家国度那个品牌。',strength:'concise',llm:route});
- assert.equal(r.text,'我想买 ROG 电脑。');assert.equal(r.fallback,false);assert.equal(r.clarification,undefined);assert.equal(f.calls.length,2);
-});
-test('a category alone never authorizes replacing a valid name',async()=>{
- const f=fixture(['{"status":"ok","text":"我想买 ROG 电脑。"}']);
- const r=await f.service.polish({rawText:'我想买 LG 电脑。',strength:'concise',llm:route});
- assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.reason,'name-kept');assert.equal(r.clarification, undefined);assert.equal(f.calls.length,1);
-});
-test('reviewing a name cannot waive number and condition checks',async()=>{
- const f=fixture(['{"status":"ok","text":"我想买 ROG 电脑，预算 20000 元。"}','{"issues":[]}']);
- const r=await f.service.polish({rawText:'我想买 LG 电脑，我说的这个词指的是玩家国度。预算 10000 元。',strength:'concise',llm:route});
- assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.clarification, undefined);assert.equal(r.reason,'invented-fact');assert.equal(f.calls.length,2);
-});
