@@ -947,7 +947,7 @@ do {
     check("the token lives in the state folder", ServiceClient().tokenPath.hasSuffix("TypeLeast/api-token") || ProcessInfo.processInfo.environment["TYPELEAST_HOME"] != nil)
 }
 
-// MARK: 21. the cue sounds are a blunt 嘟嘟: low, soft, rising to start and falling to stop
+// MARK: 21. the cue sounds are a soft 登登: low, quiet, rising to start and falling to stop
 do {
     func samples(_ pcm: Data) -> [Int16] { pcm.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) } }
     let rate = Int(StartChime.sampleRate)
@@ -959,13 +959,13 @@ do {
         return Int(Double(crossings) / 2 / (to - from))
     }
     let start = samples(StartChime.pcm()), stop = samples(StartChime.stopPCM())
-    check("the cues last about a quarter of a second", start.count == Int(Double(rate) * 0.26) && stop.count == start.count)
+    check("the cues last under half a second", start.count == Int(Double(rate) * 0.46) && stop.count == start.count)
     let peak = start.map { abs(Int($0)) }.max() ?? 0
-    check("the cues are audible but quiet", peak > 4000 && peak < Int(Int16.max) / 3)
-    let low = pitch(start, from: 0.02, to: 0.08), high = pitch(start, from: 0.13, to: 0.19)
+    check("the cues are audible but quiet", peak > 3000 && peak < Int(Int16.max) / 4)
+    let low = pitch(start, from: 0.02, to: 0.08), high = pitch(start, from: 0.20, to: 0.28)
     check("the start cue rises", high > low)
     check("…and stays low, not shrill", low > 300 && high < 600)
-    check("the stop cue falls", pitch(stop, from: 0.02, to: 0.08) > pitch(stop, from: 0.13, to: 0.19))
+    check("the stop cue falls", pitch(stop, from: 0.02, to: 0.08) > pitch(stop, from: 0.20, to: 0.28))
     let tail = start.suffix(rate / 100).map { abs(Int($0)) }.max() ?? 0
     check("the cues have died away by the end", tail < peak / 20)
     check("the cue is a valid WAV", Wav.parse(Wav.wrap(pcm: StartChime.pcm(), sampleRate: StartChime.sampleRate)) != nil)
