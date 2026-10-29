@@ -170,7 +170,7 @@ internal sealed class SettingsPage : IPage
         var fetch = Theme.Secondary(L10n.T("获取列表"), () => _ = FetchModels());
         var test = Theme.Primary(L10n.T("测试连接"), () => _ = Test());
 
-        var modelSection = Section(L10n.T("整理模型"),
+        var modelSection = ModelCard = Section(L10n.T("整理模型"),
             Theme.SettingRow(L10n.T("服务商"), null, preset),
             Theme.SettingRow(L10n.T("接口地址"), Theme.Text(L10n.T("需要 https（本机可用 http://127.0.0.1）"), 12, Theme.Grey), baseUrl),
             Theme.SettingRow("API Key", keyStatus, Theme.Row(8, key, saveKey)),
@@ -281,6 +281,17 @@ internal sealed class SettingsPage : IPage
     private readonly StackPanel tabContent = new();
     private readonly System.Collections.Generic.List<(Button Button, UIElement[] Cards)> tabs = new();
     private static int lastTab;
+
+    /// <summary>The cleanup model card (服务商, 接口地址, API Key, 模型, 测试). The onboarding shows its own
+    /// page's card, so what is typed there is the same setting.</summary>
+    public Border ModelCard { get; }
+
+    /// <summary>The model card alone, out of its tab, for the onboarding.</summary>
+    public UIElement DetachModelCard()
+    {
+        if (ModelCard.Parent is Panel parent) parent.Children.Remove(ModelCard);
+        return ModelCard;
+    }
 
     private void AddTab(string title, params UIElement[] cards)
     {

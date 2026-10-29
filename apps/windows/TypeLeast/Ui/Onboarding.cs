@@ -16,6 +16,7 @@ internal sealed class Onboarding : Window
     private int step;
     private bool finishing;
     private string shownOutput="";
+    private SettingsPage? modelSettings;
     private readonly string[] titles={"欢迎使用 TypeLeast","准备本地服务和模型","麦克风与权限","Windows 快捷键","麦克风测试","试说一句","说中文，写成其他语言","提示词模式","设置位置","准备完成"};
     public bool PracticeActive => IsVisible&&(step==5||step==6);
     public bool PracticeBusy => practice.Busy;
@@ -34,7 +35,8 @@ internal sealed class Onboarding : Window
     private void OnClosing(object? sender,CancelEventArgs e) {if(!finishing&&!host.QuittingForSetup){finishing=true;host.CompleteOnboarding(true);}}
     public void HandleShortcut(){if(PracticeActive)practice.Toggle();else Activate();}
     public void CancelPractice()=>practice.Cancel();
-    private void Refresh(){if(!practice.Busy && step==1)Render();}
+    /// <summary>Status changes refresh the model list only, so typing in the model card is never interrupted.</summary>
+    private void Refresh(){if(!practice.Busy && step==1)speechModels.Refresh();}
     private void PracticeChanged()
     {
         if(shownOutput!=practice.Output)shownOutput=practice.Output;
@@ -58,7 +60,8 @@ internal sealed class Onboarding : Window
         };
         if(description.Length>0)content.Children.Add(Theme.Text(description,14,Theme.Grey));
         if(step==0)content.Children.Add(Theme.Card(Theme.Text(L10n.T("遇到简称或专名，可补充全称、含义或逐字拼写。听写会结合整段理解，删除只用于确认名称的解释。"),14)));
-        if(step==1){speechModels.Refresh();content.Children.Add(speechModels.View);content.Children.Add(Theme.Secondary(L10n.T("打开设置"),()=>host.ShowWindow(MainWindow.Page.Settings)));}
+        // The cleanup model is filled in right here: the card is the Settings page's own.
+        if(step==1){speechModels.Refresh();content.Children.Add(speechModels.View);modelSettings??=new SettingsPage(host);content.Children.Add(modelSettings.DetachModelCard());}
         if(step==2)content.Children.Add(Theme.Secondary(L10n.T("打开麦克风设置"),()=>Shell.Open("ms-settings:privacy-microphone")));
         if(step==4)content.Children.Add(Theme.Secondary(L10n.T("测试麦克风"),()=>MicrophoneTestPanel.Show(host)));
         practice.TranslateTo=step==6?host.Settings.TranslateTarget:null;
