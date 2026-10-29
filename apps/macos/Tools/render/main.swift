@@ -185,6 +185,13 @@ for (name, configure) in [
     snapshot(backdrop, size: backdrop.frame.size, name: name, dark: false)
 }
 
+// The onboarding practice step, idle.
+do {
+    let view = NSHostingView(rootView: OnboardingPracticeView(practice: OnboardingPracticeController()).environmentObject(model)
+        .frame(width: 440).padding(30).background(Theme.window))
+    snapshot(view, size: view.fittingSize, name: "onboarding-practice", dark: false)
+}
+
 // The undo toast after a cancelled recording.
 do {
     let toast = NSHostingView(rootView: LearnedToastView(message: L10n.text("转录已取消"), undo: {}).padding(12))

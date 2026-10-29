@@ -16,12 +16,14 @@ func contextPreferencesTests() {
     var progress = PracticeProgress()
     var response = DictateResponse()
     response.raw = "周三，不对，周四，不超过三页"; response.text = "周四，不超过 3 页。"
-    check("tutorial rejects response without real model evidence", !progress.accept(response, seconds: 2))
-    response.model = "fictional-model"; response.ms = MSBreakdown(transcribe: 10, polish: 20, total: 30)
+    checkEq("a short recording is asked again", progress.accept(response, seconds: 0.3), .tooShort)
     response.fallback = true
-    check("fallback cannot pass tutorial", !progress.accept(response, seconds: 2) && !progress.complete)
+    checkEq("a failed cleanup does not pass", progress.accept(response, seconds: 2), .notCleaned)
+    check("…and the practice stays open", !progress.complete)
     response.fallback = false
-    check("tutorial accepts completed recognition and cleanup", progress.accept(response, seconds: 2) && progress.complete)
+    response.text = "周四交，不超过三页。"
+    checkEq("any recognised and cleaned sentence passes, Chinese numerals included", progress.accept(response, seconds: 2), .passed)
+    check("…and the practice is complete", progress.complete)
     response.contextOnly = true
     checkEq("explanation-only response cannot be inserted", response.insertableText, "")
 

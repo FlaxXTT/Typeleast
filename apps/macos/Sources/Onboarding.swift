@@ -42,10 +42,13 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     private var finishing = false
     private func finish() {
-        guard !model.settings.needsPractice || practice.complete else { return }
         finishing = true; window?.close(); onFinish?(); finishing = false
     }
-    func windowShouldClose(_ sender: NSWindow) -> Bool { finishing || !model.settings.needsPractice }
+    /// Closing the window is the same as 跳过引导.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if !finishing { onFinish?() }
+        return true
+    }
 
     func windowWillClose(_ notification: Notification) {
         practice.acceptsShortcut = false
@@ -196,39 +199,40 @@ struct OnboardingView: View {
             if step != .welcome {
                 Button(L10n.text("上一步")) { meter.stop(); if let previous = OnboardingStep(rawValue: step.rawValue - 1) { step = previous } }.buttonStyle(.plain).disabled(practice.busy)
             }
-            if !model.settings.needsPractice && step != .welcome && step != .done {
-                Button(L10n.text("跳过")) { advance() }.buttonStyle(.plain).foregroundColor(Theme.secondary)
-            }
-            if model.settings.needsPractice {
-                Button(L10n.text("退出应用")) { NSApp.terminate(nil) }.buttonStyle(.plain).foregroundColor(Theme.secondary)
-                Button(L10n.text("打开设置")) { model.actions?.openSetupSettings() }.buttonStyle(.plain)
-            }
             Spacer()
+            // Every step can be skipped, and so can the whole guide.
+            if step != .done {
+                Button(L10n.text("跳过引导")) { practice.cancel(); meter.stop(); finish() }
+                    .buttonStyle(SecondaryButtonStyle()).disabled(practice.busy)
+                if step != .welcome {
+                    Button(L10n.text("跳过这步")) { skip() }.buttonStyle(SecondaryButtonStyle()).disabled(practice.busy)
+                }
+            }
             Button(step == .done ? L10n.text("开始使用") : (step == .welcome ? L10n.text("开始设置") : L10n.text("继续"))) {
                 if step == .done { finish() } else { advance() }
             }
             .buttonStyle(PrimaryButtonStyle())
             .keyboardShortcut(.defaultAction)
-            // 「已改好」 is what lets this step continue; 跳过 is still there.
             .disabled(!canContinue)
         }
     }
 
+    /// 继续 waits for what the step is about; 跳过这步 never does.
     private var canContinue: Bool {
         if practice.busy { return false }
-        if step == .globeKey && !globeConfirmed { return false }
-        guard model.settings.needsPractice else { return true }
         switch step {
-        case .localService: return model.serviceUp && model.speech?.ready == true && model.llmConfigured
-        case .microphone: return model.micStatus == .authorized
-        case .accessibility: return model.accessibilityTrusted
-        case .tryIt, .done: return practice.complete
+        case .globeKey: return globeConfirmed
+        case .tryIt: return practice.complete
         default: return true
         }
     }
 
     private func advance() {
         guard canContinue else { return }
+        skip()
+    }
+
+    private func skip() {
         meter.stop()
         if let next = OnboardingStep(rawValue: step.rawValue + 1) { step = next }
     }

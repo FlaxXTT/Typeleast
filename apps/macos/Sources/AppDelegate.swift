@@ -671,7 +671,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func finishOnboarding() {
-        guard !settings.needsPractice || onboarding.practice.complete else { return }
         settings.onboardingDone = true
         model.refreshPermissions()
         registerHotKeys()
