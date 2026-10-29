@@ -1,39 +1,19 @@
 import Foundation
 import AppKit
-import SwiftUI
 
 func personalizationPolicyTests() {
     let suite = "typeleast.tests.policy." + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite); KeychainStore.stub = [:]; HistorySeal.reset() }
     KeychainStore.stub = [:]; HistorySeal.reset()
-    let preferences = PreferenceExamples(defaults: defaults)
-    let path = ProcessInfo.processInfo.environment["TYPELEAST_DICTIONARY_CONTRACT"]!
-    let fixture = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
-    for item in fixture["vocabularyCases"] as! [[String: Any]] {
-        let word = LocalWord(id: item["id"] as! String, word: "Acme", heardAs: item["heard"] as? String, source: LocalWord.Source(rawValue: item["source"] as! String)!, addedAt: Date())
-        checkEq("shared reference authority: " + word.id, preferences.references(word), item["reference"] as! Bool)
-        checkEq("shared replacement authority: " + word.id, preferences.replaces(word), item["replacement"] as! Bool)
-    }
-    var rule = LocalWord(id: "fake-rule", word: "Acme", heardAs: "Acmee", source: .manual, addedAt: Date())
-    check("old manual mapping is not enabled", !preferences.replaces(rule))
-    preferences.setRule(rule, true)
-    check("explicit enable grants a rule", preferences.replaces(rule))
-    preferences.exclude("ＡＣＭＥ")
-    check("fullwidth exclusion pauses rule", !preferences.replaces(rule))
-    preferences.restore("ＡＣＭＥ")
-    check("restore preserves previous approval", preferences.replaces(rule))
-    rule.heardAs = "Another"
-    check("changed rule requires fresh approval", !preferences.replaces(rule))
-    let automatic = LocalWord(id: "fake-auto", word: "Acme", source: .auto, addedAt: Date())
-    check("old automatic terms remain disabled", !preferences.references(automatic))
-    preferences.setReference(automatic.id, true)
-    check("user may confirm old vocabulary", preferences.references(automatic))
-    preferences.exclude("Acme")
-    check("global exclusion pauses personal term", !preferences.references(automatic))
-    let reload = PreferenceExamples(defaults: defaults)
-    check("encrypted overrides survive reload", reload.isExcluded("ACME") && reload.wordStates[automatic.id] == true)
-    let wire = reload.wirePolicy(words: [rule], disabled: true)
+    let settings = Settings(defaults: defaults)
+    settings.addWord("Acme", source: .manual)
+    settings.addWord("Kubernetes", heardAs: "库伯内蒂斯", source: .manual)
+    let dictionary = DictionaryController(settings: settings, setHint: { _ in }, changed: {})
+    checkEq("every word goes with a dictation", Set(dictionary.serviceEntries), ["Acme", "库伯内蒂斯=Kubernetes"])
+    let rules = dictionary.policy()["rules"] as! [[String: Any]]
+    checkEq("a heard-as spelling is the only replacement rule", rules.map { $0["heard"] as! String }, ["库伯内蒂斯"])
+    let wire = dictionary.policy(disabled: true)
     let payload = ServiceClient.dictateBody(wav: Data([1,2]), dictionary: ["Acme"], personalization: wire)
     let metadata = try! JSONSerialization.jsonObject(with: payload.body.prefix(payload.dictionaryBytes)) as! [Any]
     checkEq("one policy block travels in local metadata", metadata.compactMap { $0 as? [String:Any] }.filter { $0["personalization"] != nil }.count, 1)
@@ -41,18 +21,6 @@ func personalizationPolicyTests() {
     check("large personalization cannot break audio delivery", large.dictionaryBytes < 256 * 1024 && large.body.suffix(2) == Data([1,2]))
     let small = try! JSONSerialization.jsonObject(with: large.body.prefix(large.dictionaryBytes)) as! [[String:Any]]
     checkEq("oversized metadata safely disables personalization", (small[0]["personalization"] as? [String:Any])?["disabled"] as? Bool, true)
-    var legacy = PreferenceExample(historyId: "legacy-fixture", raw: "请发报告", aiText: "发送报告。", correctedText: "请发报告。")
-    legacy.confirmed = true
-    let key = HistorySeal.key(create: true)!
-    defaults.set(HistorySeal.seal(try! JSONEncoder().encode([legacy]), key: key)!, forKey: "voice.preferenceExamples.sealed.v1")
-    let upgraded = PreferenceExamples(defaults: defaults)
-    checkEq("legacy encrypted example array remains readable", upgraded.entries.count, 1)
-    upgraded.exclude("Acme")
-    check("legacy records survive saving the new archive", PreferenceExamples(defaults: defaults).entries.first?.historyId == legacy.historyId)
-    defaults.set(Data("broken fixture".utf8), forKey: "voice.preferenceExamples.sealed.v1")
-    let unavailable = PreferenceExamples(defaults: defaults)
-    unavailable.setRule(rule, true)
-    check("failed permission save cannot enable a rule", !unavailable.replaces(rule) && defaults.data(forKey: "voice.preferenceExamples.sealed.v1") == Data("broken fixture".utf8))
     let vocabularyDefaults = UserDefaults(suiteName: suite + ".vocabulary")!
     defer { vocabularyDefaults.removePersistentDomain(forName: suite + ".vocabulary") }
     let legacyWords = [LocalWord(id: "legacy-vocabulary", word: "PrivateFixtureTerm", source: .auto, addedAt: Date())]
@@ -64,53 +32,5 @@ func personalizationPolicyTests() {
     vocabularyDefaults.set(Data("unreadable fixture".utf8), forKey: VocabularyStorage.key)
     wordSettings.words = []
     check("unreadable vocabulary is not overwritten", wordSettings.vocabularyProblem != nil && vocabularyDefaults.data(forKey: VocabularyStorage.key) == Data("unreadable fixture".utf8))
-    defaults.set("background", forKey: "voice.explanationMarkers.v1")
-    let settings = Settings(defaults: defaults)
-    checkEq("old marker selection migrates to short form", settings.explanationMarkers, "note")
-    settings.explanationMarkers = ""
-    checkEq("marker opt-out is retained", Settings(defaults: defaults).explanationMarkers, "")
 }
 
-func renderPersonalizationFixtures(output: String) throws {
-    guard output.hasPrefix("/private/tmp/"), let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"], home.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
-    try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
-    let defaults = UserDefaults.standard
-    defaults.removeObject(forKey: "voice.preferenceExamples.sealed.v1")
-    let app = NSApplication.shared
-    let prefs = PreferenceExamples.shared
-    Settings.shared.explanationMarkers = "note"
-    for state in ["empty", "pending", "saved"] {
-        prefs.clearPending()
-        for item in prefs.entries { prefs.remove(item.id) }
-        if state != "empty" {
-            prefs.prepare(historyId: "fixture", raw: "请把报告发给产品团队", aiText: "请将报告发送给产品团队。")
-            if state == "saved", var item = prefs.pending.first {
-                item.correctedText = "请发给产品团队。"
-                _ = prefs.confirm(item)
-            }
-        }
-        for language in ["zh-Hans", "en"] {
-            L10n.language = language
-            for dark in [false, true] {
-                app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-                for width in [500, 720] {
-                    let model = AppModel()
-                    let view = NSHostingView(rootView: DictionaryPage().background(Theme.window).environmentObject(model).environment(\.colorScheme, dark ? .dark : .light))
-                    let size = NSSize(width: width, height: 640)
-                    let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
-                    window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-                    window.contentView = view; view.frame = NSRect(origin: .zero, size: size)
-                    window.layoutIfNeeded(); RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-                    guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw NSError(domain: "fixture-render", code: 1) }
-                    view.cacheDisplay(in: view.bounds, to: bitmap)
-                    guard let rendered = bitmap.representation(using: .png, properties: [:]) else { throw NSError(domain: "fixture-render", code: 2) }
-                    try rendered.write(to: URL(fileURLWithPath: output + "/preferences-\(state)-\(width)-\(language)-\(dark ? "dark" : "light").png"))
-                    window.orderOut(nil)
-                }
-            }
-        }
-    }
-    defaults.removeObject(forKey: "voice.preferenceExamples.sealed.v1")
-    defaults.removeObject(forKey: "voice.words.v2")
-    defaults.removeObject(forKey: VocabularyStorage.key)
-}

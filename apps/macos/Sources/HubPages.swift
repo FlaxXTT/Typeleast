@@ -454,7 +454,6 @@ struct HistoryRow: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if !compact { PersonalizationDetails(entry: entry) }
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
                     if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "需求助手" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
@@ -469,17 +468,8 @@ struct HistoryRow: View {
                     IconButton(symbol: "doc.on.doc", help: L10n.text("复制")) { copy(raw: false) }
                     if !compact {
                         IconButton(symbol: "text.quote", help: L10n.text("复制原话")) { copy(raw: true) }
-                        if !entry.raw.isEmpty, entry.strength != "promptbeta" {
-                            IconButton(symbol: "person.crop.circle.badge.xmark", help: L10n.text("仅本次关闭个性化重试，会再次调用整理模型，结果复制到剪贴板。")) { model.actions?.retryEntryWithoutPersonalization(id: entry.id) }
-                        }
                         if canRetry {
                             IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试")) { model.actions?.retryEntry(id: entry.id) }
-                        }
-                        if !entry.raw.isEmpty {
-                            IconButton(symbol: "text.badge.checkmark", help: L10n.text("记录修改为偏好示例")) {
-                                PreferenceExamples.shared.prepare(historyId: entry.id, raw: entry.raw, aiText: entry.displayText)
-                                model.page = .dictionary
-                            }
                         }
                         IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
                     }
@@ -528,7 +518,7 @@ struct ManualDictionaryPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("这里保留旧词汇与导入工具。旧自动词汇和替换默认停用，请在个人偏好中逐条确认启用。")) {
+            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("说过的名称写对。你改过的词会自动加入。")) {
                 HStack(spacing: 8) {
                     Button(L10n.text("导入 CSV")) { importCSV() }.buttonStyle(SecondaryButtonStyle())
                     Button {

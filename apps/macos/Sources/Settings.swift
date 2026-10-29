@@ -2,19 +2,6 @@ import Foundation
 
 // Settings.swift - UserDefaults-backed configuration for TypeLeast.
 
-enum InsertionMode: String, CaseIterable {
-    case autoPaste
-    case clipboardOnly
-    case preview
-    var label: String {
-        switch self {
-        case .autoPaste: return L10n.text("自动粘贴到光标处")
-        case .clipboardOnly: return L10n.text("仅复制")
-        case .preview: return L10n.text("预览（不粘贴）")
-        }
-    }
-}
-
 enum VoiceLanguage: String, CaseIterable {
     case auto, zh, en, yue, ja, ko
     var label: String {
@@ -56,16 +43,6 @@ enum ChineseVariant: String, CaseIterable {
         case .hans: return L10n.text("简体")
         case .tw: return L10n.text("繁体（台湾）")
         case .hk: return L10n.text("繁体（香港）")
-        }
-    }
-}
-
-enum EnglishVariant: String, CaseIterable {
-    case us, gb
-    var label: String {
-        switch self {
-        case .us: return L10n.text("美式")
-        case .gb: return L10n.text("英式")
         }
     }
 }
@@ -187,10 +164,6 @@ final class Settings {
             }
             defaults.set(!existing, forKey: "ui.practiceGate.v1")
         }
-        if !defaults.bool(forKey: "voice.shortMarkers.v1") {
-            if let selected = defaults.string(forKey: "voice.explanationMarkers.v1"), ["background","explanation","aside"].contains(selected) { defaults.set("note", forKey: "voice.explanationMarkers.v1") }
-            defaults.set(true, forKey: "voice.shortMarkers.v1")
-        }
         if !defaults.bool(forKey:"voice.unifiedDictation.v1") {
             defaults.set("prompt",forKey:"voice.strength")
             defaults.set(600,forKey:"voice.maxSeconds")
@@ -276,30 +249,12 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.zhVariant"); changed() }
     }
 
-    var enVariant: String {
-        get { (EnglishVariant(rawValue: d.string(forKey: "voice.enVariant") ?? "") ?? .us).rawValue }
-        set { d.set(newValue, forKey: "voice.enVariant"); changed() }
-    }
-
-    /// Sent with every request ("zh=tw,en=gb"); nil while both are the defaults.
-    var variantsHeader: String? {
-        zhVariant == ChineseVariant.hans.rawValue && enVariant == EnglishVariant.us.rawValue
-            ? nil : "zh=" + zhVariant + ",en=" + enVariant
-    }
+    /// Sent with every request ("zh=tw"); nil for simplified Chinese.
+    var variantsHeader: String? { zhVariant == ChineseVariant.hans.rawValue ? nil : "zh=" + zhVariant }
 
     var strength: String {
         get { VoiceStrength.stored(d.string(forKey: "voice.strength")).rawValue }
         set { d.set(newValue, forKey: "voice.strength"); changed() }
-    }
-
-    var insertionMode: String {
-        get { d.string(forKey: "voice.insertion") ?? InsertionMode.autoPaste.rawValue }
-        set { d.set(newValue, forKey: "voice.insertion"); changed() }
-    }
-
-    var restoreClipboard: Bool {
-        get { bool("voice.restoreClipboard", default: true) }
-        set { d.set(newValue, forKey: "voice.restoreClipboard"); changed() }
     }
 
     /// Read the text around the cursor at dictation start and send it as context.
@@ -318,12 +273,6 @@ final class Settings {
             if newValue { learnSuggestions() }
             changed()
         }
-    }
-
-    /// Paste numbered lists as real lists in rich-text apps (Notes, Mail, Pages, Word).
-    var richTextLists: Bool {
-        get { bool("voice.richLists", default: true) }
-        set { d.set(newValue, forKey: "voice.richLists"); changed() }
     }
 
     // MARK: audio
@@ -398,11 +347,6 @@ final class Settings {
     var guideDismissed: Bool {
         get { d.bool(forKey: "ui.guideDismissed.v1") }
         set { d.set(newValue, forKey: "ui.guideDismissed.v1"); changed() }
-    }
-
-    var explanationMarkers: String {
-        get { let value = d.string(forKey: "voice.explanationMarkers.v1") ?? ""; return ["note", "background", "explanation", "aside"].contains(value) ? value : "" }
-        set { d.set(["note", "background", "explanation", "aside"].contains(newValue) ? newValue : "", forKey: "voice.explanationMarkers.v1"); changed() }
     }
 
     var needsPractice: Bool { d.bool(forKey: "ui.practiceGate.v1") && !onboardingDone }

@@ -7,15 +7,14 @@ import Combine
 enum AppPhase { case idle, recording, thinking }
 
 enum HubPage: String, CaseIterable, Identifiable {
-    case home, history, dictionary, extensions, settings
+    case home, history, dictionary, settings
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: return L10n.text("首页")
         case .history: return L10n.text("历史")
-        case .dictionary: return L10n.text("个人偏好")
-        case .extensions: return L10n.text("扩展")
+        case .dictionary: return L10n.text("词典")
         case .settings: return L10n.text("设置")
         }
     }
@@ -25,7 +24,6 @@ enum HubPage: String, CaseIterable, Identifiable {
         case .home: return "house"
         case .history: return "clock.arrow.circlepath"
         case .dictionary: return "character.book.closed"
-        case .extensions: return "puzzlepiece.extension"
         case .settings: return "gearshape"
         }
     }
@@ -41,8 +39,6 @@ protocol AppActions: AnyObject {
     func pasteLast()
     func copyEntry(id: String, raw: Bool)
     func retryEntry(id: String)
-    func retryEntryWithoutPersonalization(id: String)
-    func undoEntryReplacement(id: String)
     func deleteEntry(id: String)
     func clearHistory()
     func requestAccessibility()
@@ -201,9 +197,4 @@ final class AppModel: ObservableObject {
         case .failed(let why): return why
         }
     }
-}
-
-extension AppActions {
-    func retryEntryWithoutPersonalization(id: String) {}
-    func undoEntryReplacement(id: String) {}
 }

@@ -63,7 +63,6 @@ struct HubRootView: View {
                 case .home: HomePage()
                 case .history: HistoryPage()
                 case .dictionary: DictionaryPage()
-                case .extensions: ExtensionsPage(plugins: model.plugins)
                 case .settings: SettingsPage()
                 }
             }
@@ -87,7 +86,7 @@ private struct Sidebar: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 22)
 
-            ForEach([HubPage.home, .history, .dictionary, .extensions]) { page in
+            ForEach([HubPage.home, .history, .dictionary]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)
             }
 
@@ -119,7 +118,6 @@ private struct SidebarItem: View {
                 Image(systemName: page.symbol)
                     .font(.system(size: 14, weight: selected ? .semibold : .regular))
                     .frame(width: 18)
-                if page == .dictionary { PersonalizationPendingBadge() }
                 Text(page.title).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
                 Spacer()
             }
@@ -218,19 +216,6 @@ struct SidebarModes: View {
                 Label(L10n.text("需求助手"), systemImage:"text.bubble")
                     .font(.system(size:13,weight:.medium)).padding(10)
             }.buttonStyle(.plain)
-            // A style plugin applies to 标准 and 精简 only.
-            if !plugins.styles.isEmpty {
-                Menu {
-                    Button(L10n.text("不用风格")) { plugins.selectStyle(nil) }
-                    ForEach(plugins.styles) { style in Button(style.title) { plugins.selectStyle(style.id) } }
-                } label: {
-                    Text(L10n.text("风格：") + (plugins.selectedStyle?.title ?? L10n.text("无")))
-                        .font(.system(size: 12)).foregroundColor(Theme.secondary).lineLimit(1)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .padding(.leading, 39).padding(.top, 2)
-            }
         }
         .disabled(model.phase != .idle)
         .help(model.phase == .idle ? "" : L10n.text("说完再切换"))

@@ -4,8 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { CATALOG_MIRRORS, CATALOG_URLS, PLUGIN_LIMITS, PluginStore, catalogSources, compareVersions, fetchCatalog, parsePlugin, pluginDigest, validatePlugin } from '../lib/plugins.js';
-import { STYLE_MARKER, systemPromptFor } from '../lib/prompt.js';
+import { PLUGIN_LIMITS, PluginStore, compareVersions, parsePlugin, validatePlugin } from '../lib/plugins.js';
 import { VoicePolishService } from '../lib/service.js';
 import { PluginRuntime } from '../lib/plugin-runtime.js';
 import { createHandler, ROUTE_PREFIX } from '../lib/http.js';
@@ -76,27 +75,22 @@ test('the store installs, switches and removes plugins with whole-file writes', 
   const { dir, store } = await tempStore();
   try {
     await store.install(validatePlugin(PACK).plugin, { enable: true, source: 'catalog' });
-    await store.install(validatePlugin(STYLE).plugin, { enable: false });
+    await store.install(validatePlugin(STYLE).plugin, { enable: true });
     assert.deepEqual(store.activeTerms(), ['Kubernetes', 'TypeScript', 'GitHub']);
-    assert.equal(store.activeStyle(), null);
-    await store.selectStyle('example.formal');
-    assert.equal(store.activeStyle().id, 'example.formal');
     await store.setEnabled('example.dev-terms', false);
     assert.deepEqual(store.activeTerms(), []);
     const files = (await readdir(join(dir, 'plugins'))).sort();
     assert.deepEqual(files, ['example.dev-terms.typeleast-plugin', 'example.formal.typeleast-plugin', 'state.json']);
-    // A new start reads the same switches back.
+    // A new start reads the same switches back; a style from an older version is never on.
     const again = new PluginStore(join(dir, 'plugins'));
     await again.load();
-    assert.deepEqual(again.list().map((p) => [p.id, p.enabled, p.source]), [['example.dev-terms', false, 'catalog'], ['example.formal', true, 'file']]);
+    assert.deepEqual(again.list().map((p) => [p.id, p.enabled, p.source]), [['example.dev-terms', false, 'catalog'], ['example.formal', false, 'file']]);
     // An update keeps the switch as it was.
     await again.setEnabled('example.dev-terms', true);
     await again.install(validatePlugin({ ...PACK, version: '1.1.0', terms: ['Kubernetes'] }).plugin);
     assert.deepEqual(again.activeTerms(), ['Kubernetes']);
     await again.remove('example.formal');
-    assert.equal(again.activeStyle(), null);
     await assert.rejects(again.remove('example.formal'), { code: 'plugin-not-found' });
-    await assert.rejects(again.selectStyle('example.dev-terms'), { code: 'plugin-not-found' });
     // A damaged file is reported and left off, never loaded.
     await writeFile(join(dir, 'plugins', 'example.bad.typeleast-plugin'), '{"format":"typeleast-plugin"}');
     await again.load();
@@ -150,7 +144,7 @@ test('enabled pronunciation hints have a total budget', async () => {
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('a selected style rides in the one model call; packs add only the terms a dictation mentions', async () => {
+test('an old style is never applied; packs add only the terms a dictation mentions', async () => {
   const { dir, store } = await tempStore();
   try {
     await store.install(validatePlugin(PACK).plugin, { enable: true });
@@ -165,107 +159,26 @@ test('a selected style rides in the one model call; packs add only the terms a d
     assert.equal(calls.length, 2, 'no extra model call');
     for (const call of calls) {
       const system = call.messages[0].content;
-      assert.ok(system.includes(STYLE_MARKER) && system.includes(STYLE.instructions));
-      assert.ok(system.indexOf(STYLE_MARKER) < system.indexOf('=== HARNESS ADDENDUM'), 'style before the addendum');
+      assert.ok(!system.includes(STYLE.instructions), 'no style instructions');
       assert.equal((system.match(/^Entries: (.*)$/m) ?? [])[1], 'Kubernetes', 'only the mentioned pack term');
     }
     await service.polish({ rawText: '部署到酷伯内特斯', strength: 'off', llm: ROUTE });
     await service.polish({ rawText: '部署到酷伯内特斯', translateTo: 'en', llm: ROUTE });
     assert.equal(calls.length, 5, 'retired off mode cleans, translation uses two calls');
-    assert.ok(!calls[3].messages[0].content.includes(STYLE_MARKER), 'translation source cleanup takes no selected style');
     assert.equal((calls[3].messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1], 'Kubernetes', 'source cleanup keeps pack terms');
     assert.ok(!calls[4].messages[0].content.includes('=== HARNESS ADDENDUM'), 'translation sees only the cleaned source');
     // The user's own spelling wins over a pack's.
     await service.polish({ rawText: '部署到酷伯内特斯', strength: 'prompt', llm: ROUTE, dictionary: ['kubernetes'] });
     assert.equal((calls[5].messages[0].content.match(/^Entries: (.*)$/m) ?? [])[1], 'kubernetes');
-    assert.equal(systemPromptFor({ strength: 'prompt' }), systemPromptFor({ strength: 'prompt', style: '  ' }), 'no style, no block');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-function catalogResponse(body, { status = 200 } = {}) {
-  const text = typeof body === 'string' ? body : JSON.stringify(body);
-  return { ok: status === 200, status, headers: new Headers({ 'content-length': String(Buffer.byteLength(text)) }), body: Readable.toWeb(Readable.from([Buffer.from(text)])) };
-}
-
-test('the catalog is read from the official addresses first, once, without redirects', async () => {
-  const seen = [];
-  const catalog = { format: 'typeleast-catalog', formatVersion: 1, generatedAt: '2026-10-24T00:00:00Z', plugins: [PACK, STYLE, { ...PACK, id: 'bad id' }] };
-  const result = await fetchCatalog({ fetchImpl: async (url, init) => { seen.push([url, init.redirect, Object.keys(init.headers).sort().join(',')]); return catalogResponse(catalog); } });
-  assert.deepEqual(seen, [[CATALOG_URLS[0], 'error', 'accept,user-agent']]);
-  assert.deepEqual(result.plugins.map((p) => p.id), ['example.dev-terms', 'example.formal']);
-  assert.equal(result.rejected, 1);
-  // The site down: the official GitHub copy is next; no mirror is contacted.
-  const tried = [];
-  const official = await fetchCatalog({ fetchImpl: async (url) => { tried.push(url); if (tried.length === 1) throw new Error('down'); return catalogResponse(catalog); } });
-  assert.deepEqual(tried, CATALOG_URLS);
-  assert.equal(official.mirrored, false);
-  await assert.rejects(fetchCatalog({ fetchImpl: async () => catalogResponse('x', { status: 503 }) }), { code: 'market-offline' });
-  await assert.rejects(fetchCatalog({ fetchImpl: async () => catalogResponse({ format: 'other' }) }), { code: 'market-protocol-unsupported' });
-  await assert.rejects(fetchCatalog({ fetchImpl: async () => catalogResponse('x'.repeat(PLUGIN_LIMITS.catalogBytes + 1)) }), { code: 'market-too-large' });
-});
-
-test('both official addresses blocked: the mirrors are tried in order and the result says so', async () => {
-  const catalog = { format: 'typeleast-catalog', formatVersion: 1, plugins: [PACK] };
-  const tried = [];
-  const result = await fetchCatalog({ fetchImpl: async (url) => { tried.push(url); if (CATALOG_URLS.includes(url)) throw new Error('blocked'); return catalogResponse(catalog); } });
-  assert.deepEqual(tried, [...CATALOG_URLS, CATALOG_MIRRORS[0]]);
-  assert.equal(result.mirrored, true);
-  assert.equal(result.source, 'fastly.jsdelivr.net');
-  assert.ok(CATALOG_MIRRORS.some((url) => url.startsWith('https://ghfast.top/https://raw.githubusercontent.com/')), 'the updater\'s GitHub proxies are mirrors too');
-  // 只用 GitHub: never a mirror. 优先镜像: mirrors first.
-  assert.deepEqual(catalogSources('github').map((s) => s.url), CATALOG_URLS);
-  assert.equal(catalogSources('mirror')[0].url, CATALOG_MIRRORS[0]);
-  const githubOnly = [];
-  await assert.rejects(fetchCatalog({ mode: 'github', fetchImpl: async (url) => { githubOnly.push(url); throw new Error('blocked'); } }), { code: 'market-offline' });
-  assert.deepEqual(githubOnly, CATALOG_URLS);
-});
-
-test('an address that hangs does not hold up the next one, and the rest are cancelled', async () => {
-  const catalog = { format: 'typeleast-catalog', formatVersion: 1, plugins: [PACK] };
-  const aborted = [];
-  const hang = (url, signal) => new Promise((_, reject) => signal.addEventListener('abort', () => { aborted.push(url); reject(new Error('aborted')); }));
-  const result = await fetchCatalog({ staggerMs: 20, fetchImpl: async (url, init) => url === CATALOG_MIRRORS[0] ? catalogResponse(catalog) : hang(url, init.signal) });
-  assert.equal(result.source, 'fastly.jsdelivr.net');
-  assert.deepEqual(aborted.sort(), [...CATALOG_URLS].sort(), 'the silent official addresses are cancelled once a mirror answers');
-  await assert.rejects(fetchCatalog({ timeoutMs: 60, staggerMs: 10, fetchImpl: async (url, init) => hang(url, init.signal) }), { code: 'market-offline' });
-});
-
-test('the market route follows the app\'s source setting and reports a mirrored catalog', async () => {
-  const { dir, store } = await tempStore();
-  try {
-    const TOKEN = 'b'.repeat(64);
-    const urls = [];
-    const service = new VoicePolishService({
-      recognizer: { snapshot: () => ({ ready: true }) }, config: { dictionary: [] },
-      extension: new PluginRuntime(store, { fetchImpl: async (url) => { urls.push(url); return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: [STYLE] }); } }),
-    });
-    const handler = createHandler({ service, currentToken: async () => TOKEN });
-    const call = async (path) => {
-      const req = Readable.from([]);
-      Object.assign(req, { url: ROUTE_PREFIX + path, method: 'GET', headers: { host: '127.0.0.1', authorization: `Bearer ${TOKEN}` } });
-      const res = { headersSent: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(b) { this.body = b; } };
-      await handler(req, res);
-      return { status: res.status, json: JSON.parse(res.body) };
-    };
-    const mirrored = await call('/plugins/catalog?sources=mirror');
-    assert.equal(mirrored.json.mirrored, true);
-    assert.equal(urls[0], CATALOG_MIRRORS[0]);
-    const official = await call('/plugins/catalog?sources=nonsense');
-    assert.equal(official.json.mirrored, false, 'an unknown setting reads as auto');
-    assert.equal(urls[1], CATALOG_URLS[0]);
-  } finally { await rm(dir, { recursive: true, force: true }); }
-});
-
-test('plugin routes: inspect, install, switch, market and remove need the token', async () => {
+test('plugin routes: list and switch need the token; nothing else is served', async () => {
   const { dir, store } = await tempStore();
   try {
     const TOKEN = 'a'.repeat(64);
-    let fetches = 0;
-    let published = [STYLE];
-    const service = new VoicePolishService({
-      recognizer: { snapshot: () => ({ ready: true }) }, config: { dictionary: [] },
-      extension: new PluginRuntime(store, { fetchImpl: async () => { fetches++; return catalogResponse({ format: 'typeleast-catalog', formatVersion: 1, plugins: published }); } }),
-    });
+    await store.install(validatePlugin(PACK).plugin, { enable: true });
+    const service = new VoicePolishService({ recognizer: { snapshot: () => ({ ready: true }) }, config: { dictionary: [] }, extension: new PluginRuntime(store) });
     const handler = createHandler({ service, currentToken: async () => TOKEN });
     async function call(method, path, body, authorization = `Bearer ${TOKEN}`) {
       const req = Readable.from(body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]);
@@ -275,39 +188,10 @@ test('plugin routes: inspect, install, switch, market and remove need the token'
       return { status: res.status, json: JSON.parse(res.body) };
     }
     assert.equal((await call('GET', '/plugins', undefined, 'Bearer wrong')).status, 401);
-    const inspected = await call('POST', '/plugins/inspect', PACK);
-    assert.equal(inspected.json.plugin.termCount, 3);
-    assert.equal(inspected.json.installedVersion, null);
-    assert.equal(store.list().length, 0, 'inspecting installs nothing');
-    assert.equal((await call('POST', '/plugins/inspect', { ...PACK, type: 'script' })).json.code, 'plugin-invalid');
-    assert.equal((await call('POST', '/plugins?enable=1', PACK)).status, 409, 'no install without the fingerprint of what was shown');
-    assert.equal((await call('POST', `/plugins?enable=1&digest=${inspected.json.plugin.digest}`, { ...PACK, terms: ['Other'] })).json.code, 'plugin-changed');
-    assert.equal(store.list().length, 0);
-    assert.equal((await call('POST', `/plugins?enable=1&digest=${inspected.json.plugin.digest}`, PACK)).json.plugins[0].enabled, true);
+    assert.equal((await call('GET', '/plugins')).json.plugins[0].enabled, true);
     assert.equal((await call('PUT', '/plugins/example.dev-terms', { enabled: false })).json.plugins[0].enabled, false);
-    assert.equal(fetches, 0, 'nothing reaches the network before the market opens');
-    const market = await call('GET', '/plugins/catalog');
-    assert.equal(fetches, 1);
-    assert.deepEqual(market.json.plugins.map((p) => [p.id, p.installedVersion]), [['example.formal', null]]);
-    const shown = market.json.plugins[0];
-    assert.equal(shown.digest, pluginDigest(validatePlugin(STYLE).plugin));
-    // The catalog changes after the confirmation was opened: the old confirmation installs nothing.
-    published = [{ ...STYLE, version: '2.0.0', instructions: '完全不同的说明。' }];
-    assert.equal((await call('GET', '/plugins/catalog')).json.plugins[0].version, '2.0.0');
-    const stale = await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true, digest: shown.digest });
-    assert.deepEqual([stale.status, stale.json.code], [409, 'plugin-changed']);
-    assert.ok(!store.list().some((p) => p.id === 'example.formal'), 'nothing installed from a stale confirmation');
-    assert.equal((await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true })).status, 409, 'a fingerprint is required');
-    published = [STYLE];
-    const current = (await call('GET', '/plugins/catalog')).json.plugins[0];
-    const installed = await call('POST', '/plugins/catalog/install', { id: 'example.formal', enable: true, digest: current.digest });
-    assert.equal(installed.json.style, 'example.formal');
-    assert.equal(installed.json.plugins.find((p) => p.id === 'example.formal').source, 'catalog');
-    assert.equal(installed.json.plugins.find((p) => p.id === 'example.formal').version, '1.2.0');
-    assert.equal((await call('POST', '/plugins/catalog/install', { id: 'example.missing' })).status, 404);
-    assert.equal((await call('PUT', '/plugins/style', { id: null })).json.style, null);
-    assert.equal((await call('DELETE', '/plugins/example.dev-terms')).json.plugins.length, 1);
-    assert.equal((await call('DELETE', '/plugins/example.dev-terms')).status, 404);
-    assert.equal(fetches, 3, 'one catalog read per opening or refresh, nothing else');
+    for (const [method, path] of [['POST', '/plugins/inspect'], ['POST', '/plugins'], ['GET', '/plugins/catalog'], ['PUT', '/plugins/style'], ['DELETE', '/plugins/example.dev-terms']]) {
+      assert.equal((await call(method, path, PACK)).status, 404, method + ' ' + path);
+    }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

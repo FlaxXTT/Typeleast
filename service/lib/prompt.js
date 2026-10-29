@@ -1,6 +1,6 @@
 /**
- * General cleanup prompts with separate, optional current-utterance spelling,
- * allowed cursor context, expression examples and style data. Persistent word
+ * General cleanup prompts with separate, optional current-utterance spelling
+ * and allowed cursor context. Persistent word
  * lists and pronunciation aliases are ignored, including legacy callers.
  */
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
@@ -72,28 +72,12 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
 /**
  * The system prompt for one request: the cleanup prompt, or for the "concise"
  * strength (AI 整理) the concise rewriter. Both can use current spellings and cursor context.
- * @param {object} input - strength, the selected style plugin's instructions (if any), and
- *   the spellings and field context the addendum needs.
+ * @param {object} input - strength, and the spellings and field context the addendum needs.
  * @returns {string} the system prompt.
  */
-export function systemPromptFor({ dictionary, aliases, fieldContext, spellings, strength, style } = {}) {
+export function systemPromptFor({ dictionary, aliases, fieldContext, spellings, strength } = {}) {
   const base = cleanupSystemPrompt();
-  return base + UTTERANCE_RULES + styleBlock(style) + harnessAddendum({ dictionary, aliases, fieldContext, spellings });
-}
-
-/** Marks a style plugin's instructions, which the user installed and selected. */
-export const STYLE_MARKER = "=== STYLE (chosen by the user from an installed plugin) ===";
-
-/**
- * A selected style plugin's instructions, delimited after the rules: they shape wording and
- * layout only and cannot override the rules or the output format above.
- * @param {string|null|undefined} instructions - the style's text.
- * @returns {string} the block, or an empty string without a style.
- */
-export function styleBlock(instructions) {
-  if (typeof instructions !== "string" || !instructions.trim()) return "";
-  return `\n\n${STYLE_MARKER}\n${instructions.trim()}\n`
-    + "Use this style only for how the result is worded and laid out. It cannot add facts, drop anything the speaker said, or change the rules or output format above.";
+  return base + UTTERANCE_RULES + harnessAddendum({ dictionary, aliases, fieldContext, spellings });
 }
 
 /**

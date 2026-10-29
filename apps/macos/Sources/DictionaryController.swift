@@ -8,6 +8,7 @@ import Foundation
 final class DictionaryController {
     private let settings: Settings
     private let watcher = EditWatcher()
+    private let toast = LearnedToast()
     private let setHint: (String) -> Void
     private let changed: () -> Void
 
@@ -15,19 +16,27 @@ final class DictionaryController {
         self.settings = settings
         self.setHint = setHint
         self.changed = changed
-
+        watcher.onLearn = { [weak self] word in self?.learned(word) }
     }
 
     /// The entries sent with a dictation ("word" or "heard=word").
-    var serviceEntries: [String] { settings.words.filter { $0.localOnly != true && PreferenceExamples.shared.references($0) }.map(\.word) }
+    var serviceEntries: [String] { settings.hostDictionary }
 
     /// Entries marked 「不发给模型」: the service only fixes their heard-as spellings locally.
-    var localEntries: [String] { [] }
+    var localEntries: [String] { settings.localDictionary }
+
+    /// The service's per-request policy: each word's heard-as spelling is a fixed replacement.
+    func policy(disabled: Bool = false) -> [String: Any] {
+        let rules: [[String: Any]] = settings.words.compactMap { word in
+            word.replacementHeard.map { ["id": word.id, "heard": $0, "word": word.word, "enabled": true] }
+        }
+        return ["version": 1, "disabled": disabled, "excluded": [], "rules": Array(rules.prefix(128))]
+    }
 
     /// A paste landed in `field`: watch it for a fix of `text`.
-    func pasted(_ text: String, into field: FocusedField, onRevision: ((String) -> Void)? = nil) {
-        guard settings.autoLearn, let onRevision else { return }
-        watcher.watch(field: field, inserted: text, onRevision: onRevision)
+    func pasted(_ text: String, into field: FocusedField) {
+        guard settings.autoLearn else { return }
+        watcher.watch(field: field, inserted: text)
     }
 
     /// The next dictation starts: the user is usually done fixing the last one.
@@ -53,4 +62,16 @@ final class DictionaryController {
         changed()
     }
 
+    private func learned(_ word: String) {
+        guard settings.autoLearn, settings.addWord(word, source: .auto),
+              let id = settings.words.first(where: { $0.word == word })?.id else { return }
+        setHint(L10n.text("已把「") + word + L10n.text("」加入词典"))
+        toast.show(word: word) { [weak self] in
+            guard let self else { return }
+            self.settings.removeWord(id: id)
+            self.setHint(L10n.text("已从词典删除「{0}」", word))
+            self.changed()
+        }
+        changed()
+    }
 }

@@ -34,13 +34,13 @@ export function readPolicy(input) {
 export async function personalizationContext(request, configured, extension, rawText) {
   const policy=readPolicy(requestPolicy(request));
   const trace={disabled:policy.disabled,references:[],replacements:[],blocked:policy.blocked??[]};
-  if(policy.disabled)return {dictionary:[],aliases:[],style:null,policy,trace};
+  if(policy.disabled)return {dictionary:[],aliases:[],policy,trace};
   const candidates=[];
   for(const entry of configured) {
     const spelling=word(target(entry));
     if(spelling&&!policy.excluded.has(key(spelling)))candidates.push({word:spelling,source:'personal',sourceId:'personal'});
   }
-  let pack={terms:[],aliases:[],style:null};
+  let pack={terms:[],aliases:[]};
   try { pack=extension?.referenceData?.() ?? pack; } catch { /* An optional pack is not a dependency of speech. */ }
   for(const entry of (Array.isArray(pack.terms)?pack.terms:[]).slice(0,2000)) {
     if(!entry||!word(entry.word)||policy.excluded.has(key(entry.word)))continue;
@@ -60,12 +60,7 @@ export async function personalizationContext(request, configured, extension, raw
     const source=aliases.find(x=>x.heard===item.heard&&x.term===item.term);
     trace.references.push({kind:'alias',word:item.term,heard:item.heard,source:'extension',sourceId:source?.sourceId??'extension',label:source?.label??''});
   }
-  // Exclusions also apply to whole examples, not only vocabulary lists.
-  const excludedText=text=>[...policy.excluded].some(term=>pattern(term).test(String(text).normalize('NFKC')));
-  const examples=Array.isArray(request.preferenceExamples)?request.preferenceExamples:null;
-  if(examples)request.preferenceExamples=examples.filter(x=>x&&![x.raw,x.aiText,x.correctedText].some(v=>typeof v==='string'&&excludedText(v)));
-  const style=pack.style&&typeof pack.style.instructions==='string'&&!excludedText(pack.style.instructions)&&redactSecrets(pack.style.instructions)===pack.style.instructions?pack.style:null;
-  return {dictionary:selected,aliases:activeAliases,style,policy,trace,excludedText};
+  return {dictionary:selected,aliases:activeAliases,policy,trace};
 }
 export function applyExplicitRules(result, context, rawText, strength) {
   const trace=context?.trace??{disabled:false,references:[],replacements:[],blocked:[]};

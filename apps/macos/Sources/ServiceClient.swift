@@ -884,38 +884,9 @@ final class ServiceClient {
 
     func pluginsSync() throws -> PluginState { try pluginRequest("GET", "", as: PluginState.self) }
 
-    /// Check a plugin file without installing it.
-    func inspectPluginSync(_ file: Data) throws -> PluginInspection {
-        try pluginRequest("POST", "/inspect", body: file, as: PluginInspection.self)
-    }
-
-    /// Install the file the confirmation showed; `digest` is its fingerprint from the inspection.
-    func installPluginSync(_ file: Data, enable: Bool, digest: String) throws -> PluginState {
-        try pluginRequest("POST", "?enable=" + (enable ? "1" : "0") + "&digest=" + digest, body: file, as: PluginState.self)
-    }
-
-    /// Install the catalog entry the confirmation showed; a changed entry is refused (plugin-changed).
-    func installCatalogPluginSync(id: String, enable: Bool, digest: String) throws -> PluginState {
-        let body = (try? JSONSerialization.data(withJSONObject: ["id": id, "enable": enable, "digest": digest])) ?? Data()
-        return try pluginRequest("POST", "/catalog/install", body: body, as: PluginState.self)
-    }
-
     func setPluginEnabledSync(id: String, enabled: Bool) throws -> PluginState {
         let body = (try? JSONSerialization.data(withJSONObject: ["enabled": enabled])) ?? Data()
         return try pluginRequest("PUT", "/" + id, body: body, as: PluginState.self)
-    }
-
-    func selectStyleSync(id: String?) throws -> PluginState {
-        let body = (try? JSONSerialization.data(withJSONObject: ["id": id as Any? ?? NSNull()])) ?? Data()
-        return try pluginRequest("PUT", "/style", body: body, as: PluginState.self)
-    }
-
-    func removePluginSync(id: String) throws -> PluginState { try pluginRequest("DELETE", "/" + id, as: PluginState.self) }
-
-    /// Read the catalog once: official addresses first, public mirrors as `sources` (the
-    /// 更新来源 setting: auto, github or mirror) allows.
-    func pluginCatalogSync(sources: String) throws -> PluginCatalog {
-        try pluginRequest("GET", "/catalog?sources=" + sources, timeout: 30, as: PluginCatalog.self)
     }
 
     /// The provider's model ids, from its OpenAI-compatible `GET /models`. Called
@@ -958,12 +929,9 @@ struct LLMTestResult: Codable, Equatable {
     var sample: String?
 }
 
-/// A plugin as the service describes it: installed (source, enabled), in the catalog
-/// (installedVersion) or being inspected before install.
+/// An installed plugin as the service describes it.
 struct PluginSummary: Codable, Equatable, Identifiable {
     var id: String
-    /// Fingerprint of the whole content; sent back when installing what was shown.
-    var digest: String? = nil
     var version: String
     var type: String
     var name: [String: String]
@@ -975,12 +943,9 @@ struct PluginSummary: Codable, Equatable, Identifiable {
     var termsPreview: [String]?
     var aliasCount: Int? = nil
     var aliasesPreview: [PluginAliasPreview]? = nil
-    var instructions: String?
     var source: String?
     var enabled: Bool?
-    var installedVersion: String?
 
-    var isStyle: Bool { type == "style" }
     var title: String { name[L10n.language == "en" ? "en" : "zh-Hans"] ?? id }
     var summary: String { description[L10n.language == "en" ? "en" : "zh-Hans"] ?? "" }
 }
@@ -997,23 +962,6 @@ struct PluginState: Codable, Equatable {
     var plugins: [PluginSummary]
     var style: String?
     var problems: [String]?
-}
-
-/// Answer of `GET /plugins/catalog`; on failure `plugins` is the last catalog read.
-struct PluginCatalog: Codable, Equatable {
-    var ok: Bool
-    var code: String?
-    var source: String?
-    /// Read through a public mirror rather than an official address.
-    var mirrored: Bool?
-    var fetchedAt: String?
-    var plugins: [PluginSummary]
-}
-
-/// Answer of `POST /plugins/inspect`.
-struct PluginInspection: Codable, Equatable {
-    var plugin: PluginSummary
-    var installedVersion: String?
 }
 
 /// Answer of `POST /learned-word`.

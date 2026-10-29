@@ -42,7 +42,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     private var finishing = false
     private func finish() {
-        guard !model.settings.needsPractice || (practice.complete && !model.settings.explanationMarkers.isEmpty) else { return }
+        guard !model.settings.needsPractice || practice.complete else { return }
         finishing = true; window?.close(); onFinish?(); finishing = false
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool { finishing || !model.settings.needsPractice }
@@ -222,7 +222,7 @@ struct OnboardingView: View {
         case .localService: return model.serviceUp && model.speech?.ready == true && model.llmConfigured
         case .microphone: return model.micStatus == .authorized
         case .accessibility: return model.accessibilityTrusted
-        case .tryIt, .done: return practice.complete && !model.settings.explanationMarkers.isEmpty
+        case .tryIt, .done: return practice.complete
         default: return true
         }
     }

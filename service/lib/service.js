@@ -5,7 +5,6 @@ import {CleanupTask, cleanupParameters, needsCleanupReview} from './cleanup-task
 import {CLEANUP_REVIEW_PROMPT, parseCleanupReview} from './prompts/cleanup-review.js';
 import { personalizationContext, applyExplicitRules, requestPolicy, readPolicy } from "./personalization-policy.js";
 import { splitExplanation, explanationNameRule, explanationInstruction } from "./explanation-context.js";
-import { requestPreferences, preferenceHints, preferenceInstruction } from "./preference-hints.js";
 import { nameClarification, clarificationSource, clarificationRule } from "./name-clarification.js";
 /**
  * VoicePolishService — "transcribe, then make it sayable".
@@ -218,21 +217,14 @@ export class VoicePolishService {
     const safeNotes = explanation.notes.map(s => redactSecrets(s));
     const nameRules = explanationNameRule(rawText, safeNotes);
     context.dictionary.push(...nameRules);
-    const rawExamples = request._translationSource ? [] : request.preferenceExamples ?? requestPreferences(request.dictionary);
-    const filteredExamples = (Array.isArray(rawExamples) ? rawExamples : []).filter(x => x && ![x.raw,x.aiText,x.correctedText].some(v => typeof v === "string" && request._personalization.excludedText?.(v)));
-    const examples = request._personalization.policy.disabled ? [] : preferenceHints(filteredExamples, rawText);
-    request._personalization.trace.references.push(...examples.map(x=>({kind:"example",source:"personal",sourceId:filteredExamples.find(y=>y.raw===x.raw&&y.correctedText===x.correctedText)?.id??"example"})));
-    const style = request._translationSource ? null : context.style?.instructions ?? null;
-    if(style) request._personalization.trace.references.push({kind:'style',source:'extension',sourceId:context.style.sourceId,label:context.style.label});
-    // Generic cleanup rules with the current utterance, optional style and cursor context.
+    // Generic cleanup rules with the current utterance and cursor context.
     const system = systemPromptFor({
       dictionary: context.dictionary,
       aliases: context.aliases,
       fieldContext: context.fieldContext ?? null,
       spellings: context.spellings,
       strength,
-      style,
-    }) + explanationInstruction(safeNotes) + preferenceInstruction(examples)
+    }) + explanationInstruction(safeNotes)
       + variantInstruction(parseVariants(request.variants))
       + (request._languageRetry ? "\n\nThe previous answer changed the language. Write the result in the same language the speaker used; keep English that was spoken in English." : "");
     // The transcript is redacted on the way OUT to the provider, not on the way
@@ -691,12 +683,11 @@ export class VoicePolishService {
     try { data = await personalizationContext(request, own, this.extension, rawText); }
     catch {
       // Optional personalization must not become a dependency of dictation.
-      data = {dictionary:[],aliases:[],style:null,policy:{disabled:true,rules:[]},trace:{disabled:true,references:[],replacements:[],blocked:[]}};
+      data = {dictionary:[],aliases:[],policy:{disabled:true,rules:[]},trace:{disabled:true,references:[],replacements:[],blocked:[]}};
     }
     request._personalization = data;
     const entries = [...data.dictionary, ...(request.currentTermRules ?? [])], aliases = data.aliases;
     return {
-      style: data.style,
       dictionary: entries.map(entry => redact ? redactSecrets(entry) : entry),
       aliases,
       // Found in the outbound text, so a redacted secret cannot return through a hint.

@@ -247,7 +247,6 @@ export function createHandler(options) {
           requestId: body.requestId,
           supportsClarification: body.supportsClarification === true,
           explanationMarkers: typeof body.explanationMarkers === "string" ? body.explanationMarkers : null,
-          preferenceExamples: Array.isArray(body.preferenceExamples) ? body.preferenceExamples : null,
           personalization: body.personalization,
           language: typeof body.language === "string" ? body.language : "auto",
           appHint: body.appHint ?? null,

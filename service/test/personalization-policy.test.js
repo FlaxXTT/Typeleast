@@ -2,17 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {personalizationContext,applyExplicitRules,readPolicy} from '../lib/personalization-policy.js';
 import {VoicePolishService} from '../lib/service.js';
-const extension={referenceData:()=>({terms:[{word:'ROG',sourceId:'fake.pack',label:'Test pack'},{word:'LG',sourceId:'fake.pack'}],aliases:[{heard:'阿欧鸡',term:'ROG',cues:['电脑'],blockers:[],sourceId:'fake.pack'}],style:{instructions:'Use short sentences.',sourceId:'fake.style'}})};
+const extension={referenceData:()=>({terms:[{word:'ROG',sourceId:'fake.pack',label:'Test pack'},{word:'LG',sourceId:'fake.pack'}],aliases:[{heard:'阿欧鸡',term:'ROG',cues:['电脑'],blockers:[],sourceId:'fake.pack'}]})};
 const policy=(extra={})=>({version:1,excluded:[],rules:[],...extra});
 test('exclusions filter all term and alias sources without changing current speech',async()=>{
  const raw='ROG 电脑与 LG 屏幕';const c=await personalizationContext({personalization:policy({excluded:['ＲＯＧ']})},['ROG','LG'],extension,raw);
  assert.ok(!c.dictionary.includes('ROG'));assert.ok(c.dictionary.includes('LG'));assert.equal(raw,'ROG 电脑与 LG 屏幕');assert.ok(!c.aliases.some(x=>x.term==='ROG'));
  const restored=await personalizationContext({personalization:policy()},['ROG'],extension,raw);assert.ok(restored.dictionary.includes('ROG'));
 });
-test('reference provenance stays separate and disabled requests use no data or style',async()=>{
+test('reference provenance stays separate and disabled requests use no data',async()=>{
  const c=await personalizationContext({personalization:policy()},['ROG'],extension,'ROG 电脑');
  assert.ok(c.trace.references.some(x=>x.source==='personal'));assert.ok(c.trace.references.some(x=>x.source==='extension'&&x.sourceId==='fake.pack'));
- const disabled=await personalizationContext({personalization:policy({disabled:true})},['ROG'],extension,'ROG');assert.deepEqual(disabled.dictionary,[]);assert.equal(disabled.style,null);
+ const disabled=await personalizationContext({personalization:policy({disabled:true})},['ROG'],extension,'ROG');assert.deepEqual(disabled.dictionary,[]);
 });
 test('old requests never acquire explicit rule privileges',()=>{
  assert.deepEqual(readPolicy({rules:[{enabled:true,heard:'LG',word:'ROG',id:'old'}]}).rules,[]);

@@ -1,12 +1,9 @@
 /**
- * Plugins, version 1: data only. A plugin is one JSON file (".typeleast-plugin") that is
- * either a dictionary pack (terms) or a style (extra wording/format instructions for
- * 标准/精简整理). Nothing in a plugin runs: the service checks the file, stores it, and at
- * dictation time adds the enabled packs' terms to the dictionary (still filtered to the
- * terms a dictation mentions) and the selected style's instructions to the one model call.
- *
- * The official catalog is a static file published from the repository (market/) and read
- * only from official addresses, only when the user opens the market.
+ * Plugins: data only. A plugin is one JSON file (".typeleast-plugin"). Nothing in a plugin
+ * runs: the service checks the file, stores it, and at dictation time adds the enabled packs'
+ * terms to the dictionary (still filtered to the terms a dictation mentions). Style files from
+ * older versions still load but are never applied. The published catalog (market/) is checked
+ * here for older apps that still read it.
  *
  * @module typeleast-service/plugins
  */
@@ -38,35 +35,6 @@ export const PLUGIN_LIMITS = {
   catalogBytes: 2 * 1024 * 1024,
   catalogPlugins: 500,
 };
-
-/** The official addresses of the catalog, tried first. */
-export const CATALOG_URLS = [
-  "https://typeleast.promptking.workers.dev/market/catalog.json",
-  "https://raw.githubusercontent.com/FlaxXTT/Typeleast/main/market/catalog.json",
-];
-
-/**
- * Public copies of the same file, for networks that block both official addresses (mainland
- * China): jsDelivr serves the GitHub file as it is, and the GitHub proxies are the ones the apps'
- * updater already uses. A mirror could change what it serves, so a catalog read through one is
- * marked `mirrored` and the apps say so before installing.
- */
-export const CATALOG_MIRRORS = [
-  "https://fastly.jsdelivr.net/gh/FlaxXTT/Typeleast@main/market/catalog.json",
-  "https://cdn.jsdelivr.net/gh/FlaxXTT/Typeleast@main/market/catalog.json",
-  ...["https://ghfast.top/", "https://gh-proxy.com/", "https://gh-proxy.org/", "https://gh.llkk.cc/"].map((proxy) => proxy + CATALOG_URLS[1]),
-];
-
-/** The apps' 更新来源 setting: auto (official, then mirrors), github (official only), mirror (mirrors first). */
-export const CATALOG_SOURCE_MODES = ["auto", "github", "mirror"];
-
-/** The addresses to try for one source mode, in order. */
-export function catalogSources(mode = "auto") {
-  const official = CATALOG_URLS.map((url) => ({ url, mirrored: false }));
-  const mirrors = CATALOG_MIRRORS.map((url) => ({ url, mirrored: true }));
-  if (mode === "github") return official;
-  return mode === "mirror" ? [...mirrors, ...official] : [...official, ...mirrors];
-}
 
 const ID = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 const VERSION = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/;
@@ -294,7 +262,7 @@ export class PluginStore {
     return [...this.plugins.values()].sort((a, b) => a.id.localeCompare(b.id)).map((plugin) => ({
       ...summarize(plugin),
       source: this.state.plugins[plugin.id]?.source ?? "file",
-      enabled: plugin.type === "dictionary" ? this.state.plugins[plugin.id]?.enabled === true : this.state.style === plugin.id,
+      enabled: plugin.type === "dictionary" && this.state.plugins[plugin.id]?.enabled === true,
     }));
   }
 
@@ -323,16 +291,15 @@ export class PluginStore {
     }
   }
 
-  /** Install or update; `enable` turns a pack on or selects a style. */
+  /** Install or update; `enable` turns a pack on. */
   install(plugin, { enable = false, source = "file" } = {}) {
     return this.change(async () => {
-      const wasEnabled = plugin.type === "dictionary" ? this.state.plugins[plugin.id]?.enabled === true : this.state.style === plugin.id;
+      const wasEnabled = this.state.plugins[plugin.id]?.enabled === true;
       const on = enable || wasEnabled;
       if (plugin.type === "dictionary" && on) this.checkTermBudget(plugin);
       await this.writeAtomic(`${plugin.id}.typeleast-plugin`, JSON.stringify(plugin, null, 2) + "\n");
       this.plugins.set(plugin.id, plugin);
       this.state.plugins[plugin.id] = { source, ...(plugin.type === "dictionary" ? { enabled: on } : {}) };
-      if (plugin.type === "style" && enable) this.state.style = plugin.id;
     });
   }
 
@@ -345,38 +312,13 @@ export class PluginStore {
     });
   }
 
-  selectStyle(id) {
-    return this.change(async () => {
-      if (id !== null && this.plugins.get(id)?.type !== "style") throw Object.assign(new Error("no such style"), { code: "plugin-not-found", status: 404 });
-      this.state.style = id;
-    });
-  }
-
   remove(id) {
     return this.change(async () => {
       if (!this.plugins.has(id)) throw Object.assign(new Error("not installed"), { code: "plugin-not-found", status: 404 });
       await rm(join(this.dir, `${id}.typeleast-plugin`), { force: true });
       this.plugins.delete(id);
       delete this.state.plugins[id];
-      if (this.state.style === id) this.state.style = null;
     });
-  }
-
-  /** Keep the last catalog read from an official address, to show it offline. */
-  async saveCatalog(catalog) {
-    await mkdir(this.dir, { recursive: true, mode: 0o700 });
-    await this.writeAtomic("catalog-cache.json", JSON.stringify(catalog) + "\n");
-  }
-
-  /** The last catalog read, checked again (null when there is none). */
-  async loadCatalog() {
-    try {
-      const cached = JSON.parse(await readFile(join(this.dir, "catalog-cache.json"), "utf8"));
-      return { ...validateCatalog({ format: CATALOG_FORMAT, formatVersion: 1, generatedAt: cached.generatedAt, plugins: cached.plugins }),
-        source: typeof cached.source === "string" ? cached.source : null, fetchedAt: typeof cached.fetchedAt === "string" ? cached.fetchedAt : null };
-    } catch {
-      return null;
-    }
   }
 
   /** Terms of the enabled packs, for the dictionary of one call. */
@@ -408,33 +350,6 @@ export class PluginStore {
     return [...out.values()];
   }
 
-  /** The selected style, if any. */
-  activeStyle() {
-    const plugin = this.state.style ? this.plugins.get(this.state.style) : null;
-    return plugin?.type === "style" ? plugin : null;
-  }
-}
-
-/** Read a response body, refusing more than `limit` bytes. */
-async function readLimited(response, limit) {
-  const declared = Number(response.headers?.get?.("content-length"));
-  if (Number.isFinite(declared) && declared > limit) throw Object.assign(new Error("catalog too large"), { code: "market-too-large" });
-  if (!response.body?.getReader) {
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > limit) throw Object.assign(new Error("catalog too large"), { code: "market-too-large" });
-    return text;
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) { await reader.cancel().catch(() => {}); throw Object.assign(new Error("catalog too large"), { code: "market-too-large" }); }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
 }
 
 /** Check a parsed catalog; plugins that fail the checks are left out and counted. */
@@ -453,55 +368,4 @@ export function validateCatalog(value) {
     plugins.push(result.plugin);
   }
   return { generatedAt: typeof value.generatedAt === "string" ? value.generatedAt.slice(0, 40) : null, plugins, rejected };
-}
-
-/**
- * Read the catalog from the first address that answers with a valid one. The next address is
- * tried only when the previous ones failed or stayed silent for `staggerMs`, so a working official
- * address is the only one contacted and a blocked one costs seconds, not a full timeout. No
- * redirects; nothing is sent but a user agent.
- */
-export async function fetchCatalog({ fetchImpl = globalThis.fetch, version = "0", mode = "auto", urls, timeoutMs = 20000, staggerMs = 2000 } = {}) {
-  const sources = urls ? urls.map((url) => ({ url, mirrored: false })) : catalogSources(mode);
-  const read = async ({ url, mirrored }, signal) => {
-    const response = await fetchImpl(url, {
-      method: "GET", redirect: "error", signal,
-      headers: { accept: "application/json", "user-agent": `TypeLeast/${version}` },
-    });
-    if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { code: "market-offline" });
-    const catalog = validateCatalog(JSON.parse(await readLimited(response, PLUGIN_LIMITS.catalogBytes)));
-    return { ...catalog, source: new URL(url).host, mirrored, fetchedAt: new Date().toISOString() };
-  };
-  return await new Promise((resolve, reject) => {
-    const controllers = [];
-    let next = 0, running = 0, done = false, lastError = null, stagger = null;
-    const finish = (catalog) => {
-      if (done) return;
-      done = true;
-      clearTimeout(deadline); clearTimeout(stagger);
-      for (const controller of controllers) controller.abort();
-      if (catalog) resolve(catalog);
-      else {
-        const code = lastError?.code && String(lastError.code).startsWith("market-") ? lastError.code : "market-offline";
-        reject(Object.assign(new Error("catalog unavailable"), { code }));
-      }
-    };
-    const deadline = setTimeout(() => finish(null), timeoutMs);
-    const start = () => {
-      if (done || next >= sources.length) return;
-      clearTimeout(stagger);
-      const controller = new AbortController();
-      controllers.push(controller);
-      running++;
-      read(sources[next++], controller.signal).then(finish, (error) => {
-        running--;
-        if (done) return;
-        lastError = error;
-        if (next < sources.length) start();
-        else if (running === 0) finish(null);
-      });
-      if (next < sources.length) stagger = setTimeout(start, staggerMs);
-    };
-    start();
-  });
 }

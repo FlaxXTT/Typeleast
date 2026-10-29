@@ -77,19 +77,19 @@ final class EditWatcher {
         try? ServiceClient.shared.learnedWordSync(inserted: $0, edited: $1)
     }
 
-    private var pending: (field: FocusedField, inserted: String, poll: EditPoll, revision: ((String) -> Void)?)?
+    private var pending: (field: FocusedField, inserted: String, poll: EditPoll)?
     private var timer: Timer?
 
     var watchedBundleId: String? { pending?.field.bundleId }
 
     /// Start watching after a successful paste. Replaces any earlier watch (judged first).
-    func watch(field: FocusedField, inserted: String, onRevision: ((String) -> Void)? = nil) {
+    func watch(field: FocusedField, inserted: String) {
         check()
         let before = field.context.before, after = field.context.after
         let poll = EditPoll(start: Date()) { now in
             EditLearner.editedRegion(before: before, after: after, now: now).map { $0 != inserted } ?? false
         }
-        pending = (field, inserted, poll, onRevision)
+        pending = (field, inserted, poll)
         let t = Timer(timeInterval: EditPoll.interval, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(t, forMode: .common)
         timer = t
@@ -121,10 +121,9 @@ final class EditWatcher {
         pending = nil
     }
 
-    private func judge(_ p: (field: FocusedField, inserted: String, poll: EditPoll, revision: ((String) -> Void)?), now: String) {
+    private func judge(_ p: (field: FocusedField, inserted: String, poll: EditPoll), now: String) {
         guard let region = EditLearner.editedRegion(before: p.field.context.before, after: p.field.context.after, now: now),
               region.count <= p.inserted.count * 2 + 40 else { return }
-        if let revision = p.revision { revision(region); return }
         let inserted = p.inserted, ask = learnedWord
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let word = ask(inserted, region) else { return }

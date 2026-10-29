@@ -30,7 +30,7 @@ struct SettingsPage: View {
                     case 0: shortcuts; language; audio
                     case 1:
                         ModelSection(); cleanup
-                    case 2: insertion; general
+                    case 2: general
                     case 3: privacy; permissions
                     default: service
                     }
@@ -81,10 +81,8 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("修改学习"), detail: L10n.text("各模式的修改先确认再保存为偏好，不自动添加词汇。关闭后不观察修改。"),
+            ToggleRow(title: L10n.text("自动加词"), detail: L10n.text("粘贴后你改过的词加入词典。"),
                       isOn: model.setting(\.autoLearn))
-            ToggleRow(title: L10n.text("列表按列表粘贴"), detail: nil,
-                      isOn: model.setting(\.richTextLists))
         }
     }
 
@@ -104,7 +102,7 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 150)
             }
-            SettingRow(title: L10n.text("翻译成"), detail: L10n.text("不用风格插件。")) {
+            SettingRow(title: L10n.text("翻译成"), detail: nil) {
                 Picker("", selection: model.setting(\.translateTarget)) {
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)
@@ -112,11 +110,6 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("中文字形"), detail: nil) {
                 Picker("", selection: model.setting(\.zhVariant)) {
                     ForEach(ChineseVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }.labelsHidden().frame(width: 150)
-            }
-            SettingRow(title: L10n.text("英文拼写"), detail: nil) {
-                Picker("", selection: model.setting(\.enVariant)) {
-                    ForEach(EnglishVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)
             }
         }
@@ -145,19 +138,6 @@ struct SettingsPage: View {
             }
             ToggleRow(title: L10n.text("提示音"), detail: nil, isOn: model.setting(\.soundEnabled))
             ToggleRow(title: L10n.text("听写时静音"), detail: nil, isOn: model.setting(\.muteWhileDictating))
-        }
-    }
-
-    private var insertion: some View {
-        SettingsSection(title: L10n.text("插入")) {
-            SettingRow(title: L10n.text("整理后的文字"), detail: nil) {
-                Picker("", selection: model.setting(\.insertionMode)) {
-                    ForEach(InsertionMode.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }
-                .labelsHidden()
-                .frame(width: 190)
-            }
-            ToggleRow(title: L10n.text("恢复剪贴板"), detail: nil, isOn: model.setting(\.restoreClipboard))
         }
     }
 

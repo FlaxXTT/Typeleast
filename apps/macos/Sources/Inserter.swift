@@ -152,17 +152,13 @@ final class Inserter {
         return true
     }
 
-    /// Full insert: put text on the pasteboard, wait for the paste, optionally restore.
+    /// Full insert: put text on the pasteboard, paste it, then restore the clipboard.
     /// Returns the result plus whether the clipboard was restored (left intact on failure).
-    func insert(_ text: String, mode: InsertionMode, restoreClipboard: Bool, richHTML: String? = nil,
+    func insert(_ text: String, richHTML: String? = nil,
                 completion: @escaping (PasteResult, Bool) -> Void) {
         let snap = snapshot()
         let before = richHTML.map { setRich(text, html: $0) } ?? setString(text)
 
-        if mode != .autoPaste {
-            completion(.pasted, false)
-            return
-        }
         if Inserter.isSecureInputEnabled() {
             completion(.secureInput, false)
             return
@@ -172,7 +168,7 @@ final class Inserter {
             return
         }
         let result: PasteResult = Inserter.isAccessibilityTrusted() ? .pasted : .unverified
-        let shouldRestore = (result == .pasted) && restoreClipboard && snap.changeCount >= 0
+        let shouldRestore = (result == .pasted) && snap.changeCount >= 0
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             var restored = false
             if shouldRestore {

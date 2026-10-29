@@ -27,10 +27,6 @@ func checkEq<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     check(name, got == want, "got=" + String(describing: got) + " want=" + String(describing: want))
 }
 
-if let index = CommandLine.arguments.firstIndex(of: "--personalization-ui-render"), CommandLine.arguments.count > index+1 {
-    try renderPersonalizationFixtures(output: CommandLine.arguments[index+1]); exit(0)
-}
-
 // Isolated visual regression fixture. It never loads the daily history or opens a service.
 if let index = CommandLine.arguments.firstIndex(of:"--unified-ui-render"), CommandLine.arguments.count > index+1 {
     let output = CommandLine.arguments[index+1]
@@ -226,8 +222,6 @@ let server = try StubServer { req in
     }
     if req.path.hasPrefix("/api/voice-polish/plugins") {
         let state = #"{"plugins":[{"id":"example.dev-terms","version":"1.0.0","type":"dictionary","name":{"zh-Hans":"开发术语","en":"Dev terms"},"description":{"zh-Hans":"术语。","en":"Terms."},"author":"Example","license":"CC0-1.0","homepage":null,"termCount":3,"termsPreview":["Kubernetes"],"source":"catalog","enabled":true}],"style":null,"problems":[]}"#
-        if req.path == "/api/voice-polish/plugins/inspect" { return .json(#"{"error":"not a valid plugin","code":"plugin-invalid","issues":[]}"#, status: 400) }
-        if req.path.hasPrefix("/api/voice-polish/plugins/catalog?") { return .json(#"{"ok":false,"code":"market-offline","source":null,"fetchedAt":null,"rejected":0,"plugins":[]}"#) }
         return .json(state)
     }
     if req.path == "/api/voice-polish/learned-word" {
@@ -1105,17 +1099,17 @@ do {
     let old = try JSONDecoder().decode(LocalHistoryEntry.self, from: Data(#"{"id":"a","ts":0,"language":"zh","strength":"prompt","raw":"r","text":"t","fallback":false,"inserted":true}"#.utf8))
     checkEq("older history entries still decode", old.translated, nil)
     let s = Settings.shared
-    let saved = (s.zhVariant, s.enVariant, s.translateTarget)
-    s.zhVariant = "hans"; s.enVariant = "us"
+    let saved = (s.zhVariant, s.translateTarget)
+    s.zhVariant = "hans"
     checkEq("default variants send nothing", s.variantsHeader, nil)
-    s.zhVariant = "tw"; s.enVariant = "gb"
-    checkEq("chosen variants make the header", s.variantsHeader, "zh=tw,en=gb")
+    s.zhVariant = "tw"
+    checkEq("a chosen variant makes the header", s.variantsHeader, "zh=tw")
     s.zhVariant = "nonsense"
     checkEq("an unknown variant reads as Simplified", s.zhVariant, "hans")
     s.translateTarget = "xx"
     checkEq("an unknown target reads as English", s.translateTarget, "en")
     checkEq("the translate shortcut defaults to ⇧⌥Space", HotKeyBinding.translateDefault.modifiers, 512 | 2048)
-    s.zhVariant = saved.0; s.enVariant = saved.1; s.translateTarget = saved.2
+    s.zhVariant = saved.0; s.translateTarget = saved.1
 } catch {
     check("translate decoding", false, String(describing: error))
 }
@@ -1572,28 +1566,8 @@ do {
     checkEq("installed plugins decode", installed.plugins.first?.id, "example.dev-terms")
     checkEq("…with their switch and source", installed.plugins.first?.enabled, true)
     checkEq("plugins request", state.lastRequest?.path, "/api/voice-polish/plugins")
-    _ = try client.installPluginSync(Data(#"{"format":"typeleast-plugin"}"#.utf8), enable: true, digest: "abc")
-    checkEq("install carries the switch and the fingerprint of what was shown", state.lastRequest?.path, "/api/voice-polish/plugins?enable=1&digest=abc")
-    checkEq("…and the file itself as the body", state.lastRequest.map { String(decoding: $0.body, as: UTF8.self) }, #"{"format":"typeleast-plugin"}"#)
     _ = try client.setPluginEnabledSync(id: "example.dev-terms", enabled: false)
     checkEq("a switch is a PUT on the plugin", state.lastRequest.map { $0.method + " " + $0.path }, "PUT /api/voice-polish/plugins/example.dev-terms")
-    _ = try client.selectStyleSync(id: nil)
-    checkEq("no style is sent as null", state.lastRequest.map { String(decoding: $0.body, as: UTF8.self) }, #"{"id":null}"#)
-    _ = try client.installCatalogPluginSync(id: "example.formal", enable: false, digest: "def")
-    let sentInstall = state.lastRequest.flatMap { try? JSONSerialization.jsonObject(with: $0.body) as? [String: Any] }
-    checkEq("a catalog install sends the fingerprint it showed", sentInstall?["digest"] as? String, "def")
-    checkEq("a changed plugin is explained", PluginController.describe(code: "plugin-changed"), L10n.text("插件已变化。请重新查看后再安装"))
-    _ = try client.removePluginSync(id: "example.dev-terms")
-    checkEq("uninstall is a DELETE", state.lastRequest?.method, "DELETE")
-    do { _ = try client.inspectPluginSync(Data("x".utf8)); check("an invalid file is refused", false) }
-    catch { checkEq("an invalid file is explained", PluginController.describe(error), L10n.text("这不是插件文件")) }
-    let catalog = try client.pluginCatalogSync(sources: "github")
-    checkEq("the market follows the update source setting", state.lastRequest?.path, "/api/voice-polish/plugins/catalog?sources=github")
-    checkEq("an offline market is reported, not an error", catalog.ok, false)
-    checkEq("…with a reason the page can show", PluginController.describe(code: catalog.code), L10n.text("无法获取插件目录，请检查网络"))
-    let style = PluginSummary(id: "example.formal", version: "1.0.0", type: "style", name: ["zh-Hans": "正式", "en": "Formal"],
-                              description: ["zh-Hans": "正式。", "en": "Formal."], author: "Example", license: "CC0-1.0", instructions: "正式。")
-    checkEq("a style's title follows the interface language", style.title, L10n.language == "en" ? "Formal" : "正式")
 } catch { check("plugin client", false, String(describing: error)) }
 
 // MARK: entries marked 「不发给模型」 stay out of the ordinary dictionary
