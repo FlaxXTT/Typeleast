@@ -23,7 +23,7 @@ internal static class JumpList
             foreach (var code in new[] { "promptbeta" })
                 list.JumpItems.Add(new JumpTask
                 {
-                    Title = L10n.T("需求助手"),
+                    Title = L10n.T("提示词模式"),
                     ApplicationPath = exe,
                     IconResourcePath = exe,
                     Arguments = Argument + " " + code,

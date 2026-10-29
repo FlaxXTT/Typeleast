@@ -65,7 +65,7 @@ internal sealed class TrayMenu : Window
         Item("\uE774", L10n.T("开始翻译"), host.Settings.TranslateHotkey is { } t ? TapDetector.Label(t) : "", !busy, host.ToggleTranslate);
         Item("\uE711", L10n.T("取消"), "Esc", busy, host.Cancel);
         Separator();
-        Item("", L10n.T("需求助手"), "", true, () => host.ToggleAssistant());
+        Item("", L10n.T("提示词模式"), "", true, () => host.ToggleAssistant());
         Separator();
         Item("\uE77F", L10n.T("粘贴上一条"), PasteShortcut(host.Settings.PasteLastShortcut), !busy, () => _ = host.PasteLast());
         Item("\uE8C8", L10n.T("复制上一条"), "", true, host.CopyLast);

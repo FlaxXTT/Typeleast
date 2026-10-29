@@ -60,7 +60,7 @@ internal sealed class HistoryPage : IPage
                 void Badge(string title, System.Windows.Media.SolidColorBrush color) {
                     var badge=Theme.Badge(title,color);badge.Margin=new Thickness(0,0,6,4);badges.Children.Add(badge);
                 }
-                if (entry.Task is { } task) Badge(L10n.T(task=="assistant"?"需求助手":task=="translation"?"翻译":"听写"),task=="assistant"?Theme.Style:Theme.Accent);
+                if (entry.Task is { } task) Badge(L10n.T(task=="assistant"?"提示词模式":task=="translation"?"翻译":"听写"),task=="assistant"?Theme.Style:Theme.Accent);
                 else if(entry.Request is {Strength:var stored} && stored!="off" && new[]{"prompt","concise","promptbeta","promptbrief","promptify","conservative","maximal"}.Contains(stored)) {
                     var mode=CleanupModes.Stored(stored);
                     Badge(CleanupModes.Title(mode),mode=="concise"?Theme.Accent:mode=="promptbeta"?Theme.Style:Theme.Success);

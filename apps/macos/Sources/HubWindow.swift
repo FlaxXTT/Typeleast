@@ -213,7 +213,7 @@ struct SidebarModes: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Button { model.actions?.startAssistant() } label: {
-                Label(L10n.text("需求助手"), systemImage:"text.bubble")
+                Label(L10n.text("提示词模式"), systemImage:"text.bubble")
                     .font(.system(size:13,weight:.medium)).padding(10)
             }.buttonStyle(.plain)
         }

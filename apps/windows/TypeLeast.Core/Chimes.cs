@@ -2,7 +2,7 @@ namespace TypeLeast.Core;
 
 /// <summary>
 /// The two cue sounds, synthesised in memory as WAV files (no system sounds).
-/// Start: two short, bright notes (E6 then B6), the same as the Mac app's StartChime.
+/// Start: two soft, mid notes rising (E5 then A5), the same as the Mac app's StartChime.
 /// Stop: two soft, lower notes going down (B4 then E4), slower attack and no bright
 /// partial, so it sounds rounder and duller than the start.
 /// </summary>
@@ -10,7 +10,7 @@ public static class Chimes
 {
     public const int SampleRate = 44100;
 
-    public static byte[] Start() => Render(0.24, 0.055, 0.002, 0.25, (0.0, 1318.5, 0.30), (0.075, 1975.5, 0.34));
+    public static byte[] Start() => Render(0.30, 0.09, 0.006, 0.08, (0.0, 659.3, 0.20), (0.07, 880.0, 0.22));
 
     public static byte[] Stop() => Render(0.30, 0.070, 0.008, 0.0, (0.0, 493.9, 0.34), (0.085, 329.6, 0.38));
 

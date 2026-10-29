@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoicePolishService } from '../lib/service.js';
 import { BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
-  hasContent, normaliseQuestions, parseJsonReply } from '../lib/prompts/prompt-beta.js';
+  hasContent, normaliseQuestions, parseJsonReply, boundaryQuestions, BOUNDARY_QUESTIONS } from '../lib/prompts/prompt-beta.js';
 
 const ROUTE = { baseURL: 'https://api.example.com/v1', model: 'm', apiKey: 'test-key' };
-const REQUEST = '帮我把会议记录整理成纪要，发给团队看，要详细一点';
+const REQUEST = '帮我把会议记录整理成纪要，发给团队看，要详细一点。只读我给的会议记录，不联网，按以往的纪要格式重复做';
 const DRAFT = '## 目标\n把会议记录整理成详细纪要，供团队阅读。';
 const interview = (questions = [], confirmed = ['整理会议纪要，供团队阅读']) => JSON.stringify({ goal: '整理纪要', confirmed, questions });
 function provider(script = {}) {
@@ -193,4 +193,12 @@ test('failed generation retains the accepted conversation for a retry',async()=>
  const p=provider({draft:''}),s=serviceFor(p),first=await send(s);
  const held=await finish(s,first.beta.sessionId); assert.equal(held.text,'');assert.ok(held.beta.sessionId);
  assert.ok(s.betaSessions.has(first.beta.sessionId));
+});
+
+test('the two boundary questions come first, once, unless the user already covered them', () => {
+  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍'), [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh]);
+  assert.deepEqual(boundaryQuestions('帮我写产品介绍，可以联网查资料，要有创意'), []);
+  assert.deepEqual(boundaryQuestions('Write a product page'), [BOUNDARY_QUESTIONS.scope.en, BOUNDARY_QUESTIONS.nature.en]);
+  const turns = [{ questions: [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh], answer: '不确定' }];
+  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', turns), [], 'an unsure answer is not asked again');
 });

@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             if self.onboarding.practice.busy { return (L10n.text("正在练习"), L10n.text("练习结束后再更新。")) }
             if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
             // Restarting would drop the questions and the answers given so far.
-            if self.betaPending != nil { return (L10n.text("需求助手 未结束"), L10n.text("更新前，请先生成或取消需求助手。")) }
+            if self.betaPending != nil { return (L10n.text("提示词模式 未结束"), L10n.text("更新前，请先生成或取消提示词模式。")) }
             return nil
         },
         setHint: { [weak self] in self?.setHint($0) },

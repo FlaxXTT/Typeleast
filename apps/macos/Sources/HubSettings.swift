@@ -58,7 +58,7 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文。", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
                 HotkeyField(slot: .translate)
             }
-            SettingRow(title:L10n.text("需求助手"),detail:L10n.text("多轮补充需求，主动生成完整提示词。")) {
+            SettingRow(title:L10n.text("提示词模式"),detail:L10n.text("先说清能读哪些资料、能否联网，以及是创新还是重复的工作。")) {
                 HotkeyField(slot:.assistant)
             }
             SettingRow(title: L10n.text("粘贴上一条"), detail: nil) {

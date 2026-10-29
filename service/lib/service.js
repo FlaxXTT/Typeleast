@@ -41,7 +41,7 @@ import { joinSpacedCapitals, normalizeTermCase, tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
-  cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
+  boundaryQuestions, cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
 } from "./prompts/prompt-beta.js";
 import { directTranslatePrompt, TRANSLATE_LANGUAGES, translatePrompt } from "./prompts/translate.js";
 import { applyVariants, parseVariants, variantInstruction } from "./variants.js";
@@ -451,8 +451,10 @@ export class VoicePolishService {
           throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
         }
         if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
-        const questions = normaliseQuestions(reply.questions);
-        if (reply.questions.length && !questions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
+        const modelQuestions = normaliseQuestions(reply.questions);
+        if (reply.questions.length && !modelQuestions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
+        // The task's boundaries come first: what may be read or searched, and creative or routine work.
+        const questions = normaliseQuestions([...boundaryQuestions(session.request, turns), ...modelQuestions]);
         session.turns = turns;
         session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
         session.confirmed = reply.confirmed.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, 6);

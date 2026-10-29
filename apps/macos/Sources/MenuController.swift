@@ -76,7 +76,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(cancelItem)
         pasteItem = item(L10n.text("粘贴上一条"), #selector(onPasteLast))
         menu.addItem(pasteItem)
-        let assistant = item(L10n.text("需求助手"), #selector(onMode(_:)))
+        let assistant = item(L10n.text("提示词模式"), #selector(onMode(_:)))
         assistant.representedObject = "promptbeta"
         menu.addItem(assistant)
         hintItem = item("", nil)

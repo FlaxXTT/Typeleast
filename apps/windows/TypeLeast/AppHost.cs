@@ -30,7 +30,7 @@ internal sealed class AppHost : IDictationHost
         onboarding?.PracticeBusy == true ? L10n.T("练习结束后再更新。") :
         Phase != DictationPhase.Idle ? L10n.T("听写结束后再更新。")
         // Quitting would drop the questions and the answers given so far.
-        : dictation.HasBeta ? L10n.T("更新前，请先生成或取消需求助手。") : null;
+        : dictation.HasBeta ? L10n.T("更新前，请先生成或取消提示词模式。") : null;
     public LocalHistory History { get; }
     public ActivityLog Activity { get; }
     public ServiceClient Client { get; } = new();

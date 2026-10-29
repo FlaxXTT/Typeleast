@@ -198,7 +198,7 @@ internal sealed class SettingsPage : IPage
             Section(L10n.T("快捷键"),
                 Theme.SettingRow(L10n.T("听写快捷键"), Theme.Text(L10n.T("按一下开始，再按一下结束。右 Alt 在部分键盘上是 AltGr，请换键。"), 12, Theme.Grey), hotkey),
                 Theme.SettingRow(L10n.T("翻译快捷键"), Theme.Text(L10n.T("不能与听写键相同。"), 12, Theme.Grey), translateKey),
-                Theme.SettingRow(L10n.T("需求助手"), Theme.Text(L10n.T("多轮补充需求，主动生成完整提示词。"), 12, Theme.Grey), assistantKey),
+                Theme.SettingRow(L10n.T("提示词模式"), Theme.Text(L10n.T("先说清能读哪些资料、能否联网，以及是创新还是重复的工作。"), 12, Theme.Grey), assistantKey),
                 Theme.SettingRow(L10n.T("粘贴上一条"), null, pasteKey),
                 Theme.SettingRow(L10n.T("取消"), null, Theme.Keycaps("Esc"))),
             Section(L10n.T("语言"), languageRows),

@@ -947,20 +947,20 @@ do {
     check("the token lives in the state folder", ServiceClient().tokenPath.hasSuffix("TypeLeast/api-token") || ProcessInfo.processInfo.environment["TYPELEAST_HOME"] != nil)
 }
 
-// MARK: 21. the recording-start chime is short, bright and starts at once
+// MARK: 21. the recording-start chime is short, soft and starts promptly
 do {
     let pcm = StartChime.pcm()
     let samples: [Int16] = pcm.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
     let rate = Int(StartChime.sampleRate)
-    check("the chime lasts about a quarter of a second", samples.count == Int(Double(rate) * 0.24))
+    check("the chime lasts under a third of a second", samples.count == Int(Double(rate) * 0.30))
     let peak = samples.map { abs(Int($0)) }.max() ?? 0
-    check("the chime is audible but not clipped", peak > 8000 && peak < Int(Int16.max))
-    let attack = samples.prefix(rate * 3 / 1000).map { abs(Int($0)) }.max() ?? 0
-    check("the chime reaches full level within 3 ms (no slow fade-in)", attack > peak / 3)
+    check("the chime is audible but quiet", peak > 5000 && peak < Int(Int16.max) / 2)
+    let attack = samples.prefix(rate * 12 / 1000).map { abs(Int($0)) }.max() ?? 0
+    check("the chime reaches full level within 12 ms (no slow fade-in)", attack > peak / 3)
     let first = Array(samples.prefix(rate * 70 / 1000))
     var crossings = 0
     for i in 1..<first.count where (first[i - 1] < 0) != (first[i] < 0) { crossings += 1 }
-    check("the chime's pitch is above 1 kHz (bright, not dull)", crossings > 2 * 1000 * 70 / 1000)
+    check("the chime's pitch is mid-range, not shrill", crossings > 2 * 500 * 70 / 1000 && crossings < 2 * 1000 * 70 / 1000)
     let tail = samples.suffix(rate / 100).map { abs(Int($0)) }.max() ?? 0
     check("the chime has died away by the end", tail < peak / 20)
     check("the chime is a valid WAV", Wav.parse(Wav.wrap(pcm: pcm, sampleRate: StartChime.sampleRate)) != nil)

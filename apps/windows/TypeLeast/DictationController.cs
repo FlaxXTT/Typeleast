@@ -202,7 +202,7 @@ internal sealed class DictationController
         hook.SwallowEscape = true;
         bar.ShowRecording(recorder, translating is { } target
             ? L10n.T("翻译") + " →" + target.ToUpperInvariant()
-            : L10n.T(assistantRecording ? "需求助手" : "听写"));
+            : L10n.T(assistantRecording ? "提示词模式" : "听写"));
         Raise();
         Dictionary.DictationStarting();
         recordingOptions = new DictationOptions(Settings.Language, assistantRecording ? "promptbeta" : "prompt", translating, Settings.VariantsHeader, ActiveRoute, "autoPaste", Settings.LearnCorrections);
@@ -325,7 +325,7 @@ internal sealed class DictationController
         if (answering is not null) beta.SetBusy(L10n.T("正在更新…"));
         Phase = DictationPhase.Thinking;
         hook.SwallowEscape = true;
-        bar.ShowThinking(translateTo is null ? L10n.T(options.Strength == "promptbeta" ? "需求助手" : "正在整理…") : L10n.T("正在翻译…"));
+        bar.ShowThinking(translateTo is null ? L10n.T(options.Strength == "promptbeta" ? "提示词模式" : "正在整理…") : L10n.T("正在翻译…"));
         Raise();
         targetField = held is { } original ? original.Field : await Within(targetFieldTask, 300);
         recordingContext = held is { } originalContext ? originalContext.Context : await Within(recordingContextTask, 300);
@@ -459,7 +459,7 @@ internal sealed class DictationController
     private bool ShowBetaQuestions(DictateResponse result, DictationOptions options)
     {
         if (!beta.Show(result, options, targetWindow, targetApp, targetField, Settings.AssistantHotkey is { } key ? TapDetector.Label(key) : L10n.T("继续补充按钮"))) return false;
-        bar.ShowResult(L10n.T("需求助手：继续补充或生成"), warning: false);
+        bar.ShowResult(L10n.T("提示词模式：继续补充或生成"), warning: false);
         return true;
     }
 

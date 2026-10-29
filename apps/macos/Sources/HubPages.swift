@@ -456,7 +456,7 @@ struct HistoryRow: View {
                 }
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
-                    if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "需求助手" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
+                    if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "提示词模式" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
                     else if let mode { Badge(text: mode.label, tint: modeTint).fixedSize() }
                     if entry.fallback { Badge(text: L10n.text("已用原文"), tint: Theme.warning).fixedSize() }
                     if copied { Badge(text: L10n.text("已复制"), tint: Theme.success).fixedSize() }

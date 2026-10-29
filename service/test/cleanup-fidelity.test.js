@@ -38,7 +38,7 @@ test('number formatting preserves ranges, constraints and one model call', async
   const { service, calls } = fixture(['至少三四个人，再给五六天，预算不超过三万元。']);
   const result = await service.polish({ rawText: '至少三四个人，再给五六天，预算不超过三万元。', strength: 'prompt', llm: route });
   assert.equal(result.fallback, false, result.reason);
-  assert.equal(result.text, '至少3～4个人，再给5～6天，预算不超过30000元。');
+  assert.equal(result.text, '至少三四个人，再给五六天，预算不超过30000元。');
   assert.equal(calls.length, 1);
 });
 
@@ -63,5 +63,5 @@ test('translation receives the formatted source in its second call', async () =>
   const result = await service.polish({ rawText: '需要三四个人。', strength: 'prompt', translateTo: 'en', llm: route });
   assert.equal(result.fallback, false, result.reason);
   assert.equal(calls.length, 2);
-  assert.equal(calls[1].messages[1].content, '需要3～4个人。');
+  assert.equal(calls[1].messages[1].content, '需要三四个人。');
 });

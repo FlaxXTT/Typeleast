@@ -71,7 +71,7 @@ struct BetaQuestionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("需求助手 · 第 {0} 轮", info.round ?? 1))
+            Text(L10n.text("提示词模式 · 第 {0} 轮", info.round ?? 1))
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
             Text(info.ready == true ? L10n.text("已清楚。可继续补充或生成。") : L10n.text("先说清信息"))
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)

@@ -8,7 +8,7 @@ public static class SettingsGuide
 
     public static IReadOnlyList<Entry> Entries => new Entry[]
     {
-        new(L10n.T("需求助手"), L10n.T("侧栏"), ""),
+        new(L10n.T("提示词模式"), L10n.T("侧栏"), ""),
         new(L10n.T("API Key"), L10n.T("设置 › 模型"), "settings", 1),
         new(L10n.T("快捷键"), L10n.T("设置 › 听写"), "settings", 0),
         new(L10n.T("语音模型"), L10n.T("设置 › 模型"), "settings", 1),

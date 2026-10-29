@@ -36,7 +36,7 @@ internal sealed class BetaPanel : Window
         SourceInitialized += (_, _) => TypeLeast.Native.MakeNoActivate(new WindowInteropHelper(this).Handle);
 
         var title = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
-        title.Children.Add(Theme.Text(L10n.T("需求助手"), 12, Theme.Accent, bold: true));
+        title.Children.Add(Theme.Text(L10n.T("提示词模式"), 12, Theme.Accent, bold: true));
         title.Children.Add(roundLabel);
         hint = Theme.Text("", 11.5, Theme.Grey);
         hint.Margin = new Thickness(0, 10, 0, 12);
