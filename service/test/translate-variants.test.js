@@ -40,11 +40,11 @@ test("翻译：先验证原语言整理稿，再把它交给第二次调用译�
   assert.equal(result.translated, "en");
   assert.equal(calls.length, 2);
   assert.equal(calls[0].user, SPOKEN);
-  assert.match(calls[0].system, /整理语音识别文本/);
+  assert.match(calls[0].system, /整理成可以直接使用的书面文字/);
   assert.equal(calls[1].user, cleaned, "second call sees the cleaned source, not the raw correction");
   assert.match(calls[1].system, /译成English/);
-  assert.match(calls[1].system, /问题和指令按原意译出/);
-  assert.match(calls[1].system, /可以调整句式/);
+  assert.match(calls[1].system, /问题和指令照原意译出/);
+  assert.match(calls[1].system, /地道自然/);
   assert.equal(service.stats.modelCalls, 2);
   assert.equal(service.stats.modelFallbacks, 0);
 });

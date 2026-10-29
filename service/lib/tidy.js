@@ -199,29 +199,3 @@ export function tidy(text) {
   out = stripped;
   return { text: out, applied };
 }
-
-/**
- * Exact-token case correction from an enabled version-2 dictionary pack.
- * The caller must exclude names that are also ordinary English words.
- */
-/**
- * Capital letters a recogniser spelled out with spaces are one word.
- * Only capital letters, joined by single spaces, are merged.
- */
-export function joinSpacedCapitals(text) {
-  return String(text ?? "").replace(/(?<![A-Za-z])[A-Z](?: [A-Z])+(?![A-Za-z])/g, (run) => run.replaceAll(" ", ""));
-}
-
-export function normalizeTermCase(text, terms = []) {
-  let out = String(text ?? "");
-  const sourceLower = out.toLowerCase();
-  for (const term of terms) {
-    if (typeof term !== "string" || !term || !/[a-z]/iu.test(term)) continue;
-    if (!sourceLower.includes(term.toLowerCase())) continue;
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-    // Do not alter code paths, identifiers or a token inside another word.
-    const pattern = new RegExp(`(?<![A-Za-z0-9_./-])${escaped}(?![A-Za-z0-9_./(-])`, "gi");
-    out = out.replace(pattern, term);
-  }
-  return out;
-}

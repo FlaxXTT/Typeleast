@@ -58,5 +58,5 @@ export function explanationNameRule(text, notes) {
 export function explanationInstruction(notes) {
   if (!notes.length) return '';
   return '\n\n=== EXPLANATION DATA FOR THIS UTTERANCE ===\n' + JSON.stringify(notes)
-    + '\n以上是用户为本次口述给出的解释资料，用来确定指代、名称和含义；正文只写口述本身的内容。';
+    + '\n以上是用户对本次口述的解释，用来理解指代和名称，不写进正文。';
 }

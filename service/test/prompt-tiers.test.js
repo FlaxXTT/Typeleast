@@ -19,12 +19,11 @@ test('all one-shot cleanup modes receive scoped correction and term-restoration 
   for (const strength of ['prompt', 'conservative', 'maximal', 'concise']) {
     assert.ok(systemPromptFor({ strength }).includes(UTTERANCE_RULES), strength);
   }
-  assert.match(translatePrompt('en'), /已经整理好的文本/);
-  assert.match(UTTERANCE_RULES, /处理本次口述/);
-  assert.match(UTTERANCE_RULES, /改口/);
+  assert.match(translatePrompt('en'), /已整理好的文本/);
+  assert.match(UTTERANCE_RULES, /忠实边界/);
   assert.match(UTTERANCE_RULES, /实质信息和表达意图/);
-  assert.match(UTTERANCE_RULES, /依据按可靠程度依次是本次明确拼写或改正/);
-  assert.match(UTTERANCE_RULES, /识别结果本身是说得通的真实名称时照写/);
+  assert.match(UTTERANCE_RULES, /识别结果本身合理时照写/);
+  assert.match(UTTERANCE_RULES, /明显是识别错误/);
 });
 
 test('the JSON reply format belongs to dictation only', () => {

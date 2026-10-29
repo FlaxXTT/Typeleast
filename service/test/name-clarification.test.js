@@ -101,9 +101,8 @@ test('general prompts describe evidence and constraints, without hardcoded brand
   for (const strength of ['concise', 'prompt']) {
     const prompt = systemPromptFor({ strength });
     assert.doesNotMatch(prompt, /\bROG\b|\bLG\b|玩家国度|败家之眼|# Examples|^Input:/mu);
-    assert.match(prompt, /依据按可靠程度/);
-    assert.match(prompt,/识别结果本身是说得通的真实名称时照写/);
-    if(strength==='concise')assert.match(prompt,/找词/);
+    assert.match(prompt, /本次拼写或解释、上下文能确定正确写法/);
+    assert.match(prompt,/识别结果本身合理时照写/);
   }
 });
 

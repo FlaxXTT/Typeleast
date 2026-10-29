@@ -33,8 +33,8 @@ import { buildUserMessage, harnessAddendum, promptVersionFor, systemPromptFor } 
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { parsePolishOutput } from "./parse-output.js";
 import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
-import { restoreApproximateNumbers, unwrap } from "./validate.js";
-import { joinSpacedCapitals, normalizeTermCase, tidy } from "./tidy.js";
+import { unwrap } from "./validate.js";
+import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
 import {
   BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
@@ -160,8 +160,7 @@ export class VoicePolishService {
     const strength = canonicalStrength(request.strength ?? this.strength);
     const explanation = strength !== "promptbeta" && !request.translateTo
       ? splitExplanation(originalText, request.explanationMarkers) : { text: originalText, notes: [], used: false };
-    // Recognisers often space out spelled capitals; the model sees one word.
-    const rawText = joinSpacedCapitals(explanation.text);
+    const rawText = explanation.text;
     const base = {
       task: taskKind,
       raw: originalText,
@@ -278,10 +277,8 @@ export class VoicePolishService {
       }
       if (parsed.clarification) return this.retainSourceName(request, base, rawText, started, parsed.text);
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      // Only fixed formatting follows the model: approximate numbers, punctuation, a wrapper a chatty model may
-      // add. The cleaned text is inserted as the model wrote it; nothing judges or replaces it.
-      const tidied = tidy(restoreApproximateNumbers(rawText, unwrap(parsed.text).text));
-      candidate = tidied.text.trim();
+      // The cleaned text is inserted as the model wrote it, minus a wrapper a chatty model may add.
+      candidate = unwrap(parsed.text).text.trim();
       if (!candidate) {
         const tidyOnly = tidy(rawText);
         return await this.recordFallback(request, { ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",
@@ -294,7 +291,6 @@ export class VoicePolishService {
         ms: timing(started, 0),
         usage: result.usage,
         attempts: result.attempts,
-        postprocess: tidied.applied,
         modelNote: parsed.reason ?? undefined,
         outputMode: parsed.mode,
       });

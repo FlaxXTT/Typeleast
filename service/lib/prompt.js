@@ -7,7 +7,7 @@ import { cleanupSystemPrompt } from "./prompts/cleanup.js";
 import { JSON_OUTPUT, UTTERANCE_RULES } from "./utterance-rules.js";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-10-30.1-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-10-30.2-dictation+assistant+translate";
 
 /** The only prompt source. Kept as a list so an old profile value still validates. */
 export const PROMPT_SOURCES = ["typeleast"];
@@ -50,20 +50,20 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
   const lines = [HARNESS_ADDENDUM_MARKER];
   if (entries.length > 0) {
     lines.push(
-      "Dictionary entries from the user. A=B means the recognised spelling A is written B. Use an entry when the meaning of this utterance fits it; this utterance's own spelling and correction come first.",
+      "User dictionary (A=B: A is written B). Use an entry when it fits this utterance.",
       "Entries: " + entries.join(" | "),
     );
   }
   if (Array.isArray(aliases) && aliases.length > 0) {
-    lines.push("Pronunciation hints from an enabled terminology plugin. Each is a candidate, used when the meaning of this utterance fits it:");
+    lines.push("Possible terms for how words sound, from a terminology plugin. Use one when it fits:");
     for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
   }
   if (spelled.length > 0) {
-    lines.push("Letter-by-letter spellings in this utterance, the strongest evidence for a name. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it. Recognised letters can be misheard: when a spelled word makes no sense here and the context clearly points to the intended word, write that word:");
+    lines.push("Words spelled out letter by letter in this utterance:");
     for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);
   }
   if (context.length > 0) {
-    lines.push("The text already in the box being typed into is below, for understanding the topic and recognising names already written there. The output is the cleaned dictation alone:");
+    lines.push("Text already in the field being typed into, to help with the topic and names:");
     for (const [key, label] of context) lines.push(`${label}: ${JSON.stringify(fieldContext[key])}`);
   }
   return "\n\n" + lines.join("\n");

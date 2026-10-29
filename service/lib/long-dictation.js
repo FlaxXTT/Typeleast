@@ -28,7 +28,7 @@ export function partitionText(text, limit = CHUNK_SIZE) {
   return parts;
 }
 
-const EVIDENCE_PROMPT = `从整段口述中提取名称依据、改口关系和需要跨段保留的条件，供分段整理参考。只记录原文明确说出的依据。只返回 JSON：{"evidence":[{"quote":"原文中连续且逐字存在的依据","meaning":"依据的简短含义"}]}。最多 40 项，每项 quote 不超过 300 字、meaning 不超过 180 字。没有依据时 evidence 为空数组。`;
+const EVIDENCE_PROMPT = `从整段口述中摘出分段整理时需要跨段参考的依据：名称、改口和条件。只回复 JSON：{"evidence":[{"quote":"原文逐字摘录","meaning":"简短含义"}]}，最多 40 项，quote 不超过 300 字，meaning 不超过 180 字；没有时为空数组。`;
 
 /** Every accepted hint must have a bounded quotation in this request. */
 export function parseEvidence(text, source) {
@@ -91,7 +91,7 @@ export async function generateDictation({source, system, call, parameters, progr
   if (evidence === null) throw new ModelCallError('error','invalid cross-segment evidence',{code:'invalid-evidence'});
   const parts = partitionText(source);
   let attempts = context.attempts ?? 1, done = 0;
-  const segmentSystem = system + '\n这是长口述的一部分。evidence 是全文依据，帮助理解；before 和 after 是相邻原文，只用来衔接，由相邻部分负责整理。正文是 text 从头到尾的整理结果。全文依据里明确的后续改口可以撤回本段的旧说法。';
+  const segmentSystem = system + '\n这是长口述的一部分：完整整理 text；before、after 是相邻原文，evidence 是全文依据，都只用来理解衔接。';
   progress({stage:'generating',completed:0,total:parts.length});
   const drafts = await pool(parts, PARALLEL, async (text, i) => {
     const before = i > 0 ? Array.from(parts[i - 1]).slice(-OVERLAP).join('') : '';

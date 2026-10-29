@@ -9,11 +9,11 @@ import { inventedFacts } from "../lib/validate.js";
 test("compact prompts keep one shared fidelity boundary and a one-shot JSON contract", () => {
   for(const strength of ['prompt','concise']) {
     const prompt=systemPromptFor({strength});
-    assert.ok(Array.from(prompt).length<1400,'base rules must not grow through duplicated instructions');
-    for(const rule of ['改口','否定','实质信息和表达意图','数字含义','代码','按原意写出','照写','"status"','"text"'])assert.ok(prompt.includes(rule),rule);
+    assert.ok(Array.from(prompt).length<600,'base rules must not grow through duplicated instructions');
+    for(const rule of ['改口','实质信息和表达意图','照原意写出','识别结果本身合理时照写','"status"','"text"'])assert.ok(prompt.includes(rule),rule);
     assert.doesNotMatch(prompt,/Tech Domain|Python|杰森|Claude|GitHub|ROG|LG/);
   }
-  assert.match(CLEANUP_PROMPT,/篇幅随内容而定/);
+  assert.match(CLEANUP_PROMPT,/自行判断如何整理/);
 });
 
 test("natural cleanup carries no addendum when there is nothing to add", () => {
@@ -39,7 +39,7 @@ test("a letter-by-letter spelling adds a hint only when the utterance has one", 
   const [base, addendum] = prompt.split(HARNESS_ADDENDUM_MARKER);
   assert.equal(base.trimEnd(), (cleanupSystemPrompt() + UTTERANCE_RULES + JSON_OUTPUT).trimEnd());
   assert.match(addendum, /"R-O-G" spells "ROG"\./);
-  assert.match(addendum, /where the spelling itself is the subject, keep it/);
+  assert.match(addendum, /spelled out letter by letter/);
   assert.equal(systemPromptFor({ strength: "prompt", spellings: [] }), cleanupSystemPrompt() + UTTERANCE_RULES + JSON_OUTPUT);
 });
 

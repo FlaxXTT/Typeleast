@@ -1,16 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { joinSpacedCapitals } from "../lib/tidy.js";
 import { relevantAliases } from "../lib/term-hints.js";
 import { cleanupSystemPrompt } from "../lib/prompts/cleanup.js";
 import { JSON_OUTPUT, UTTERANCE_RULES } from "../lib/utterance-rules.js";
-
-test("capitals a recogniser spaced out are joined; words are not", () => {
-  assert.equal(joinSpacedCapitals("帮我查一下L G那款显示器"), "帮我查一下LG那款显示器");
-  assert.equal(joinSpacedCapitals("可用的H T T P或MIXED代理"), "可用的HTTP或MIXED代理");
-  assert.equal(joinSpacedCapitals("I am fine, use OAuth"), "I am fine, use OAuth");
-});
 
 test("new pack hints apply only in their context", () => {
   const pack = JSON.parse(readFileSync(new URL("../lib/bundled/typeleast.tech-terms.typeleast-plugin", import.meta.url), "utf8"));
@@ -21,7 +14,7 @@ test("new pack hints apply only in their context", () => {
   assert.deepEqual(terms("视频的 codecs 不支持"), []);
 });
 
-test("the prompt keeps explained names, lists parallel items, writes spoken symbols and keeps English", () => {
+test("the prompt states the task, the fidelity boundary and the language", () => {
   const prompt = cleanupSystemPrompt() + UTTERANCE_RULES + JSON_OUTPUT;
-  for (const rule of ["被解释的名称本身保留", "编号列表", "念出的符号写成对应的符号", "代码块", "沿用口述的语言"]) assert.ok(prompt.includes(rule), rule);
+  for (const rule of ["纠正识别错误", "改口", "沿用口述的语言", "专有名称", "照写"]) assert.ok(prompt.includes(rule), rule);
 });

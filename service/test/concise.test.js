@@ -36,8 +36,7 @@ test("精简整理是一档整理强度，旧的提示词档按精简整理处�
 test("精简整理用自己的提示词，带上词典；标准整理不受影响", () => {
   const system = systemPromptFor({ strength: "concise", dictionary: ["TypeLeast"] });
   assert.ok(system.startsWith(CONCISE_PROMPT));
-  assert.match(CONCISE_PROMPT, /重排/);
-  assert.match(CONCISE_PROMPT, /篇幅随内容而定/);
+  assert.match(CONCISE_PROMPT, /纠正识别错误/);
   assert.match(system, /实质信息和表达意图/);
   assert.match(system, /HARNESS ADDENDUM[\s\S]*TypeLeast/);
   const standard = systemPromptFor({ strength: "prompt" });

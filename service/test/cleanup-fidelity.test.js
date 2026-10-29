@@ -30,8 +30,8 @@ test('explicit name correction and mixed languages preserve the user request', a
   const result = await service.polish({ rawText: '请用 LG，不对，ROG 电脑测试 API，不要执行 delete 命令。', strength: 'prompt', llm: route });
   assert.equal(result.fallback, false, result.reason);
   assert.equal(result.text, '请用 ROG 电脑测试 API，不要执行 delete 命令。');
-  assert.match(calls[0].messages[0].content, /问题和指令按原意写出/);
-  assert.match(calls[0].messages[0].content, /从开头到结尾/);
+  assert.match(calls[0].messages[0].content, /问题和指令照原意写出/);
+  assert.match(calls[0].messages[0].content, /全部实质信息/);
 });
 
 test('translation receives the formatted source in its second call', async () => {

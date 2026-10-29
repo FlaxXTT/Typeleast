@@ -401,29 +401,6 @@ export function inventedFacts(source, output) {
   return invented;
 }
 
-/**
- * Put back an estimate that a rewrite joined into one number: the speaker said
- * 三四个 and the model wrote 34 个. Only a number the speaker never said is
- * touched, and it is replaced by the speaker's own words.
- * @param {string} raw - the transcript.
- * @param {string} output - the rewrite.
- * @returns {string} the rewrite with such numbers restored.
- */
-export function restoreApproximateNumbers(raw, output) {
-  let text = String(output ?? "");
-  const said = factTokens(raw);
-  for (const estimate of approximateNumbers(raw)) {
-    if (!estimate.merged || said.has("N:" + estimate.merged)) continue;
-    const pattern = new RegExp(`( ?)(?<![\\d.,])${estimate.merged}(?![\\d.,])( ?)`, "gu");
-    text = text.replace(pattern, (m, before, after, at, whole) => {
-      const prev = whole[at - 1] ?? "", next = whole[at + m.length] ?? "";
-      const cjk = /[\u4e00-\u9fff]/u;
-      return (before && !cjk.test(prev) ? before : "") + estimate.text + (after && !cjk.test(next) ? after : "");
-    });
-  }
-  return text;
-}
-
 /** Language balance of a text: CJK characters, latin letters and latin words. */
 export function languageBalance(text) {
   const source = String(text ?? "");

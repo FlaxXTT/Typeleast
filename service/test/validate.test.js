@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { approximateNumbers, chineseNumeral, contentLength, coverage, inventedFacts, novelty, restoreApproximateNumbers, stripListMarkers, translationInventedNumbers, unwrap, validateOutput } from "../lib/validate.js";
+import { approximateNumbers, chineseNumeral, contentLength, coverage, inventedFacts, novelty, stripListMarkers, translationInventedNumbers, unwrap, validateOutput } from "../lib/validate.js";
 
 const FENCE = String.fromCharCode(96).repeat(3);
 const NL = String.fromCharCode(10);
@@ -199,16 +199,6 @@ test("two neighbouring numbers are an estimate, not one number", () => {
   assert.deepEqual(inventedFacts("验证码是一二三四五六", "验证码是 123456。"), []);
   assert.deepEqual(translationInventedNumbers("我要三四个苹果", "I want 3 or 4 apples."), []);
   assert.deepEqual(translationInventedNumbers("我要三四个苹果", "I want 34 apples."), ["34"]);
-});
-
-test("an estimate joined into one number is put back in the speaker's words", () => {
-  assert.equal(restoreApproximateNumbers("嗯我要三四个苹果然后十七八个梨", "我要 34 个苹果，然后 178 个梨。"), "我要三四个苹果，然后十七八个梨。");
-  assert.equal(restoreApproximateNumbers("我要三四个", "I need 34 of them"), "I need 三四 of them");
-  assert.equal(restoreApproximateNumbers("我有三十四个，还要三四个", "我有 34 个，还要三四个。"), "我有 34 个，还要三四个。", "a number the speaker said is left alone");
-  assert.equal(restoreApproximateNumbers("我要三四个", "编号 1345 的我要 34 个"), "编号 1345 的我要三四个", "only a whole number is replaced");
-  const raw = "那个我大概要三四个人然后再给我五六天时间";
-  assert.equal(validateOutput({ rawText: raw, output: "我大概要 34 个人，再给我 56 天时间。", strength: "prompt" }).reason, "invented-fact");
-  assert.equal(validateOutput({ rawText: raw, output: restoreApproximateNumbers(raw, "我大概要 34 个人，再给我 56 天时间。"), strength: "prompt" }).ok, true);
 });
 
 test("a count that matches the list it introduces is structure, not invention", () => {
