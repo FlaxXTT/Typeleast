@@ -59,7 +59,7 @@ export function harnessAddendum({ dictionary, aliases, fieldContext, spellings }
     for (const alias of aliases) lines.push(`${JSON.stringify(alias.heard)} may mean ${JSON.stringify(alias.term)} in this context.`);
   }
   if (spelled.length > 0) {
-    lines.push("Letter-by-letter spellings in this utterance. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it:");
+    lines.push("Letter-by-letter spellings in this utterance. Where the speaker spells to confirm a word, write that word once in its usual capitalisation and drop the spelling; where the spelling itself is the subject, keep it. Recognised letters can themselves be wrong (B/D/P/E/V, M/N and S/F sound alike): check each spelled word and every all-caps term against the context, and when the context clearly points to a known name, product or term, write that one; otherwise keep the recognised letters:");
     for (const item of spelled) lines.push(`${JSON.stringify(item.spelled)} spells ${JSON.stringify(item.word)}.`);
   }
   if (context.length > 0) {

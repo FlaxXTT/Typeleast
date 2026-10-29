@@ -23,7 +23,8 @@ test('all one-shot cleanup modes receive scoped correction and term-restoration 
   assert.match(UTTERANCE_RULES, /处理本次口述/);
   assert.match(UTTERANCE_RULES, /明确改口/);
   assert.match(UTTERANCE_RULES, /引用和强调/);
-  assert.match(UTTERANCE_RULES, /证据不足保留原称呼/);
+  assert.match(UTTERANCE_RULES, /证据不足保留识别结果/);
+  assert.match(UTTERANCE_RULES, /明确拼出的，也要对照上下文核对/);
 });
 
 const samples = [
