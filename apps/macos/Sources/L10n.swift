@@ -309,6 +309,7 @@ enum L10n {
         "自动加词": "Learn words",
         "粘贴后你改过的词加入词典。": "Words you fix after a paste go into the dictionary.",
         "试说一句": "Try a sentence",
+        "说话，再按一次结束": "to talk, press again to finish",
         "口述字数": "Words dictated",
         "节省时间": "Time saved",
         "平均口述速度": "Average speed",

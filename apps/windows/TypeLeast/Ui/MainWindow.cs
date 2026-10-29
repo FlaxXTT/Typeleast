@@ -182,7 +182,7 @@ internal sealed class HomePage : IPage
     private readonly MainWindow window;
     private readonly StackPanel root = new();
     private readonly Button tryButton;
-    private readonly TextBlock heroTitle = Theme.Text("", 22, bold: true);
+    private readonly TextBlock heroTitle = Theme.Text("", 15, bold: true, wrap: false);
     private readonly TextBlock hint = Theme.Text("", 12.5, Theme.Grey);
     private readonly StackPanel checklist = new();
     private readonly Border setupCard;
@@ -198,11 +198,13 @@ internal sealed class HomePage : IPage
         this.host = host;
         this.window = window;
         tryButton = Theme.Primary(L10n.T("试一下"), host.Toggle);
-        var hero = Theme.Stack(8,
-            heroTitle,
-            Theme.Text(L10n.T("在输入框按一下说话，再按一下结束。"), 13, Theme.Grey),
-            Theme.Row(10, tryButton, hint));
-        root.Children.Add(Theme.Card(hero, 24));
+        // One line: what to press, then 分享 and 试一下.
+        var hero = new DockPanel { LastChildFill = true };
+        var actions = Theme.Row(8, ActivityView.ShareButton(), tryButton);
+        DockPanel.SetDock(actions, Dock.Right); hero.Children.Add(actions);
+        heroTitle.VerticalAlignment = VerticalAlignment.Center;
+        hero.Children.Add(Theme.Stack(2, heroTitle, hint));
+        root.Children.Add(Theme.Card(hero, 14));
         setupCard = Theme.Card(Theme.Stack(10, Theme.Text(L10n.T("设置位置"), 14, bold: true), checklist));
         root.Children.Add(setupCard);
         root.Children.Add(insights);
@@ -217,7 +219,7 @@ internal sealed class HomePage : IPage
     {
         keycaps.Content = Theme.Keycaps(host.HotkeyLabel);
         engine.Text = (host.Speech?.DisplayName ?? L10n.T("未选择语音模型")) + " · " + host.ServiceSummary + " · " + host.ModelSummary;
-        heroTitle.Text = L10n.T("按 ") + host.HotkeyLabel + L10n.T(" 开始听写");
+        heroTitle.Text = L10n.T("按 ") + host.HotkeyLabel + L10n.T(" 说话，再按一次结束");
         tryButton.Content = host.Phase == DictationPhase.Recording ? L10n.T("结束听写") : L10n.T("试一下");
         tryButton.IsEnabled = host.Phase != DictationPhase.Thinking;
         hint.Text = host.Hint;

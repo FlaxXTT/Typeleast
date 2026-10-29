@@ -11,8 +11,7 @@ namespace TypeLeast.Ui;
 
 /// <summary>
 /// The Home insights: four figures (字数, 节省时间, 速度, 口述时间), then active days and streaks above a
-/// heatmap (a square per day, a column per week), on a lightly dotted panel with 分享 for the website
-/// and GitHub links.
+/// heatmap (a square per day, a column per week), on a lightly dotted panel.
 /// </summary>
 internal static class ActivityView
 {
@@ -38,8 +37,16 @@ internal static class ActivityView
         grid.Children.Add(Figure(Duration(seconds), L10n.T("总口述时间")));
         foreach (FrameworkElement tile in grid.Children) tile.Margin = new Thickness(0, 0, 14, 14);
 
+        var activity = Activity(log, today);
+        activity.Margin = new Thickness(0, 0, 14, 0);
+        var stack = Theme.Stack(0, grid, activity);
+        return new Border { CornerRadius = new CornerRadius(18), Padding = new Thickness(16, 16, 2, 16), Background = Dots(), Child = stack };
+    }
+
+    /// <summary>分享 (on the Home hero): copy the website and GitHub links, or open either.</summary>
+    public static Button ShareButton()
+    {
         var share = Theme.Secondary("⇪ " + L10n.T("分享"), () => { });
-        share.HorizontalAlignment = HorizontalAlignment.Right;
         share.ToolTip = L10n.T("分享官网和 GitHub 链接");
         var menu = new ContextMenu();
         void Add(string title, Action run) { var item = new MenuItem { Header = title }; item.Click += (_, _) => run(); menu.Items.Add(item); }
@@ -47,12 +54,7 @@ internal static class ActivityView
         Add(L10n.T("打开官网"), () => Shell.Open(Site));
         Add(L10n.T("打开 GitHub"), () => Shell.Open(GitHub));
         share.Click += (_, _) => { menu.PlacementTarget = share; menu.IsOpen = true; };
-
-        var activity = Activity(log, today);
-        activity.Margin = new Thickness(0, 0, 14, 0);
-        var stack = Theme.Stack(0, share, grid, activity);
-        share.Margin = new Thickness(0, 0, 14, 14);
-        return new Border { CornerRadius = new CornerRadius(18), Padding = new Thickness(16, 16, 2, 16), Background = Dots(), Child = stack };
+        return share;
     }
 
     /// <summary>34.9K 字 / 3.5万 字: large counts are shortened.</summary>

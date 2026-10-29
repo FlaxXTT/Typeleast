@@ -103,24 +103,18 @@ private struct HeroCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        Card(padding: 22) {
-            HStack(alignment: .center, spacing: 18) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Text(L10n.text("按")).font(.system(size: 17, weight: .semibold))
-                        Keycap(label: model.hotkeyLabel, large: true)
-                        Text(L10n.text("开始，再按一次结束")).font(.system(size: 17, weight: .semibold))
-                    }
-                    Text(L10n.text("文字写到光标处。按 Esc 取消。"))
-                        .font(.system(size: 12.5))
-                        .foregroundColor(Theme.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        Card(padding: 14) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(L10n.text("按")).font(.system(size: 15, weight: .semibold))
+                Keycap(label: model.hotkeyLabel)
+                Text(L10n.text("说话，再按一次结束")).font(.system(size: 15, weight: .semibold))
                 Spacer(minLength: 12)
+                ShareButton(items: InsightsPanel.shareItems).fixedSize()
                 Button(model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(model.phase == .thinking)
             }
+            .padding(.leading, 6)
         }
     }
 }

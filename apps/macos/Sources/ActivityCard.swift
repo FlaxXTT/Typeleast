@@ -3,7 +3,7 @@ import AppKit
 
 // ActivityCard.swift - the Home insights: four figures (字数, 节省时间, 速度, 口述时间), then
 // active days and streaks above a heatmap (one square per day, a column per week), on a
-// lightly dotted panel with a share button for the website and the GitHub page.
+// lightly dotted panel. ShareButton (on the Home hero) shares the website and GitHub links.
 
 struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
@@ -14,10 +14,6 @@ struct InsightsPanel: View {
     var body: some View {
         let stats = model.stats
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Spacer()
-                ShareButton(items: InsightsPanel.shareItems).fixedSize()
-            }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
                 Figure(parts: InsightsPanel.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"))
                 Figure(parts: InsightsPanel.duration(stats.savedSeconds), label: L10n.text("节省时间"))
@@ -90,7 +86,7 @@ private struct DotGrid: View {
 }
 
 /// 分享: the system share menu with the website and GitHub links.
-private struct ShareButton: NSViewRepresentable {
+struct ShareButton: NSViewRepresentable {
     let items: [Any]
 
     func makeNSView(context: Context) -> NSButton {
