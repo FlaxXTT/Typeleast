@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {partitionText, parseEvidence, generateDictation, TEXT_LIMIT} from '../lib/long-dictation.js';
+import {partitionText, parseEvidence, generateDictation, copiedTail, TEXT_LIMIT} from '../lib/long-dictation.js';
 import {taskFor} from '../lib/dictation-task.js';
 import {VoicePolishService} from '../lib/service.js';
 import {LocalRecognizer} from '../lib/asr.js';
@@ -104,4 +104,31 @@ test('progress contains stage counts only, expires, and never contains text',()=
   s.setProgress('fixture-id',{stage:'generating',completed:1,total:3,raw:'private'});
   assert.deepEqual(s.taskProgress('fixture-id'),{stage:'generating',completed:1,total:3});
   s.progress.get('fixture-id').updated=0;assert.equal(s.taskProgress('fixture-id').stage,'waiting');
+});
+
+const RAMBLE = Array.from({length: 58}, (_, i) => `然后第${i + 1}个事情就是我们那个要把报表的格式再调整一下嗯还有就是要跟进客户的反馈`).join('，');
+
+test('a cleanup whose second half copies the transcript is detected', () => {
+  const structured = '本次要处理三类事情：\n1. 调整报表格式。\n2. 跟进客户反馈。\n3. 每周汇总进度。'.repeat(12);
+  assert.equal(copiedTail(RAMBLE, structured), false, 'a structured rewrite is not a copy');
+  const lazy = structured.slice(0, 200) + RAMBLE.slice(Math.floor(RAMBLE.length / 2));
+  assert.equal(copiedTail(RAMBLE, lazy), true, 'a verbatim tail is a copy');
+  assert.equal(copiedTail('短', '短'), false, 'short answers are never judged');
+});
+
+test('a long single answer that copies its second half is redone in parts', async () => {
+  const source = RAMBLE.slice(0, 2300);
+  const lazy = JSON.stringify({status: 'ok', text: '要点：\n1. 调整报表格式。\n' + source.slice(1000)});
+  const calls = [];
+  const call = async (system, user) => {
+    calls.push(user);
+    if (calls.length === 1) return {text: lazy};
+    if (calls.length === 2) return {text: '{"evidence":[]}'};
+    return {text: JSON.stringify({status: 'ok', text: '1. 调整报表格式。\n2. 跟进客户反馈。'})};
+  };
+  const result = await generateDictation({source, system: 'S', call, parameters: {}});
+  assert.equal(result.segmented, true);
+  assert.ok(calls.length >= 4, 'evidence plus at least two parts');
+  const second = JSON.parse(calls[3]);
+  assert.ok(second.previousEnd.includes('跟进客户反馈'), 'each part continues from the previous one');
 });
