@@ -31,10 +31,10 @@ for (const scenario of ["timeout", "length", "format", "validation", "auth", "ne
       recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl });
     const result = await service.polish({ rawText: raw, strength: "prompt", llm: route });
     assert.equal(result.fallback, true);
-    assert.equal(result.text, "");assert.ok(result.raw.includes("Wednesday"));assert.equal(result.clarification.kind,"quality");
+    assert.notEqual(result.text, '', 'a result is inserted, never held');assert.ok(result.raw.includes("Wednesday"));assert.equal(result.clarification, undefined);
     const expected = { timeout: "model-timeout", length: "model-max-tokens", format: "output-format", auth: "model-error:HTTP_401", network: "model-error:NETWORK" };
     if (expected[scenario]) assert.equal(result.reason, expected[scenario]);
-    else assert.ok(result.reason && !result.text.includes("999"));
+    else assert.ok(result.reason && result.uncertain, "an unverified result is inserted but marked");
     assert.equal(budgets[0], 64);
     assert.equal(budgets[1], 1800);
     assert.ok(Number.isFinite(result.ms.total));

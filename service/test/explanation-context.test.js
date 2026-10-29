@@ -61,7 +61,7 @@ test('provider cannot copy markers or a full explanation into inserted output',a
  const raw='请购买电脑。补充背景开始仅仅用于说明这个名称的用途补充背景结束';
  for(const output of [raw,'请购买电脑，仅仅用于说明这个名称的用途。']){
   const f=fixture(output);const r=await f.service.polish({rawText:raw,llm:route,strength:'concise',explanationMarkers:'background'});
-  assert.equal(r.fallback,true);assert.equal(r.reason,'explanation-leaked');assert.equal(r.text,'');assert.equal(r.clarification.candidate,'请购买电脑。');
+  assert.equal(r.fallback,true);assert.equal(r.reason,'explanation-leaked');assert.equal(r.text,'请购买电脑。');
  }
 });
 test('explanation secrets are redacted before any provider message or scoped name rule',async()=>{

@@ -78,13 +78,13 @@ test("the service listens on loopback, publishes its port, and serves the contra
       assert.equal(dictated.status, 200);
       assert.equal(dictated.json.fallback, true);
       assert.equal(dictated.json.fallbackReason, "no-api-key");
-      assert.equal(dictated.json.text, "");
+      assert.notEqual(dictated.json.text, '', 'a result is inserted, never held');
       // The app's dictionary rides ahead of the audio.
       const dictionary = Buffer.from(JSON.stringify(["TypeLeast"]));
       const withDictionary = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
         headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": String(dictionary.length) }, body: Buffer.concat([dictionary, wav(0.5)]) });
       assert.equal(withDictionary.status, 200);
-      assert.equal(withDictionary.json.text, "");
+      assert.notEqual(withDictionary.json.text, "");
       const badLength = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
         headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": "-1" }, body: wav(0.5) });
       assert.equal(badLength.status, 400);
@@ -127,7 +127,7 @@ test('core dictation starts and answers with the extension module disabled', asy
       assert.deepEqual([plugins.status, plugins.json.code], [503, 'plugins-unavailable']);
       const dictated = await raw(handle.port, { method: 'POST', path: '/api/voice-polish/dictate',
         headers: { ...headers, 'content-type': 'audio/wav' }, body: wav(0.5) });
-      assert.deepEqual([dictated.status, dictated.json.text], [200, '']);
+      assert.deepEqual([dictated.status, dictated.json.text.length > 0], [200, true]);
     } finally { await handle.close(); }
   });
 });

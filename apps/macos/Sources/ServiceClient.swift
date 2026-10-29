@@ -316,6 +316,8 @@ struct DictateResponse: Codable, Equatable {
     var raw: String = ""
     var fallback: Bool = false
     var fallbackReason: String?
+    /// The cleaned result was inserted although a check could not confirm it.
+    var uncertain: Bool?
     var model: String?
     var provider: String?
     var ms: MSBreakdown?

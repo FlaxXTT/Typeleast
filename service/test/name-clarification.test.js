@@ -34,10 +34,10 @@ test('name question requires bounded evidence present in the current utterance',
 test('ordinary modes retain uncertain source names without a confirmation or learning', async () => {
   const f = fixture(pending);
   const result = await f.service.polish({ rawText: raw, llm: route, supportsClarification: true });
-  assert.equal(result.text, "");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
   assert.equal(result.raw, raw);
   assert.equal(result.reason,'name-kept');
-  assert.equal(result.clarification.kind,"quality");
+  assert.equal(result.clarification, undefined);
   assert.deepEqual(result.suggestions, []);
   assert.equal(f.suggestions(), 0);
   assert.equal(f.calls.length, 1);
@@ -46,14 +46,14 @@ test('ordinary modes retain uncertain source names without a confirmation or lea
 test('older clients get the same conservative one-pass name result', async () => {
   const result = await fixture(pending).service.polish({rawText:raw,llm:route});
   assert.equal(result.fallback,true);assert.equal(result.reason,'name-kept');
-  assert.equal(result.text,"");assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');assert.equal(result.clarification, undefined);
 });
 
 test('an unsupported brand substitution returns the source without a question', async () => {
   const f = fixture({ status: 'ok', text: '我想买 ROG 电脑。' });
   const result = await f.service.polish({ rawText: '我想买 LG 电脑', llm: route, supportsClarification: true });
-  assert.equal(result.text, '');
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
   assert.equal(f.suggestions(), 0);
 });
 
@@ -61,13 +61,13 @@ test('translation stops before its second call when source name needs confirmati
   const f = fixture(pending);
   const result = await f.service.polish({ rawText: raw, llm: route, translateTo: 'en', supportsClarification: true });
   assert.equal(f.calls.length, 1);
-  assert.equal(result.text, '');
-  assert.equal(result.clarification.target, 'en');
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test('fabricated clarification evidence cannot release an unsupported name', async () => {
   const result=await fixture({...pending,text:'我想买 ROG 电脑。',clarification:{question:'Which?',evidence:'玩家国度'}}).service.polish({rawText:raw,llm:route,supportsClarification:true});
-  assert.equal(result.text,"");assert.equal(result.reason,'name-kept');assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');assert.equal(result.reason,'name-kept');assert.equal(result.clarification, undefined);
 });
 
 test('automatic dictionary entries cannot authorise replacing a valid different name', () => {
@@ -149,8 +149,8 @@ test('HTTP ordinary polish delivers the source directly instead of a name questi
   const f = fixture(pending);
   const res = await post(f.service, '/polish', Buffer.from(JSON.stringify({ text: raw, llm: route, supportsClarification: true })));
   assert.equal(res.status, 200);
-  assert.equal(res.json.text, "");
-  assert.equal(res.json.clarification.kind,"quality");
+  assert.notEqual(res.json.text, '', 'a result is inserted, never held');
+  assert.equal(res.json.clarification, undefined);
   assert.deepEqual(res.json.suggestions, []);
 });
 

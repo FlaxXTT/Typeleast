@@ -269,6 +269,7 @@ export function createHandler(options) {
           personalization: result.personalization,
           fallback: result.fallback,
           fallbackReason: result.reason ?? undefined,
+          ...(result.uncertain ? { uncertain: true } : {}),
           model: result.model,
           provider: result.provider,
           ms: result.ms,

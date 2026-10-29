@@ -177,6 +177,8 @@ public sealed class DictateResponse
     [JsonPropertyName("raw")] public string Raw { get; set; } = "";
     [JsonPropertyName("fallback")] public bool Fallback { get; set; }
     [JsonPropertyName("fallbackReason")] public string? FallbackReason { get; set; }
+    /// <summary>The cleaned result was inserted although a check could not confirm it.</summary>
+    [JsonPropertyName("uncertain")] public bool Uncertain { get; set; }
     [JsonPropertyName("model")] public string? Model { get; set; }
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }

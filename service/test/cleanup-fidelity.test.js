@@ -27,9 +27,9 @@ for (const [rawText, output] of [
   const result = await service.polish({ rawText, strength: 'prompt', llm: route });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, 'name-kept');
-  assert.equal(result.text, "");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
   assert.equal(result.raw, rawText);
-  assert.equal(result.clarification.kind,"quality");
+  assert.equal(result.clarification, undefined);
   assert.deepEqual(result.suggestions, []);
   assert.equal(calls.length, 1);
 });

@@ -16,10 +16,10 @@ test('a current free-form term explanation can resolve an ASR name through one b
 test('a category alone never authorizes replacing a valid name',async()=>{
  const f=fixture(['{"status":"ok","text":"我想买 ROG 电脑。"}']);
  const r=await f.service.polish({rawText:'我想买 LG 电脑。',strength:'concise',llm:route});
- assert.equal(r.text,'');assert.equal(r.reason,'name-kept');assert.equal(r.clarification.kind,'quality');assert.equal(f.calls.length,1);
+ assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.reason,'name-kept');assert.equal(r.clarification, undefined);assert.equal(f.calls.length,1);
 });
 test('reviewing a name cannot waive number and condition checks',async()=>{
  const f=fixture(['{"status":"ok","text":"我想买 ROG 电脑，预算 20000 元。"}','{"issues":[]}']);
  const r=await f.service.polish({rawText:'我想买 LG 电脑，我说的这个词指的是玩家国度。预算 10000 元。',strength:'concise',llm:route});
- assert.equal(r.text,'');assert.equal(r.clarification.kind,'quality');assert.equal(r.clarification.reason,'invented-fact');assert.equal(f.calls.length,2);
+ assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.clarification, undefined);assert.equal(r.reason,'invented-fact');assert.equal(f.calls.length,2);
 });

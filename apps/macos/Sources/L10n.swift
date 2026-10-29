@@ -53,6 +53,7 @@ enum L10n {
         "正在处理…": "Processing…",
         "录音超过 24 MiB": "Recording exceeds 24 MiB",
         "提示词 Beta": "Prompt Beta",
+        "已插入，可能有误，可在历史中修改": "Inserted. It may contain errors; you can fix it in History.",
 
         "多轮补充需求，主动生成完整提示词。": "Clarify your requirements over several turns, then generate when ready.",
         "使用识别原文": "Use original transcript",

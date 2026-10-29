@@ -157,8 +157,8 @@ export class VoicePolishService {
     request.strength = taskKind === "assistant" ? "promptbeta" : "prompt";
     const started = Date.now();
     const originalText = String(request.rawText ?? "").trim();
-    if (Array.from(originalText).length > TEXT_LIMIT) return this.qualityQuestion(request,{
-      task:taskKind,raw:originalText,text:originalText,fallback:true,reason:'text-too-long',ms:timing(started,0),
+    if (Array.from(originalText).length > TEXT_LIMIT) return this.recordAndReturn(request,{
+      task:taskKind,raw:originalText,text:tidy(originalText).text,fallback:true,reason:'text-too-long',ms:timing(started,0),
     });
     // The retired prompt-mode tiers (promptbrief, promptify) are read as 精简整理.
     const strength = canonicalStrength(request.strength ?? this.strength);
@@ -232,7 +232,8 @@ export class VoicePolishService {
       strength,
       style,
     }) + explanationInstruction(safeNotes) + preferenceInstruction(examples)
-      + variantInstruction(parseVariants(request.variants));
+      + variantInstruction(parseVariants(request.variants))
+      + (request._languageRetry ? "\n\nThe previous answer changed the language. Write the result in the same language the speaker used; keep English that was spoken in English." : "");
     // The transcript is redacted on the way OUT to the provider, not on the way
     // in: a dictated key or password must not reach the model, and context is
     // already redacted by buildContext. The text the user finally gets is what
@@ -280,7 +281,7 @@ export class VoicePolishService {
           ...base, text: tidy(rawText).text, fallback: true, reason: "explanation-leaked", ms: timing(started, 0),
         });
       }
-      if (parsed.clarification) return this.retainSourceName(request, base, rawText, started);
+      if (parsed.clarification) return this.retainSourceName(request, base, rawText, started, parsed.text);
       if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
       // Deterministic cleanup runs BEFORE validation so the safety checks judge
       // exactly the text that would be inserted.
@@ -300,22 +301,31 @@ export class VoicePolishService {
       let verdict = validateOutput({ rawText, output: candidate, strength, termEvidence: context.dictionary });
       if (!verdict.ok && verdict.reason === "entity-changed") {
         // A current explanation can resolve a name, but it cannot waive other fact checks.
-        if (!hasTermExplanation(originalText) && !explanation.used) return this.retainSourceName(request, base, rawText, started);
+        if (!hasTermExplanation(originalText) && !explanation.used) return this.retainSourceName(request, base, rawText, started, candidate);
         const issues = await reviewCandidate();
-        if (issues === null || issues.length) return this.retainSourceName(request, base, rawText, started);
+        if (issues === null || issues.length) return this.retainSourceName(request, base, rawText, started, candidate);
         verdict = validateOutput({rawText,output:candidate,strength,termEvidence:context.dictionary,nameChangesReviewed:true,meaningReviewed:true});
       }
       if (!verdict.ok && ['output-too-short','invented-content'].includes(verdict.reason)) {
         const issues = reviewed ? null : await reviewCandidate();
-        if (issues === null || issues.length) return this.recordFallback(request,{...base,text:candidate,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
+        if (issues === null || issues.length) return this.recordFallback(request,{...base,text:candidate,uncertain:true,fallback:true,reason:issues===null?'review-invalid':'incomplete-output',ms:timing(started,0)});
         verdict = validateOutput({rawText,output:candidate,strength,termEvidence:context.dictionary,meaningReviewed:true});
       }
+      // A changed language is retried once before anything is inserted.
+      if (!verdict.ok && verdict.reason === "language-changed" && !request._languageRetry) {
+        task.dispose();
+        return this.polish({ ...request, _languageRetry: true });
+      }
       if (!verdict.ok) {
-        // Keep the candidate for editing, but never expose it as insertable text.
+        // Nothing waits on the user: a result that only failed a fact or name check is
+        // inserted and marked uncertain; a truncated or wrong-language one is replaced by
+        // the tidied transcript.
         const tidyOnly = tidy(rawText);
+        const unusable = ["language-changed", "output-too-short", "empty-output"].includes(verdict.reason);
         return await this.recordFallback(request, {
           ...base,
-          text: candidate,
+          text: unusable ? tidyOnly.text : candidate,
+          ...(unusable ? {} : { uncertain: true }),
           fallback: true,
           reason: verdict.reason,
           detail: describeVerdict(verdict.metrics),
@@ -358,6 +368,7 @@ export class VoicePolishService {
       return await this.recordFallback(request, {
         ...base,
         text: candidate ?? tidyOnly.text,
+        ...(candidate ? { uncertain: true } : {}),
         fallback: true,
         reason,
         detail,
@@ -394,7 +405,8 @@ export class VoicePolishService {
         ...(this.fetchImpl ? {fetchImpl:this.fetchImpl} : {})});
       const verdict = validateOutput({rawText:cleanedSource,output:String(result.text ?? '').trim(),strength:'translate'});
       task.assertTime();
-      if (!verdict.ok) return this.recordFallback(request,{...base,text:String(result.text ?? ''),fallback:true,reason:verdict.reason,ms:timing(started,0)});
+      // A translation that failed only the number check is inserted and marked, like dictation.
+      if (!verdict.ok) return this.recordFallback(request,{...base,text:String(result.text ?? ''),uncertain:true,translated:target,fallback:true,reason:verdict.reason,ms:timing(started,0)});
       return this.recordAndReturn(request,{...base,text:verdict.text,translated:target,ms:timing(started,0),attempts:result.attempts});
     } catch (error) {
       const reason = request.signal?.aborted ? 'cancelled' : task.deadline.timedOut() ? 'model-timeout' : failureReason(error);
@@ -516,13 +528,13 @@ export class VoicePolishService {
       ms: result.ms.polish,
     });
     this.recentFailures.length = Math.min(this.recentFailures.length, MAX_RECENT_FAILURES);
-    const mode=canonicalStrength(request.strength??this.strength);
-    if(mode!=='promptbeta'&&result.reason!=='cancelled')return this.qualityQuestion(request,result);
     return await this.recordAndReturn(request, result);
   }
 
-  async retainSourceName(request, base, source, started) {
-    return this.qualityQuestion(request,{...base,text:tidy(source).text,fallback:true,reason:'name-kept',suggestions:[],ms:timing(started,0)});
+  /** A name the checks could not confirm: the cleaned text is still inserted, marked uncertain. */
+  async retainSourceName(request, base, source, started, candidate) {
+    const text = typeof candidate === "string" && candidate.trim() ? candidate : tidy(source).text;
+    return this.recordFallback(request,{...base,text,uncertain:text!==tidy(source).text,fallback:true,reason:'name-kept',suggestions:[],ms:timing(started,0)});
   }
 
   async qualityQuestion(request,result) {
@@ -552,7 +564,6 @@ export class VoicePolishService {
   }
 
   async recordAndReturn(request, result) {
-    if(result.fallback&&canonicalStrength(request.strength??this.strength)!=="promptbeta"&&result.reason!=="cancelled")return this.qualityQuestion(request,result);
     result = applyExplicitRules(result, request._personalization, result.explanation ? splitExplanation(result.raw, request.explanationMarkers).text : result.raw, canonicalStrength(request.strength ?? this.strength));
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
@@ -623,6 +634,7 @@ export class VoicePolishService {
         raw: polished.raw ?? spoken.text,
         fallback: polished.fallback,
         fallbackReason: polished.reason ?? undefined,
+        ...(polished.uncertain ? { uncertain: true } : {}),
         suggestions: polished.suggestions ?? [],
         model: polished.model,
         provider: polished.provider,

@@ -30,12 +30,12 @@ test('review evidence must quote the current source and candidate',()=>{
  assert.equal(parseCleanupReview('{"issues":[{"kind":"omission","sourceQuote":"旧说法","outputQuote":"","reason":"遗漏"}]}','最终说法','草稿'),null);
 });
 test('a truncated model result is held with no insertable text',async()=>{
- const s=service(async()=>reply('半截','length'));const r=await s.polish({rawText:'这是完整口述。',strength:'prompt',llm:route});assert.equal(r.text,'');assert.equal(r.clarification.kind,'quality');assert.equal(r.clarification.reason,'model-max-tokens');assert.equal(r.raw,'这是完整口述。');
+ const s=service(async()=>reply('半截','length'));const r=await s.polish({rawText:'这是完整口述。',strength:'prompt',llm:route});assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.clarification, undefined);assert.equal(r.reason,'model-max-tokens');assert.equal(r.raw,'这是完整口述。');
 });
 test('a valid but severely incomplete AI result must pass independent review',async()=>{
  const raw='请检查录音是否完整，不要改变用户条件，只有确认后才保存资料。'.repeat(24);let calls=0;
  const s=service(async()=>++calls===1?reply(JSON.stringify({status:'ok',text:'请检查录音。'})):reply(JSON.stringify({issues:[{kind:'omission',sourceQuote:'只有确认后才保存资料',outputQuote:'',reason:'遗漏保存条件'}]})));
- const r=await s.polish({rawText:raw,strength:'concise',llm:route});assert.equal(calls,2);assert.equal(r.text,'');assert.equal(r.clarification.candidate,'请检查录音。');assert.equal(r.clarification.reason,'incomplete-output');
+ const r=await s.polish({rawText:raw,strength:'concise',llm:route});assert.equal(calls,2);assert.equal(r.text,'请检查录音。');assert.equal(r.reason,'incomplete-output');
 });
 test('review accepts legitimate aggressive rewriting without another rewrite call',async()=>{
  const raw='请把重复的说明合并成一句话。'.repeat(60);let calls=0;
@@ -60,12 +60,12 @@ test('invalid or stale review evidence holds the same candidate without insertin
  for(const review of ['not JSON','{"issues":[{"kind":"changed-meaning","sourceQuote":"原话没有这个内容","outputQuote":"草稿也没有","reason":"invalid"}]}']) {
   let calls=0;const s=service(async()=>++calls===1?reply('{"status":"ok","text":"请合并重复说明。"}'):reply(review));
   const r=await s.polish({rawText:'请把重复的说明合并成一句话。'.repeat(60),strength:'concise',llm:route});
-  assert.equal(calls,2);assert.equal(r.text,'');assert.equal(r.clarification.reason,'review-invalid');assert.equal(r.clarification.candidate,'请合并重复说明。');
+  assert.equal(calls,2);assert.equal(r.reason,'review-invalid');assert.equal(r.text,'请合并重复说明。');
  }
 });
 test('permanent authentication failure is held without retry and caller cancellation never delivers a draft',async()=>{
  let calls=0;const s=service(async()=>{calls++;return {ok:false,status:401,text:async()=> 'fixture denied'};});
- const r=await s.polish({rawText:'请发送报告。',strength:'prompt',llm:route});assert.equal(calls,1);assert.equal(r.text,'');assert.equal(r.clarification.kind,'quality');
+ const r=await s.polish({rawText:'请发送报告。',strength:'prompt',llm:route});assert.equal(calls,1);assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.clarification, undefined);
  const ac=new AbortController();ac.abort();const cancelled=await s.polish({rawText:'请发送报告。',strength:'prompt',llm:route,signal:ac.signal});
  assert.equal(cancelled.reason,'cancelled');assert.equal(cancelled.clarification,undefined);assert.equal(calls,1);
 });

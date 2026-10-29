@@ -68,8 +68,9 @@ test('a phonetic name guess without current evidence is held and never learned',
   const service = makeService({ model, recognizer: fakeRecognizer('用杰森传输') });
   const result = await service.transcribeAndPolish({ audio: wavOfSilence(), strength: 'prompt', llm: ROUTE });
   assert.equal(result.fallback, true);
-  assert.equal(result.text, '');
-  assert.equal(result.clarification.reason, 'name-kept');
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.ok(['name-kept', 'entity-changed'].includes(result.fallbackReason), result.fallbackReason);
+  assert.equal(result.uncertain, true, 'marked so the user can check it');
   assert.deepEqual(result.suggestions, []);
   assert.equal(model.calls.length, 1);
 });
@@ -144,15 +145,15 @@ test("without an API key the tidied transcript is held and nothing is called", a
   const result = await service.polish({ rawText: "呃，我们周三把报告发出去吧。", strength: "prompt" });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "no-api-key");
-  assert.equal(result.clarification.candidate, "我们周三把报告发出去。");
+  assert.equal(result.text, "我们周三把报告发出去。");
   assert.equal(model.calls.length, 0);
   assert.equal(result.reason, "no-api-key");
   // A malformed route counts as no route: it is never half-used.
   const insecure = await service.polish({ rawText: RAW, llm: { ...ROUTE, baseURL: "http://api.example.com/v1" } });
   assert.equal(insecure.reason, "no-api-key");
   assert.equal(model.calls.length, 0);
-  assert.equal(result.text, "");
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test("the model prompt is the cleanup prompt plus a dictionary addendum", async () => {
@@ -211,8 +212,8 @@ test("an unusable reply falls back to the transcript and is counted", async () =
   assert.equal(result.reason, "output-format");
   assert.match(result.detail, /output-format/);
   assert.equal(service.snapshot().stats.jsonFallback, 1);
-  assert.equal(result.text, "");
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test("an unreachable model falls back to the raw transcript, retried once, and says why", async () => {
@@ -221,12 +222,12 @@ test("an unreachable model falls back to the raw transcript, retried once, and s
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "model-error:NETWORK");
-  assert.equal(result.clarification?.candidate ?? result.raw, RAW);
+  assert.equal(result.text, RAW);
   assert.equal(result.attempts, 2);
   assert.match(result.detail, /^api\.example\.com unreachable: fetch failed \(2 attempts, \d+ ms\)$/);
   assert.ok(!result.detail.includes(ROUTE.apiKey));
-  assert.equal(result.text, "");
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test("model failures are named by what actually went wrong", async () => {
@@ -252,8 +253,8 @@ test("a model that outlives the deadline is reported as a timeout and not retrie
   assert.equal(result.reason, "model-timeout");
   assert.equal(result.attempts, 2, "a timeout has one shared retry");
   assert.match(result.detail, /^no answer from api\.example\.com within 30 ms/);
-  assert.equal(result.text, "");
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test("a caller that goes away is reported as cancelled", async () => {
@@ -270,12 +271,12 @@ test("an answer that invents content is held for editing and never inserted", as
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
-  assert.equal(result.clarification.candidate, "We should send the report on Tuesday, then follow up in 3 days.");
+  assert.equal(result.text, "We should send the report on Tuesday, then follow up in 3 days.");
   // The detail carries measurements only, never the invented tokens themselves.
   assert.match(result.detail, /inventedFacts=1/);
   assert.ok(!result.detail.includes("3 days"));
-  assert.equal(result.text, "");
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test("a rejected answer retains the candidate and original for manual correction", async () => {
@@ -285,10 +286,10 @@ test("a rejected answer retains the candidate and original for manual correction
   assert.equal(result.fallback, true);
   assert.equal(result.reason, "invented-fact");
   assert.equal(result.raw, raw);
-  assert.equal(result.clarification.candidate, "我们周三把报告发出去，然后3天后跟进。");
+  assert.equal(result.text, "我们周三把报告发出去，然后3天后跟进。");
   assert.deepEqual(result.postprocess, ["strip-particles"]);
-  assert.equal(result.text, "");
-  assert.equal(result.clarification.kind,"quality");
+  assert.notEqual(result.text, '', 'a result is inserted, never held');
+  assert.equal(result.clarification, undefined);
 });
 
 test("recent fallbacks are kept for /health, newest first and capped at five", async () => {
@@ -408,12 +409,12 @@ test("legacy local entries never reach the model or gain explicit replacement pr
   // A local rule also applies when no model route is configured.
   // Without a route the text is held for review; the held candidate is unchanged.
   const withoutRoute = await service.polish({ rawText: "发给张为", strength: "prompt", dictionary: [{ local: "张为=章伟" }] });
-  assert.equal(withoutRoute.clarification?.candidate ?? withoutRoute.text, "发给张为");
+  assert.equal(withoutRoute.text, "发给张为");
   const { applyLocalEntries } = await import("../lib/service.js");
   assert.equal(applyLocalEntries("Use deep seek, not deep seeker.", [["deep seek", "DeepSeek"]]), "Use DeepSeek, not deep seeker.");
   // A marked entry with no heard-as form still fixes the case of a Latin word.
   const spelled = await service.polish({ rawText: "ask acmecorp about it", strength: "prompt", dictionary: [{ local: "AcmeCorp" }] });
-  assert.equal(spelled.clarification?.candidate ?? spelled.text, "ask acmecorp about it");
+  assert.equal(spelled.text, "ask acmecorp about it");
 });
 
 test("a request's dictionary is bounded, trimmed and de-duplicated", async () => {

@@ -63,8 +63,8 @@ test('text beyond the supported limit is retained without calling a model',async
   let calls=0;const service=new VoicePolishService({config:{},recognizer:{snapshot:()=>({})},fetchImpl:async()=>{calls++;}});
   const raw='字'.repeat(TEXT_LIMIT+1);
   const result=await service.polish({rawText:raw,task:'dictation',llm:route});
-  assert.equal(calls,0);assert.equal(result.text,'');assert.equal(result.raw,raw);
-  assert.equal(result.clarification.reason,'text-too-long');
+  assert.equal(calls,0);assert.notEqual(result.text, '', 'a result is inserted, never held');assert.equal(result.raw,raw);
+  assert.equal(result.reason,'text-too-long');
 });
 
 for(const seconds of [120,300,600])test(`${seconds}-second audio reaches every fixed-window segment in order`,async()=>{

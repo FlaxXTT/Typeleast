@@ -90,7 +90,7 @@ test('optional terminology failures leave the dictation path usable', async () =
   const result = await broken.polish({ rawText: '今天开会', strength: 'prompt', llm });
   assert.equal(result.text, '今天开会。');
   const raw = await broken.polish({ rawText: '今天开会', strength: 'off' });
-  assert.equal(raw.clarification?.candidate ?? raw.text, '今天开会');
+  assert.equal(raw.text, '今天开会');
 });
 
 test('an extension that fails while choosing a style cannot stop cleanup', async () => {

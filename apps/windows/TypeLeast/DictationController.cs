@@ -424,7 +424,7 @@ internal sealed class DictationController
                     Dictionary.Pasted(field, text, corrected => Preferences.Offer(entry.Id, entry.Raw, result.Text, corrected));
                 if (History.LastError is not null) SetHint(L10n.T("历史无法读写，文件已保留。请检查文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
-                var note = Messages.FallbackNote(result.FallbackReason);
+                var note = result.Uncertain ? L10n.T("已插入，可能有误，可在历史中修改") : Messages.FallbackNote(result.FallbackReason);
                 var done = Paster.Message(outcome);
                 bar.ShowResult(note is null ? done : done + " · " + note, warning: note is not null);
             }

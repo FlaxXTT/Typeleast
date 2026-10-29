@@ -50,10 +50,11 @@ test('exclusions never leave the local policy envelope and disabled retry uses n
  const result=await service.polish({rawText:'请发送会议报告',strength:'concise',dictionary:['PrivateBlockedTerm',{personalization:policy({disabled:true,excluded:['PrivateBlockedTerm']})}],preferenceExamples:[example],llm:{baseURL:'https://api.example.com/v1',model:'fake',apiKey:'sk-test-123456789012'}});
  const serialized=JSON.stringify(calls[0].messages);assert.ok(!serialized.includes('PrivateBlockedTerm'));assert.ok(!serialized.includes('USER-CONFIRMED WORDING'));assert.ok(!serialized.includes('Use short sentences.'));assert.equal(calls.length,1);assert.equal(result.personalization.disabled,true);
 });
-test('a held confirmation preserves one-shot personalization opt-out',async()=>{
+test('a result inserted without confirmation keeps the one-shot personalization opt-out',async()=>{
  const service=new VoicePolishService({recognizer:{snapshot:()=>({ready:true})},config:{dictionary:[]}});
  const result=await service.polish({rawText:'正文。备注：缺少结束词',strength:'concise',explanationMarkers:'note',supportsClarification:true,personalization:policy({disabled:true})});
- assert.equal(result.clarification.personalizationDisabled,true);
+ assert.equal(result.clarification,undefined);
+ assert.deepEqual(result.personalization.references,[],'nothing personal is used');
 });
 
 test('removing a personal term differs from excluding its extension sources',async()=>{
