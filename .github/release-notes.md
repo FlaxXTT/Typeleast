@@ -3,6 +3,9 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
+- 首页改版：统计白卡、连续天数和热力图；「分享」官网和 GitHub。
+- 「设置位置」只显示没设置好的项。
+- 提示音改为柔和的「登登」。
 - 提示音改为钝化的「嘟嘟」：开始上扬，结束下降。
 - 拼出的大写字母也会对照上下文核对，识别错了会改正。
 - 需求助手改名「提示词模式」，先问能读哪些资料、能否联网，以及创新还是重复。
@@ -20,6 +23,9 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
+- New Home: stat tiles, streaks and a heatmap; Share for the website and GitHub.
+- The setup card lists only what is not set up yet.
+- Softer two-note cues with a natural fade.
 - Softer two-note cues: rising when recording starts, falling when it stops.
 - Spelled capitals and acronyms are checked against the context and corrected when it clearly points elsewhere.
 - The requirements assistant is now Prompt mode. It first asks what the AI may read or search, and whether the work is creative or routine.
@@ -40,9 +46,9 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 
 | 电脑 | 安装包 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.24.4-macOS-AppleSilicon.dmg` 或 `.zip` |
-| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.24.4-Windows-x64-Setup.exe` 或 `TypeLeast-1.24.4-Windows-x64-Portable.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.24.5-macOS-AppleSilicon.dmg` 或 `.zip` |
+| Windows 10 1809 以上 / Windows 11，64 位 | `TypeLeast-1.24.5-Windows-x64-Setup.exe` 或 `TypeLeast-1.24.5-Windows-x64-Portable.zip` |
 
-Mac 构建号 37。旧的风格设置不再生效；旧词典数据保留。
+Mac 构建号 38。旧的风格设置不再生效；旧词典数据保留。
 
 [完整记录](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md) · [代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)
