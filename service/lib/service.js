@@ -1,5 +1,3 @@
-import {taskFor} from './dictation-task.js';
-import {CleanupTask, cleanupParameters} from './cleanup-task.js';
 /**
  * VoicePolishService — "transcribe, then make it sayable".
  *
@@ -20,22 +18,20 @@ import {CleanupTask, cleanupParameters} from './cleanup-task.js';
  * @module typeleast-service/service
  */
 import { canonicalStrength, LANGUAGES } from "./config.js";
-import { createHash, randomUUID } from "node:crypto";
-import { redactFieldContext, redactSecrets } from "./context.js";
-import { buildUserMessage, promptVersionFor, systemPromptFor } from "./prompt.js";
+import { taskFor } from "./dictation-task.js";
+import { redactSecrets } from "./context.js";
+import { promptVersionFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
-import { parsePolishOutput } from "./parse-output.js";
-import { createDeadline, failureDetail, failureReason, ModelCallError } from "./llm.js";
-import { PROFILE_PROMPT, profileMessage, readProfile } from "./prompts/profile.js";
-import { unwrap } from "./validate.js";
+import { createDeadline } from "./llm.js";
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
-import {
-  BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
-  boundaryQuestions, cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply, reviewMessage,
-} from "./prompts/prompt-beta.js";
-import { directTranslatePrompt, TRANSLATE_LANGUAGES } from "./prompts/translate.js";
-import { applyVariants, parseVariants, variantInstruction } from "./variants.js";
+import { TRANSLATE_LANGUAGES } from "./prompts/translate.js";
+import { applyVariants, parseVariants } from "./variants.js";
+import { runDictation } from "./tasks/dictation.js";
+import { runTranslation } from "./tasks/translation.js";
+import { AssistantSessions } from "./tasks/assistant.js";
+import { buildProfile } from "./tasks/profile.js";
+import { timing } from "./tasks/timing.js";
 
 /** Longest transcript cleaned by the model, in characters. */
 export const TEXT_LIMIT = 32000;
@@ -76,8 +72,8 @@ export class VoicePolishService {
     this.stats = { dictations: 0, polished: 0, fallback: 0, lastError: null, lastMs: null, modelCalls: 0, modelFallbacks: 0, jsonFallback: 0, jsonRecovered: 0 };
     /** Newest first; only attempts that reached the model and fell back. */
     this.recentFailures = [];
-    /** Prompt Beta question sessions: id -> { request, spec, questions, created }. */
-    this.betaSessions = new Map();
+    /** Prompt mode's open clarifications. */
+    this.assistant = new AssistantSessions();
     this.progress = new Map();
   }
 
@@ -175,196 +171,51 @@ export class VoicePolishService {
     base.model = custom.model;
     this.lastRoute = { provider: base.provider, model: base.model };
 
+    const ctx = this.taskContext({ request, base, route: custom, started, rawText });
     // 翻译模式 has its own hotkey and prompt: one call cleans up and translates.
     const translateTo = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
-    if (translateTo) return await this.polishTranslate({ request, base, route: custom, started, rawText, target: translateTo });
-    if (strength === "promptbeta") return await this.polishBeta({ request, base, route: custom, started, rawText, skip: betaSkip });
-
-    const task = new CleanupTask(request.signal);
-    const redact = this.config.redactSecrets !== false;
-    try {
-      const system = systemPromptFor({
-        fieldContext: redactFieldContext(request.fieldContext ?? null, redact),
-        profile: redact ? redactSecrets(String(request.profile ?? "")) : request.profile,
-      }) + variantInstruction(parseVariants(request.variants));
-      // The transcript is redacted on the way OUT to the provider: a dictated key or
-      // password must not reach the model. The user gets the model's text (or the original).
-      const user = buildUserMessage({ rawText: redact ? redactSecrets(rawText) : rawText });
-      this.setProgress(request.requestId, { stage: "generating", completed: 0, total: 1 });
-      this.stats.modelCalls += 1;
-      const result = await completeOpenAI({ route: custom, system, user, ...cleanupParameters(rawText, strength, this.config),
-        signal: task.signal, retryBudget: task, ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
-      task.assertTime();
-      // A reply that is not the expected JSON must not reach the document.
-      const parsed = parsePolishOutput(result.text);
-      if (!parsed.ok) {
-        this.stats.jsonFallback += 1;
-        const tidyOnly = tidy(rawText);
-        const detail = `output-format:${parsed.failure ?? "unknown"}`;
-        this.stats.lastError = detail;
-        this.logger.warn?.("typeleast: unusable model reply (%s)", detail);
-        return await this.recordFallback(request, { ...base, text: tidyOnly.text, fallback: true, reason: "output-format", detail,
-          ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
-      }
-      if (parsed.mode !== "json") this.stats.jsonRecovered += 1;
-      // The cleaned text is inserted as the model wrote it, minus a wrapper a chatty model may add.
-      const candidate = unwrap(parsed.text).text.trim();
-      if (!candidate) {
-        const tidyOnly = tidy(rawText);
-        return await this.recordFallback(request, { ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",
-          ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
-      }
-      return await this.recordAndReturn(request, {
-        ...base,
-        text: candidate,
-        ms: timing(started, 0),
-        usage: result.usage,
-        attempts: result.attempts,
-        modelNote: parsed.reason ?? undefined,
-        outputMode: parsed.mode,
-        ...(parsed.corrections ? { corrections: parsed.corrections } : {}),
-        ...(parsed.intention ? { intention: parsed.intention } : {}),
-      });
-    } catch (error) {
-      if (!(error instanceof ModelCallError) && !request.signal?.aborted && !task.deadline.timedOut()) this.logger.warn?.("typeleast: internal cleanup error (%s)", error?.name ?? "error");
-      const reason = request.signal?.aborted
-        ? "cancelled"
-        : task.deadline.timedOut() ? "model-timeout" : error instanceof ModelCallError ? failureReason(error) : "internal-error";
-      const detail = this.redactDetail(failureDetail(error)).split(custom.apiKey || "\u0000").join("[redacted-key]");
-      this.stats.lastError = `${reason}: ${detail}`;
-      this.logger.warn?.("typeleast: polishing failed (%s: %s)", reason, detail);
-      // The fallback is still cleaned deterministically: a model timeout is no
-      // reason to insert "呃，嗯，那个" into the user's document.
-      const tidyOnly = tidy(rawText);
-      return await this.recordFallback(request, {
-        ...base,
-        text: tidyOnly.text,
-        fallback: true,
-        reason,
-        detail,
-        ms: timing(started, 0),
-        attempts: error instanceof ModelCallError ? error.attempts : undefined,
-        postprocess: tidyOnly.applied,
-      });
-    } finally { task.dispose(); }
+    if (translateTo) return await runTranslation(ctx, translateTo);
+    if (strength === "promptbeta") return await this.assistant.run(ctx, betaSkip);
+    return await runDictation(ctx);
   }
 
-  /** Clean up and translate the recognised transcript in one call; on failure the tidied original is inserted. */
-  async polishTranslate({ request, base, route, started, rawText, target }) {
-    const task = new CleanupTask(request.signal);
-    const redact = this.config.redactSecrets !== false;
-    try {
-      this.setProgress(request.requestId,{stage:'translating',completed:0,total:1});
-      this.stats.modelCalls += 1;
-      const result = await completeOpenAI({route,system:directTranslatePrompt(target)
-        + (target === 'en' ? variantInstruction(parseVariants(request.variants)) : ''),
-        user:redact ? redactSecrets(rawText) : rawText,
-        ...cleanupParameters(rawText,'prompt',this.config),temperature:0.2,signal:task.signal,retryBudget:task,
-        ...(this.fetchImpl ? {fetchImpl:this.fetchImpl} : {})});
-      const translated = unwrap(String(result.text ?? '')).text.trim();
-      task.assertTime();
-      if (!translated) return this.recordFallback(request,{...base,text:tidy(rawText).text,fallback:true,reason:'empty-output',ms:timing(started,0),translated:target});
-      return this.recordAndReturn(request,{...base,text:translated,translated:target,ms:timing(started,0),attempts:result.attempts});
-    } catch (error) {
-      const reason = request.signal?.aborted ? 'cancelled' : task.deadline.timedOut() ? 'model-timeout' : failureReason(error);
-      return this.recordFallback(request,{...base,text:tidy(rawText).text,fallback:true,reason,ms:timing(started,0),translated:target});
-    } finally { task.dispose(); }
-  }
-
-  /** Keep the whole clarification in memory until the user explicitly generates or cancels. */
-  async polishBeta({ request, base, route, started, rawText, skip }) {
-    const redact = text => this.config.redactSecrets === false ? text : redactSecrets(text);
-    const call = async (system, user, maxTokens = 1800) => {
-      this.stats.modelCalls += 1;
-      const result = await completeOpenAI({ route, system, user: redact(user), maxTokens, temperature: 0.2,
-        timeoutMs: Math.max(this.config.timeoutMs, 60000), signal: AbortSignal.any([request.signal, session.controller.signal].filter(Boolean)),
-        ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
-      request.signal?.throwIfAborted();
-      return result.text;
+  /**
+   * What a task module receives: the request, the route, and the service's hooks for model
+   * calls, redaction, progress and finishing (see tasks/dictation.js).
+   */
+  taskContext({ request, base, route, started, rawText }) {
+    return {
+      request, base, route, started, rawText,
+      config: this.config,
+      logger: this.logger,
+      stats: this.stats,
+      complete: (options) => this.complete({ route, ...options }),
+      redact: (text) => this.redactDetail(text),
+      progress: (stage) => this.setProgress(request.requestId, { stage, completed: 0, total: 1 }),
+      done: (result) => this.recordAndReturn(request, result),
+      fail: (result) => this.recordFallback(request, result),
     };
-    this.pruneBetaSessions();
-    const id = request.betaSession || randomUUID();
-    let session = this.betaSessions.get(id);
-    if (request.betaSession && !session) throw Object.assign(new Error('clarification expired'), { code: 'beta-expired' });
-    if (session?.busy) throw Object.assign(new Error('clarification in progress'), { code: 'model-busy' });
-    if (!session && !hasContent(rawText)) {
-      return { ...base, raw: '', text: '', fallback: true, reason: 'empty-transcript' };
-    }
-    if (!session) {
-      if (rawText.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
-      // Do not evict another user's active operation to admit a new one.
-      if (this.betaSessions.size >= BETA_LIMITS.sessions) throw Object.assign(new Error('too many clarifications'), { code: 'busy' });
-      session = { request: rawText, turns: [], questions: [], confirmed: [], goals: [], selection: request.source === 'selection', created: Date.now(), ready: false };
-      this.betaSessions.set(id, session);
-    }
-    const pending = notice => ({ ...base, text: '', raw: rawText,
-      beta: { sessionId: id, questions: session.questions, confirmed: session.confirmed, goals: session.goals ?? [],
-        round: session.turns.length + 1, ready: session.ready, ...(notice ? { notice } : {}) }, ms: timing(started, 0) });
-    if (request.betaSession && !skip && !hasContent(rawText)) return pending('empty-transcript');
-    const turns = [...session.turns];
-    if (request.betaSession && !skip) turns.push({ questions: [...session.questions], answer: rawText });
-    const source = [session.request, ...turns.map(t => t.answer)].join('\n');
-    if (source.length > BETA_LIMITS.inputChars) return pending('beta-input-limit');
-    session.busy = true;
-    session.created = Date.now();
-    session.controller = new AbortController();
-    try {
-      if (!skip) {
-        const reply = parseJsonReply(await call(session.selection ? BETA_BREAKDOWN_PROMPT : BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns)));
-        if (!reply || !Array.isArray(reply.questions) || !Array.isArray(reply.confirmed)) {
-          throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
-        }
-        if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
-        const modelQuestions = normaliseQuestions(reply.questions);
-        if (reply.questions.length && !modelQuestions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
-        // The task's boundaries come first: what may be read or searched, and creative or routine work.
-        const questions = normaliseQuestions([...boundaryQuestions(session.request, turns), ...modelQuestions]);
-        session.turns = turns;
-        session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
-        session.confirmed = reply.confirmed.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, session.selection ? 8 : 6);
-        if (Array.isArray(reply.goals)) session.goals = reply.goals.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 200)).filter(Boolean).slice(0, 5);
-        session.questions = questions;
-        session.ready = session.questions.length === 0;
-        session.created = Date.now();
-        return pending();
-      }
-      const material = { request: session.request, spec: session.spec, turns,
-        questions: session.questions, skipped: true };
-      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), cleanupParameters(source,'prompt',this.config).maxTokens));
-      if (!draft) throw Object.assign(new Error('empty draft'), { code: 'output-format' });
-      if (this.betaSessions.get(id) !== session) throw new DOMException('Cancelled', 'AbortError');
-      request.signal?.throwIfAborted();
-      const result = await this.recordAndReturn(request, { ...base, raw: source, text: unwrap(draft).text.trim(),
-        ms: timing(started, 0), beta: { reviewed: false, issues: 0, patched: false } });
-      this.betaSessions.delete(id);
-      return result;
-    } catch (error) {
-      // Never insert a partial draft or lose accepted answers after a failed round.
-      if (request.signal?.aborted || this.betaSessions.get(id) !== session) throw error;
-      const notice = error.code === 'beta-validation' ? 'beta-validation' : error instanceof ModelCallError ? failureReason(error) : 'output-format';
-      return pending(notice);
-    } finally {
-      session.busy = false;
-    }
   }
 
-  /** Drop expired Prompt Beta sessions and keep the map bounded. */
+  /** One model call; every call is counted for /health. */
+  complete(options) {
+    this.stats.modelCalls += 1;
+    return completeOpenAI({ ...options, ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
+  }
+
+  /** Prompt mode's sessions, for the tests and diagnostics. */
+  get betaSessions() {
+    return this.assistant.map;
+  }
+
+  /** Drop expired prompt-mode sessions. */
   pruneBetaSessions(now = Date.now()) {
-    for (const [id, session] of this.betaSessions) {
-      if (!session.busy && now - session.created > BETA_LIMITS.sessionMs) this.betaSessions.delete(id);
-    }
-    while (this.betaSessions.size > BETA_LIMITS.sessions) {
-      const idle = [...this.betaSessions].find(([, session]) => !session.busy);
-      if (!idle) break;
-      this.betaSessions.delete(idle[0]);
-    }
+    this.assistant.prune(now);
   }
 
-  /** Forget a Prompt Beta session the user cancelled. */
+  /** Forget a prompt-mode session the user cancelled. */
   cancelBeta(sessionId) {
-    const id = String(sessionId ?? "");
-    this.betaSessions.get(id)?.controller?.abort();
-    return this.betaSessions.delete(id);
+    return this.assistant.cancel(sessionId);
   }
 
   /**
@@ -506,16 +357,8 @@ export class VoicePolishService {
    * @param {object} request - the route and the history items.
    * @returns {Promise<{profile: string}>} at most PROFILE_LIMIT characters, possibly empty.
    */
-  async buildProfile({ llm, items, signal }) {
-    const route = llm ? normalizeRoute(llm) : null;
-    if (!route) throw Object.assign(new Error("model route required"), { code: "no-api-key" });
-    const message = profileMessage(items);
-    if (!message) return { profile: "" };
-    const redact = this.config.redactSecrets !== false;
-    this.stats.modelCalls += 1;
-    const result = await completeOpenAI({ route, system: PROFILE_PROMPT, user: redact ? redactSecrets(message) : message,
-      maxTokens: 1200, temperature: 0.2, timeoutMs: 60000, signal, ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
-    return { profile: readProfile(result.text) };
+  async buildProfile(request) {
+    return buildProfile(request, (options) => this.complete(options), (text) => this.redactDetail(text));
   }
 
   /** Wait for a free slot without polling. */
@@ -529,11 +372,6 @@ export class VoicePolishService {
   }
 }
 
-/** Milliseconds shape shared by every result. */
-function timing(started, transcribeMs) {
-  const polish = Date.now() - started;
-  return { transcribe: Math.round(transcribeMs), polish, total: Math.round(transcribeMs) + polish };
-}
 
 
 /** Narrow an unknown throwable to a printable message. */
