@@ -89,7 +89,6 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(item(L10n.text("打开 TypeLeast"), #selector(onOpenHome)))
         menu.addItem(item(L10n.text("历史…"), #selector(onOpenHistory)))
-        menu.addItem(item(L10n.text("词典"), #selector(onOpenDictionary)))
         let settings = item(L10n.text("设置…"), #selector(onOpenSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)
@@ -168,7 +167,6 @@ final class MenuController: NSObject, NSMenuDelegate {
     @objc private func onLaunch() { target?.menuRestartService() }
     @objc private func onOpenHome() { target?.menuOpenHub(.home) }
     @objc private func onOpenHistory() { target?.menuOpenHub(.history) }
-    @objc private func onOpenDictionary() { target?.menuOpenHub(.dictionary) }
     @objc private func onOpenSettings() { target?.menuOpenHub(.settings) }
     @objc private func onQuit() { target?.menuQuit() }
 }

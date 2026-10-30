@@ -21,7 +21,6 @@ enum SettingsGuide {
             Entry(title: L10n.text("API Key"), place: L10n.text("设置 › 模型"), page: .settings, category: 1),
             Entry(title: L10n.text("快捷键"), place: L10n.text("设置 › 听写"), page: .settings, category: 0),
             Entry(title: L10n.text("语音模型"), place: L10n.text("设置 › 模型"), page: .settings, category: 1),
-            Entry(title: L10n.text("词典"), place: L10n.text("侧栏 › 词典"), page: .dictionary),
             Entry(title: L10n.text("麦克风和辅助功能"), place: L10n.text("设置 › 通用"), page: .settings, category: 2),
         ]
     }

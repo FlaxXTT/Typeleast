@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 // HubWindow.swift - the main window: a quiet
-// sidebar (Home, History, Dictionary; Settings at the bottom left) and one page.
+// sidebar (Home, History; Settings at the bottom left) and one page.
 
 final class HubWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
@@ -62,7 +62,6 @@ struct HubRootView: View {
                 switch model.page {
                 case .home: HomePage()
                 case .history: HistoryPage()
-                case .dictionary: DictionaryPage()
                 case .settings: SettingsPage()
                 }
             }
@@ -86,13 +85,13 @@ private struct Sidebar: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 22)
 
-            ForEach([HubPage.home, .history, .dictionary]) { page in
+            ForEach([HubPage.home, .history]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)
             }
 
             Spacer()
 
-            SidebarModes(plugins: model.plugins)
+            SidebarModes()
                 .padding(.bottom, 10)
             ServiceBadge()
                 .padding(.horizontal, 12)
@@ -208,7 +207,6 @@ extension PageHeader where Trailing == EmptyView {
 /// from Settings. The chosen one shows what it does in a few words.
 struct SidebarModes: View {
     @EnvironmentObject var model: AppModel
-    @ObservedObject var plugins: PluginController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -219,8 +217,6 @@ struct SidebarModes: View {
         }
         .disabled(model.phase != .idle)
         .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
-        .onAppear { plugins.refresh() }
-        .onChange(of: model.serviceUp) { up in if up { plugins.refresh() } }
     }
 }
 

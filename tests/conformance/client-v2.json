@@ -49,8 +49,7 @@
       "strength": "prompt",
       "translateTo": null,
       "variants": null,
-      "dictionary": [],
-      "localOnly": []
+      "profile": ""
     },
     {
       "id": "translate-variants",
@@ -58,23 +57,15 @@
       "strength": "prompt",
       "translateTo": "en",
       "variants": "zh=tw,en=gb",
-      "dictionary": [
-        "TypeLeast"
-      ],
-      "localOnly": []
+      "profile": "做 CFD 仿真的工程师"
     },
     {
-      "id": "beta-local-word",
+      "id": "beta-no-profile",
       "language": "auto",
       "strength": "promptbeta",
       "translateTo": null,
       "variants": null,
-      "dictionary": [
-        "GitHub"
-      ],
-      "localOnly": [
-        "张为=章伟"
-      ]
+      "profile": ""
     }
   ],
   "responseCases": [
@@ -173,18 +164,25 @@
       "translated": null
     },
     {
-      "id": "name-confirmation-holds-insertion",
+      "id": "corrections-stay-out-of-the-text",
       "response": {
-        "text": "不可粘贴的草稿",
-        "raw": "我想买 LG 电脑",
-        "clarification": {
-          "question": "请确认名称",
-          "evidence": "LG"
-        }
+        "text": "修复 CUDA out of memory。",
+        "raw": "修复哭达 out of memory",
+        "fallback": false,
+        "corrections": [
+          {
+            "from": "哭达",
+            "to": "CUDA",
+            "reason": "显存报错"
+          }
+        ],
+        "intention": "修复显存溢出"
       },
-      "insertable": "",
+      "insertable": "修复 CUDA out of memory。",
       "betaWaiting": false,
-      "translated": null
+      "translated": null,
+      "corrections": 1,
+      "intention": "修复显存溢出"
     }
   ]
 }

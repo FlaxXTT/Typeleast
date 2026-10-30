@@ -122,37 +122,9 @@ struct HotKeyBinding: Codable, Equatable {
     var isFn: Bool { keyCode == 63 && modifiers == 0 }
 }
 
-/// One dictionary word. `heardAs` is an optional hard rule ("heard=word"); auto-added
-/// words never carry one, so learning can only ever add vocabulary.
-struct LocalWord: Codable, Equatable, Identifiable {
-    enum Source: String, Codable { case manual, auto }
-    var id: String
-    var word: String
-    var heardAs: String?
-    var source: Source
-    var addedAt: Date
-    /// 「不发给模型」: never put into a model request; a heard-as spelling is fixed on this computer.
-    var localOnly: Bool? = nil
-
-    /// The string the host stores: "word" or "heard=word".
-    var requestEntry: String { source == .auto ? word : hostEntry }
-    var replacementHeard: String? {
-        if let heardAs, !heardAs.isEmpty { return heardAs }
-        if localOnly == true, word.lowercased() != word { return word.lowercased() }
-        return nil
-    }
-    var approvalKey: String { id + "|" + (replacementHeard ?? "") + "=" + word }
-
-    var hostEntry: String {
-        if let heard = heardAs, !heard.isEmpty, heard != word { return heard + "=" + word }
-        return word
-    }
-}
-
 final class Settings {
     static let shared = Settings()
     static let didChange = Notification.Name("DshVoiceSettingsDidChange")
-    static let wordsDidChange = Notification.Name("DshVoiceWordsDidChange")
 
     private let d: UserDefaults
 
@@ -271,16 +243,6 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.fieldContext"); changed() }
     }
 
-    /// Add a word to the dictionary when the user corrects it right after a dictation.
-    var autoLearn: Bool {
-        get { bool("voice.autoLearn", default: true) }
-        set {
-            d.set(newValue, forKey: "voice.autoLearn")
-            if newValue { learnSuggestions() }
-            changed()
-        }
-    }
-
     // MARK: audio
 
     var soundEnabled: Bool {
@@ -385,115 +347,5 @@ final class Settings {
     var keepAudio24h: Bool {
         get { bool("voice.keepAudio24h.v2", default: true) }
         set { d.set(newValue, forKey: "voice.keepAudio24h.v2"); changed() }
-    }
-
-    // MARK: dictionary
-
-    private(set) var vocabularyProblem: String?
-    private var vocabulary: VocabularyArchive? {
-        if d.object(forKey: VocabularyStorage.key) != nil {
-            let archive = VocabularyStorage.read(d); vocabularyProblem = archive == nil ? "vocabulary-unavailable" : nil; return archive
-        }
-        let legacy = VocabularyArchive(words: d.data(forKey: "voice.words.v2").flatMap { try? JSONDecoder().decode([LocalWord].self, from: $0) } ?? migratedWords(),
-            suggestions: d.data(forKey: "voice.wordSuggestions").flatMap { try? JSONDecoder().decode([WordSuggestion].self, from: $0) } ?? [],
-            dismissed: d.stringArray(forKey: "voice.dismissedSuggestions") ?? [])
-        if ["voice.words.v2","voice.dictionary","voice.wordSuggestions","voice.dismissedSuggestions"].contains(where: { d.object(forKey: $0) != nil }) {
-            vocabularyProblem = VocabularyStorage.write(legacy, to: d) ? nil : "vocabulary-unavailable"
-        }
-        return legacy
-    }
-    private func saveVocabulary(_ archive: VocabularyArchive) {
-        vocabularyProblem = VocabularyStorage.write(archive, to: d) ? nil : "vocabulary-unavailable"
-        NotificationCenter.default.post(name: Settings.wordsDidChange, object: nil)
-    }
-    var words: [LocalWord] {
-        get { vocabulary?.words ?? [] }
-        set { guard var archive = vocabulary else { return }; archive.words = newValue; saveVocabulary(archive) }
-    }
-
-    /// Entries in the service's format ("word" or "heard=word"), sent with every dictation;
-    /// the service passes on only those a dictation mentions.
-    var hostDictionary: [String] { words.filter { $0.localOnly != true }.map(\.requestEntry) }
-
-    /// Entries marked 「不发给模型」, sent to the local service separately and never to a model.
-    var localDictionary: [String] { words.filter { $0.localOnly == true }.map(\.requestEntry) }
-
-    @discardableResult
-    func addWord(_ word: String, heardAs: String? = nil, source: LocalWord.Source, localOnly: Bool = false) -> Bool {
-        let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !w.isEmpty, w.count + (h?.count ?? 0) <= 119, !(w + (h ?? "")).contains("="), (w + (h ?? "")).rangeOfCharacter(from: .controlCharacters) == nil else { return false }
-        if source == .auto && dismissedSuggestions.contains(w.lowercased()) { return false }
-        var list = words
-        // Auto-learning never overrides what the user typed in by hand.
-        if source == .auto, list.contains(where: { $0.word.caseInsensitiveCompare(w) == .orderedSame }) { return false }
-        list.removeAll { $0.word.caseInsensitiveCompare(w) == .orderedSame && ($0.heardAs ?? "").caseInsensitiveCompare(h ?? "") == .orderedSame }
-        list.insert(LocalWord(id: UUID().uuidString, word: w, heardAs: (h?.isEmpty ?? true) ? nil : h,
-                              source: source, addedAt: Date(), localOnly: localOnly ? true : nil), at: 0)
-        words = list
-        return vocabularyProblem == nil
-    }
-
-    func updateWord(id: String, word: String, heardAs: String?, localOnly: Bool? = nil) {
-        var list = words
-        guard let index = list.firstIndex(where: { $0.id == id }) else { return }
-        list[index].word = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        let h = heardAs?.trimmingCharacters(in: .whitespacesAndNewlines)
-        list[index].heardAs = (h?.isEmpty ?? true) ? nil : h
-        list[index].source = .manual
-        if let localOnly { list[index].localOnly = localOnly ? true : nil }
-        words = list
-    }
-
-    func removeWord(id: String) {
-        if let removed = words.first(where: { $0.id == id }) {
-            dismissedSuggestions = dismissedSuggestions.filter { $0 != removed.word.lowercased() } + [removed.word.lowercased()]
-            wordSuggestions = wordSuggestions.filter { $0.id != removed.word.lowercased() }
-        }
-        words = words.filter { $0.id != id }
-    }
-
-    /// Existing service-filtered candidates go straight into the dictionary. User deletions win.
-    @discardableResult
-    func learnSuggestions(_ candidates: [SuggestionCandidate] = []) -> Int {
-        return 0 // Retain old data; model guesses no longer mutate the dictionary.
-    }
-
-    // MARK: dictionary suggestions (from what the cleanup model corrected)
-
-    var wordSuggestions: [WordSuggestion] {
-        get { vocabulary?.suggestions ?? [] }
-        set { guard var archive = vocabulary else { return }; archive.suggestions = newValue; saveVocabulary(archive) }
-    }
-    private var dismissedSuggestions: [String] {
-        get { vocabulary?.dismissed ?? [] }
-        set { guard var archive = vocabulary else { return }; archive.dismissed = Array(Set(newValue.map { $0.lowercased() })); saveVocabulary(archive) }
-    }
-
-    /// Import a CSV: one entry per line, "word" or "heard,word".
-    func importCSV(_ text: String) -> Int {
-        var added = 0
-        for line in text.split(whereSeparator: \.isNewline) {
-            let cells = line.split(separator: ",", omittingEmptySubsequences: false)
-                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"")) }
-            guard let last = cells.last, !last.isEmpty else { continue }
-            let heard = cells.count >= 2 ? cells[0] : nil
-            if addWord(last, heardAs: heard, source: .manual) { added += 1 }
-        }
-        return added
-    }
-
-    /// Words saved by older builds as from/to pairs.
-    private struct DictEntry: Codable { var from: String; var to: String }
-
-    /// Words saved by older builds as [DictEntry] (from/to pairs).
-    private func migratedWords() -> [LocalWord] {
-        guard let data = d.data(forKey: "voice.dictionary"),
-              let old = try? JSONDecoder().decode([DictEntry].self, from: data) else { return [] }
-        return old.map { entry in
-            LocalWord(id: UUID().uuidString, word: entry.to,
-                      heardAs: entry.from == entry.to ? nil : entry.from,
-                      source: .manual, addedAt: Date())
-        }
     }
 }

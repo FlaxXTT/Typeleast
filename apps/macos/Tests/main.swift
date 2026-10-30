@@ -43,19 +43,6 @@ if let index = CommandLine.arguments.firstIndex(of:"--unified-ui-render"), Comma
     for language in ["zh-Hans","en"] { for dark in [false,true] {
         L10n.language = language;app.appearance = NSAppearance(named:dark ? .darkAqua : .aqua)
         let name = language + (dark ? "-dark" : "-light")
-        let recovery = NameConfirmationPanel()
-        recovery.show(question:L10n.text("整理结果被截断，未插入不完整内容。"),raw:"Fictional draft. Budget: 8000. Do not change the deadline.",kind:"quality") { _ in }
-        if let window = app.windows.first(where:{$0.isVisible}),let view=window.contentView {
-            try save(view,name+"-recovery")
-            func expand(_ view:NSView) {
-                for child in view.subviews {
-                    if let button=child as? NSButton,button.title==L10n.text("查看或修改") {button.performClick(nil);return}
-                    expand(child)
-                }
-            }
-            expand(view);try save(view,name+"-recovery-expanded")
-        }
-        recovery.dismiss()
         let model = AppModel()
         let rows = ["dictation","translation","assistant"].map { task -> LocalHistoryEntry in
             var entry=LocalHistoryEntry(id:task,ts:Date(timeIntervalSince1970:0),app:"fictional.editor",language:"zh",strength:"prompt",raw:"Fictional input",text:String(repeating:"虚构文本与 English names，预算 8000，条件必须保留。",count:3),fallback:false,inserted:false)
@@ -122,33 +109,6 @@ if let index = CommandLine.arguments.firstIndex(of: "--model-ui-render"), Comman
             window.orderOut(nil)
         }
     }
-    exit(0)
-}
-
-if CommandLine.arguments.contains("--dictionary-ui") {
-    guard let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"],
-          home.hasPrefix(NSTemporaryDirectory()) || home.hasPrefix("/private/tmp/") else {
-        print("Set TYPELEAST_HOME to an isolated temporary directory first.")
-        exit(2)
-    }
-    let settings = Settings.shared
-    let oldWords = settings.words
-    let oldSuggestions = settings.wordSuggestions
-    settings.words = (1...68).map { LocalWord(id: "fixture-\($0)", word: "示例术语 \($0)", heardAs: "示例读音 \($0)", source: $0 <= 8 ? .auto : .manual, addedAt: Date()) }
-    settings.wordSuggestions = []
-    let app = NSApplication.shared
-    app.setActivationPolicy(.regular)
-    let model = AppModel()
-    let hub = HubWindowController(model: model)
-    hub.show(page: .dictionary)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 180) {
-        settings.words = oldWords
-        settings.wordSuggestions = oldSuggestions
-        exit(0)
-    }
-    app.run()
-    settings.words = oldWords
-    settings.wordSuggestions = oldSuggestions
     exit(0)
 }
 
@@ -219,14 +179,6 @@ let server = try StubServer { req in
             return .json(String(healthJSON.dropLast()) + ",\"proof\":\"" + proof + "\"}")
         }
         return .json(healthJSON)
-    }
-    if req.path.hasPrefix("/api/voice-polish/plugins") {
-        let state = #"{"plugins":[{"id":"example.dev-terms","version":"1.0.0","type":"dictionary","name":{"zh-Hans":"开发术语","en":"Dev terms"},"description":{"zh-Hans":"术语。","en":"Terms."},"author":"Example","license":"CC0-1.0","homepage":null,"termCount":3,"termsPreview":["Kubernetes"],"source":"catalog","enabled":true}],"style":null,"problems":[]}"#
-        return .json(state)
-    }
-    if req.path == "/api/voice-polish/learned-word" {
-        let edit = (try? JSONSerialization.jsonObject(with: req.body) as? [String: String]) ?? [:]
-        return .json(edit["edited"] == "这家公司很好" ? #"{"word":"公司"}"# : #"{"word":null}"#)
     }
     if req.path == "/api/voice-polish/models" { return .json(modelCatalogJSON) }
     if req.path.hasPrefix("/api/voice-polish/models/") { return .json("{\"ok\":true,\"phase\":\"accepted\"}", status: 202) }
@@ -439,25 +391,21 @@ do {
 }
 state.mode = "health"
 
-// MARK: 7. the dictionary rides with each dictation
+// MARK: 7. the learned description rides with each dictation
 
 do {
     let wav = Data(repeating: 1, count: 64)
-    let none = ServiceClient.dictateBody(wav: wav, dictionary: [])
-    checkEq("no dictionary: the body is the WAV", none.body, wav)
-    checkEq("no dictionary: zero bytes", none.dictionaryBytes, 0)
-    let some = ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek", "得普=DeepSeek"])
-    let json = some.body.prefix(some.dictionaryBytes)
-    checkEq("the dictionary comes first, as JSON", (try? JSONSerialization.jsonObject(with: json)) as? [String], ["DeepSeek", "得普=DeepSeek"])
-    checkEq("then the WAV", some.body.suffix(from: some.body.startIndex + some.dictionaryBytes), wav)
-    let marked = ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek"], localOnly: ["张为=章伟"])
-    let markedJSON = (try? JSONSerialization.jsonObject(with: marked.body.prefix(marked.dictionaryBytes))) as? [Any]
-    checkEq("entries kept from the model go as {local: entry}", (markedJSON?.last as? [String: String])?["local"], "张为=章伟")
-    checkEq("…after the ordinary ones", markedJSON?.first as? String, "DeepSeek")
-    _ = try client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt", dictionary: ["DeepSeek"])
-    checkEq("its length is in the header", state.lastRequest?.header("x-voice-dictionary-bytes"), String(ServiceClient.dictateBody(wav: wav, dictionary: ["DeepSeek"]).dictionaryBytes))
+    let none = ServiceClient.dictateBody(wav: wav, profile: "")
+    checkEq("no description: the body is the WAV", none.body, wav)
+    checkEq("no description: zero bytes", none.metaBytes, 0)
+    let some = ServiceClient.dictateBody(wav: wav, profile: "做 CFD 仿真的工程师")
+    let json = some.body.prefix(some.metaBytes)
+    checkEq("the description comes first, in a JSON object", (try? JSONSerialization.jsonObject(with: json)) as? [String: String], ["profile": "做 CFD 仿真的工程师"])
+    checkEq("then the WAV", some.body.suffix(from: some.body.startIndex + some.metaBytes), wav)
+    _ = try client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt", profile: "做 CFD 仿真的工程师")
+    checkEq("its length is in the header", state.lastRequest?.header("x-voice-meta-bytes"), String(some.metaBytes))
 } catch {
-    check("dictionary with dictation", false, String(describing: error))
+    check("description with dictation", false, String(describing: error))
 }
 
 // MARK: 9. missing token
@@ -732,38 +680,9 @@ do {
     check("keys typed before Fn do not spoil the next tap", fn.fnUp(at: t0.addingTimeInterval(0.3)))
 }
 
-// MARK: 15. learning from corrections
+// MARK: 15. update offers and progress
 
 do {
-    // When the edit learner judges: after the pasted text was edited and the field settled.
-    let t0 = Date(timeIntervalSince1970: 1_000_000)
-    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
-    let pasted = "我在用得普西克写代码"
-    let edited: (String) -> Bool = { $0 != "前文" + pasted && $0 != "前文" }
-    var poll = EditPoll(start: t0, edited: edited)
-    checkEq("before the paste lands nothing is judged", poll.feed("前文", at: at(0)), .wait)
-    checkEq("the pasted text alone is not an edit", poll.feed("前文" + pasted, at: at(3)), .wait)
-    checkEq("…however long it stays", poll.feed("前文" + pasted, at: at(30)), .wait)
-    checkEq("mid-edit: wait", poll.feed("前文我在用D写代码", at: at(33)), .wait)
-    checkEq("still typing: wait", poll.feed("前文我在用DeepSeek写代码", at: at(36)), .wait)
-    checkEq("settled for less than 6 s: wait", poll.feed("前文我在用DeepSeek写代码", at: at(41)), .wait)
-    checkEq("settled: judge the fixed text", poll.feed("前文我在用DeepSeek写代码", at: at(42)), .judge("前文我在用DeepSeek写代码"))
-    var late = EditPoll(start: t0, edited: edited)
-    _ = late.feed("前文" + pasted, at: at(0))
-    checkEq("a fix after 2 minutes is not watched", late.feed("前文" + pasted, at: at(120)), .stop)
-    var gone = EditPoll(start: t0, edited: edited)
-    checkEq("a field that cannot be read ends the watch", gone.feed(nil, at: at(3)), .stop)
-    checkEq("leaving the app judges an edit at once", EditPoll(start: t0, edited: edited).final("前文我在用DeepSeek写代码"), "前文我在用DeepSeek写代码")
-    checkEq("…but not an untouched paste", EditPoll(start: t0, edited: edited).final("前文" + pasted), nil)
-
-    // Service suggestions still retain local merge/ignore/accept behavior.
-    let now = Date(timeIntervalSince1970: 2_000_000)
-    var list = WordSuggestions.merge([], word: "DeepSeek", heardAs: "德普西克", at: now, known: [], dismissed: [])
-    list = WordSuggestions.merge(list, word: "deepseek", heardAs: "deep seek", at: now, known: [], dismissed: [])
-    checkEq("a repeated suggestion is counted once", list.map(\.count), [2])
-    checkEq("a word already in the dictionary is not suggested", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: ["github"], dismissed: []), [])
-    checkEq("an ignored word is not suggested again", WordSuggestions.merge([], word: "GitHub", heardAs: "get hub", at: now, known: [], dismissed: ["github"]), [])
-
     // The update offer rule and the ring's steps.
     check("a quiet check offers a new version once", Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: false))
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
@@ -786,17 +705,6 @@ do {
     checkEq("mirrors-first ends with GitHub", UpdateSources.list(for: official, mode: "mirror").last?.1, "GitHub")
     checkEq("GitHub only means one source", UpdateSources.list(for: official, mode: "github").count, 1)
     checkEq("other addresses are never sent to a mirror", UpdateSources.list(for: URL(string: "https://example.com/x.zip")!, mode: "mirror").count, 1)
-
-    // Which word an edit teaches is decided by the service (service/test/edit-correction.test.js).
-    checkEq("the service names the learned word", try? client.learnedWordSync(inserted: "这家公式很好", edited: "这家公司很好"), "公司")
-    checkEq("learned-word path", state.lastRequest?.path, "/api/voice-polish/learned-word")
-    let sentEdit = state.lastRequest.flatMap { try? JSONSerialization.jsonObject(with: $0.body) as? [String: String] }
-    checkEq("the pasted and edited text are sent", sentEdit, ["inserted": "这家公式很好", "edited": "这家公司很好"])
-    checkEq("no word when it was not a spelling fix", try? client.learnedWordSync(inserted: "明天开会", edited: "后天开会"), String?.none)
-
-    checkEq("edited region between the anchors", EditLearner.editedRegion(before: "Hi Emma, ", after: " Thanks", now: "Hi Emma, see you Friday. Thanks"), "see you Friday.")
-    checkEq("edited region without anchors is the whole field", EditLearner.editedRegion(before: "", after: "", now: "全文"), "全文")
-    checkEq("missing anchor means no region", EditLearner.editedRegion(before: "gone", after: "", now: "全文"), nil)
 }
 
 // MARK: 16. rich list pasting and pill sizing
@@ -1468,17 +1376,6 @@ do {
     checkEq("Beta completion does not send cancellation", cancelled.count, 1)
 }
 
-// The same optional-response fixtures are consumed by both clients.
-do {
-    struct SuggestionResponseCase: Decodable { let id: String; let response: DictateResponse; let expectedWords: [String] }
-    guard let path = ProcessInfo.processInfo.environment["TYPELEAST_SUGGESTION_RESPONSES"] else { fatalError("Missing response fixtures") }
-    let samples = try JSONDecoder().decode([SuggestionResponseCase].self, from: Data(contentsOf: URL(fileURLWithPath: path)))
-    for sample in samples {
-        checkEq("suggestion response: " + sample.id, sample.response.suggestions.map(\.word), sample.expectedWords)
-        checkEq("optional suggestions cannot break text: " + sample.id, sample.response.insertableText, "Result stays usable.")
-    }
-}
-
 // Shared, versioned behavior for a future client written in another language.
 do {
     struct ModeCase: Decodable { let stored: String?; let expected: String; let labelZh: String }
@@ -1488,8 +1385,7 @@ do {
         let strength: String
         let translateTo: String?
         let variants: String?
-        let dictionary: [String]
-        let localOnly: [String]
+        let profile: String
     }
     struct ResponseCase: Decodable {
         let id: String
@@ -1497,6 +1393,8 @@ do {
         let insertable: String
         let betaWaiting: Bool
         let translated: String?
+        let corrections: Int?
+        let intention: String?
     }
     struct ClientContract: Decodable { let version: Int; let modeCases: [ModeCase]; let requestCases: [RequestCase]; let responseCases: [ResponseCase] }
     guard let path = ProcessInfo.processInfo.environment["TYPELEAST_CLIENT_CONTRACT"] else { fatalError("Missing client contract") }
@@ -1514,29 +1412,19 @@ do {
     for sample in contract.requestCases {
         _ = try client.dictateSync(wav: wav, language: sample.language, appBundleId: "example.editor",
                                    strength: sample.strength, translateTo: sample.translateTo,
-                                   variants: sample.variants, dictionary: sample.dictionary,
-                                   localOnly: sample.localOnly)
+                                   variants: sample.variants, profile: sample.profile)
         let sent = state.lastRequest
         checkEq("shared request path: " + sample.id, sent?.path, "/api/voice-polish/dictate")
         checkEq("shared request language: " + sample.id, sent?.header("x-voice-language"), sample.language)
         checkEq("shared request mode: " + sample.id, sent?.header("x-voice-strength"), sample.strength)
         checkEq("shared request translation: " + sample.id, sent?.header("x-voice-translate"), sample.translateTo ?? "")
         checkEq("shared request variants: " + sample.id, sent?.header("x-voice-variants"), sample.variants ?? "")
-        let length = Int(sent?.header("x-voice-dictionary-bytes") ?? "") ?? -1
+        let length = Int(sent?.header("x-voice-meta-bytes") ?? "") ?? -1
         let body = sent?.body ?? Data()
-        check("shared dictionary length: " + sample.id, length >= 0 && length <= body.count)
+        check("shared meta length: " + sample.id, length >= 0 && length <= body.count)
         if length >= 0 && length <= body.count {
-            let actual = length == 0 ? [] : ((try? JSONSerialization.jsonObject(with: body.prefix(length))) as? [Any] ?? [])
-            checkEq("shared dictionary count: " + sample.id, actual.count, sample.dictionary.count + sample.localOnly.count)
-            if actual.count == sample.dictionary.count + sample.localOnly.count {
-                for (index, word) in sample.dictionary.enumerated() {
-                    checkEq("shared dictionary word: " + sample.id + "/" + String(index), actual[index] as? String, word)
-                }
-                for (index, word) in sample.localOnly.enumerated() {
-                    checkEq("shared local word: " + sample.id + "/" + String(index),
-                            (actual[sample.dictionary.count + index] as? [String: String])?["local"], word)
-                }
-            }
+            let meta = length == 0 ? [:] : ((try? JSONSerialization.jsonObject(with: body.prefix(length))) as? [String: String] ?? [:])
+            checkEq("shared profile: " + sample.id, meta["profile"] ?? "", sample.profile)
             checkEq("shared WAV tail: " + sample.id, Data(body.suffix(from: length)), wav)
         }
     }
@@ -1544,13 +1432,15 @@ do {
         checkEq("shared insertable response: " + sample.id, sample.response.insertableText, sample.insertable)
         checkEq("shared beta waiting: " + sample.id, sample.response.betaWaiting, sample.betaWaiting)
         checkEq("shared translation result: " + sample.id, sample.response.translated, sample.translated)
+        checkEq("shared corrections: " + sample.id, sample.response.corrections?.count, sample.corrections)
+        checkEq("shared intention: " + sample.id, sample.response.intention, sample.intention)
     }
 }
 
 do {
     struct NotesCase: Decodable { let id: String; let language: String; let markdown: String; let expected: String }
-    let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TYPELEAST_SUGGESTION_RESPONSES"]!).deletingLastPathComponent()
-    let cases = try JSONDecoder().decode([NotesCase].self, from: Data(contentsOf: root.appendingPathComponent("release-notes.json")))
+    let notes = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TYPELEAST_RELEASE_NOTES"]!)
+    let cases = try JSONDecoder().decode([NotesCase].self, from: Data(contentsOf: notes))
     for sample in cases { checkEq("release summary: " + sample.id, ReleaseSummary.text(sample.markdown, language: sample.language), sample.expected) }
     checkEq("release summary line is bounded", ReleaseSummary.text("- " + String(repeating: "x", count: 1000)).count, 142)
     let data = Data(#"{"tag_name":"v1.18.0","body":"- Clearer modes","draft":false}"#.utf8)
@@ -1565,32 +1455,33 @@ do {
     checkEq("the concise tier persists", Settings().strength, "concise")
 }
 
-// MARK: plugins: the app only asks the service; its answers decode
+// MARK: the description of the user's work is learned from History and cleared with it
 do {
-    let installed = try client.pluginsSync()
-    checkEq("installed plugins decode", installed.plugins.first?.id, "example.dev-terms")
-    checkEq("…with their switch and source", installed.plugins.first?.enabled, true)
-    checkEq("plugins request", state.lastRequest?.path, "/api/voice-polish/plugins")
-    _ = try client.setPluginEnabledSync(id: "example.dev-terms", enabled: false)
-    checkEq("a switch is a PUT on the plugin", state.lastRequest.map { $0.method + " " + $0.path }, "PUT /api/voice-polish/plugins/example.dev-terms")
-} catch { check("plugin client", false, String(describing: error)) }
-
-// MARK: entries marked 「不发给模型」 stay out of the ordinary dictionary
-do {
-    let savedSealedVocabulary = UserDefaults.standard.data(forKey: VocabularyStorage.key)
-    defer { if let savedSealedVocabulary { UserDefaults.standard.set(savedSealedVocabulary, forKey: VocabularyStorage.key) } else { UserDefaults.standard.removeObject(forKey: VocabularyStorage.key) } }
-    let saved = UserDefaults.standard.data(forKey: "voice.words.v2")
-    defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.words.v2") } else { UserDefaults.standard.removeObject(forKey: "voice.words.v2") } }
-    let settings = Settings()
-    settings.words = []
-    settings.addWord("章伟", heardAs: "张为", source: .manual, localOnly: true)
-    settings.addWord("DeepSeek", source: .manual)
-    checkEq("ordinary entries are sent for the model", settings.hostDictionary, ["DeepSeek"])
-    checkEq("marked entries only for the local service", settings.localDictionary, ["张为=章伟"])
-    if let id = settings.words.first(where: { $0.word == "章伟" })?.id { settings.updateWord(id: id, word: "章伟", heardAs: "张为", localOnly: false) }
-    checkEq("unmarking puts it back", settings.hostDictionary.sorted(), ["DeepSeek", "张为=章伟"])
-    let old = Data(#"[{"id":"1","word":"Kubernetes","source":"manual","addedAt":0}]"#.utf8)
-    checkEq("entries saved before the mark existed still load", try? JSONDecoder().decode([LocalWord].self, from: old).first?.localOnly, LocalWord?.none?.localOnly)
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    let suite = "typeleast.tests.profile"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let store = HistoryStore(defaults: defaults)
+    store.keepsNothing = { false }
+    var learned = LocalHistoryEntry(id: "a", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "修复哭达", text: "修复 CUDA",
+                                    fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1)
+    learned.corrections = [TermCorrection(from: "哭达", to: "CUDA", reason: "显存")]
+    learned.intention = "修复显存溢出"
+    store.add(LocalHistoryEntry(id: "b", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "r", text: "t",
+                                fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1))
+    store.add(learned)
+    checkEq("only entries with something learned are sent", store.learningItems.count, 1)
+    checkEq("…as corrections and intention, never the text", store.learningItems.first?.keys.sorted(), ["corrections", "intention"])
+    checkEq("no description before the first launch writes one", store.profile, "")
+    store.setProfile("做 CUDA 开发")
+    checkEq("the description is kept, sealed", store.profile, "做 CUDA 开发")
+    check("…not as plain text", !(defaults.dictionaryRepresentation().values.contains { ($0 as? String)?.contains("CUDA") == true }))
+    store.setProfile(String(repeating: "字", count: 1200))
+    checkEq("the description is capped at 1000 characters", store.profile.count, 1000)
+    store.clear()
+    checkEq("clearing History clears the description", store.profile, "")
 }
 
 // MARK: retry recordings are deleted after five minutes
@@ -1625,7 +1516,7 @@ do {
 // MARK: new-user guide: every entry names a place; a failed model download offers a mirror
 do {
     let entries = SettingsGuide.entries
-    checkEq("the guide lists six places", entries.count, 6)
+    checkEq("the guide lists five places", entries.count, 5)
     check("every guide entry says where it is", entries.allSatisfy { !$0.place.isEmpty })
     checkEq("the API key lives under Settings › Models", entries.first { $0.title == L10n.text("API Key") }?.category, 1)
     checkEq("the speech model lives under Settings › Models", entries.first { $0.title == L10n.text("语音模型") }?.category, 1)
@@ -1642,55 +1533,6 @@ do {
     checkEq("the suggested mirror", ModelMirror.suggested, "https://hf-mirror.com")
 }
 
-// MARK: dictionary: a word picked in History never replaces its entry
-do {
-    let savedSealedVocabulary = UserDefaults.standard.data(forKey: VocabularyStorage.key)
-    defer { if let savedSealedVocabulary { UserDefaults.standard.set(savedSealedVocabulary, forKey: VocabularyStorage.key) } else { UserDefaults.standard.removeObject(forKey: VocabularyStorage.key) } }
-    let saved = UserDefaults.standard.data(forKey: "voice.words.v2")
-    defer { if let saved { UserDefaults.standard.set(saved, forKey: "voice.words.v2") } else { UserDefaults.standard.removeObject(forKey: "voice.words.v2") } }
-    let settings = Settings()
-    settings.words = [LocalWord(id: "w1", word: "DeepSeek", heardAs: "德普西克", source: .manual, addedAt: Date())]
-    var hints: [String] = []
-    let dictionary = DictionaryController(settings: settings, setHint: { hints.append($0) }, changed: {})
-    dictionary.addFromHistory("deepseek")
-    checkEq("a word already there keeps what it is heard as", settings.words.first?.heardAs, "德普西克")
-    checkEq("…and is not added twice", settings.words.count, 1)
-    checkEq("…and the hint says so", hints.last, L10n.text("「{0}」已在词典里", "deepseek"))
-    dictionary.addFromHistory(" 飞书 ")
-    checkEq("a new word from History is added", settings.words.map(\.word), ["飞书", "DeepSeek"])
-}
-
-// Shared client contract: automatic learning, migration, opt-out and explicit deletion.
-do {
-    let defaults = UserDefaults.standard
-    let keys = [VocabularyStorage.key, "voice.words.v2", "voice.wordSuggestions", "voice.dismissedSuggestions", "voice.autoLearn"]
-    let old = keys.map { defaults.object(forKey: $0) }
-    defer { for (key, value) in zip(keys, old) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
-    let path = ProcessInfo.processInfo.environment["TYPELEAST_DICTIONARY_CONTRACT"]!
-    let root = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
-    let settings = Settings.shared
-    for item in root["cases"] as! [[String: Any]] {
-        let id = item["id"] as! String
-        settings.words = (item["initial"] as? [String] ?? []).map { LocalWord(id: $0, word: $0, source: .manual, addedAt: Date()) }
-        settings.wordSuggestions = []
-        settings.autoLearn = item["enabled"] as! Bool
-        defaults.set(item["ignored"] as? [String] ?? [], forKey: "voice.dismissedSuggestions")
-        let pending = item["pending"] as! [[String: String]]
-        settings.wordSuggestions = pending.map { WordSuggestion(word: $0["word"]!, heardAs: $0["heardAs"]!, count: 1, lastSeen: Date()) }
-        let data = try! JSONSerialization.data(withJSONObject: item["incoming"]!)
-        let incoming = try! JSONDecoder().decode([SuggestionCandidate].self, from: data)
-        settings.learnSuggestions(incoming)
-        checkEq("automatic dictionary: " + id, settings.words.map(\.word).sorted(), (item["expected"] as! [String]).sorted())
-        checkEq("pending dictionary: " + id, settings.wordSuggestions.count, item["pendingCount"] as! Int)
-        if let entry = settings.words.first(where: { $0.source == .auto }) {
-            let same = try! JSONDecoder().decode([SuggestionCandidate].self, from: JSONSerialization.data(withJSONObject: [["word": entry.word, "heardAs": entry.heardAs ?? ""]]))
-            settings.removeWord(id: entry.id)
-            Settings().learnSuggestions(same)
-            check("deleted dictionary term stays removed: " + id, !settings.words.contains { $0.word == entry.word })
-        }
-    }
-}
-
 // The menu bar menu builds every item it later updates (a missing one stops the app at launch).
 do {
     let menu = MenuController()
@@ -1702,7 +1544,7 @@ do {
     NSStatusBar.system.removeStatusItem(menu.statusItem)
 }
 
-// AI cleanup migration and vocabulary provenance use a dedicated preference domain.
+// AI cleanup migration uses a dedicated preference domain.
 do {
     let suite = "typeleast.tests.ai-cleanup." + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
@@ -1712,18 +1554,6 @@ do {
     checkEq("existing users migrate to unified dictation once", migrated.strength, "prompt")
     migrated.strength = "prompt"
     checkEq("later startups preserve chosen mode", Settings(defaults: defaults).strength, "prompt")
-    let auto = LocalWord(id: "a", word: "ROG", heardAs: "LG", source: .auto, addedAt: Date())
-    checkEq("automatic mapping remains stored", auto.hostEntry, "LG=ROG")
-    checkEq("automatic mapping is only a vocabulary hint", auto.requestEntry, "ROG")
-    var manual = auto; manual.source = .manual
-    checkEq("manual rule remains explicit", manual.requestEntry, "LG=ROG")
-    migrated.words = [auto]
-    checkEq("old automatic mappings cannot bypass name guard", migrated.hostDictionary, ["ROG"])
-    migrated.updateWord(id: "a", word: "ROG", heardAs: "LG")
-    checkEq("explicit edit makes a manual rule", migrated.words.first?.source, .manual)
-    let payload = ServiceClient.dictateBody(wav: Data([1, 2]), dictionary: [], clarificationSource: "我想买 LG 电脑")
-    let metadata = (try? JSONSerialization.jsonObject(with: payload.body.prefix(payload.dictionaryBytes))) as? [[String: String]]
-    checkEq("voice continuation carries only explicit prior input", metadata?.first?["clarificationSource"], "我想买 LG 电脑")
 }
 
 do {
@@ -1751,7 +1581,6 @@ do {
 }
 
 contextPreferencesTests()
-personalizationPolicyTests()
 
 server.stop()
 print("")

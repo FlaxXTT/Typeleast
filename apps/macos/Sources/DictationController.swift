@@ -7,7 +7,6 @@ final class DictationController {
         let settings: Settings
         let client: ServiceClient
         let model: AppModel
-        let dictionary: DictionaryController
         let beta: BetaController
         let recorder: Recorder
         let recordingBar: RecordingBar
@@ -26,7 +25,6 @@ final class DictationController {
     private var settings: Settings { host.settings }
     private var client: ServiceClient { host.client }
     private var model: AppModel { host.model }
-    private var dictionary: DictionaryController { host.dictionary }
     private var beta: BetaController { host.beta }
     private var betaPending: BetaPending? { beta.pending }
     private var recorder: Recorder { host.recorder }
@@ -53,9 +51,6 @@ final class DictationController {
     private var heldRecording: (url: URL, seconds: Double, app: String, field: FocusedField?, language: String, keep: Bool, translateTo: String?)?
     private let cancelToast = LearnedToast()
     private var pendingTranslate: String?
-    private let namePanel = NameConfirmationPanel()
-    private var clarificationSource: String?
-    private var clarificationDestination: (app: String, field: FocusedField?, language: String, strength: String, target: String?, variants: String?, evidence: String, disabled: Bool)?
 
     private var tickTimer: Timer?
     private var lastTickedSecond = -1
@@ -90,7 +85,6 @@ final class DictationController {
 
     func startRecording() {
         guard phase == .idle else { return }
-        namePanel.dismiss()
         if recorder.demoPCM != nil {
             beginCapture()   // demo input: no microphone involved
             return
@@ -119,10 +113,8 @@ final class DictationController {
     func beginCapture() {
         progressID = UUID()
         cancelToast.finish()
-        // The previous dictation's field is checked for corrections before a new one starts.
-        dictionary.dictationStarting()
         // Contract: frontmost bundle id is captured BEFORE recording starts.
-        pendingAppBundleId = clarificationDestination?.app ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        pendingAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         pendingField = nil
         let deviceID = AudioDevices.deviceID(forUID: settings.inputDeviceUID)
         recorder.prepareEngine = { engine in AudioInputSelector.apply(deviceID: deviceID, to: engine) }
@@ -159,10 +151,9 @@ final class DictationController {
         startTick()
         applyState()
 
-        // Read the target field off the main thread while the user is already speaking: as
-        // context for the model (only with 参考输入框里的内容 on) and, locally, so the edit
-        // learner can see what the user fixes afterwards.
-        if clarificationSource == nil && (settings.readFieldContext || settings.autoLearn) {
+        // Read the target field off the main thread while the user is already speaking, as
+        // context for the model (only with 参考输入框里的内容 on).
+        if settings.readFieldContext {
             let bundle = pendingAppBundleId
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 let field = FieldContextReader.capture(bundleId: bundle)
@@ -215,14 +206,7 @@ final class DictationController {
         }
     }
 
-    func dropNameConfirmation() {
-        namePanel.dismiss()
-        clarificationSource = nil
-        clarificationDestination = nil
-    }
-
     func cancelDictation() {
-        dropNameConfirmation()
         switch phase {
         case .recording:
             unregisterEscape()
@@ -286,30 +270,19 @@ final class DictationController {
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
                       translateTo: String? = nil) {
-        let source = clarificationSource
-        let destination = source == nil ? nil : clarificationDestination
-        clarificationSource = nil
-        clarificationDestination = nil
-        let appBundleId = destination?.app ?? appBundleId
-        let field = destination?.field ?? field
-        let language = destination?.language ?? language
-        let strength = destination?.strength ?? strength
-        let translateTo = destination?.target ?? translateTo
         phase = .thinking
         registerEscape()
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
         applyState()
         // The field's text goes to the model's provider only when the user turned that on.
-        let context = (destination?.disabled == true) ? nil : (settings.readFieldContext ? field?.context.encoded() : nil)
+        let context = settings.readFieldContext ? field?.context.encoded() : nil
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let previousBeta = betaSession == nil ? nil : betaPending
         let llm = previousBeta?.llm ?? settings.activeLLMRoute
         let effectiveLanguage = previousBeta?.language ?? language
-        let variants = destination?.variants ?? (previousBeta == nil ? settings.variantsHeader : previousBeta?.variants)
-        let dictionary = self.dictionary.serviceEntries
-        let localOnly = self.dictionary.localEntries
-        let policy = self.dictionary.policy(disabled: destination?.disabled ?? false)
+        let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
+        let profile = HistoryStore.shared.profile
         let progressID = UUID(); self.progressID = progressID
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -324,7 +297,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              dictionary: dictionary, localOnly: localOnly, clarificationSource: source, clarificationEvidence: destination?.evidence, personalization: policy,
+                                                              profile: profile,
                                                               onProgress: { [weak self] progress in DispatchQueue.main.async {
                                                                   guard let self, self.phase == .thinking, self.progressID == progressID else { return }
                                                                   self.recordingBar.showThinking(detail:progress.label)
@@ -361,65 +334,6 @@ final class DictationController {
         case .success(let resp):
             serviceUp = true
             model.serviceProblem = ""
-            if resp.contextOnly {
-                recordingBar.showResult(L10n.text("这次只有解释信息，没有正文，未插入。"), warning: false)
-                setHint(L10n.text("这次只有解释信息，没有正文，未插入。"))
-                applyState(); return
-            }
-            if let clarification = resp.clarification {
-                recordingBar.hide()
-                clarificationSource = resp.raw
-                clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.personalizationDisabled ?? false)
-                namePanel.show(question: clarification.kind == "quality" ? CleanupIssue.message(clarification.reason) : L10n.text("需要确认：{0}", clarification.evidence), raw: clarification.kind == "quality" ? (clarification.candidate ?? resp.raw) : resp.raw, kind: clarification.kind) { [weak self] choice in
-                    guard let self else { return }
-                    self.clarificationSource = nil
-                    self.clarificationDestination = nil
-                    switch choice {
-                    case .cancel: self.setHint(L10n.text("已取消"))
-                    case .supplement:
-                        self.clarificationSource = resp.raw
-                        self.clarificationDestination = (appBundleId, field, language, strength, clarification.target, variants, clarification.evidence, clarification.personalizationDisabled ?? false)
-                        self.toggleDictation(translateTo: clarification.target)
-                    case .original:
-                        var confirmed = resp
-                        confirmed.clarification = nil
-                        confirmed.text = resp.raw
-                        confirmed.suggestions = []
-                        self.finishRequest(.success(confirmed), appBundleId: appBundleId, language: language, strength: strength,
-                                           audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
-                    case .edit(let text) where clarification.kind == "quality":
-                        var confirmed = resp
-                        confirmed.clarification = nil; confirmed.fallback = false; confirmed.fallbackReason = nil
-                        confirmed.text = text; confirmed.suggestions = []
-                        self.finishRequest(.success(confirmed), appBundleId: appBundleId, language: language, strength: strength,
-                                           audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
-                    case .retry, .edit:
-                        let text: String
-                        if case .edit(let edited) = choice { text = edited } else { text = resp.raw }
-                        self.phase = .thinking
-                        self.registerEscape()
-                        self.recordingBar.showThinking(detail:L10n.text("正在整理…"))
-                        let generation = UUID(); self.progressID = generation
-                        self.applyState()
-                        let entries = self.dictionary.serviceEntries
-                        let local = self.dictionary.localEntries
-                        let context = self.settings.readFieldContext ? field?.context.encoded() : nil
-                        let policy = self.dictionary.policy(disabled: clarification.personalizationDisabled ?? false)
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let outcome = Result { try self.client.polishSync(text: text, language: language, strength: strength, llm: llm,
-                                translateTo: clarification.target, variants: variants,
-                                dictionary: entries, localOnly: local, fieldContext: context, personalization: policy) }
-                            DispatchQueue.main.async {
-                                guard self.progressID == generation else { return }
-                                self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength,
-                                                   audioPath: nil, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
-                            }
-                        }
-                    }
-                }
-                applyState()
-                return
-            }
             if let sessionId = resp.beta?.sessionId, let info = resp.beta {
                 beta.accept(info: info, sessionId: sessionId, llm: llm, language: language,
                             variants: variants, appBundleId: appBundleId, field: field)
@@ -454,19 +368,19 @@ final class DictationController {
                                           seconds: seconds)
             entry.model = resp.model ?? resp.provider
             entry.translated = resp.translated
-            entry.personalization = resp.personalization
+            entry.corrections = resp.corrections
+            entry.intention = resp.intention
             entry.variants = variants
             entry.task = resp.task
             HistoryStore.shared.add(entry)
-            if !resp.fallback, resp.translated == nil { dictionary.received(resp.suggestions) }
             if text.isEmpty {
                 recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
                 setHint(L10n.text("没有识别到内容"), warning: true)
                 applyState()
                 return
             }
-            let failedHint = resp.uncertain == true ? L10n.text("已插入，可能有误，可在历史中修改") : ["entity-changed", "name-kept"].contains(resp.fallbackReason ?? "") ? L10n.text("名称改写缺少依据，已保留识别原文。") : resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
-            setHint(resp.fallback || resp.uncertain == true ? failedHint : nil, warning: resp.fallback || resp.uncertain == true)
+            let failedHint = resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
+            setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)
                 ActivityLog.shared.record(words: counts.cjk + counts.latin)
@@ -527,9 +441,6 @@ final class DictationController {
             self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message, warning: !result.ok)
             self.recordingBar.showResult(text, warning: !result.ok || fallback)
             if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
-            if result == .pasted, let field = field, field.bundleId == appBundleId {
-                self.dictionary.pasted(text, into: field)
-            }
             self.applyState()
         }
     }
@@ -608,7 +519,7 @@ final class DictationController {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.polishSync(text: text, language: language, strength: strength, llm: route, translateTo: nil, variants: variants,
-                                                              dictionary: [], localOnly: [], betaSession: session, source: source) }
+                                                              betaSession: session, source: source) }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
                 self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength, audioPath: nil, seconds: nil,

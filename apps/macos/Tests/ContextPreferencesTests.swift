@@ -24,8 +24,9 @@ func contextPreferencesTests() {
     response.text = "周四交，不超过三页。"
     checkEq("any recognised and cleaned sentence passes, Chinese numerals included", progress.accept(response, seconds: 2), .passed)
     check("…and the practice is complete", progress.complete)
-    response.contextOnly = true
-    checkEq("explanation-only response cannot be inserted", response.insertableText, "")
+    response.corrections = [TermCorrection(from: "哭达", to: "CUDA", reason: nil)]
+    response.intention = "交周报"
+    checkEq("corrections and intention never reach the inserted text", response.insertableText, "周四交，不超过三页。")
 
     // Test AppKit's proposed width directly, without opening a window or reading history.
     let view = HistoryTextView()

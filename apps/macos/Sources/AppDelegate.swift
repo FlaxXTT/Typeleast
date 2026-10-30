@@ -19,9 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let settings = Settings.shared
     let client = ServiceClient.shared
     let model = AppModel.shared
-    lazy var dictionary = DictionaryController(settings: settings,
-                                               setHint: { [weak self] in self?.setHint($0) },
-                                               changed: { [weak self] in self?.applyState() })
     lazy var updates = UpdateController(host: .init(
         busyReason: { [weak self] in
             guard let self else { return nil }
@@ -37,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     lazy var hub = HubWindowController(model: model)
     lazy var onboarding = OnboardingWindowController(model: model)
     lazy var dictation = DictationController(host: .init(
-        settings: settings, client: client, model: model, dictionary: dictionary, beta: beta,
+        settings: settings, client: client, model: model, beta: beta,
         recorder: recorder, recordingBar: recordingBar, idleBar: idleBar,
         applyState: { [weak self] in self?.applyState() },
         updateIdleBar: { [weak self] in self?.updateIdleBar() },
@@ -138,7 +135,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(onSettingsChanged), name: Settings.didChange, object: nil)
-        center.addObserver(self, selector: #selector(onWordsChanged), name: Settings.wordsDidChange, object: nil)
         center.addObserver(self, selector: #selector(onHistoryChanged), name: HistoryStore.didChange, object: nil)
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(self, selector: #selector(onWake), name: NSWorkspace.didWakeNotification, object: nil)
@@ -437,10 +433,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         applyState()
     }
 
-    @objc func onWordsChanged() {
-        model.reloadWords()
-    }
-
     @objc func onHistoryChanged() { applyState() }
 
     @objc func onWake() {
@@ -450,9 +442,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     @objc func onAppActivated(_ note: Notification) {
-        // Leaving the app a dictation went into: the user is usually done fixing it.
-        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-        dictionary.appActivated(app?.bundleIdentifier)
         let trusted = AXIsProcessTrusted()
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
@@ -489,6 +478,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     // MARK: health (single check; no polling)
 
+    /// The description of the user's work is rewritten once per launch, from History, in the background.
+    private var profileRefreshed = false
+    func refreshProfileOnce() {
+        guard !profileRefreshed, let route = settings.activeLLMRoute else { return }
+        let items = HistoryStore.shared.learningItems
+        guard !items.isEmpty else { return }
+        profileRefreshed = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            do {
+                let profile = try self.client.profileSync(items: items, llm: route)
+                DispatchQueue.main.async { if !profile.isEmpty { HistoryStore.shared.setProfile(profile) } }
+            } catch {
+                DiagnosticsLog.write("profile.fail", ["error": (error as? ServiceError)?.description ?? error.localizedDescription])
+            }
+        }
+    }
+
     func refreshHealth() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
@@ -497,6 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                 let catalog = try? self.client.speechModelsSync()
                 DispatchQueue.main.async {
                     self.serviceUp = h.ok
+                    if h.ok { self.refreshProfileOnce() }
                     self.model.health = h
                     self.model.speechCatalog = catalog
                     self.model.serviceProblem = AppDelegate.speechProblem(h.speech)
@@ -604,8 +612,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuOpened() { refreshHealth() }
 
     // MARK: AppActions (called from the windows)
-
-    func addWordFromHistory(_ word: String) { dictionary.addFromHistory(word) }
 
     func breakdownSample() {
         dictation.startBreakdown(L10n.text("你是一名资深产品经理。请为一款面向大学生的记账 App 写一份需求文档，包含目标用户、核心功能、首版范围和成功指标。语气专业但易读，控制在 1500 字以内。"), appBundleId: "tutorial")

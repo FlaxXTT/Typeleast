@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// HubPages.swift - Home, History and Dictionary.
+// HubPages.swift - Home and History.
 
 // MARK: - shared helpers
 
@@ -405,10 +405,8 @@ struct HistoryRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .clipped()
                 } else {
-                    // Select a name or term, right-click, 加入词典.
                     SelectableText(text: entry.displayText, font: .systemFont(ofSize: 13.5), color: NSColor(Theme.ink),
                                    maxLines: expanded ? 0 : 4,
-                                   onAddWord: { word in model.actions?.addWordFromHistory(word) },
                                    onPlainClick: { expanded.toggle() })
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -457,201 +455,5 @@ struct HistoryRow: View {
         model.actions?.copyEntry(id: entry.id, raw: raw)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
-    }
-}
-
-// MARK: - Dictionary
-
-enum WordFilter: Hashable { case all, auto, manual }
-
-struct ManualDictionaryPage: View {
-    @EnvironmentObject var model: AppModel
-    @State private var filter: WordFilter = .all
-    @State private var query = ""
-    @State private var editor = WordEditorController()
-    @State private var importNote = ""
-
-    private var filtered: [LocalWord] {
-        model.words.filter { word in
-            switch filter {
-            case .all: break
-            case .auto: if word.source != .auto { return false }
-            case .manual: if word.source != .manual { return false }
-            }
-            guard !query.isEmpty else { return true }
-            return word.word.localizedCaseInsensitiveContains(query) || (word.heardAs ?? "").localizedCaseInsensitiveContains(query)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("词典"), subtitle: L10n.text("说过的名称写对。你改过的词会自动加入。")) {
-                HStack(spacing: 8) {
-                    Button(L10n.text("导入 CSV")) { importCSV() }.buttonStyle(SecondaryButtonStyle())
-                    Button {
-                        editor.show(title: L10n.text("新词"), word: "", heardAs: "", localOnly: false) { word, heard, localOnly in
-                            Settings.shared.addWord(word, heardAs: heard, source: .manual, localOnly: localOnly)
-                        }
-                    } label: {
-                        Label(L10n.text("新词"), systemImage: "plus")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                }
-            }
-            HStack {
-                ChipPicker(options: [(WordFilter.all, L10n.text("全部")), (.auto, L10n.text("自动添加")), (.manual, L10n.text("手动添加"))], selection: $filter)
-                Spacer()
-                if !importNote.isEmpty { Text(importNote).font(.system(size: 12)).foregroundColor(Theme.secondary) }
-                SearchField(text: $query)
-            }
-            .padding(.horizontal, 36)
-            .padding(.bottom, 12)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if filtered.isEmpty {
-                        VStack(spacing: 8) {
-                            Image(systemName: "character.book.closed").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                            Text(query.isEmpty ? L10n.text("词典是空的。") : L10n.text("没有匹配的词"))
-                                .multilineTextAlignment(.center)
-                                .foregroundColor(Theme.secondary)
-                                .frame(maxWidth: 360)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 160)
-                    } else {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filtered) { word in
-                                WordRow(word: word, onEdit: {
-                                    editor.show(title: L10n.text("编辑"), word: word.word, heardAs: word.heardAs ?? "", localOnly: word.localOnly == true) { newWord, heard, localOnly in
-                                        Settings.shared.updateWord(id: word.id, word: newWord, heardAs: heard, localOnly: localOnly)
-                                    }
-                                }, onDelete: {
-                                    Settings.shared.removeWord(id: word.id)
-                                })
-                                if word.id != filtered.last?.id { Divider().padding(.leading, 16) }
-                            }
-                        }
-                        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 36)
-                .padding(.bottom, 36)
-            }
-        }
-        .onDisappear { editor.close() }
-    }
-
-    private func importCSV() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.commaSeparatedText, .plainText]
-        panel.allowsMultipleSelection = false
-        panel.message = L10n.text("每行一个词，或「识别成,正确写法」")
-        guard panel.runModal() == .OK, let url = panel.url,
-              let text = try? String(contentsOf: url, encoding: .utf8) else { return }
-        let added = Settings.shared.importCSV(text)
-        importNote = L10n.text("已导入 {0} 个词", added)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { importNote = "" }
-    }
-}
-
-private struct WordRow: View {
-    let word: LocalWord
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(word.word).font(.system(size: 14, weight: .semibold))
-                if let heard = word.heardAs, !heard.isEmpty {
-                    Text(L10n.text("常被识别成「{0}」", heard)).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
-                }
-            }
-            Spacer()
-            if word.localOnly == true { Badge(text: L10n.text("不发给模型"), tint: Theme.warning) }
-            Badge(text: word.source == .auto ? L10n.text("自动添加") : L10n.text("手动添加"),
-                  tint: word.source == .auto ? Theme.accent : Theme.secondary)
-            if hovering {
-                IconButton(symbol: "pencil", help: L10n.text("编辑"), action: onEdit)
-                IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive, action: onDelete)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-        .contentShape(Rectangle())
-        .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
-        .onHover { hovering = $0 }
-    }
-}
-
-/// A modeless editor: the dictionary remains scrollable while it is open.
-private final class WordEditorController {
-    private var panel: NSPanel?
-
-    func show(title: String, word: String, heardAs: String, localOnly: Bool,
-              onSave: @escaping (String, String?, Bool) -> Void) {
-        close()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 468, height: 330),
-                            styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
-        panel.title = title
-        panel.isReleasedWhenClosed = false
-        panel.isFloatingPanel = false
-        panel.hidesOnDeactivate = false
-        panel.contentViewController = NSHostingController(rootView:
-            WordEditor(title: title, word: word, heardAs: heardAs, localOnly: localOnly,
-                       onCancel: { [weak self] in self?.close() }, onSave: { [weak self] word, heard, localOnly in
-                           onSave(word, heard, localOnly)
-                           self?.close()
-                       }))
-        panel.center()
-        self.panel = panel
-        panel.makeKeyAndOrderFront(nil)
-    }
-
-    func close() { panel?.close(); panel = nil }
-}
-
-private struct WordEditor: View {
-    let title: String
-    @State var word: String
-    @State var heardAs: String
-    @State var localOnly: Bool
-    let onCancel: () -> Void
-    let onSave: (String, String?, Bool) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title).font(.system(size: 18, weight: .bold))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.text("词语")).font(.system(size: 12, weight: .medium)).foregroundColor(Theme.secondary)
-                TextField(L10n.text("例如 DeepSeek、张伟、Kubernetes"), text: $word)
-                    .textFieldStyle(.roundedBorder)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.text("常被识别成（可选）")).font(.system(size: 12, weight: .medium)).foregroundColor(Theme.secondary)
-                TextField(L10n.text("例如 得普西克"), text: $heardAs)
-                    .textFieldStyle(.roundedBorder)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(L10n.text("不发给模型"), isOn: $localOnly).toggleStyle(.checkbox)
-                if localOnly && heardAs.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text(L10n.text("没填识别成时，只修正英文大小写。")).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
-                }
-            }
-            HStack {
-                Spacer()
-                Button(L10n.text("取消"), action: onCancel).buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
-                Button(title == L10n.text("新词") ? L10n.text("添加") : L10n.text("保存")) {
-                    onSave(word, heardAs.isEmpty ? nil : heardAs, localOnly)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .keyboardShortcut(.defaultAction)
-                .disabled(word.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(24)
-        .frame(width: 420)
     }
 }

@@ -23,8 +23,9 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var seconds: Double?
     /// 翻译模式: the target language, so a retry translates again. Absent otherwise.
     var translated: String? = nil
-    var explanationMarkers: String? = nil
-    var personalization: PersonalizationTrace? = nil
+    /// What the cleanup model corrected and understood: never inserted, only learned from.
+    var corrections: [TermCorrection]? = nil
+    var intention: String? = nil
     var variants: String? = nil
     var task: String? = nil
 
@@ -155,6 +156,8 @@ final class HistoryStore {
     /// Plain JSON written by older versions; read once, then replaced by the sealed copy.
     private let plainKey = "voice.history.v1"
     private let sealedKey = "voice.history.sealed.v1"
+    /// The description of the user's work learned from this history, sealed like it.
+    private let profileKey = "voice.profile.sealed.v1"
     private let d: UserDefaults
     private var locked = false
     private(set) var persistenceProblem: String?
@@ -200,6 +203,7 @@ final class HistoryStore {
         if keepsNothing() {
             d.removeObject(forKey: sealedKey)
             d.removeObject(forKey: plainKey)
+            d.removeObject(forKey: profileKey)
             persistenceProblem = nil
             return
         }
@@ -248,6 +252,31 @@ final class HistoryStore {
 
     var stats: DictationStats { DictationStats.compute(entries) }
 
+    /// Sent with each dictation and added to the cleanup prompt. Cleared with the history.
+    var profile: String {
+        guard !keepsNothing(), let sealed = d.data(forKey: profileKey), let key = HistorySeal.key(create: false),
+              let data = HistorySeal.open(sealed, key: key) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    func setProfile(_ text: String) {
+        guard !keepsNothing(), !locked, let key = HistorySeal.key(create: true),
+              let sealed = HistorySeal.seal(Data(String(text.prefix(1000)).utf8), key: key) else { return }
+        d.set(sealed, forKey: profileKey)
+    }
+
+    /// What the description is learned from: the corrections and intentions of the newest entries.
+    var learningItems: [[String: Any]] {
+        entries.lazy.filter { !($0.corrections ?? []).isEmpty || !($0.intention ?? "").isEmpty }.prefix(100).map { entry in
+            var item: [String: Any] = [:]
+            if let corrections = entry.corrections, !corrections.isEmpty {
+                item["corrections"] = corrections.map { ["from": $0.from, "to": $0.to] }
+            }
+            if let intention = entry.intention, !intention.isEmpty { item["intention"] = intention }
+            return item
+        }
+    }
+
     var last: LocalHistoryEntry? { entries.first }
 
     func add(_ e: LocalHistoryEntry) {
@@ -279,6 +308,7 @@ final class HistoryStore {
         entries.removeAll()
         d.removeObject(forKey: plainKey)
         d.removeObject(forKey: sealedKey)
+        d.removeObject(forKey: profileKey)
         locked = false; persistenceProblem = nil
         DispatchQueue.main.async { NotificationCenter.default.post(name: HistoryStore.didChange, object: nil) }
     }

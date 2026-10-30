@@ -7,14 +7,13 @@ import Combine
 enum AppPhase { case idle, recording, thinking }
 
 enum HubPage: String, CaseIterable, Identifiable {
-    case home, history, dictionary, settings
+    case home, history, settings
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: return L10n.text("首页")
         case .history: return L10n.text("历史")
-        case .dictionary: return L10n.text("词典")
         case .settings: return L10n.text("设置")
         }
     }
@@ -23,7 +22,6 @@ enum HubPage: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house"
         case .history: return "clock.arrow.circlepath"
-        case .dictionary: return "character.book.closed"
         case .settings: return "gearshape"
         }
     }
@@ -31,8 +29,6 @@ enum HubPage: String, CaseIterable, Identifiable {
 
 /// What the windows may ask the app to do. Implemented by AppDelegate.
 protocol AppActions: AnyObject {
-    /// A word the user selected in History: added to the dictionary by hand.
-    func addWordFromHistory(_ word: String)
     func setCleanupMode(_ code: String)
     func startAssistant()
     /// The onboarding's 拆解一段示例提示词: opens 提示词模式 on a sample prompt.
@@ -66,8 +62,6 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     weak var actions: AppActions?
-    /// Installed plugins and the official catalog (Extensions page, style picker).
-    let plugins = PluginController()
 
     @Published var page: HubPage = .home
     @Published var settingsCategory = 0
@@ -75,7 +69,6 @@ final class AppModel: ObservableObject {
     @Published private(set) var stats = DictationStats()
     /// Bumped when the per-day activity changes; the heatmap reads ActivityLog.shared.
     @Published private(set) var activityRevision = 0
-    @Published private(set) var words: [LocalWord] = []
 
     @Published var phase: AppPhase = .idle
     @Published var serviceUp = false
@@ -99,7 +92,6 @@ final class AppModel: ObservableObject {
 
     init() {
         reloadHistory()
-        reloadWords()
         refreshPermissions()
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: HistoryStore.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -107,9 +99,6 @@ final class AppModel: ObservableObject {
         })
         observers.append(center.addObserver(forName: ActivityLog.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.activityRevision += 1
-        })
-        observers.append(center.addObserver(forName: Settings.wordsDidChange, object: nil, queue: .main) { [weak self] _ in
-            self?.reloadWords()
         })
         observers.append(center.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.settingsRevision += 1
@@ -119,10 +108,6 @@ final class AppModel: ObservableObject {
     func reloadHistory() {
         history = HistoryStore.shared.entries
         stats = HistoryStore.shared.stats
-    }
-
-    func reloadWords() {
-        words = settings.words
     }
 
     func refreshPermissions() {

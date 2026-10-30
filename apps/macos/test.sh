@@ -20,12 +20,10 @@ CMD=("$SWIFTC" -swift-version 5 -O
   "${SOURCES[@]}"
   "$ROOT/Tests/StubServer.swift"
   "$ROOT/Tests/ContextPreferencesTests.swift"
-  "$ROOT/Tests/PersonalizationPolicyTests.swift"
   "$ROOT/Tests/main.swift")
 
 echo "compile: ${CMD[*]}"
 "${CMD[@]}"
 echo "run: $BIN"
-TYPELEAST_SUGGESTION_RESPONSES="$ROOT/../../service/test/fixtures/suggestion-responses.json" \
-TYPELEAST_DICTIONARY_CONTRACT="$ROOT/../../tests/conformance/personalization-v1.json" \
+TYPELEAST_RELEASE_NOTES="$ROOT/../../service/test/fixtures/release-notes.json" \
 TYPELEAST_CLIENT_CONTRACT="$ROOT/../../tests/conformance/client-v2.json" "$BIN"
