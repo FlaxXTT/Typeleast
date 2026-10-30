@@ -160,7 +160,7 @@ export class VoicePolishService {
     };
     // Skipping Prompt Beta's questions sends no answer at all, which is not an empty dictation.
     const betaSkip = strength === "promptbeta" && request.betaSkip === true && Boolean(request.betaSession);
-    if (rawText.length === 0 && !betaSkip && !(strength === "promptbeta" && request.betaSession)) {
+    if (rawText.length === 0 && !betaSkip && !(strength === "promptbeta" && (request.betaSession || request.baseline))) {
       if (strength === "promptbeta") return { ...base, text: "", fallback: true, reason: "empty-transcript" };
       return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
     }
@@ -283,18 +283,21 @@ export class VoicePolishService {
       return result.text;
     };
     this.pruneBetaSessions();
+    // The draft: text selected when 提示词模式 started. The older form sends it as the text itself.
+    let baseline = typeof request.baseline === 'string' ? request.baseline.trim() : '';
+    if (!baseline && request.source === 'selection') { baseline = rawText; rawText = ''; }
     const id = request.betaSession || randomUUID();
     let session = this.betaSessions.get(id);
     if (request.betaSession && !session) throw Object.assign(new Error('clarification expired'), { code: 'beta-expired' });
     if (session?.busy) throw Object.assign(new Error('clarification in progress'), { code: 'model-busy' });
-    if (!session && !hasContent(rawText)) {
+    if (!session && !hasContent(rawText) && !hasContent(baseline)) {
       return { ...base, raw: '', text: '', fallback: true, reason: 'empty-transcript' };
     }
     if (!session) {
-      if (rawText.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
+      if (rawText.length + baseline.length > BETA_LIMITS.inputChars) throw Object.assign(new Error('request too long'), { code: 'invalid-prompt' });
       // Do not evict another user's active operation to admit a new one.
       if (this.betaSessions.size >= BETA_LIMITS.sessions) throw Object.assign(new Error('too many clarifications'), { code: 'busy' });
-      session = { request: rawText, turns: [], questions: [], confirmed: [], goals: [], selection: request.source === 'selection', created: Date.now(), ready: false };
+      session = { request: hasContent(rawText) ? rawText : '', baseline, turns: [], questions: [], confirmed: [], goals: [], selection: Boolean(baseline), created: Date.now(), ready: false };
       this.betaSessions.set(id, session);
     }
     const pending = notice => ({ ...base, text: '', raw: rawText,
@@ -302,15 +305,16 @@ export class VoicePolishService {
         round: session.turns.length + 1, ready: session.ready, ...(notice ? { notice } : {}) }, ms: timing(started, 0) });
     if (request.betaSession && !skip && !hasContent(rawText)) return pending('empty-transcript');
     const turns = [...session.turns];
-    if (request.betaSession && !skip) turns.push({ questions: [...session.questions], answer: rawText });
-    const source = [session.request, ...turns.map(t => t.answer)].join('\n');
+    // 生成 may carry answers chosen in the panel but not sent yet.
+    if (request.betaSession && (!skip || hasContent(rawText))) turns.push({ questions: [...session.questions], answer: rawText });
+    const source = [session.baseline ?? '', session.request, ...turns.map(t => t.answer)].join('\n');
     if (source.length > BETA_LIMITS.inputChars) return pending('beta-input-limit');
     session.busy = true;
     session.created = Date.now();
     session.controller = new AbortController();
     try {
       if (!skip) {
-        const reply = parseJsonReply(await call(session.selection ? BETA_BREAKDOWN_PROMPT : BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns)));
+        const reply = parseJsonReply(await call(session.selection ? BETA_BREAKDOWN_PROMPT : BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns, session.baseline)));
         if (!reply || !Array.isArray(reply.questions) || !Array.isArray(reply.confirmed)) {
           throw Object.assign(new Error('invalid clarification'), { code: 'output-format' });
         }
@@ -318,7 +322,7 @@ export class VoicePolishService {
         const modelQuestions = normaliseQuestions(reply.questions);
         if (reply.questions.length && !modelQuestions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
         // The task's boundaries come first: what may be read or searched, and creative or routine work.
-        const questions = normaliseQuestions([...boundaryQuestions(session.request, turns), ...modelQuestions]);
+        const questions = normaliseQuestions([...boundaryQuestions(session.request, turns, session.baseline), ...modelQuestions]);
         session.turns = turns;
         session.spec = { goal: typeof reply.goal === 'string' ? reply.goal.slice(0, 500) : '' };
         session.confirmed = reply.confirmed.filter(x => typeof x === 'string').map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, session.selection ? 8 : 6);
@@ -328,7 +332,7 @@ export class VoicePolishService {
         session.created = Date.now();
         return pending();
       }
-      const material = { request: session.request, spec: session.spec, turns,
+      const material = { baseline: session.baseline, request: session.request, spec: session.spec, turns,
         questions: session.questions, skipped: true };
       const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), cleanupParameters(source,'prompt',this.config).maxTokens));
       if (!draft) throw Object.assign(new Error('empty draft'), { code: 'output-format' });
@@ -449,6 +453,7 @@ export class VoicePolishService {
         llm: request.llm ?? null,
         signal: request.signal,
         betaSession: request.betaSession ?? null,
+        baseline: request.baseline ?? null,
         translateTo: request.translateTo ?? null,
         variants: request.variants ?? null,
         profile: request.profile ?? "",

@@ -404,6 +404,8 @@ do {
     checkEq("then the WAV", some.body.suffix(from: some.body.startIndex + some.metaBytes), wav)
     _ = try client.dictateSync(wav: wav, language: "zh", appBundleId: "com.apple.TextEdit", strength: "prompt", profile: "做 CFD 仿真的工程师")
     checkEq("its length is in the header", state.lastRequest?.header("x-voice-meta-bytes"), String(some.metaBytes))
+    let draft = ServiceClient.dictateBody(wav: wav, profile: "", baseline: "选中的提示词")
+    checkEq("提示词模式's draft travels in the same JSON object", (try? JSONSerialization.jsonObject(with: draft.body.prefix(draft.metaBytes))) as? [String: String], ["baseline": "选中的提示词"])
 } catch {
     check("description with dictation", false, String(describing: error))
 }
@@ -1366,7 +1368,7 @@ do {
 // Beta controller keeps the initial destination and route across follow-up rounds.
 do {
     var shown = 0, hidden = 0, cancelled: [String] = []
-    let controller = BetaController(host: .init(show: { _, _ in shown += 1 },
+    let controller = BetaController(host: .init(show: { _, _, _ in shown += 1 },
         hide: { hidden += 1 }, busy: { _ in }, cancel: { cancelled.append($0.sessionId) }))
     let info = try JSONDecoder().decode(BetaInfo.self, from: Data(#"{"sessionId":"round1","questions":[]}"#.utf8))
     controller.accept(info: info, sessionId: "round1", llm: nil, language: "zh", variants: nil,
@@ -1389,6 +1391,54 @@ do {
     checkEq("Beta new conversation has a new destination", controller.pending?.appBundleId, "example.new")
     controller.clear()
     checkEq("Beta completion does not send cancellation", cancelled.count, 1)
+}
+
+// Keys: fn dictates, ⌥Space opens 提示词模式 (moved once off dictation's second slot).
+do {
+    struct Keys { let hotkeyMain, hotkeyAlt, hotkeyAssistant: HotKeyBinding }
+    func fresh(_ setup: (UserDefaults) -> Void) -> Keys {
+        let suite = "typeleast.tests.keys." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        setup(defaults)
+        let s = Settings(defaults: defaults)
+        return Keys(hotkeyMain: s.hotkeyMain, hotkeyAlt: s.hotkeyAlt, hotkeyAssistant: s.hotkeyAssistant)
+    }
+    let space = HotKeyBinding.optionSpaceDefault
+    let new = fresh { _ in }
+    check("a new install dictates with fn", new.hotkeyMain.isFn)
+    check("…has no second dictation key", !new.hotkeyAlt.enabled)
+    checkEq("…and opens 提示词模式 with ⌥Space", new.hotkeyAssistant, space)
+    let upgraded = fresh { d in d.set(try! JSONEncoder().encode(space), forKey: "hk.alt.v2") }
+    check("an upgrade takes ⌥Space off dictation", !upgraded.hotkeyAlt.enabled)
+    checkEq("…and gives it to 提示词模式", upgraded.hotkeyAssistant, space)
+    let custom = HotKeyBinding(keyCode: 35, modifiers: 2048, enabled: true, name: "Option+P")
+    let kept = fresh { d in d.set(try! JSONEncoder().encode(custom), forKey: "hk.assistant") }
+    checkEq("a 提示词模式 key the user chose is kept", kept.hotkeyAssistant, custom)
+    let main = fresh { d in d.set(try! JSONEncoder().encode(space), forKey: "hk.main.v2") }
+    check("⌥Space used for dictation itself is not taken", !main.hotkeyAssistant.enabled || main.hotkeyAssistant != space)
+}
+
+// A selection is copied only in browsers, which copy nothing when nothing is selected.
+check("Chrome's selection is read by copying", Inserter.readsSelectionByCopy("com.google.Chrome") && Inserter.readsSelectionByCopy("com.google.Chrome.canary"))
+check("an editor's is not (⌘C there copies the whole line)", !Inserter.readsSelectionByCopy("com.microsoft.VSCode") && !Inserter.readsSelectionByCopy("com.google.Chromeish"))
+
+// The questions panel: chosen answers go out as one reply and are dropped when the questions change.
+do {
+    let panel = BetaPanel()
+    var info = BetaInfo()
+    info.sessionId = "s"
+    info.questions = ["要读哪些文件？", "给谁用？"]
+    panel.model.info = info
+    panel.model.chosen = ["要读哪些文件？": "全部文件，仅本地"]
+    checkEq("chosen answers form one reply", panel.model.chosenAnswer, "要读哪些文件？ 全部文件，仅本地")
+    panel.show(info: info, hotkey: "⌥Space")
+    checkEq("an update of the same round keeps the choice", panel.model.chosen.count, 1)
+    var next = info
+    next.questions = ["交付什么格式？"]
+    panel.show(info: next, hotkey: "⌥Space")
+    check("a new round starts without choices", panel.model.chosen.isEmpty && panel.model.chosenAnswer == nil)
+    panel.hide()
 }
 
 // Shared, versioned behavior for a future client written in another language.

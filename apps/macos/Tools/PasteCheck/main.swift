@@ -140,7 +140,7 @@ if mode == "all" || mode == "beta" {
         let field = FieldContextReader.capture(bundleId: te)
         let panel = BetaPanel()
         var generated = false
-        panel.onSkip = { generated = true }
+        panel.onSkip = { _ in generated = true }
         panel.show(info: BetaInfo(sessionId: "s", questions: ["要读哪些文件？"], confirmed: ["目标"], goals: nil, round: 1,
                                   ready: false, notice: nil, issues: nil, patched: nil), hotkey: "fn")
         pump(0.8)

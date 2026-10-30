@@ -251,7 +251,7 @@ final class ServiceManager {
         }
         do {
             try p.run()
-            input.fileHandleForWriting.write(Data((secretHex + "\n").utf8))
+            try? input.fileHandleForWriting.write(contentsOf: Data((secretHex + "\n").utf8))
             try? input.fileHandleForWriting.close()
             process = p
             state = .starting
@@ -263,6 +263,8 @@ final class ServiceManager {
 
     private func consumeStdout(_ data: Data) {
         stdoutBuffer += String(decoding: data, as: UTF8.self)
+        // Only the ready line is read here; output without line breaks is not kept.
+        if stdoutBuffer.utf8.count > 64 * 1024 { stdoutBuffer = String(stdoutBuffer.suffix(1024)) }
         while let newline = stdoutBuffer.firstIndex(of: "\n") {
             let line = String(stdoutBuffer[..<newline])
             stdoutBuffer = String(stdoutBuffer[stdoutBuffer.index(after: newline)...])

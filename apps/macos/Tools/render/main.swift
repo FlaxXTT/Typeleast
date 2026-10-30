@@ -146,7 +146,7 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_FOCUS"] == "settings" {
         }
         let info = BetaInfo(sessionId: "fixture", questions: [L10n.text("项目主要给谁使用？"), L10n.text("你提到的现有流程有什么问题？")],
                             confirmed: [L10n.text("项目需要支持团队日常使用。"), L10n.text("先把现有流程说清楚，再确定目标。")], round: 3, ready: false)
-        snapshot(NSHostingView(rootView: BetaQuestionsView(info: info, hotkey: "fn", skip: {}, cancel: {})
+        snapshot(NSHostingView(rootView: BetaQuestionsView(info: info, hotkey: "⌥Space", skip: { _ in }, cancel: {})
             .background(Theme.card).environment(\.colorScheme, dark ? .dark : .light)),
             size: NSSize(width: 440, height: 540), name: "beta-round", dark: dark)
     }
@@ -203,10 +203,8 @@ do {
     let info = BetaInfo(sessionId: "fixture", questions: [L10n.text("AI 可以读取哪些文件或资料？可以联网检索吗？"), L10n.text("这件事需要创新、探索新做法，还是按既定方式重复执行？")],
                         confirmed: [L10n.text("面向大学生"), L10n.text("包含目标用户、核心功能、首版范围和成功指标"), L10n.text("控制在 1500 字以内")],
                         goals: [L10n.text("写一份记账 App 的需求文档"), L10n.text("让团队对首版范围达成一致")], round: 1, ready: false)
-    let view = NSHostingView(rootView: BetaQuestionsView(info: info, hotkey: "fn", skip: {}, cancel: {}).background(Theme.card))
+    let view = NSHostingView(rootView: BetaQuestionsView(info: info, hotkey: "⌥Space", skip: { _ in }, cancel: {}).background(Theme.card))
     snapshot(view, size: view.fittingSize, name: "prompt-breakdown", dark: false)
-    let button = NSHostingView(rootView: BreakdownButtonView(action: {}).padding(10).background(Color(white: 0.9)))
-    snapshot(button, size: button.fittingSize, name: "breakdown-button", dark: false)
 }
 
 // The undo toast after a cancelled recording.

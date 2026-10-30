@@ -43,9 +43,10 @@ enum DiagnosticsLog {
                 try? fm.removeItem(at: old)
                 try? fm.moveItem(at: file, to: old)
             }
+            // The throwing calls: on a full disk the old ones raise an exception that ends the app.
             if let handle = try? FileHandle(forWritingTo: file) {
-                handle.seekToEndOfFile()
-                handle.write(Data(line.utf8))
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: Data(line.utf8))
                 try? handle.close()
             } else {
                 try? Data(line.utf8).write(to: file)

@@ -247,7 +247,7 @@ enum KeychainHandoff {
             return false
         }
         for account in values.keys { KeychainStore.remove(account: account) }
-        input.fileHandleForWriting.write(data)
+        try? input.fileHandleForWriting.write(contentsOf: data)
         try? input.fileHandleForWriting.close()
         let deadline = Date().addingTimeInterval(20)
         while child.isRunning && Date() < deadline { usleep(20_000) }
@@ -307,7 +307,7 @@ enum KeychainHandoff {
     /// Overwrite before deleting, so the keys are not left in a free block either.
     private static func wipe(_ file: URL, bytes: Int) {
         if let handle = try? FileHandle(forWritingTo: file) {
-            handle.write(Data(count: bytes))
+            try? handle.write(contentsOf: Data(count: bytes))
             try? handle.synchronize()
             try? handle.close()
         }

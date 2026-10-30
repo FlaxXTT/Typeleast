@@ -621,18 +621,23 @@ final class ServiceClient {
     /// dictation; the service keeps no copy.
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
-                     translateTo: String? = nil, variants: String? = nil, profile: String = "",
+                     translateTo: String? = nil, variants: String? = nil, profile: String = "", baseline: String? = nil,
                      onProgress: ((TaskProgress) -> Void)? = nil) throws -> DictateResponse {
         let generation = epoch()
         return try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
-                                            translateTo: translateTo, variants: variants, profile: profile, onProgress:onProgress, generation:generation) }
+                                            translateTo: translateTo, variants: variants, profile: profile, baseline: baseline,
+                                            onProgress:onProgress, generation:generation) }
     }
 
     /// The body of /dictate: a JSON object (its length in x-voice-meta-bytes), then the WAV.
-    static func dictateBody(wav: Data, profile: String) -> (body: Data, metaBytes: Int) {
-        guard !profile.isEmpty, let json = try? JSONSerialization.data(withJSONObject: ["profile": profile]) else { return (wav, 0) }
+    /// `baseline`: 提示词模式's draft, the text that was selected when it started.
+    static func dictateBody(wav: Data, profile: String, baseline: String? = nil) -> (body: Data, metaBytes: Int) {
+        var meta: [String: String] = [:]
+        if !profile.isEmpty { meta["profile"] = profile }
+        if let baseline, !baseline.isEmpty { meta["baseline"] = baseline }
+        guard !meta.isEmpty, let json = try? JSONSerialization.data(withJSONObject: meta) else { return (wav, 0) }
         return (json + wav, json.count)
     }
 
@@ -655,15 +660,18 @@ final class ServiceClient {
         } }
     }
 
-    /// Prompt Beta: write the prompt without answering the questions (skip), or forget them (cancel).
+    /// Prompt Beta: write the prompt now (skip), with `answer` (chosen but not yet sent), or forget
+    /// the questions (cancel).
     func betaSync(sessionId: String, skip: Bool, appBundleId: String, llm: LLMRoute?,
-                  variants: String? = nil) throws -> DictateResponse {
+                  variants: String? = nil, answer: String? = nil) throws -> DictateResponse {
         let generation = epoch()
         return try withPortRetry { try withTokenRetry { token in
             var headers = ["content-type": "application/json", "x-voice-app": appBundleId]
             if let variants { headers["x-voice-variants"] = variants }
             if let route = ServiceClient.encodeRouteHeader(llm) { headers["x-voice-llm"] = route }
-            let body = try JSONSerialization.data(withJSONObject: ["sessionId": sessionId])
+            var fields = ["sessionId": sessionId]
+            if skip, let answer, !answer.isEmpty { fields["answer"] = answer }
+            let body = try JSONSerialization.data(withJSONObject: fields)
             let path = "/api/voice-polish/assistant/" + (skip ? "finish" : "cancel")
             let req = try makeRequest(path: path, method: "POST", token: token, headers: headers, body: body,
                                       timeout: max(dictateTimeout, 300))
@@ -677,7 +685,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, profile: String, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, profile: String, baseline: String?, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
         try withTokenRetry { token in
             let requestID = UUID().uuidString
             var headers: [String: String] = [
@@ -699,7 +707,7 @@ final class ServiceClient {
             if let variants { headers["x-voice-variants"] = variants }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
-            let payload = ServiceClient.dictateBody(wav: wav, profile: profile)
+            let payload = ServiceClient.dictateBody(wav: wav, profile: profile, baseline: baseline)
             headers["x-voice-meta-bytes"] = String(payload.metaBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)

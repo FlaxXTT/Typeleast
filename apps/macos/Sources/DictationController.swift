@@ -45,8 +45,8 @@ final class DictationController {
     private var pendingField: FocusedField?
     private var progressID = UUID()
     private var pendingAssistant = false
-    /// The open 提示词模式 session began from a selected prompt: its result is copied, not pasted over the selection.
-    private var copyFinalPrompt = false
+    /// 提示词模式's draft copied from a browser, whose fields Accessibility cannot read.
+    private var copiedSelection: String?
     /// A recording cancelled a moment ago, kept until 撤销 sends it on or the toast goes away.
     private var heldRecording: (url: URL, seconds: Double, app: String, field: FocusedField?, language: String, keep: Bool, translateTo: String?)?
     private let cancelToast = LearnedToast()
@@ -66,22 +66,16 @@ final class DictationController {
             pendingAssistant = assistant
             pendingTranslate = translateTo
             startRecording()
-        case .recording:
-            // A second press right after the first (a double tap) turns this recording into 提示词模式.
-            if !pendingAssistant, pendingTranslate == nil, translateTo == nil,
-               let started = recordingStartedAt, Date().timeIntervalSince(started) < DictationController.doubleTapWindow {
-                pendingAssistant = true
-                recordingBar.showRecording(destination: pendingAppBundleId, badge: L10n.text("提示词模式"))
-                if betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", model.hotkeyLabel)) }
-                return
-            }
-            stopRecording()
+        // Fn is for dictation only; 提示词模式 has its own key (⌥Space by default).
+        case .recording: stopRecording()
         case .thinking: NSSound.beep()
         }
     }
 
-    /// Two presses within this many seconds are a double tap.
-    static let doubleTapWindow: TimeInterval = 0.4
+    /// The key that answers 提示词模式's questions, as shown to the user.
+    private var assistantKeyLabel: String {
+        model.assistantLabel.isEmpty ? L10n.text("继续补充按钮") : model.assistantLabel
+    }
 
     func startRecording() {
         guard phase == .idle else { return }
@@ -112,6 +106,7 @@ final class DictationController {
 
     func beginCapture() {
         progressID = UUID()
+        copiedSelection = nil
         cancelToast.finish()
         // Contract: frontmost bundle id is captured BEFORE recording starts.
         pendingAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
@@ -130,7 +125,7 @@ final class DictationController {
         }
         phase = .recording
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
-        if pendingAssistant && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", settings.hotkeyAssistant.enabled ? settings.hotkeyAssistant.name : model.hotkeyLabel)) }
+        if pendingAssistant && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", assistantKeyLabel)) }
         recordingStartedAt = Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
@@ -161,6 +156,18 @@ final class DictationController {
                 DispatchQueue.main.async {
                     guard let self = self, self.phase == .recording, self.pendingAppBundleId == bundle else { return }
                     self.pendingField = field
+                    // Text selected when 提示词模式 starts is the draft the user is about to revise.
+                    guard self.pendingAssistant, self.betaPending == nil else { return }
+                    if Self.hasText(field?.selection) {
+                        self.recordingBar.showRecording(destination: bundle, badge: L10n.text("提示词模式 · 修改选中内容"))
+                    } else if Inserter.readsSelectionByCopy(bundle) {
+                        Inserter.shared.copySelection { [weak self] text in
+                            guard let self, self.phase == .recording, self.pendingAssistant, self.pendingAppBundleId == bundle,
+                                  Self.hasText(text) else { return }
+                            self.copiedSelection = text.map { String($0.prefix(FieldContextReader.selectionLimit)) }
+                            self.recordingBar.showRecording(destination: bundle, badge: L10n.text("提示词模式 · 修改选中内容"))
+                        }
+                    }
                 }
             }
         }
@@ -175,6 +182,9 @@ final class DictationController {
         let field = pendingField
         let language = settings.language
         let strength = pendingAssistant ? "promptbeta" : "prompt"
+        // A new 提示词模式 conversation starts from the selected text, revised by what was said.
+        let baseline = !pendingAssistant || betaPending != nil ? nil : Self.hasText(field?.selection) ? field?.selection : copiedSelection
+        copiedSelection = nil
         pendingAssistant = false
         // With "never keep history" nothing stays on disk, the recording included.
         let keep = settings.keepAudio24h && settings.historyRetention.seconds != 0
@@ -193,7 +203,8 @@ final class DictationController {
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,
-                         insert: true, deleteWhenDone: !keep, betaSession: betaSession, translateTo: translateTo)
+                         insert: true, deleteWhenDone: !keep, betaSession: betaSession, translateTo: translateTo,
+                         baseline: baseline)
         } catch {
             playSound(start: false)
             phase = .idle
@@ -270,7 +281,7 @@ final class DictationController {
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
-                      translateTo: String? = nil) {
+                      translateTo: String? = nil, baseline: String? = nil) {
         phase = .thinking
         registerEscape()
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
@@ -298,7 +309,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              profile: profile,
+                                                              profile: profile, baseline: baseline,
                                                               onProgress: { [weak self] progress in DispatchQueue.main.async {
                                                                   guard let self, self.phase == .thinking, self.progressID == progressID else { return }
                                                                   self.recordingBar.showThinking(detail:progress.label)
@@ -317,7 +328,7 @@ final class DictationController {
 
     func finishRequest(_ outcome: Result<DictateResponse, Error>, appBundleId: String, language: String,
                        strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool,
-                       llm: LLMRoute? = nil, variants: String? = nil) {
+                       llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false) {
         unregisterEscape()
         // A failed request or Beta question does not retain an untracked raw recording.
         defer {
@@ -337,7 +348,7 @@ final class DictationController {
             model.serviceProblem = ""
             if let sessionId = resp.beta?.sessionId, let info = resp.beta {
                 beta.accept(info: info, sessionId: sessionId, llm: llm, language: language,
-                            variants: variants, appBundleId: appBundleId, field: field)
+                            variants: variants, appBundleId: appBundleId, field: field, copyResult: copyResult)
                 recordingBar.hide()
                 showBetaQuestions()
                 setHint(L10n.text("提示词模式：继续补充或生成"))
@@ -345,10 +356,11 @@ final class DictationController {
                 return
             }
             // The answer to Prompt Beta's questions: the prompt goes where the request was made.
-            var appBundleId = appBundleId, field = field
+            var appBundleId = appBundleId, field = field, insert = insert, copied = false
             if let pending = betaPending, strength == VoiceStrength.promptbeta.rawValue, resp.translated == nil {
                 appBundleId = pending.appBundleId
                 field = pending.field
+                if pending.copyResult { insert = false; copied = true }
                 beta.clear()
             }
             let text = resp.insertableText
@@ -389,7 +401,7 @@ final class DictationController {
             } else {
                 Inserter.shared.setString(text)
                 recordingBar.showResult(text, warning: resp.fallback)
-                setHint(L10n.text("重试完成，结果已复制"))
+                setHint(copied ? L10n.text("提示词已复制") : L10n.text("重试完成，结果已复制"))
                 applyState()
             }
         case .failure(let error):
@@ -505,14 +517,18 @@ final class DictationController {
 
     // MARK: Prompt Beta
 
-    /// 拆解提示词: a prompt the user selected starts 提示词模式 as its first input. Nothing is
-    /// pasted over the selection; the finished prompt is copied.
+    static func hasText(_ text: String?) -> Bool {
+        !(text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The onboarding's sample: a prompt starts 提示词模式 as its draft, with nothing said yet.
+    /// There is no field to paste into, so the finished prompt is copied.
     func startBreakdown(_ text: String, appBundleId: String) {
         guard phase == .idle else { NSSound.beep(); return }
         guard let route = settings.activeLLMRoute else { setHint(L10n.text("请先配置可用的整理模型。"), warning: true); applyState(); return }
         if betaPending != nil { beta.cancel() }
-        copyFinalPrompt = true
-        sendBetaText(text, session: nil, source: "selection", appBundleId: appBundleId, route: route, language: settings.language, variants: settings.variantsHeader)
+        sendBetaText(text, session: nil, source: "selection", appBundleId: appBundleId, route: route, language: settings.language,
+                     variants: settings.variantsHeader, copyResult: true)
     }
 
     /// A typed or chosen answer to the open questions (the quick choices in the panel).
@@ -522,7 +538,8 @@ final class DictationController {
         sendBetaText(text, session: pending.sessionId, source: nil, appBundleId: pending.appBundleId, route: pending.llm, language: pending.language, variants: pending.variants)
     }
 
-    private func sendBetaText(_ text: String, session: String?, source: String?, appBundleId: String, route: LLMRoute?, language: String, variants: String?) {
+    private func sendBetaText(_ text: String, session: String?, source: String?, appBundleId: String, route: LLMRoute?, language: String,
+                              variants: String?, copyResult: Bool = false) {
         phase = .thinking
         registerEscape()
         recordingBar.showThinking(detail: "")
@@ -536,17 +553,17 @@ final class DictationController {
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
                 self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength, audioPath: nil, seconds: nil,
-                                   field: nil, insert: false, llm: route, variants: variants)
+                                   field: nil, insert: false, llm: route, variants: variants, copyResult: copyResult)
             }
         }
     }
 
     func showBetaQuestions() {
-        beta.show(hotkey: settings.hotkeyAssistant.enabled ? settings.hotkeyAssistant.name : L10n.text("继续补充按钮"))
+        beta.show(hotkey: assistantKeyLabel)
     }
 
-    /// Explicitly finish clarification; unanswered points stay unconfirmed.
-    func finishBetaWithoutAnswers() {
+    /// 生成: write the prompt now, with the chosen answers not sent yet; unanswered points stay unconfirmed.
+    func finishBetaWithoutAnswers(answer: String? = nil) {
         guard phase == .idle, let pending = betaPending else { return }
         beta.hide()
         phase = .thinking
@@ -561,13 +578,12 @@ final class DictationController {
             guard let self else { return }
             let outcome = Result { try self.client.betaSync(sessionId: pending.sessionId, skip: true,
                                                             appBundleId: pending.appBundleId, llm: llm,
-                                                            variants: variants) }
+                                                            variants: variants, answer: answer) }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
                 self.finishRequest(outcome, appBundleId: pending.appBundleId, language: language,
                                    strength: VoiceStrength.promptbeta.rawValue, audioPath: nil, seconds: nil,
-                                   field: pending.field, insert: !self.copyFinalPrompt, llm: llm, variants: variants)
-                self.copyFinalPrompt = false
+                                   field: pending.field, insert: true, llm: llm, variants: variants)
             }
         }
     }
@@ -579,6 +595,33 @@ final class DictationController {
         if notify {
             setHint(L10n.text("已取消"))
             applyState()
+        }
+    }
+
+    // MARK: 翻译 of selected text
+
+    /// 翻译's key with text selected: the selection is translated and replaces itself; nothing is recorded.
+    func translateSelection(_ field: FocusedField, to target: String) {
+        guard phase == .idle else { NSSound.beep(); return }
+        guard let route = settings.activeLLMRoute else { setHint(L10n.text("请先配置可用的整理模型。"), warning: true); applyState(); return }
+        cancelToast.finish()
+        phase = .thinking
+        registerEscape()
+        idleBar.hide()
+        recordingBar.showThinking(detail: L10n.text("正在翻译…"))
+        applyState()
+        let text = field.selection, language = settings.language, variants = settings.variantsHeader
+        let profile = HistoryStore.shared.profile
+        let generation = UUID(); progressID = generation
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let outcome = Result { try self.client.polishSync(text: text, language: language, strength: "prompt", llm: route,
+                                                              translateTo: target, variants: variants, profile: profile) }
+            DispatchQueue.main.async {
+                guard self.progressID == generation else { return }
+                self.finishRequest(outcome, appBundleId: field.bundleId, language: language, strength: "prompt", audioPath: nil,
+                                   seconds: nil, field: field, insert: true, llm: route, variants: variants)
+            }
         }
     }
 }

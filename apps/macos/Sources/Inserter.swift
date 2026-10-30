@@ -149,11 +149,50 @@ final class Inserter {
     static func isAccessibilityTrusted() -> Bool { AXIsProcessTrusted() }
 
     /// Synthesise Cmd+V. Construction needs no permission; delivery may.
-    func postCommandV() -> Bool {
+    func postCommandV() -> Bool { postCommand(0x09) } // kVK_ANSI_V
+
+    /// Browsers whose web text fields Accessibility cannot read. They copy nothing when nothing
+    /// is selected (unlike editors such as VS Code, which copy the whole line), so a ⌘C there
+    /// reads exactly the selection.
+    static let copySelectionApps = ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser",
+                                    "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
+                                    "org.mozilla.firefox"]
+
+    static func readsSelectionByCopy(_ bundleId: String) -> Bool {
+        copySelectionApps.contains { bundleId == $0 || bundleId.hasPrefix($0 + ".") }
+    }
+
+    /// The frontmost app's selection, read with a synthesised ⌘C once ⌥ ⇧ ⌃ are let go (so the
+    /// app does not see ⌥⌘C); the clipboard is put back. nil when nothing was copied.
+    func copySelection(completion: @escaping (String?) -> Void) {
+        let held: CGEventFlags = [.maskAlternate, .maskShift, .maskControl, .maskCommand]
+        func waitForRelease(_ tries: Int) {
+            if CGEventSource.flagsState(.combinedSessionState).intersection(held).isEmpty || tries == 0 { copy() }
+            else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { waitForRelease(tries - 1) } }
+        }
+        func copy() {
+            let pb = NSPasteboard.general
+            let snap = snapshot()
+            let before = pb.changeCount
+            guard !Inserter.isSecureInputEnabled(), postCommand(0x08) else { completion(nil); return } // kVK_ANSI_C
+            func check(_ tries: Int) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    if pb.changeCount != before {
+                        let text = pb.string(forType: .string)
+                        self.restore(snap)
+                        completion(text)
+                    } else if tries > 0 { check(tries - 1) } else { completion(nil) }
+                }
+            }
+            check(8)
+        }
+        waitForRelease(40)
+    }
+
+    private func postCommand(_ key: CGKeyCode) -> Bool {
         guard let src = CGEventSource(stateID: .combinedSessionState) else { return false }
-        let vKey: CGKeyCode = 0x09 // kVK_ANSI_V
-        guard let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true),
-              let up = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: false) else {
+        guard let down = CGEvent(keyboardEventSource: src, virtualKey: key, keyDown: true),
+              let up = CGEvent(keyboardEventSource: src, virtualKey: key, keyDown: false) else {
             return false
         }
         down.flags = .maskCommand

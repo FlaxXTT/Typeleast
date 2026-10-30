@@ -8,6 +8,10 @@ if CommandLine.arguments.dropFirst().first == KeychainHandoff.receiveFlag { exit
 // which the app delegate loads as it is created) reads the Keychain.
 KeychainHandoff.restoreIfPresent()
 
+// A child that exits before reading its stdin (the service, an update's key hand-over) must
+// fail that write, not end TypeLeast with SIGPIPE.
+signal(SIGPIPE, SIG_IGN)
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

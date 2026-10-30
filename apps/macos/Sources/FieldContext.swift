@@ -28,6 +28,8 @@ struct FocusedField {
     let bundleId: String
     let context: FieldContext
     var range: CFRange? = nil
+    /// The whole selected text (context.selected is cut short): 提示词模式's draft and 翻译's input.
+    var selection: String = ""
 }
 
 /// Whether a caret position captured at dictation start still points at the same place.
@@ -132,7 +134,35 @@ enum FieldContextReader {
         }
         let context = FieldContext(before: before, selected: String(selected.prefix(400)),
                                    after: after, windowTitle: windowTitle() ?? "")
-        return FocusedField(element: element, bundleId: bundleId, context: context, range: anchor)
+        return FocusedField(element: element, bundleId: bundleId, context: context, range: anchor,
+                            selection: String(selected.prefix(selectionLimit)))
+    }
+
+    /// The frontmost app as the target when its field cannot be read (a web page in Chrome): the text
+    /// is pasted wherever its focus is, over the selection that is still there.
+    static func frontmostApp(bundleId: String, selection: String) -> FocusedField? {
+        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier == bundleId else { return nil }
+        return FocusedField(element: AXUIElementCreateApplication(app.processIdentifier), bundleId: bundleId,
+                            context: FieldContext(before: "", selected: "", after: "", windowTitle: ""),
+                            selection: String(selection.prefix(selectionLimit)))
+    }
+
+    /// Longest selection taken as a draft or translated (the service's own limit is 24000).
+    static let selectionLimit = 20000
+
+    /// Where the captured cursor or selection is on screen, in Cocoa coordinates, when the app says.
+    static func caretRect(_ field: FocusedField) -> NSRect? {
+        guard var range = field.range, let axRange = AXValueCreate(.cfRange, &range) else { return nil }
+        AXUIElementSetMessagingTimeout(field.element, 0.25)
+        var raw: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(field.element, kAXBoundsForRangeParameterizedAttribute as CFString,
+                                                         axRange, &raw) == .success,
+              let raw, CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+        var rect = CGRect.zero
+        guard AXValueGetValue(raw as! AXValue, .cgRect, &rect), rect.height > 0,
+              let primary = NSScreen.screens.first else { return nil }
+        // Accessibility measures from the top-left of the primary screen.
+        return NSRect(x: rect.minX, y: primary.frame.maxY - rect.maxY, width: max(rect.width, 1), height: rect.height)
     }
 
     enum CaretRestore: Equatable {

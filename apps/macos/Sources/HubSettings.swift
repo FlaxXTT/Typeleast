@@ -55,10 +55,10 @@ struct SettingsPage: View {
                     HotkeyField(slot: .alt)
                 }
             }
-            SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文。", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
+            SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文。选中文字时直接翻译选中内容。", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
                 HotkeyField(slot: .translate)
             }
-            SettingRow(title:L10n.text("提示词模式"),detail:L10n.text("先说清能读哪些资料、能否联网，以及是创新还是重复的工作。")) {
+            SettingRow(title:L10n.text("提示词模式"),detail:L10n.text("按一下开始说需求，它先问清范围再写提示词。选中文字时，以选中内容为底稿修改。")) {
                 HotkeyField(slot:.assistant)
             }
             SettingRow(title: L10n.text("粘贴上一条"), detail: nil) {
@@ -79,8 +79,6 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("选中提示词时拆解"), detail: L10n.text("选中一长段文字后，旁边出现拆解按钮。点了才发送。"),
-                      isOn: model.setting(\.selectionBreakdown))
         }
     }
 

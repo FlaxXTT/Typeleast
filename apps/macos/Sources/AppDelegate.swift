@@ -50,14 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var skipGlobalHotkeys = false
     private let instanceLock = InstanceLock()
     private let betaPanel = BetaPanel()
-    private let selectionWatcher = SelectionWatcher()
     lazy var beta: BetaController = {
         betaPanel.onContinue = { [weak self] in self?.startAssistant() }
-        betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers() }
+        betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers(answer: $0) }
         betaPanel.onAnswer = { [weak self] in self?.dictation.answerBeta($0) }
         betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
         return BetaController(host: .init(
-            show: { [weak self] info, key in self?.betaPanel.show(info: info, hotkey: key) },
+            show: { [weak self] info, key, anchor in self?.betaPanel.show(info: info, hotkey: key, anchor: anchor) },
             hide: { [weak self] in self?.betaPanel.hide() },
             busy: { [weak self] in self?.betaPanel.setBusy($0) },
             cancel: { [client] pending in
@@ -121,11 +120,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         })
         applyGeneralSettings()
         registerHotKeys()
-        if !isolatedTestRun {
-            selectionWatcher.enabled = { [weak self] in self?.settings.selectionBreakdown == true && self?.settings.needsPractice == false }
-            selectionWatcher.onBreakdown = { [weak self] text, app in self?.dictation.startBreakdown(text, appBundleId: app) }
-            selectionWatcher.start()
-        }
         updates.scheduleChecks()
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
@@ -367,8 +361,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     /// 翻译模式: starts a recording whose text is inserted in the target language;
-    /// while recording, either key finishes it.
+    /// while recording, either key finishes it. With text selected, the selection itself is
+    /// translated in place and nothing is recorded.
     func translateHotkeyPressed() {
+        // The onboarding's translate step says to press this key: it records the practice sentence.
+        if onboarding.practice.acceptsShortcut && onboarding.practice.translateTo != nil { onboarding.practice.toggle(); return }
+        if phase == .idle, !onboarding.practice.acceptsShortcut, !onboarding.practice.busy, !settings.needsPractice,
+           let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, app != Bundle.main.bundleIdentifier,
+           let field = FieldContextReader.capture(bundleId: app), DictationController.hasText(field.selection) {
+            dictation.translateSelection(field, to: settings.translateTarget)
+            return
+        }
+        // A browser's web fields are not readable: the selection is copied instead.
+        if phase == .idle, !onboarding.practice.busy, !settings.needsPractice,
+           let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, Inserter.readsSelectionByCopy(app) {
+            Inserter.shared.copySelection { [weak self] text in
+                guard let self, self.phase == .idle else { return }
+                if let text, DictationController.hasText(text), let field = FieldContextReader.frontmostApp(bundleId: app, selection: text) {
+                    self.dictation.translateSelection(field, to: self.settings.translateTarget)
+                } else {
+                    self.toggleDictation(translateTo: self.settings.translateTarget)
+                }
+            }
+            return
+        }
         toggleDictation(translateTo: settings.translateTarget)
     }
 

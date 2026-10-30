@@ -175,10 +175,14 @@ struct OnboardingView: View {
         case .translate:
             TranslatePracticeView(practice: practice)
         case .promptMode:
+            // fn only dictates; 提示词模式 has its own key (⌥Space unless the user changed it).
             StepView(symbol: "text.bubble", title: L10n.text("提示词模式"),
-                     text: L10n.text("双击 {0} 进入：说出需求，它先问清范围，再生成完整提示词。", model.hotkeyLabel)) {
+                     text: model.assistantLabel.isEmpty
+                        ? L10n.text("在「设置 › 快捷键」给提示词模式设一个键：说出需求，它先问清范围，再生成完整提示词。")
+                        : L10n.text("按 {0} 进入：说出需求，它先问清范围，再生成完整提示词。", model.assistantLabel)) {
                 VStack(spacing: 14) {
-                    Text(L10n.text("拿到一段别人写的长提示词？选中它，旁边会出现「用 TypeLeast 拆解提示词」，先告诉你它想做什么、有哪些要求。"))
+                    if !model.assistantLabel.isEmpty { Keycap(label: model.assistantLabel, large: true) }
+                    Text(L10n.text("先选中一段文字再按这个键，就以选中内容为底稿修改。按翻译键则直接翻译选中内容。"))
                         .font(.system(size: 13)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("拆解一段示例提示词")) { model.actions?.breakdownSample() }

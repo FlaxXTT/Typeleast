@@ -154,6 +154,12 @@ final class AppModel: ObservableObject {
         return main.isFn ? "fn" : HotKeyCentre.describe(keyCode: main.keyCode, modifiers: main.modifiers)
     }
 
+    /// 提示词模式's key, or "" when it has none.
+    var assistantLabel: String {
+        let key = settings.hotkeyAssistant
+        return key.enabled ? HotKeyCentre.describe(keyCode: key.keyCode, modifiers: key.modifiers) : ""
+    }
+
     var modelSummary: String {
         let preset = LLMPreset.find(settings.llmPresetID)
         guard settings.llmRouteReady else { return L10n.text("没有整理模型（只去口头禅）") }

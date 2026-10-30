@@ -112,11 +112,12 @@ struct HotKeyBinding: Codable, Equatable {
 
     /// kVK_Function = 63. Read through FnKeyMonitor, not Carbon (which never fires for it).
     static let fnDefault = HotKeyBinding(keyCode: 63, modifiers: 0, enabled: true, name: "Fn")
-    /// kVK_Space = 49, optionKey = 2048.
+    /// kVK_Space = 49, optionKey = 2048: 提示词模式 (Fn is for dictation only).
     static let optionSpaceDefault = HotKeyBinding(keyCode: 49, modifiers: 2048, enabled: true, name: "Option+Space")
+    static let unset = HotKeyBinding(keyCode: 0, modifiers: 0, enabled: false, name: "")
     /// kVK_ANSI_V = 9, cmdKey (256) | controlKey (4096): "paste last transcript".
     static let pasteLastDefault = HotKeyBinding(keyCode: 9, modifiers: 256 | 4096, enabled: true, name: "Control+Command+V")
-    /// kVK_Space with shiftKey (512) | optionKey (2048): 翻译, next to ⌥Space for dictation.
+    /// kVK_Space with shiftKey (512) | optionKey (2048): 翻译, next to ⌥Space for 提示词模式.
     static let translateDefault = HotKeyBinding(keyCode: 49, modifiers: 512 | 2048, enabled: true, name: "Shift+Option+Space")
 
     var isFn: Bool { keyCode == 63 && modifiers == 0 }
@@ -140,6 +141,21 @@ final class Settings {
             defaults.set("prompt",forKey:"voice.strength")
             defaults.set(600,forKey:"voice.maxSeconds")
             defaults.set(true,forKey:"voice.unifiedDictation.v1")
+        }
+        migratePromptKey()
+    }
+
+    /// Once: ⌥Space leaves dictation's second slot and becomes 提示词模式's key, unless another
+    /// shortcut already uses it. Fn stays the dictation key.
+    private func migratePromptKey() {
+        guard !d.bool(forKey: "hk.promptKey.v1") else { return }
+        d.set(true, forKey: "hk.promptKey.v1")
+        let space = HotKeyBinding.optionSpaceDefault
+        func isSpace(_ b: HotKeyBinding) -> Bool { b.enabled && b.keyCode == space.keyCode && b.modifiers == space.modifiers }
+        if isSpace(decodeBinding("hk.alt.v2") ?? space) { encodeBinding("hk.alt.v2", .unset) }
+        if decodeBinding("hk.assistant")?.enabled != true {
+            let taken = [hotkeyMain, hotkeyAlt, hotkeyTranslate, hotkeyPasteLast].contains(where: isSpace)
+            encodeBinding("hk.assistant", taken ? .unset : space)
         }
     }
 
@@ -167,14 +183,15 @@ final class Settings {
         set { encodeBinding("hk.main.v2", newValue); changed() }
     }
 
-    /// Second binding for keyboards without a usable Fn ("Add another").
+    /// Second binding for keyboards without a usable Fn ("Add another"); none by default.
     var hotkeyAlt: HotKeyBinding {
-        get { decodeBinding("hk.alt.v2") ?? HotKeyBinding.optionSpaceDefault }
+        get { decodeBinding("hk.alt.v2") ?? HotKeyBinding.unset }
         set { encodeBinding("hk.alt.v2", newValue); changed() }
     }
 
+    /// 提示词模式: ⌥Space by default. With text selected, the selection is the draft to revise.
     var hotkeyAssistant: HotKeyBinding {
-        get { decodeBinding("hk.assistant") ?? HotKeyBinding(keyCode: 0, modifiers: 0, enabled: false, name: "") }
+        get { decodeBinding("hk.assistant") ?? HotKeyBinding.optionSpaceDefault }
         set { encodeBinding("hk.assistant", newValue); changed() }
     }
 
@@ -227,12 +244,6 @@ final class Settings {
     var strength: String {
         get { VoiceStrength.stored(d.string(forKey: "voice.strength")).rawValue }
         set { d.set(newValue, forKey: "voice.strength"); changed() }
-    }
-
-    /// After a long drag-selection, offer 「用 TypeLeast 拆解提示词」 next to it (read on this Mac only).
-    var selectionBreakdown: Bool {
-        get { bool("voice.selectionBreakdown", default: true) }
-        set { d.set(newValue, forKey: "voice.selectionBreakdown"); changed() }
     }
 
     /// Read the text around the cursor at dictation start and send it as context.

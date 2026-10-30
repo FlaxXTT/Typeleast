@@ -222,3 +222,38 @@ test('prompt mode guides with the elements of a good prompt and says why each qu
     assert.ok(q.zh.length <= 200 && q.en.length <= 200, 'within the question length limit');
   }
 });
+
+test('a one-click answer counts only the choice, not the words of its question', () => {
+  const routine = [{ questions: [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh],
+    answer: BOUNDARY_QUESTIONS.scope.zh + ' 全部文件，仅本地\n' + BOUNDARY_QUESTIONS.nature.zh + ' 重复执行' }];
+  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', routine), [], 'routine work is not asked about reuse');
+  const creative = [{ ...routine[0], answer: BOUNDARY_QUESTIONS.nature.zh + ' 创新探索' }];
+  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', creative), [BOUNDARY_QUESTIONS.reuse.zh], 'creative work is');
+});
+
+test('selected text is the draft, revised by what was said, and both reach the model', async () => {
+  const p = provider({ other: interview() });
+  const s = serviceFor(p);
+  const draft = '你是一名资深文案。请为开发者工具写一篇产品介绍，不超过 500 字。';
+  const a = await send(s, '改成面向学生，再短一点', { baseline: draft });
+  assert.ok(a.beta.sessionId);
+  assert.equal(a.beta.notice, undefined, 'the round succeeded');
+  assert.deepEqual(a.beta.confirmed, ['整理会议纪要，供团队阅读']);
+  const sent = JSON.parse(p.calls[0].user);
+  assert.equal(sent.baseline, draft);
+  assert.equal(sent.request, '改成面向学生，再短一点');
+  const quiet = await send(s, '', { baseline: draft });
+  assert.ok(quiet.beta.sessionId && quiet.beta.notice === undefined, 'a draft alone, with nothing said, still starts');
+  await finish(s, a.beta.sessionId);
+  assert.equal(JSON.parse(p.calls.at(-1).user).baseline, draft, 'the draft is written from the draft');
+});
+
+test('generate carries answers chosen in the panel but not sent', async () => {
+  const p = provider();
+  const s = serviceFor(p);
+  const a = await send(s);
+  await send(s, '全部文件，仅本地', { betaSession: a.beta.sessionId, betaSkip: true });
+  const draft = JSON.parse(p.calls.at(-1).user);
+  assert.equal(p.calls.at(-1).stage, 'draft');
+  assert.equal(draft.turns.at(-1).answer, '全部文件，仅本地');
+});

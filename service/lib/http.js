@@ -19,7 +19,7 @@ import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compa
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
 /** The metadata object sent with each dictation ahead of the audio. */
-export const MAX_META_BYTES = 64 * 1024;
+export const MAX_META_BYTES = 128 * 1024;
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
@@ -244,6 +244,7 @@ export function createHandler(options) {
           betaSession: typeof body.betaSession === "string" ? body.betaSession : null,
           task: body.task,
           source: body.source === 'selection' ? 'selection' : null,
+          baseline: typeof body.baseline === "string" ? body.baseline : null,
           requestId: body.requestId,
           profile: typeof body.profile === "string" ? body.profile : "",
           language: typeof body.language === "string" ? body.language : "auto",
@@ -301,6 +302,7 @@ export function createHandler(options) {
         const audio = body.subarray(metaBytes);
         const result = await service.transcribeAndPolish({
           profile: typeof meta.profile === "string" ? meta.profile : "",
+          baseline: typeof meta.baseline === "string" ? meta.baseline : null,
           task: req.headers["x-voice-task"],
           requestId: req.headers["x-request-id"] ?? undefined,
           audio,
@@ -327,7 +329,8 @@ export function createHandler(options) {
           return;
         }
         const result = await service.polish({
-          rawText: "",
+          // Answers chosen in the panel but not sent before 生成.
+          rawText: typeof body?.answer === "string" ? body.answer : "",
           appHint: req.headers["x-voice-app"] ?? null,
           strength: "promptbeta",
           llm: parseRouteHeader(req.headers["x-voice-llm"]),
