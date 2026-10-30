@@ -426,19 +426,27 @@ final class DictationController {
         // chat, so nothing is pasted and the clipboard is left alone; the text is
         // in History and one "paste last" away.
         let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        guard PasteTarget.matches(expected: appBundleId, frontmost: frontmost) else {
+        func notPasted(_ short: String, _ long: String) {
             if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
             let paste = settings.hotkeyPasteLast
             let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
-            recordingBar.showResult(key.isEmpty ? L10n.text("已切换应用，未粘贴 · 见历史") : L10n.text("已切换应用，未粘贴 · 按 ") + key + L10n.text(" 贴到这里"),
+            recordingBar.showResult(short + (key.isEmpty ? L10n.text("，未粘贴 · 见历史") : L10n.text("，未粘贴 · 按 ") + key + L10n.text(" 贴到这里")),
                                     warning: true)
-            setHint(L10n.text("整理时切换了应用，未粘贴。") + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 贴到这里。历史里也有。")),
+            setHint(long + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 贴到这里。历史里也有。")),
                     warning: true)
             applyState()
+        }
+        guard PasteTarget.matches(expected: appBundleId, frontmost: frontmost) else {
+            notPasted(L10n.text("已切换应用"), L10n.text("整理时切换了应用，未粘贴。"))
             return
         }
         // The cursor the user placed first is where the text goes, even if it moved meanwhile.
-        if let field, field.bundleId == appBundleId { FieldContextReader.restoreCaret(field) }
+        // When that field is gone (closed, another tab), pasting into whatever has focus now
+        // would put the text in the wrong place.
+        if let field, field.bundleId == appBundleId, FieldContextReader.restoreCaret(field) == .lost {
+            notPasted(L10n.text("输入框已切换"), L10n.text("整理时原来的输入框已关闭或切换，未粘贴。"))
+            return
+        }
         let rich = Inserter.richListApps.contains(appBundleId)
             ? Inserter.listHTML(for: text) : nil
         Inserter.shared.insert(text, richHTML: rich) { [weak self] result, _ in
