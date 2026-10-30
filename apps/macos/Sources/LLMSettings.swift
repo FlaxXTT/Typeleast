@@ -170,8 +170,6 @@ enum KeychainStore {
         return SecItemDelete(base as CFDictionary) == errSecSuccess
     }
 
-    /// Test seam: forget what was read.
-    static func resetCache() { lock.withLock { cache = [:] } }
 }
 
 /// In-app updates without password dialogs. macOS lets only the build that created a

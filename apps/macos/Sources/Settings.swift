@@ -143,12 +143,6 @@ final class Settings {
         }
     }
 
-    static func migrateAICleanup(_ defaults: UserDefaults) {
-        guard !defaults.bool(forKey: "voice.aiCleanupDefault.v1") else { return }
-        defaults.set("concise", forKey: "voice.strength")
-        defaults.set(true, forKey: "voice.aiCleanupDefault.v1")
-    }
-
     private func changed() {
         NotificationCenter.default.post(name: Settings.didChange, object: nil)
     }

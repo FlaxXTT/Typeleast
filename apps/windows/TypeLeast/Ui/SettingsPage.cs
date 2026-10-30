@@ -314,8 +314,6 @@ internal sealed class SettingsPage : IPage
         }
     }
 
-    private static UIElement Spacer(double height) => new Border { Height = height };
-
     private static Border Section(string title, params UIElement[] rows)
     {
         var stack = new StackPanel();

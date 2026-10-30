@@ -67,7 +67,6 @@ struct OnboardingView: View {
     let finish: () -> Void
     @State private var step: OnboardingStep = .welcome
     @StateObject private var meter = MicMeter()
-    @State private var tryText = ""
     @State private var globeConfirmed = false
     /// The cleanup model form stays open once shown, even after the key is saved.
     @State private var modelFormShown = false

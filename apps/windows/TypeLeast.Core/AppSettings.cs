@@ -31,12 +31,6 @@ public sealed class AppSettings
     public bool UnifiedDictationApplied { get; set; }
     public void ApplyUnifiedDictation() { if (UnifiedDictationApplied) return; Strength = "prompt"; UnifiedDictationApplied = true; }
     public bool AiCleanupDefaultApplied { get; set; }
-    public void ApplyAICleanupDefault()
-    {
-        if (AiCleanupDefaultApplied) return;
-        Strength = "concise";
-        AiCleanupDefaultApplied = true;
-    }
     public string InterfaceLanguage { get; set; } = "system";
     public string Language { get; set; } = "auto";
     public string LlmPresetId { get; set; } = "deepseek";

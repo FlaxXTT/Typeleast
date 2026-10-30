@@ -195,12 +195,6 @@ enum FieldContextReader {
         return selectedRange(element) != nil
     }
 
-    /// The whole current value of an element captured earlier, for the edit learner.
-    static func currentValue(of element: AXUIElement) -> String? {
-        AXUIElementSetMessagingTimeout(element, 0.25)
-        return copy(element, kAXValueAttribute)
-    }
-
     // MARK: helpers
 
     private static func copy<T>(_ element: AXUIElement, _ attribute: String) -> T? {
