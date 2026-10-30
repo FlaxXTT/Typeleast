@@ -2,7 +2,9 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
-## 1.24.13（未发布）
+## 1.24.13（2026-10-30）
+
+发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 47，Mac 与 1.24.12 相同。
 
 - Windows 与 Mac 对齐：
   - 翻译默认有快捷键（右 Ctrl；右 Ctrl 已是听写键时用 F8），以前默认关闭，很多人找不到。已手动关掉的保持关闭。
