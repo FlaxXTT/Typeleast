@@ -710,6 +710,13 @@ do {
 // MARK: 16. rich list pasting and pill sizing
 
 do {
+    checkEq("a list after text on the same line starts on a new line", Inserter.separatingList("1. 第一项\n2. 第二项", before: "他说的话"), "\n1. 第一项\n2. 第二项")
+    checkEq("…and after text that could not be read", Inserter.separatingList("1、第一项", before: nil), "\n1、第一项")
+    checkEq("a list at the start of a line is left alone", Inserter.separatingList("1. 第一项", before: "上一段\n"), "1. 第一项")
+    checkEq("…as is a list in an empty field", Inserter.separatingList("- 第一项", before: ""), "- 第一项")
+    checkEq("a bullet after text starts on a new line", Inserter.separatingList("- 第一项", before: "前文"), "\n- 第一项")
+    checkEq("ordinary text is never moved", Inserter.separatingList("2026 年的计划", before: "他说的话"), "2026 年的计划")
+    checkEq("…nor a decimal at the start", Inserter.separatingList("3.5 万元的预算", before: "他说的话"), "3.5 万元的预算")
     let html = Inserter.listHTML(for: "我说三点：\n1. 要快\n2. 要准\n3. 要便宜")
     check("numbered lines become an ordered list", html?.contains("<ol><li>要快</li><li>要准</li><li>要便宜</li></ol>") == true, html ?? "nil")
     check("the lead-in stays a paragraph", html?.contains("<p>我说三点：</p>") == true)

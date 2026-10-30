@@ -79,6 +79,17 @@ final class Inserter {
     ]
 
     /// HTML for text containing "1. " numbered lines, or nil when there is no list.
+    /// A numbered or bulleted list starts on its own line: when the cursor follows other text on
+    /// the same line (or what precedes it could not be read), a line break goes first.
+    static func separatingList(_ text: String, before: String?) -> String {
+        guard text.range(of: #"^\s*(\d{1,3}[.、．)）](?!\d)|[-*•]\s)\s*\S"#, options: .regularExpression) != nil else { return text }
+        if let before {
+            let line = before.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? ""
+            if line.trimmingCharacters(in: .whitespaces).isEmpty { return text }
+        }
+        return "\n" + text
+    }
+
     static func listHTML(for text: String) -> String? {
         let lines = text.components(separatedBy: "\n")
         let numbered = lines.filter { $0.range(of: #"^\s*\d{1,2}[.)]\s+"#, options: .regularExpression) != nil }

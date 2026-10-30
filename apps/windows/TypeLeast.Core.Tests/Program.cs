@@ -616,6 +616,13 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         try { audio.Save("../escape", wav); Check("audio rejects path traversal", false); } catch (InvalidDataException) { Check("audio rejects path traversal", true); }
         Check("format lists produces HTML", FormattedText.HtmlClipboard("1. 第一项\n2. <safe>")?.Contains("&lt;safe&gt;") == true);
         Check("ordinary text stays plain", FormattedText.HtmlClipboard("ordinary paragraph") is null);
+        Eq("a list after text on the same line starts on a new line", FormattedText.SeparatingList("1. 第一项\n2. 第二项", "他说的话"), "\n1. 第一项\n2. 第二项");
+        Eq("…and after text that could not be read", FormattedText.SeparatingList("1、第一项", null), "\n1、第一项");
+        Eq("a list at the start of a line is left alone", FormattedText.SeparatingList("1. 第一项", "上一段\r\n"), "1. 第一项");
+        Eq("…as is a list in an empty field", FormattedText.SeparatingList("- 第一项", ""), "- 第一项");
+        Eq("a bullet after text starts on a new line", FormattedText.SeparatingList("- 第一项", "前文"), "\n- 第一项");
+        Eq("ordinary text is never moved", FormattedText.SeparatingList("2026 年的计划", "他说的话"), "2026 年的计划");
+        Eq("…nor a decimal at the start", FormattedText.SeparatingList("3.5 万元的预算", "他说的话"), "3.5 万元的预算");
     }
     finally { Directory.Delete(dir, true); }
 }

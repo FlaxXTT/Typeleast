@@ -6,6 +6,18 @@ namespace TypeLeast.Core;
 
 public static class FormattedText
 {
+    private static readonly System.Text.RegularExpressions.Regex ListStart =
+        new(@"^\s*(\d{1,3}[.、．)）](?!\d)|[-*•]\s)\s*\S", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>A numbered or bulleted list starts on its own line: when the cursor follows other text on
+    /// the same line (or what precedes it could not be read), a line break goes first.</summary>
+    public static string SeparatingList(string text, string? before)
+    {
+        if (!ListStart.IsMatch(text)) return text;
+        if (before is not null && before.Split('\n')[^1].Trim(' ', '\t', '\r').Length == 0) return text;
+        return "\n" + text;
+    }
+
     public static string? HtmlClipboard(string text)
     {
         var rows = text.Replace("\r\n", "\n").Split('\n');

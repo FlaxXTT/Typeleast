@@ -28,6 +28,14 @@ internal static class FieldContextReader
         }
         catch (Exception) { return null; }
     }
+    /// <summary>The text before the cursor, read on this computer only; null when it cannot be read.</summary>
+    public static string? Before(FieldTarget target)
+    {
+        if (Read(target) is not { } json) return null;
+        try { using var doc = System.Text.Json.JsonDocument.Parse(json); return doc.RootElement.GetProperty("before").GetString(); }
+        catch (Exception) { return null; }
+    }
+
     public static string? ReadLearningField(FieldTarget target)
     {
         if (Read(target) is null) return null;

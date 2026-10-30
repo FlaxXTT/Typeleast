@@ -99,7 +99,9 @@ internal sealed class DictationController
         var field = FieldTarget.Capture();
         for (var i = 0; i < 40 && (Native.GetAsyncKeyState(0x11) < 0 || Native.GetAsyncKeyState(0x10) < 0 || Native.GetAsyncKeyState(0x12) < 0); i++) await Task.Delay(25);
         if (quitting || field.Window == IntPtr.Zero || !Paster.SameWindow(field.Window, Native.GetForegroundWindow())) return;
-        var text = TerminalGuard.SafeText(last.Text, Shell.ProcessName(field.Window));
+        var app = Shell.ProcessName(field.Window);
+        var text = TerminalGuard.IsTerminal(app) ? TerminalGuard.SafeText(last.Text, app)
+            : FormattedText.SeparatingList(last.Text, await Within(Task.Run(() => FieldContextReader.Before(field)), 300));
         var result = await Paster.PasteAsync(text, field.Window, true);
         if (result != Paster.Outcome.Pasted) SetHint(Paster.Message(result));
     }
@@ -422,7 +424,12 @@ internal sealed class DictationController
             result.FallbackReason, result.Ms?.Total, Characters: result.Text.Length).Format());
         {
             // A terminal gets one line without control characters: this reduces accidental command execution.
-            var text = TerminalGuard.SafeText(result.InsertableText.Trim(), targetApp);
+            // Elsewhere a list never starts right after the text the cursor follows (read on this computer only).
+            var pasting = options.InsertionMode != "clipboardOnly" && !TerminalGuard.IsTerminal(targetApp);
+            var before = pasting && targetField is { } field ? await Within(Task.Run(() => FieldContextReader.Before(field)), 300) : null;
+            if (!operations.IsCurrent(operation)) return;
+            var text = pasting ? FormattedText.SeparatingList(result.InsertableText.Trim(), before)
+                : TerminalGuard.SafeText(result.InsertableText.Trim(), targetApp);
             if (text.Length == 0)
             {
                 bar.ShowResult(L10n.T("没有听到内容"), warning: true);

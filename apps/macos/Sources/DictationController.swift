@@ -151,9 +151,10 @@ final class DictationController {
         startTick()
         applyState()
 
-        // Read the target field off the main thread while the user is already speaking, as
-        // context for the model (only with 参考输入框里的内容 on).
-        if settings.readFieldContext {
+        // Read the target field off the main thread while the user is already speaking: to see,
+        // on this computer, what precedes the cursor, and as context for the model (only with
+        // 参考输入框里的内容 on).
+        do {
             let bundle = pendingAppBundleId
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 let field = FieldContextReader.capture(bundleId: bundle)
@@ -417,7 +418,9 @@ final class DictationController {
 
     func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?) {
         // A terminal gets one line without control characters: this reduces accidental command execution.
-        let text = TerminalGuard.safeText(text, bundleId: appBundleId)
+        // Elsewhere a list never starts right after the text the cursor follows.
+        let text = TerminalGuard.isTerminal(appBundleId) ? TerminalGuard.safeText(text, bundleId: appBundleId)
+            : Inserter.separatingList(text, before: field?.bundleId == appBundleId ? field?.context.before : nil)
         // The user may have moved on while the text was being cleaned up. Pasting
         // into whatever is in front now could type into a terminal or the wrong
         // chat, so nothing is pasted and the clipboard is left alone; the text is
@@ -452,7 +455,7 @@ final class DictationController {
             return
         }
         let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        insertText(last.displayText, fallback: last.fallback, entryId: nil, appBundleId: app, field: nil)
+        insertText(last.displayText, fallback: last.fallback, entryId: nil, appBundleId: app, field: FieldContextReader.capture(bundleId: app))
     }
 
     // MARK: helpers
