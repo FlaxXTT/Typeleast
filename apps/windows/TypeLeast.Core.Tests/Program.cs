@@ -263,6 +263,12 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
     var (withProfile, profileBytes) = ServiceClient.DictateBody(new byte[] { 1, 2 }, "写周报");
     Eq("the description goes first, in a JSON object", JsonSerializer.Deserialize<JsonElement>(withProfile.AsSpan(0, profileBytes)).GetProperty("profile").GetString(), "写周报");
     Eq("no description: the body is the WAV", ServiceClient.DictateBody(new byte[] { 1 }, null).MetaBytes, 0);
+    Eq("selection: Chinese goes to the translate target", SelectionLanguage.Target("今天开会", "en"), "en");
+    Eq("selection: English with an English target comes back in Chinese", SelectionLanguage.Target("Ship it today", "en"), "zh");
+    Eq("selection: with a Chinese target, Chinese goes to English", SelectionLanguage.Target("今天开会", "zh"), "en");
+    Eq("selection: other targets are kept", SelectionLanguage.Target("Ship it today", "ja"), "ja");
+    var (withBaseline, baselineBytes) = ServiceClient.DictateBody(new byte[] { 1 }, null, "原提示词");
+    Eq("提示词模式's draft travels in the same object", JsonSerializer.Deserialize<JsonElement>(withBaseline.AsSpan(0, baselineBytes)).GetProperty("baseline").GetString(), "原提示词");
 
     // The service proves it is ours before anything is sent to it.
     Eq("HMAC proof matches the service's (RFC 4231 case 2 key)",
@@ -445,7 +451,13 @@ Console.WriteLine();
         Eq("the translate key cannot be the dictation key", loaded.TranslateHotkey, (DictationKey?)null);
         Eq("an unknown target reads as English", loaded.TranslateTarget, "en");
         Eq("an unknown variant reads as Simplified", loaded.ZhVariant, "hans");
-        Eq("the translate key is off by default", new AppSettings().TranslateHotkey, (DictationKey?)null);
+        Eq("the translate key is on by default", new AppSettings().TranslateHotkey, (DictationKey?)DictationKey.RightCtrl);
+        File.WriteAllText(path, "{\"Hotkey\":\"RightAlt\",\"TranslateHotkey\":null}");
+        Eq("settings from before the default get the translate key once", AppSettings.Load(path, TestHistoryProtection.Shared).TranslateHotkey, (DictationKey?)DictationKey.RightCtrl);
+        File.WriteAllText(path, "{\"Hotkey\":\"RightCtrl\",\"TranslateHotkey\":null}");
+        Eq("…a free one, never the dictation key", AppSettings.Load(path, TestHistoryProtection.Shared).TranslateHotkey, (DictationKey?)DictationKey.F8);
+        File.WriteAllText(path, "{\"Hotkey\":\"RightAlt\",\"TranslateHotkey\":null,\"TranslateKeyDefaults\":1}");
+        Eq("a translate key turned off later stays off", AppSettings.Load(path, TestHistoryProtection.Shared).TranslateHotkey, (DictationKey?)null);
     }
     finally { if (File.Exists(path)) File.Delete(path); }
 }

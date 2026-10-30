@@ -275,11 +275,15 @@ public sealed class ServiceClient
         return Encoding.ASCII.GetByteCount(encoded) <= MaxContextHeaderBytes ? encoded : null;
     }
 
-    /// <summary>The body of /dictate: a JSON object (its length in x-voice-meta-bytes), then the WAV.</summary>
-    public static (byte[] Body, int MetaBytes) DictateBody(byte[] wav, string? profile)
+    /// <summary>The body of /dictate: a JSON object (its length in x-voice-meta-bytes), then the WAV.
+    /// <paramref name="baseline"/> is 提示词模式's draft: the text selected when it started.</summary>
+    public static (byte[] Body, int MetaBytes) DictateBody(byte[] wav, string? profile, string? baseline = null)
     {
-        if (string.IsNullOrEmpty(profile)) return (wav, 0);
-        var json = JsonSerializer.SerializeToUtf8Bytes(new { profile });
+        var meta = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(profile)) meta["profile"] = profile;
+        if (!string.IsNullOrEmpty(baseline)) meta["baseline"] = baseline;
+        if (meta.Count == 0) return (wav, 0);
+        var json = JsonSerializer.SerializeToUtf8Bytes(meta);
         return ([.. json, .. wav], json.Length);
     }
 
@@ -287,7 +291,8 @@ public sealed class ServiceClient
     /// dictation; the service keeps no copy.</param>
     public Task<DictateResponse> DictateAsync(byte[] wav, string language, string appHint, string strength,
         LlmRoute? llm, byte[]? fieldContext = null, CancellationToken ct = default, string? betaSession = null,
-        string? translateTo = null, string? variants = null, string? profile = null, Action<TaskProgress>? onProgress = null) =>
+        string? translateTo = null, string? variants = null, string? profile = null, Action<TaskProgress>? onProgress = null,
+        string? baseline = null) =>
         Once(async () =>
         {
             var requestId = Guid.NewGuid().ToString();
@@ -304,7 +309,7 @@ public sealed class ServiceClient
             if (!string.IsNullOrEmpty(betaSession)) headers["x-voice-beta-session"] = betaSession;
             if (!string.IsNullOrEmpty(translateTo)) headers["x-voice-translate"] = translateTo;
             if (!string.IsNullOrEmpty(variants)) headers["x-voice-variants"] = variants;
-            var (payload, metaBytes) = DictateBody(wav, profile);
+            var (payload, metaBytes) = DictateBody(wav, profile, baseline);
             headers["x-voice-meta-bytes"] = metaBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var content = new ByteArrayContent(payload);
             content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");

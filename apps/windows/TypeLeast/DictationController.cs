@@ -48,6 +48,8 @@ internal sealed class DictationController
     private byte[]? recordingContext;
     private Task<FieldTarget>? targetFieldTask;
     private Task<byte[]?>? recordingContextTask;
+    /// <summary>提示词模式's draft: the text selected when a new conversation starts.</summary>
+    private Task<string?>? baselineTask;
     private readonly System.Diagnostics.Stopwatch micClock = new();
     /// <summary>A dictation cancelled a moment ago, kept in memory until 撤销 sends it on or the toast goes away.</summary>
     private (byte[] Wav, double Seconds, DictationOptions Options, IntPtr Window, string App, Task<FieldTarget>? Field, Task<byte[]?>? Context)? cancelled;
@@ -134,7 +136,41 @@ internal sealed class DictationController
 
     public void Toggle() => Toggle(null);
 
-    public void ToggleTranslate() => Toggle(Settings.TranslateTarget);
+    /// <summary>翻译's key: with text selected, the selection is translated and replaces itself;
+    /// otherwise a recording starts whose text is inserted translated.</summary>
+    public async Task ToggleTranslate()
+    {
+        if (Phase == DictationPhase.Idle && !IsMicrophoneTesting)
+        {
+            var window = Native.GetForegroundWindow();
+            var selection = await Within(Task.Run(() => FieldContextReader.Selection(window)), 400);
+            if (selection is not null && Phase == DictationPhase.Idle) { await TranslateSelection(selection, window); return; }
+        }
+        Toggle(Settings.TranslateTarget);
+    }
+
+    private async Task TranslateSelection(string text, IntPtr window)
+    {
+        if (ActiveRoute is null) { SetHint(L10n.T("请先配置可用的整理模型。")); return; }
+        var operation = operations.TryBegin();
+        if (operation is null) return;
+        var options = new DictationOptions(Settings.Language, "prompt", Settings.TranslateTarget, Settings.VariantsHeader, ActiveRoute, "autoPaste");
+        targetWindow = window; targetApp = Shell.ProcessName(window); targetField = null; recordingContext = null;
+        Phase = DictationPhase.Thinking; hook.SwallowEscape = true; bar.ShowThinking(L10n.T("正在翻译…")); Raise();
+        try
+        {
+            var result = await Client.PolishAsync(text, options.Language, "prompt", options.Route, options.TranslateTo, options.Variants,
+                operation.Token, profile: History.Profile);
+            if (operations.IsCurrent(operation)) await Deliver(result, 0, operation, options);
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested) { }
+        catch (ServiceException) { if (operations.IsCurrent(operation)) bar.ShowResult(L10n.T("翻译失败"), true); }
+        finally
+        {
+            if (operations.IsCurrent(operation)) { Phase = DictationPhase.Idle; hook.SwallowEscape = false; Raise(); }
+            operations.Complete(operation);
+        }
+    }
     public void ToggleAssistant() => Toggle(null, true);
 
     public void SetStrength(string code, bool announce = false)
@@ -264,6 +300,8 @@ internal sealed class DictationController
         targetApp = Shell.ProcessName(targetWindow);
         var window = targetWindow;
         targetFieldTask = Task.Run(() => FieldTarget.CaptureFor(window));
+        // A new 提示词模式 conversation starts from the selected text, revised by what is said.
+        baselineTask = assistantRecording && beta.Session is null ? Task.Run(() => FieldContextReader.Selection(window)) : null;
         recordingContextTask = Settings.UseFieldContext ? targetFieldTask.ContinueWith(t => FieldContextReader.Read(t.Result), TaskScheduler.Default) : null;
         if (Settings.MuteOtherAudio) ducking.Start();
     }
@@ -355,6 +393,7 @@ internal sealed class DictationController
         translating = null;
         if (seconds < 0.3)
         {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(wav);
             operations.Complete(operation);
             Phase = DictationPhase.Idle;
             bar.ShowResult(L10n.T("录音太短"), warning: true);
@@ -372,14 +411,15 @@ internal sealed class DictationController
         Raise();
         targetField = await Within(targetFieldTask, 300);
         recordingContext = await Within(recordingContextTask, 300);
-        targetFieldTask = null; recordingContextTask = null;
+        var baseline = answering is null && options.Strength == "promptbeta" && translateTo is null ? await Within(baselineTask, 300) : null;
+        targetFieldTask = null; recordingContextTask = null; baselineTask = null;
         if (!operations.IsCurrent(operation)) return;
         try
         {
             var requestOptions = answering is not null ? beta.Options ?? options : options;
             var result = await Client.DictateAsync(wav, requestOptions.Language, targetApp, requestOptions.Strength, requestOptions.Route,
                 fieldContext: recordingContext, ct: operation.Token, betaSession: answering, translateTo: translateTo, variants: requestOptions.Variants,
-                profile: History.Profile,
+                profile: History.Profile, baseline: baseline,
                 onProgress: progress => dispatcher.InvokeAsync(() => { if (operations.IsCurrent(operation) && Phase == DictationPhase.Thinking) bar.ShowThinking(progress.Label); }));
             if (!operations.IsCurrent(operation)) return;
             if (ShowBetaQuestions(result, requestOptions)) return;
@@ -438,7 +478,6 @@ internal sealed class DictationController
             {
                 var outcome = options.InsertionMode == "clipboardOnly" ? (Paster.SetText(text) ? Paster.Outcome.CopiedOnly : Paster.Outcome.Failed)
                     : await Paster.PasteAsync(text, targetWindow, true, operation.Token, TerminalGuard.SafeText("a\nb", targetApp).Contains('\n'));
-                if (outcome == Paster.Outcome.Failed) { bar.ShowResult(L10n.T("无法写入剪贴板，请重试"), true); return; }
                 if (!operations.IsCurrent(operation)) return;
                 var entry = new HistoryEntry
                 {
@@ -460,6 +499,8 @@ internal sealed class DictationController
                     catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { SetHint(L10n.T("录音未能保留，文字仍可用。")); }
                 }
                 History.Add(entry); PruneAudio();
+                // The clipboard could not be written: nothing was pasted, but the text is kept in History.
+                if (outcome == Paster.Outcome.Failed) { bar.ShowResult(L10n.T("无法写入剪贴板，文字在历史里"), true); return; }
                 if (History.LastError is not null) SetHint(L10n.T("历史无法读写，文件已保留。请检查文件权限。"));
                 Activity.Record(ActivityLog.CountWords(text), DateTime.Now);
                 var note = Messages.FallbackNote(result.FallbackReason);

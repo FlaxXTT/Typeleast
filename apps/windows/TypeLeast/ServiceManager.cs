@@ -175,6 +175,8 @@ internal sealed class ServiceManager
             using var p = Process.Start(start);
             if (p is null) return null;
             var output = p.StandardOutput.ReadToEndAsync();
+            // stderr is read too: a full, unread stderr pipe would block the process until the timeout.
+            _ = p.StandardError.ReadToEndAsync();
             if (!p.WaitForExit(5000)) { try { p.Kill(); } catch (Exception) { } return null; }
             return p.ExitCode == 0 ? output.Result : null;
         }

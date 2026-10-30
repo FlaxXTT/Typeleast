@@ -95,6 +95,7 @@ internal sealed class AppHost : IDictationHost
         if (History.LastError is not null) Hint = L10n.T("历史无法读写，文件已保留。请检查文件权限。");
     }
 
+    private SelectionTranslator? selection;
     public bool ServiceUp => Health?.Ok == true && Health.Service == "typeleast";
     public SpeechModelCatalog? SpeechCatalog { get; private set; }
     public SpeechStatus? Speech => Health?.Speech;
@@ -144,6 +145,21 @@ internal sealed class AppHost : IDictationHost
         hook.TranslateTapped += () => app.Dispatcher.InvokeAsync(() => ToggleTranslate());
         hook.Escape += () => app.Dispatcher.InvokeAsync(Cancel);
         HotkeyReady = hook.Install();
+        // 选中即翻译: the button and bubble next to a mouse selection. Nothing is inserted or recorded.
+        selection = new SelectionTranslator(app.Dispatcher)
+        {
+            Enabled = () => Settings.SelectionTranslate && dictation.Phase == DictationPhase.Idle && !Settings.NeedsPractice,
+            PreferredTarget = () => Settings.TranslateTarget,
+            Translate = async (text, target) =>
+            {
+                if (ActiveRoute is not { } route) return null;
+                var result = await Client.PolishAsync(text, Settings.Language, "prompt", route, target, Settings.VariantsHeader,
+                    CancellationToken.None, profile: History.Profile);
+                // A failed translation comes back as the original text: report it instead of showing it.
+                return result.Fallback ? null : result.InsertableText;
+            },
+        };
+        selection.Install();
         if (HotkeyReady != true) Hint = L10n.T("无法注册快捷键，请用托盘菜单听写");
 
         tray = new Tray(this);
@@ -177,6 +193,7 @@ internal sealed class AppHost : IDictationHost
         healthTimer?.Stop();
         dictation.Shutdown();
         hook.Dispose();
+        selection?.Dispose();
         Service.Stop();
         tray?.Dispose();
         app.Shutdown();
@@ -347,7 +364,7 @@ internal sealed class AppHost : IDictationHost
         if(onboarding?.PracticeActive==true){onboarding.HandleShortcut();return;}
         if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.Toggle();
     }
-    public void ToggleTranslate() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return; if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.ToggleTranslate(); }
+    public void ToggleTranslate() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return; if(Settings.NeedsPractice){ShowOnboarding();return;}_ = dictation.ToggleTranslate(); }
     public void ToggleAssistant() { if(onboarding?.PracticeActive==true || onboarding?.PracticeBusy==true)return; if(Settings.NeedsPractice){ShowOnboarding();return;}dictation.ToggleAssistant(); }
     public void SetStrength(string code, bool announce = false) => dictation.SetStrength(code, announce);
     public void Cancel() { if(onboarding?.PracticeBusy==true)onboarding.CancelPractice();else dictation.Cancel(); }

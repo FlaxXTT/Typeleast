@@ -84,6 +84,8 @@ internal sealed class SettingsPage : IPage
         {
             Theme.SettingRow(L10n.T("听写语言"), null, dictationLanguage),
             Theme.SettingRow(L10n.T("翻译成"), null, translateTarget),
+            Theme.SettingRow(L10n.T("选中即翻译"), Theme.Text(L10n.T("用鼠标选中文字，旁边出现「翻译」按钮，译文在气泡里显示。"), 12, Theme.Grey),
+                Theme.Toggle(s.SelectionTranslate, v => { s.SelectionTranslate = v; host.SaveSettings(); })),
             Theme.SettingRow(L10n.T("中文字形"), null, zhVariant),
         };
 

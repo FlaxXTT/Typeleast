@@ -59,6 +59,9 @@ internal sealed class LocalSpeechModelImport : Window
             await host.Client.LocalModelActionAsync("local/inspect", value);
             await host.Client.LocalModelActionAsync("local/register", value);
             await host.RefreshHealth(); Close();
-        } catch (ServiceException) { problem.Text = L10n.T("模型文件不兼容或路径无效。当前模型保留。"); submit.IsEnabled = true; }
+        }
+        // A timeout or a dropped connection must not escape this async void handler (and leave the button dead).
+        catch (Exception e) when (e is ServiceException or System.Net.Http.HttpRequestException or OperationCanceledException or System.IO.IOException)
+        { problem.Text = L10n.T("模型文件不兼容或路径无效。当前模型保留。"); submit.IsEnabled = true; }
     }
 }

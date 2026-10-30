@@ -19,8 +19,12 @@ public enum DictationKey
 public sealed class AppSettings
 {
     public DictationKey Hotkey { get; set; } = DictationKey.RightAlt;
-    /// <summary>翻译模式's own key (one tap starts, one tap finishes); null = off.</summary>
-    public DictationKey? TranslateHotkey { get; set; }
+    /// <summary>翻译模式's own key (one tap starts, one tap finishes); null = off. On by default, as on the Mac.</summary>
+    public DictationKey? TranslateHotkey { get; set; } = DictationKey.RightCtrl;
+    /// <summary>Present in settings saved since translation got a default key (1.24.13); older files get one once.</summary>
+    public int TranslateKeyDefaults { get; set; } = 1;
+    /// <summary>选中即翻译: a mouse selection offers a 「翻译」 button and shows the translation in a bubble.</summary>
+    public bool SelectionTranslate { get; set; } = true;
     public DictationKey? AssistantHotkey { get; set; }
     /// <summary>Target language code the service knows (en, zh, ja, ko, fr, de, es, pt, it, ru).</summary>
     public string TranslateTarget { get; set; } = "en";
@@ -115,6 +119,8 @@ public sealed class AppSettings
                 using (var document = JsonDocument.Parse(File.ReadAllText(path))) {
                     if (!document.RootElement.EnumerateObject().Any(x => string.Equals(x.Name, "PracticeGateRequired", StringComparison.OrdinalIgnoreCase)))
                         loaded.PracticeGateRequired = false;
+                    if (!document.RootElement.EnumerateObject().Any(x => string.Equals(x.Name, "TranslateKeyDefaults", StringComparison.OrdinalIgnoreCase)))
+                        loaded.TranslateKeyDefaults = 0;
                 }
                 loaded.Strength = CleanupModes.Stored(loaded.Strength);
                 loaded.ApplyUnifiedDictation();
@@ -133,6 +139,14 @@ public sealed class AppSettings
                 // The two keys must differ; the dictation key wins.
                 if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
                 if (loaded.AssistantHotkey == loaded.Hotkey || loaded.AssistantHotkey == loaded.TranslateHotkey) loaded.AssistantHotkey = null;
+                // Translation had no key by default, so most people never found it: give it one once.
+                if (loaded.TranslateKeyDefaults < 1)
+                {
+                    if (loaded.TranslateHotkey is null)
+                        loaded.TranslateHotkey = new[] { DictationKey.RightCtrl, DictationKey.F8 }
+                            .Cast<DictationKey?>().FirstOrDefault(k => k != loaded.Hotkey && k != loaded.AssistantHotkey);
+                    loaded.TranslateKeyDefaults = 1;
+                }
                 // The old default took Ctrl+Shift+V from every app: move it once.
                 if (loaded.PasteShortcutDefaults < 1)
                 {
