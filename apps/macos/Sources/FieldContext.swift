@@ -59,6 +59,38 @@ enum FieldContextReader {
         blockedBundlePrefixes.contains { bundleId.hasPrefix($0) }
     }
 
+    /// Chromium browsers show a web page's fields to Accessibility only once an assistive
+    /// app asks for it (AXEnhancedUserInterface, as screen readers do). Until then the field
+    /// and cursor in a page cannot be read, so the starting position cannot be kept.
+    static let chromiumBrowsers: Set<String> = [
+        "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "org.chromium.Chromium",
+        "com.microsoft.edgemac", "com.microsoft.edgemac.beta", "com.microsoft.edgemac.Dev",
+        "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
+    ]
+    private static let exposedLock = NSLock()
+    private static var exposedPids = Set<pid_t>()
+
+    /// Ask the app to expose its web content (Chromium) or its whole tree (Electron, through
+    /// AXManualAccessibility; other apps ignore it). Once per process. True when it was just
+    /// asked, so the caller can give the app a moment to build the tree.
+    @discardableResult
+    static func exposeContent(bundleId: String) -> Bool {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else { return false }
+        let pid = app.processIdentifier
+        exposedLock.lock()
+        let fresh = exposedPids.insert(pid).inserted
+        exposedLock.unlock()
+        guard fresh else { return false }
+        let element = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        // The return codes are not meaningful here: Chrome reports an error and still complies.
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        if chromiumBrowsers.contains(bundleId) {
+            AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+        }
+        return true
+    }
+
     /// Read the focused field of the frontmost app. Returns nil when not trusted, when
     /// nothing editable is focused, for secure fields and for blocked apps.
     static func capture(bundleId: String) -> FocusedField? {
@@ -66,7 +98,15 @@ enum FieldContextReader {
         let system = AXUIElementCreateSystemWide()
         // A busy target app must never stall the hotkey path.
         AXUIElementSetMessagingTimeout(system, 0.25)
-        guard let element: AXUIElement = copy(system, kAXFocusedUIElementAttribute) else { return nil }
+        var focused: AXUIElement? = copy(system, kAXFocusedUIElementAttribute)
+        if exposeContent(bundleId: bundleId) {
+            // The first time, the app builds its tree now: wait up to a second for the field.
+            for _ in 0..<10 where !isTextField(focused) {
+                usleep(100_000)
+                focused = copy(system, kAXFocusedUIElementAttribute)
+            }
+        }
+        guard let element = focused else { return nil }
         AXUIElementSetMessagingTimeout(element, 0.25)
 
         let subrole: String? = copy(element, kAXSubroleAttribute)
@@ -148,6 +188,11 @@ enum FieldContextReader {
         guard let axRange = AXValueCreate(.cfRange, &wanted),
               AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, axRange) == .success else { return .sameField }
         return .restored
+    }
+
+    private static func isTextField(_ element: AXUIElement?) -> Bool {
+        guard let element else { return false }
+        return selectedRange(element) != nil
     }
 
     /// The whole current value of an element captured earlier, for the edit learner.

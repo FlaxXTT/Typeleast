@@ -177,12 +177,13 @@ if mode.hasPrefix("browser:") {
     func textAreas() -> [AXUIElement] {
         guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first?.processIdentifier else { return [] }
         let appEl = AXUIElementCreateApplication(pid)
-        AXUIElementSetAttributeValue(appEl, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        FieldContextReader.exposeContent(bundleId: bundle)
         var found: [AXUIElement] = []
-        for _ in 0..<5 where found.isEmpty {
+        for _ in 0..<8 where found.isEmpty {
             pump(0.8)
-            guard let win: AXUIElement = attr(appEl, kAXFocusedWindowAttribute) else { continue }
-            walkFrom(win)
+            // Only our page's window: a browser may float a bubble window in front of it.
+            let windows: [AXUIElement] = attr(appEl, kAXWindowsAttribute) ?? []
+            for win in windows where ((attr(win, kAXTitleAttribute) as String?) ?? "").contains("pastecheck") { walkFrom(win) }
         }
         return found
         func walkFrom(_ win: AXUIElement) {
@@ -213,6 +214,24 @@ if mode.hasPrefix("browser:") {
         report("B1 \(name): other field on the page -> first field", value(areas[0]) == "AAAAXBBBB" && value(areas[1]) == "CCCC",
                value(areas[0]) + " | " + value(areas[1]) + " movedTo=" + moved + " restored=" + String(describing: restored) + " anchor=" + String(field?.range != nil))
     } else { report("B1 \(name): other field on the page -> first field", false, "text areas found: \(areas.count)") }
+    // B3: a click on a blank part of the page took focus away from the field.
+    closeOurTabs()
+    open("pastecheck-a.html")
+    if let first = textAreas().first, let area: AXUIElement = attr(first, kAXParentAttribute) {
+        focusArea(first, 4)
+        let field = FieldContextReader.capture(bundleId: bundle)
+        var pos = CGPoint.zero, size = CGSize.zero
+        if let p: AXValue = attr(area, kAXPositionAttribute) { AXValueGetValue(p, .cgPoint, &pos) }
+        if let z: AXValue = attr(area, kAXSizeAttribute) { AXValueGetValue(z, .cgSize, &size) }
+        // CG top-left point -> AppKit point for click(): a spot well below the two fields.
+        let h = NSScreen.screens[0].frame.height
+        click(NSPoint(x: pos.x + size.width / 2, y: h - (pos.y + min(size.height - 20, 400))))
+        let after = focusedElement().map { (attr($0, kAXRoleAttribute) as String?) ?? "?" } ?? "nil"
+        let restored = field.map { FieldContextReader.restoreCaret($0) } ?? .unknown
+        _ = paste("X")
+        report("B3 \(name): clicked a blank part of the page -> first field", value(first) == "AAAAXBBBB",
+               value(first) + " focusAfterClick=" + after + " restored=" + String(describing: restored) + " anchor=" + String(field?.range != nil))
+    } else { report("B3 \(name): clicked a blank part of the page", false, "no text area") }
     // B2: another tab is in front: the first field is gone, so nothing is pasted.
     closeOurTabs()
     open("pastecheck-a.html")
