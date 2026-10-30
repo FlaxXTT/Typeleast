@@ -18,12 +18,8 @@ internal sealed class AppHost : IDictationHost
 {
 
     public AppSettings Settings { get; }
-    /// <summary>The dictionary: editing, learning, suggestions (DictionaryController).</summary>
-    public DictionaryController Dictionary { get; }
     /// <summary>In-app updates (UpdateController).</summary>
     public UpdateController Updates { get; }
-    /// <summary>Installed plugins and the official catalog (Extensions page, style picker).</summary>
-    public PluginController Plugins { get; }
 
     /// <summary>Why an update must wait (a dictation, Prompt Beta's questions), or null.</summary>
     private string? UpdateBlocker() =>
@@ -76,10 +72,6 @@ internal sealed class AppHost : IDictationHost
         PrivateStorage.EnsureDirectory(AppPaths.StateDirectory());
         settingsPath = AppPaths.AppSettingsFile();
         Settings = AppSettings.Load(settingsPath);
-        var vocabularyCleanupFailed = false;
-        Dictionary = new DictionaryController(Settings, SaveSettings, SetHint, () => quitting,
-            (inserted, edited) => Client.LearnedWordAsync(inserted, edited));
-        Plugins = new PluginController(Client);
         Updates = new UpdateController(Settings, app.Dispatcher, UpdateBlocker, () => quitting, SetHint, Raise, Quit);
         savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options);
         L10n.Configure(Settings.InterfaceLanguage);
@@ -98,10 +90,6 @@ internal sealed class AppHost : IDictationHost
         bar = new RecordingBar(this);
         dictation = new DictationController(this, app.Dispatcher, hook, bar);
         bar.IsVisibleChanged += (_, _) => UpdateIdleBar();
-        if (vocabularyCleanupFailed) {
-            SettingsSaveError = L10n.T("设置未保存。请检查文件权限和磁盘空间。");
-            Hint = SettingsSaveError;
-        }
         if (Settings.PersistenceBlocked) Hint = L10n.T("设置文件无法读取，文件已保留，暂不覆盖。");
         if (Activity.LastError is not null) Hint = L10n.T("活动文件无法读取，文件已保留。");
         if (History.LastError is not null) Hint = L10n.T("历史无法读写，文件已保留。请检查文件权限。");
@@ -144,7 +132,7 @@ internal sealed class AppHost : IDictationHost
         Log.Write("app.start", "version=" + typeof(AppHost).Assembly.GetName().Version);
         Service.Changed += () => app.Dispatcher.InvokeAsync(() =>
         {
-            if (Service.State == ServiceManager.Phase.Running) { _ = RefreshHealth(); _ = Plugins.Refresh(); }
+            if (Service.State == ServiceManager.Phase.Running) _ = RefreshHealth();
             Raise();
         });
         Service.Start();
@@ -170,7 +158,6 @@ internal sealed class AppHost : IDictationHost
             Settings.LaunchAtLogin = startsWithWindows;
             SaveSettings();
         }
-        Dictionary.Received(Array.Empty<SuggestionCandidate>());
         if (!Settings.NeedsPractice && (!Settings.OnboardingDone || !autostart)) ShowWindow(MainWindow.Page.Home);
         if (!Settings.OnboardingDone) ShowOnboarding();
         UpdateIdleBar();
@@ -242,7 +229,6 @@ internal sealed class AppHost : IDictationHost
 
     public bool SaveSettings()
     {
-        if (!Settings.LearnCorrections) Dictionary.StopWatching();
         try { Settings.Save(settingsPath); savedSettingsJson = System.Text.Json.JsonSerializer.Serialize(Settings, Json.Options); }
         catch (Exception e) {
             var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(savedSettingsJson, Json.Options)!;
@@ -272,6 +258,19 @@ internal sealed class AppHost : IDictationHost
 
     // ---- health and the service
 
+    private bool profileRefreshed;
+
+    /// <summary>The description of the user's work is rewritten once per launch, from History, in the background.</summary>
+    private async Task RefreshProfileOnce()
+    {
+        if (profileRefreshed || ActiveRoute is not { } route) return;
+        var items = History.LearningItems();
+        if (items.Count == 0) return;
+        profileRefreshed = true;
+        try { if (await Client.ProfileAsync(items, route) is { Length: > 0 } profile && !quitting) History.SetProfile(profile); }
+        catch (Exception e) when (e is ServiceException or System.Text.Json.JsonException) { Log.Write("profile.fail", e is ServiceException s ? s.Code ?? s.Kind.ToString() : "format"); }
+    }
+
     public async Task RefreshHealth()
     {
         if (refreshing || quitting) return;
@@ -293,6 +292,7 @@ internal sealed class AppHost : IDictationHost
             Health = null;
         }
         finally { refreshing = false; }
+        if (ServiceUp) _ = RefreshProfileOnce();
         if (healthTimer is not null)
             healthTimer.Interval = HealthPolling.Interval(Health is not null, Health?.Speech?.Phase, SpeechCatalog?.Operation?.Phase);
         Raise();

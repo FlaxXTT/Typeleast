@@ -171,10 +171,9 @@ Windows code signing via SignPath Foundation is currently pending approval.
 
 - **听写**：结合整段理解，按需要重排和去重复，完整保留事实、用途、条件、数字和否定。无需选择整理档位；单次最长 10 分钟。
 - **提示词模式**：通过独立快捷键或按钮进入，多轮补充后主动生成完整需求，不执行口述任务。默认不绑定快捷键。
-- **翻译**：先整理，再翻译，支持 10 种目标语言。至少两次模型调用；长文分块会增加调用。
-- **名称解释与拼写**：可随口补充全称、含义或逐字拼写。只为确认名称的内容不写入结果；用途、预算及其他实质条件保留。
+- **翻译**：一次模型调用完成整理和翻译，支持 10 种目标语言。
 - **失败恢复**：不自动插入半截正文或识别原文；可重试、查看修改、使用识别原文或取消，无需重新录音。
-- **词典**：说过的名称写对。填了「识别成」的词会固定替换；粘贴后你改过的词自动加入。自带「技术术语」词库，可在词典页关闭。资料在本机加密保存。
+- **术语纠正**：听错的专有名称、缩写和术语按全文语境改对；识别结果本身合理时照写。每次纠正的术语和你的意图记入历史，App 每次启动时据此写一段你的使用场景描述，帮助之后的整理。清空历史时一起清除。
 - **语言**：简体、台湾繁体、香港繁体。界面语言在设置里改，重启后生效。
 - **历史**：加密存在本机。
 
@@ -222,14 +221,13 @@ Windows code signing via SignPath Foundation is currently pending approval.
 <summary><b>隐私</b></summary>
 
 - **音频不上传。** 识别后删除。开启「保留录音」时，加密保存约 5 分钟，用于重试。
-- **发给模型的内容**：识别出的文字、词典里与本次相关的词及本次解释段。长文分块会重复发送必要依据，不新增音频上传。开启「参考光标附近的文字」时，加上光标附近的文字和窗口标题。像密钥和密码的内容先删除。
-- **标记「不发给模型」的词**：不会发出。
+- **发给模型的内容**：识别出的文字，以及从历史学到的使用场景描述（不超过 1000 字）。每次启动生成描述时，发送历史里的术语纠正和意图，不发送正文。开启「参考光标附近的文字」时，加上光标附近的文字和窗口标题。像密钥和密码的内容先删除。
 - **剪贴板**：粘贴时使用剪贴板，之后恢复。剪贴板工具可能会记录文字。
 - **本机服务**：只监听 `127.0.0.1`，每个请求要带本机令牌。
 
 | | macOS | Windows |
 |---|---|---|
-| 设置、历史、词典、日志 | `~/Library/Application Support/TypeLeast/`、`~/Library/Logs/TypeLeast/` | `%APPDATA%\TypeLeast\` |
+| 设置、历史、日志 | `~/Library/Application Support/TypeLeast/`、`~/Library/Logs/TypeLeast/` | `%APPDATA%\TypeLeast\` |
 | 语音模型 | `~/Library/Application Support/TypeLeast/models/` | `%LOCALAPPDATA%\TypeLeast\models\` |
 | API Key | 钥匙串：`TypeLeast.llm-api-key` | 凭据管理器：`TypeLeast.llm-api-key/…` |
 
@@ -318,7 +316,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 | 目录 | 内容 |
 |---|---|
-| [`service/`](service/) | 本地服务（Node.js）：识别、整理、校验、历史、词典 |
+| [`service/`](service/) | 本地服务（Node.js）：识别、整理、翻译、使用场景描述 |
 | [`apps/macos/`](apps/macos/) | macOS App（Swift） |
 | [`apps/windows/`](apps/windows/) | Windows App（C# / WPF） |
 | [`site/`](site/) | 官网 |

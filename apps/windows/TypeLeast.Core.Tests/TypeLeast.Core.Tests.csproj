@@ -9,9 +9,7 @@
     <ProjectReference Include="..\TypeLeast.Core\TypeLeast.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="../../../service/test/fixtures/suggestion-responses.json" Link="suggestion-responses.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../service/test/fixtures/release-notes.json" Link="release-notes.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../tests/conformance/client-v2.json" Link="client-v2.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="../../../tests/conformance/personalization-v1.json" Link="personalization-v1.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

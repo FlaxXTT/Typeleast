@@ -17,10 +17,12 @@ public sealed class HistoryEntry
     public bool Inserted { get; set; }
     public HistoryRequest? Request { get; set; }
     public string? AudioId { get; set; }
-    public PersonalizationTrace? Personalization { get; set; }
+    /// <summary>What the cleanup model corrected and understood: never inserted, only learned from.</summary>
+    public List<TermCorrection>? Corrections { get; set; }
+    public string? Intention { get; set; }
 }
 
-public sealed record HistoryRequest(string Language, string Strength, string? TranslateTo, string? Variants, string? ExplanationMarkers = null);
+public sealed record HistoryRequest(string Language, string Strength, string? TranslateTo, string? Variants);
 
 /// <summary>Recent dictations, protected at rest with DPAPI; migrates legacy JSON.</summary>
 public sealed class LocalHistory
@@ -78,7 +80,52 @@ public sealed class LocalHistory
         if (days < 0) return;
         var cutoff = (now ?? DateTimeOffset.Now).AddDays(-days);
         if (Entries.RemoveAll(e => retention == "never" || e.Time < cutoff) > 0) Save();
+        if (retention == "never") ClearProfile();
     }
+
+    private string ProfilePath => path + ".profile";
+
+    /// <summary>The description of the user's work learned from this history, sent with each dictation
+    /// and added to the cleanup prompt. Protected like the history; cleared with it.</summary>
+    public string Profile
+    {
+        get {
+            if (Retention == "never") return "";
+            byte[]? plain = null;
+            try {
+                plain = protection.Unprotect(File.ReadAllBytes(ProfilePath));
+                return System.Text.Encoding.UTF8.GetString(plain);
+            } catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException || IsStorageError(e)) { return ""; }
+            finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
+        }
+    }
+
+    public void SetProfile(string text)
+    {
+        if (locked || Retention == "never") return;
+        var value = string.Concat(text.EnumerateRunes().Take(1000).Select(r => r.ToString()));
+        byte[]? plain = null;
+        try {
+            plain = System.Text.Encoding.UTF8.GetBytes(value);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(ProfilePath))!);
+            File.WriteAllBytes(ProfilePath, protection.Protect(plain));
+        } catch (Exception e) when (IsStorageError(e)) { }
+        finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
+    }
+
+    private void ClearProfile()
+    {
+        try { File.Delete(ProfilePath); } catch (Exception e) when (IsStorageError(e)) { }
+    }
+
+    /// <summary>What the description is learned from: the corrections and intentions of the newest entries.</summary>
+    public IReadOnlyList<object> LearningItems() => Entries
+        .Where(e => (e.Corrections?.Count ?? 0) > 0 || !string.IsNullOrEmpty(e.Intention))
+        .Take(100)
+        .Select(e => (object)new {
+            corrections = (e.Corrections ?? new()).Select(c => new { from = c.From, to = c.To }).ToList(),
+            intention = e.Intention ?? "" })
+        .ToList();
 
     public void Update(HistoryEntry entry)
     {
@@ -98,6 +145,7 @@ public sealed class LocalHistory
     {
         try {
             File.Delete(path); // Only the explicit Delete All History action calls this.
+            File.Delete(ProfilePath);
             Entries.Clear(); lastSession = null; locked = false; LastError = null; Revision++;
         } catch (Exception e) when (IsStorageError(e)) { LastError = "history-unavailable"; }
     }

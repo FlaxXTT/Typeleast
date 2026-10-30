@@ -9,7 +9,7 @@ which the app starts, watches and stops by itself.
 |---|---|
 | `TypeLeast.Core` | Logic without WPF (the default history protector uses Windows DPAPI): the service client, settings, presets, the single-key tap detector, Node.js discovery. |
 | `TypeLeast.Core.Tests` | A console test runner for Core (no test framework to download). |
-| `TypeLeast` | The WPF app: tray icon, main window (首页 / 历史 / 词典 / 设置), recording bar, keyboard hook, microphone (NAudio), paste, Credential Manager. |
+| `TypeLeast` | The WPF app: tray icon, main window (首页 / 历史 / 设置), recording bar, keyboard hook, microphone (NAudio), paste, Credential Manager. |
 | `installer/TypeLeast.iss` | Inno Setup script: per-user install, no administrator rights. |
 | `package.ps1` | Builds the release: self-contained `TypeLeast.exe` + service + Node.js → `Setup.exe` and a portable `.zip`. |
 
@@ -55,7 +55,7 @@ SHA-256 list, starts the bundled service once as a smoke test, and writes
 | `%APPDATA%\TypeLeast\app-settings.json` | the app's settings (no key) |
 | `%APPDATA%\TypeLeast\app-history.json` | current-user DPAPI encrypted dictations (500 at most; legacy JSON is migrated) |
 | `%APPDATA%\TypeLeast\typeleast-app.log` | events and error codes only |
-| `%APPDATA%\TypeLeast\` | the service's token, runtime file, history, dictionary |
+| `%APPDATA%\TypeLeast\` | the service's token, runtime file, history |
 | `%LOCALAPPDATA%\TypeLeast\models\` | speech models (about 241 MB) |
 
 ## Storage and service safeguards

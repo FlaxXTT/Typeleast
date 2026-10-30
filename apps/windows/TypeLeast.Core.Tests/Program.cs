@@ -129,12 +129,11 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
     var dir = Path.Combine(Path.GetTempPath(), "typeleast-tests-" + Guid.NewGuid().ToString("N"));
     var file = Path.Combine(dir, "app-settings.json");
     s.Hotkey = DictationKey.F8;
-    s.Words.Add("TypeLeast");
+    s.ProtectedVocabulary = "c2VhbGVk";
     s.Save(file, TestHistoryProtection.Shared);
     var back = LoadSettings(file);
     Eq("settings round-trip", back.Hotkey, DictationKey.F8);
-    Eq("old plain words become dictionary entries", back.DictionaryEntries.FirstOrDefault()?.Word, "TypeLeast");
-    Eq("…and are not written back", back.Words.Count, 0);
+    Eq("an earlier version's sealed dictionary is kept as it was", back.ProtectedVocabulary, "c2VhbGVk");
     Check("the key is never written to the settings file", !File.ReadAllText(file).Contains("sk-test"));
     File.WriteAllText(file, "{ broken");
     Eq("a broken file gives defaults", LoadSettings(file).Hotkey, DictationKey.RightAlt);
@@ -156,12 +155,11 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
     Eq("existing Beta settings migrate to dictation", migratedAI.Strength, "prompt");
     migratedAI.Strength = "prompt"; migratedAI.Save(file, TestHistoryProtection.Shared);
     Eq("next startup keeps chosen mode", LoadSettings(file).Strength, "prompt");
-    var autoHint = WordEntry.Parse("ROG", "LG", "auto")!;
-    Eq("automatic mapping is preserved", autoHint.ServiceValue, "LG=ROG");
-    Eq("automatic mapping is not a replacement", autoHint.RequestValue, "ROG");
-    Eq("manual mapping remains explicit", WordEntry.Parse("ROG", "LG")!.RequestValue, "LG=ROG");
-    var heldName = JsonSerializer.Deserialize<DictateResponse>("{\"text\":\"draft\",\"raw\":\"LG\",\"clarification\":{\"question\":\"Which name?\",\"evidence\":\"LG\"}}", Json.Options)!;
-    Eq("name confirmation never inserts a draft", heldName.InsertableText, "");
+    var learned = JsonSerializer.Deserialize<DictateResponse>("{\"text\":\"修复 CUDA。\",\"raw\":\"修复哭达\",\"corrections\":[{\"from\":\"哭达\",\"to\":\"CUDA\"}],\"intention\":\"修复显存\"}", Json.Options)!;
+    Eq("corrections decode", learned.Corrections?.FirstOrDefault()?.To, "CUDA");
+    Eq("…and never reach the inserted text", learned.InsertableText, "修复 CUDA。");
+    var odd = JsonSerializer.Deserialize<DictateResponse>("{\"text\":\"仍可使用。\",\"corrections\":\"wrong\",\"intention\":5}", Json.Options)!;
+    Check("optional fields of the wrong shape are read as absent", odd.Corrections is null && odd.Intention is null && odd.InsertableText == "仍可使用。");
 
 
     var history = new LocalHistory(Path.Combine(dir, "app-history.json"), TestHistoryProtection.Shared);
@@ -233,55 +231,38 @@ AppSettings LoadSettings(string path) => AppSettings.Load(path, TestHistoryProte
         {
             var id = sample.GetProperty("id").GetString();
             string? Optional(string name) => sample.GetProperty(name).ValueKind == JsonValueKind.Null ? null : sample.GetProperty(name).GetString();
-            var dictionary = sample.GetProperty("dictionary").EnumerateArray().Select(v => v.GetString()!).ToArray();
-            var localOnly = sample.GetProperty("localOnly").EnumerateArray().Select(v => v.GetString()!).ToArray();
+            var profile = sample.GetProperty("profile").GetString()!;
             var language = sample.GetProperty("language").GetString()!;
             var strength = sample.GetProperty("strength").GetString()!;
             await client.DictateAsync(sampleWav, language, "example.editor", strength, null,
-                translateTo: Optional("translateTo"), variants: Optional("variants"), dictionary: dictionary, localOnly: localOnly);
+                translateTo: Optional("translateTo"), variants: Optional("variants"), profile: profile);
             Eq("shared request path: " + id, stub.LastPath, "/api/voice-polish/dictate");
             Eq("shared request language: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-language"), language);
             Eq("shared request mode: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-strength"), strength);
             Eq("shared request translation: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-translate"), Optional("translateTo"));
             Eq("shared request variants: " + id, stub.LastHeaders.GetValueOrDefault("x-voice-variants"), Optional("variants"));
-            var dictionaryBytes = int.Parse(stub.LastHeaders["x-voice-dictionary-bytes"]);
-            Check("shared dictionary length: " + id, dictionaryBytes >= 0 && dictionaryBytes <= stub.LastBody.Length);
-            if (dictionaryBytes > 0)
+            var metaBytes = int.Parse(stub.LastHeaders["x-voice-meta-bytes"]);
+            Check("shared meta length: " + id, metaBytes >= 0 && metaBytes <= stub.LastBody.Length);
+            var sentProfile = "";
+            if (metaBytes > 0)
             {
-                using var sentEntries = JsonDocument.Parse(stub.LastBody.AsMemory(0, dictionaryBytes));
-                Eq("shared dictionary count: " + id, sentEntries.RootElement.GetArrayLength(), dictionary.Length + localOnly.Length);
-                if (sentEntries.RootElement.GetArrayLength() == dictionary.Length + localOnly.Length)
-                {
-                    for (var i = 0; i < dictionary.Length; i++) Eq("shared dictionary word: " + id + "/" + i, sentEntries.RootElement[i].GetString(), dictionary[i]);
-                    for (var i = 0; i < localOnly.Length; i++) Eq("shared local word: " + id + "/" + i, sentEntries.RootElement[dictionary.Length + i].GetProperty("local").GetString(), localOnly[i]);
-                }
+                using var meta = JsonDocument.Parse(stub.LastBody.AsMemory(0, metaBytes));
+                sentProfile = meta.RootElement.GetProperty("profile").GetString() ?? "";
             }
-            Check("shared WAV tail: " + id, stub.LastBody.AsSpan(dictionaryBytes).SequenceEqual(sampleWav));
+            Eq("shared profile: " + id, sentProfile, profile);
+            Check("shared WAV tail: " + id, stub.LastBody.AsSpan(metaBytes).SequenceEqual(sampleWav));
         }
     }
 
-    stub.Reply = (200, "{\"word\":\"公司\"}");
-    Eq("the service names the learned word", await client.LearnedWordAsync("这家公式很好", "这家公司很好"), "公司");
-    Eq("learned-word path", stub.LastPath, "/api/voice-polish/learned-word");
-    var edit = JsonSerializer.Deserialize<JsonElement>(stub.LastBody);
-    Check("the pasted and edited text are sent", edit.GetProperty("inserted").GetString() == "这家公式很好" && edit.GetProperty("edited").GetString() == "这家公司很好");
-    stub.Reply = (200, "{\"word\":null}");
-    Eq("no word when it was not a spelling fix", await client.LearnedWordAsync("明天开会", "后天开会"), null);
+    stub.Reply = (200, "{\"profile\":\"做 CFD 仿真的工程师\"}");
+    Eq("the description comes back", await client.ProfileAsync(new object[] { new { corrections = new[] { new { from = "欧喷丰", to = "OpenFOAM" } }, intention = "跑 LES" } }, route), "做 CFD 仿真的工程师");
+    Eq("profile path", stub.LastPath, "/api/voice-polish/profile");
+    var askedProfile = JsonSerializer.Deserialize<JsonElement>(stub.LastBody);
+    Check("only corrections and intentions are sent", askedProfile.GetProperty("items")[0].GetProperty("intention").GetString() == "跑 LES" && askedProfile.GetProperty("llm").GetProperty("model").GetString() == "m");
 
-    // Plugins: the app only asks the service; its answers decode.
-    stub.Reply = (200, "{\"plugins\":[{\"id\":\"example.dev-terms\",\"version\":\"1.0.0\",\"type\":\"dictionary\",\"name\":{\"zh-Hans\":\"开发术语\",\"en\":\"Dev terms\"},\"description\":{\"zh-Hans\":\"术语。\",\"en\":\"Terms.\"},\"author\":\"Example\",\"license\":\"CC0-1.0\",\"termCount\":3,\"source\":\"catalog\",\"enabled\":true}],\"style\":null,\"problems\":[]}");
-    var plugins = await client.GetPluginsAsync();
-    Eq("installed plugins decode", plugins.Plugins[0].Id, "example.dev-terms");
-    Check("…with their switch and source", plugins.Plugins[0].Enabled == true && plugins.Plugins[0].Source == "catalog");
-    Eq("plugins path", stub.LastPath, "/api/voice-polish/plugins");
-    await client.SetPluginEnabledAsync("example.dev-terms", false);
-    Eq("a switch is a PUT on the plugin", stub.LastMethod + " " + stub.LastPath, "PUT /api/voice-polish/plugins/example.dev-terms");
-
-    // Entries marked 「不发给模型」 go to the local service as {"local": entry}, after the ordinary ones.
-    var (marked, markedBytes) = ServiceClient.DictateBody(new byte[] { 1, 2 }, new[] { "DeepSeek" }, new[] { "张为=章伟" });
-    var markedJson = JsonSerializer.Deserialize<JsonElement>(marked.AsSpan(0, markedBytes));
-    Check("ordinary entries first, marked ones as {local}", markedJson[0].GetString() == "DeepSeek" && markedJson[1].GetProperty("local").GetString() == "张为=章伟");
-    Eq("no entries: the body is the WAV", ServiceClient.DictateBody(new byte[] { 1 }, null, new string[0]).DictionaryBytes, 0);
+    var (withProfile, profileBytes) = ServiceClient.DictateBody(new byte[] { 1, 2 }, "写周报");
+    Eq("the description goes first, in a JSON object", JsonSerializer.Deserialize<JsonElement>(withProfile.AsSpan(0, profileBytes)).GetProperty("profile").GetString(), "写周报");
+    Eq("no description: the body is the WAV", ServiceClient.DictateBody(new byte[] { 1 }, null).MetaBytes, 0);
 
     // The service proves it is ours before anything is sent to it.
     Eq("HMAC proof matches the service's (RFC 4231 case 2 key)",
@@ -603,20 +584,22 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         Eq("never writes no result", new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared).Entries.Count, 0);
         history.Clear(); Check("clear forgets memory result", history.Last is null);
         var settingsPath = Path.Combine(dir, "settings.json");
-        File.WriteAllText(settingsPath, "{\"words\":[\"heard=TypeLeast\",\"SenseVoice\"]}");
+        history.Add(new HistoryEntry { Text = "kept", Corrections = new() { new TermCorrection { From = "哭达", To = "CUDA" } }, Intention = "修复显存" });
+        Eq("nothing is kept with history off", history.LearningItems().Count, 0);
+        history.ApplyRetention("forever");
+        history.Add(new HistoryEntry { Text = "plain" });
+        history.Add(new HistoryEntry { Text = "learned", Corrections = new() { new TermCorrection { From = "哭达", To = "CUDA" } }, Intention = "修复显存" });
+        Eq("only entries with something learned are sent", history.LearningItems().Count, 1);
+        Check("…as corrections and intention, never the text", !JsonSerializer.Serialize(history.LearningItems()).Contains("learned"));
+        Eq("no description before the first launch writes one", history.Profile, "");
+        history.SetProfile("做 CUDA 开发");
+        Eq("the description is kept, protected", new LocalHistory(Path.Combine(dir, "history.json"), TestHistoryProtection.Shared).Profile, "做 CUDA 开发");
+        history.SetProfile(new string('字', 1200));
+        Eq("the description is capped at 1000 characters", history.Profile.Length, 1000);
+        history.Clear();
+        Eq("clearing History clears the description", history.Profile, "");
+        var settingsPath = Path.Combine(dir, "settings.json");
         var settings = LoadSettings(settingsPath);
-        Eq("legacy dictionary entries migrate", settings.DictionaryEntries.Count, 2);
-        Eq("legacy heardAs preserved", settings.DictionaryEntries[0].HeardAs, "heard");
-        Eq("legacy source is manual", settings.DictionaryEntries[0].Source, "manual");
-        Check("entries saved before 「不发给模型」 existed are sent as before", settings.DictionaryEntries.All(e => !e.LocalOnly));
-        var kept = JsonSerializer.Deserialize<WordEntry>("{\"Word\":\"章伟\",\"HeardAs\":\"张为\",\"LocalOnly\":true}", Json.Options)!;
-        Check("the mark survives saving", kept.LocalOnly && JsonSerializer.Deserialize<WordEntry>(JsonSerializer.Serialize(kept, Json.Options), Json.Options)!.LocalOnly);
-        var preview = WordImport.Preview("word,heardAs\nTypeLeast,heard\n\"Product, Name\",wrong\nnew,old\n\"unterminated", settings.DictionaryEntries);
-        Eq("CSV duplicates reported", preview.Duplicates, 1); Eq("CSV valid preview", preview.Valid.Count, 2);
-        Eq("CSV invalid line reported", preview.InvalidLines.Single(), 5);
-        Eq("CSV quoted commas preserved", preview.Valid[0].Word, "Product, Name");
-        Check("dictionary rejects controls", WordEntry.Parse("bad\nword") is null);
-        Check("dictionary enforces service limit", WordEntry.Parse(new string('a', 121)) is null);
         File.WriteAllText(settingsPath, "{broken"); var broken = LoadSettings(settingsPath);
         Check("corrupt settings block writes", broken.PersistenceBlocked);
         try { broken.Save(settingsPath, TestHistoryProtection.Shared); Check("cannot replace corrupt settings", false); } catch (IOException) { Check("cannot replace corrupt settings", File.ReadAllText(settingsPath) == "{broken"); }
@@ -813,31 +796,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
 }
 
 {
-    // Which word an edit teaches is decided by the service (service/test/edit-correction.test.js);
-    // the client test below checks the request.
-    var t0 = new DateTime(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
-    var poll = new EditPoll(t0, v => v != "hello deepseak");
-    Eq("the pasted text alone is not an edit", poll.Feed("hello deepseak", t0.AddSeconds(30)), EditPoll.Step.Wait);
-    Eq("mid-edit: wait", poll.Feed("hello deeps", t0.AddSeconds(33)), EditPoll.Step.Wait);
-    Eq("settling: wait", poll.Feed("hello deepseek", t0.AddSeconds(36)), EditPoll.Step.Wait);
-    Eq("settled for 6 s: judge", poll.Feed("hello deepseek", t0.AddSeconds(42)), EditPoll.Step.Judge);
-    var late = new EditPoll(t0, v => v != "x");
-    Eq("nothing is watched after 2 minutes", late.Feed("x", t0.AddSeconds(120)), EditPoll.Step.Stop);
-    Eq("an unreadable field ends the watch", new EditPoll(t0, _ => true).Feed(null, t0), EditPoll.Step.Stop);
-    Eq("the next dictation judges an edit at once", new EditPoll(t0, v => v != "x").Final("y"), "y");
-    Eq("…but not an untouched paste", new EditPoll(t0, v => v != "x").Final("x"), null);
-
-    // Detection lives in the service; local merge/ignore is still tested here.
-    using (var fixtures = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "suggestion-responses.json"))))
-    {
-        foreach (var sample in fixtures.RootElement.EnumerateArray())
-        {
-            var response = System.Text.Json.JsonSerializer.Deserialize<DictateResponse>(sample.GetProperty("response").GetRawText(), Json.Options)!;
-            var expected = sample.GetProperty("expectedWords").EnumerateArray().Select(e => e.GetString());
-            Eq("suggestion response: " + sample.GetProperty("id").GetString(), string.Join("|", response.Suggestions.Select(s => s.Word)), string.Join("|", expected));
-            Eq("optional suggestions cannot break text", response.InsertableText, "Result stays usable.");
-        }
-    }
     using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client-v2.json"))))
     {
         Eq("shared client contract version", contract.RootElement.GetProperty("version").GetInt32(), 2);
@@ -858,17 +816,10 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
             Eq("shared beta waiting: " + id, response.BetaWaiting, sample.GetProperty("betaWaiting").GetBoolean());
             var translation = sample.GetProperty("translated");
             Eq("shared translation result: " + id, response.Translated, translation.ValueKind == JsonValueKind.Null ? null : translation.GetString());
+            Eq("shared corrections: " + id, response.Corrections?.Count, sample.TryGetProperty("corrections", out var count) ? count.GetInt32() : (int?)null);
+            Eq("shared intention: " + id, response.Intention, sample.TryGetProperty("intention", out var intention) ? intention.GetString() : null);
         }
     }
-    var seenAt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Utc);
-    var none = new HashSet<string>();
-    var merged = WordSuggestions.Merge([], "DeepSeek", "德普西克", seenAt, none, none);
-    var originalSuggestion = merged[0];
-    merged = WordSuggestions.Merge(merged, "deepseek", "deep seek", seenAt, none, none);
-    Eq("merging a repeat does not mutate stored settings before saving", originalSuggestion.Count, 1);
-    Eq("a repeated suggestion is counted once", string.Join(",", merged.Select(m => m.Count)), "2");
-    Eq("a word already in the dictionary is not suggested", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, new HashSet<string> { "github" }, none).Count, 0);
-    Eq("an ignored word is not suggested again", WordSuggestions.Merge([], "GitHub", "get hub", seenAt, none, new HashSet<string> { "github" }).Count, 0);
     Eq("download progress is a fraction", UpdateProgressText.Fraction(UpdateStage.Downloading, 25 << 20, 50 << 20), 0.5);
     Eq("an unknown size shows a moving bar", UpdateProgressText.Fraction(UpdateStage.Downloading, 1, null), null);
     string WriteTemp(string json) { var f = Path.Combine(Path.GetTempPath(), "tl-src-" + Guid.NewGuid().ToString("N") + ".json"); File.WriteAllText(f, json); return f; }
@@ -889,10 +840,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Eq("a model downloading: ask often", HealthPolling.Interval(true, "ready", "downloading"), HealthPolling.Busy);
     Eq("all ready and idle: ask rarely", HealthPolling.Interval(true, "ready", null), HealthPolling.Idle);
     Eq("no model yet, nothing happening: rarely", HealthPolling.Interval(true, "missing-model", null), HealthPolling.Idle);
-    var (body, length) = ServiceClient.DictateBody([1, 2, 3], ["DeepSeek", "得普=DeepSeek"]);
-    Eq("the dictionary rides first, as JSON", System.Text.Json.JsonSerializer.Deserialize<string[]>(body.AsSpan(0, length))?.Length, 2);
-    Eq("then the WAV", string.Join(",", body[length..]), "1,2,3");
-    Eq("no dictionary: just the WAV", ServiceClient.DictateBody([1, 2, 3], []).DictionaryBytes, 0);
     var quarter = RingGeometry.ArcEnd(0.25, 10, 50, 50);
     Check("a quarter ends at 3 o'clock", Math.Abs(quarter.X - 60) < 1e-9 && Math.Abs(quarter.Y - 50) < 1e-9);
     var half = RingGeometry.ArcEnd(0.5, 10, 50, 50);
@@ -907,13 +854,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
     Check("稍后: not offered again in this run", !UpdatePolicy.ShouldOffer(newer, true, "1.18.0", false));
     Check("a newer version is offered even after 稍后", UpdatePolicy.ShouldOffer(new WindowsReleaseInfo("1.19.0", "v1.19.0", ""), true, "1.18.0", false));
     Check("not with 更新提醒 off", !UpdatePolicy.ShouldOffer(newer, false, null, false));
-    Check("learning is on for new installs", new AppSettings().LearnCorrections);
-    var old = Path.Combine(Path.GetTempPath(), "tl-learn-" + Guid.NewGuid().ToString("N") + ".json");
-    File.WriteAllText(old, """{"LearnCorrections":false}""");
-    Check("switched on once for settings from before", LoadSettings(old) is { LearnCorrections: true, LearningDefaults: 1 });
-    File.WriteAllText(old, """{"LearnCorrections":false,"LearningDefaults":1}""");
-    Check("a later choice to turn it off is kept", !LoadSettings(old).LearnCorrections);
-    File.Delete(old);
 }
 
 
@@ -957,40 +897,7 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
     Eq("the suggested mirror", ModelMirror.Suggested, "https://hf-mirror.com");
 }
 
-using (var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "personalization-v1.json"))))
-{
-    foreach (var item in contract.RootElement.GetProperty("cases").EnumerateArray())
-    {
-        var id = item.GetProperty("id").GetString()!;
-        var settings = new AppSettings { LearnCorrections = item.GetProperty("enabled").GetBoolean() };
-        if (item.TryGetProperty("initial", out var initial))
-            settings.DictionaryEntries = initial.EnumerateArray().Select(v => WordEntry.Parse(v.GetString()!)!).ToList();
-        if (item.TryGetProperty("ignored", out var ignored)) settings.DismissedSuggestions = ignored.EnumerateArray().Select(v => v.GetString()!).ToList();
-        settings.WordSuggestions = item.GetProperty("pending").EnumerateArray().Select(v => new WordSuggestion { Word = v.GetProperty("word").GetString()!, HeardAs = v.GetProperty("heardAs").GetString()! }).ToList();
-        var incoming = item.GetProperty("incoming").EnumerateArray().Select(v => new SuggestionCandidate(v.GetProperty("word").GetString()!, v.GetProperty("heardAs").GetString()!)).ToArray();
-        WordSuggestions.ApplyAutomatic(settings, incoming);
-        Eq("automatic dictionary: " + id, string.Join(",", settings.DictionaryEntries.Select(e => e.Word).Order()), string.Join(",", item.GetProperty("expected").EnumerateArray().Select(e => e.GetString()!).Order()));
-        Eq("pending dictionary: " + id, settings.WordSuggestions.Count, item.GetProperty("pendingCount").GetInt32());
-        if (settings.DictionaryEntries.FirstOrDefault(e => e.Source == "auto") is { } entry)
-        {
-            WordSuggestions.RememberDeletion(settings, [entry]);
-            settings.DictionaryEntries.Remove(entry);
-            var path = Path.Combine(Path.GetTempPath(), "typeleast-auto-dictionary-" + Guid.NewGuid().ToString("N") + ".json");
-            try
-            {
-                settings.LearningDefaults = 1;
-                settings.Save(path, TestHistoryProtection.Shared);
-                settings = LoadSettings(path);
-            }
-            finally { File.Delete(path); }
-            WordSuggestions.ApplyAutomatic(settings, [new(entry.Word, entry.HeardAs)]);
-            Check("deleted dictionary term stays removed: " + id, !settings.DictionaryEntries.Any(e => e.Word == entry.Word));
-        }
-    }
-}
-
 ContextPreferencesTests.Run(Check);
-PersonalizationPolicyTests.Run(Check);
 Console.WriteLine($"TESTS: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

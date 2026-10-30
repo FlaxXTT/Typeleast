@@ -54,8 +54,6 @@ class P
             if (random.NextDouble() < 0.35) continue;
             for (var n = random.Next(1, 9); n > 0; n--) host.Activity.Record(random.Next(12, 90), DateTime.Now.Date.AddDays(-day).AddHours(10));
         }
-        foreach (var (word, heard) in new[] { ("DeepSeek", "德普西克"), ("TypeLeast", ""), ("SenseVoice", ""), ("王小明", "王晓明") })
-            if (WordEntry.Parse(word, heard) is { } entry) host.Settings.DictionaryEntries.Add(entry);
         host.Settings.LlmPresetId = "deepseek"; host.Settings.LlmModel = "deepseek-flash";
         host.SaveSettings();
         // Screenshots show the ready state; no service runs in this renderer.
@@ -160,21 +158,6 @@ class P
         Console.WriteLine($"CONTROLLER CHECKS: {checks} passed");
     }
 
-    static void RenderDictionary(AppHost host,string dir,string language)
-    {
-        host.Settings.OnboardingDone=true;host.Settings.PracticeGateRequired=false;
-        host.Settings.DictionaryEntries.Clear();
-        host.Settings.DictionaryEntries.Add(WordEntry.Parse("Acme")!);host.Settings.DictionaryEntries.Add(WordEntry.Parse("Kubernetes","库伯内蒂斯")!);
-        host.Settings.DictionaryEntries.Add(WordEntry.Parse("LegacyTerm","","auto")!);
-        foreach(var appearance in new[]{"light","dark"}) {
-            Theme.Apply(appearance);
-            var page=new DictionaryPage(host);page.Refresh();
-            var scroll=new ScrollViewer {Content=page.View,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Padding=new Thickness(20),Background=Theme.Background};
-            Save(scroll,Path.Combine(dir,$"dictionary-{appearance}-{language}.png"),880,740);
-            scroll.Content=null;
-        }
-    }
-
     [STAThread]
     static int Main(string[] args)
     {
@@ -191,7 +174,6 @@ class P
                 L10n.Configure(language);
                 RenderUpdateWindow(dir);
                 RenderSpeechModels(host, dir, language);
-                RenderDictionary(host,dir,language);
                 foreach (var mode in new[] { "light", "dark" })
                 foreach (var strength in new[] { "prompt", "concise" })
                 {

@@ -24,7 +24,7 @@ public sealed class OperationTracker
 }
 
 public sealed record DictationOptions(string Language, string Strength, string? TranslateTo, string? Variants,
-    LlmRoute? Route, string InsertionMode = "autoPaste", bool LearnCorrections = false);
+    LlmRoute? Route, string InsertionMode = "autoPaste");
 
 /// <summary>Reset only after a stable service run, not merely receipt of a ready line.</summary>
 public sealed class RestartPolicy

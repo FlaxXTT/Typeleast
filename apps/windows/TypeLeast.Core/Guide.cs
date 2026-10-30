@@ -12,7 +12,6 @@ public static class SettingsGuide
         new(L10n.T("API Key"), L10n.T("设置 › 模型"), "settings", 1),
         new(L10n.T("快捷键"), L10n.T("设置 › 听写"), "settings", 0),
         new(L10n.T("语音模型"), L10n.T("设置 › 模型"), "settings", 1),
-        new(L10n.T("词典"), L10n.T("侧栏 › 词典"), "dictionary"),
         new(L10n.T("麦克风"), L10n.T("设置 › 通用"), "settings", 2),
     };
 }

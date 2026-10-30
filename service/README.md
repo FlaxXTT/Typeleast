@@ -3,9 +3,8 @@
 macOS 和 Windows 两个 App 共用的后台服务（Node.js，没有界面）：
 
 - **本地识别**：SenseVoice int8，用 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 在本机运行；超过 20 秒的录音先用 Silero VAD 按停顿切分。
-- **整理**：用 App 随请求带来的模型和 API Key（任何 OpenAI 兼容接口）调用大模型，提示词见 `lib/prompts/cleanup.js`；没有 Key 时返回去掉口水词的原文。
-- **校验**：防止模型编造数字、日期等事实，或改换语言；不通过就退回原文。
-- **历史和词典**：保存在状态目录里。
+- **整理**：用 App 随请求带来的模型和 API Key（任何 OpenAI 兼容接口）调用大模型，提示词见 `lib/prompts/cleanup.md`；没有 Key 时返回去掉口水词的原文。
+- **使用场景描述**：App 发来历史里的术语纠正和意图，生成一段不超过 1000 字的描述；之后每次整理附在提示词里。服务不保存。
 
 App 会自己启动和停止这个服务，普通用户不需要单独运行它。
 
@@ -39,7 +38,7 @@ npm start
 一般不需要。例如：
 
 ```json
-{ "timeoutMs": 15000, "dictionary": ["TypeLeast"], "numThreads": 4 }
+{ "timeoutMs": 15000, "numThreads": 4 }
 ```
 
 | 键 | 默认 | 说明 |
@@ -50,7 +49,6 @@ npm start
 | `strength` | `prompt` | `off` 不调模型；`conservative` / `prompt` / `maximal` 只影响校验的严格程度 |
 | `language` | `auto` | 识别语言：`auto`、`zh`、`en`、`yue`、`ja`、`ko` |
 | `numThreads` | 2 | 识别用的 CPU 线程数 |
-| `dictionary` | `[]` | 一定要这样写的词，或 `听成=正确写法` |
 | `redactSecrets` | `true` | 发给模型前抹掉看起来像密钥、密码的内容 |
 
 模型、接口地址和 API Key **不在**这里配置：App 每次请求时带过来，服务不保存。
@@ -62,10 +60,10 @@ npm start
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/health` | 状态：`ok`（识别就绪）、`service`、`version`、`speech`（`phase`、下载进度）、统计 |
-| POST | `/dictate` | 请求体是词典 JSON（字节数见 `x-voice-dictionary-bytes`，可为 0）加 16 kHz 单声道 16 位 WAV（44 字节头）；请求头 `x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-voice-context`、`x-voice-llm`（base64 JSON：`{baseURL, model, apiKey}`） |
-| POST | `/polish` | JSON `{text, strength?, llm?, dictionary?}`，只整理文字 |
+| POST | `/dictate` | 请求体是 JSON 对象 `{profile?}`（字节数见 `x-voice-meta-bytes`，可为 0）加 16 kHz 单声道 16 位 WAV（44 字节头）；请求头 `x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-voice-context`、`x-voice-llm`（base64 JSON：`{baseURL, model, apiKey}`） |
+| POST | `/polish` | JSON `{text, strength?, llm?, profile?}`，只整理文字 |
 | POST | `/test-llm` | JSON `{llm}`，测试一次模型连接 |
-| POST | `/learned-word` | JSON `{inserted, edited}`：粘贴的文字和用户改后的样子，返回 `{word}`（要加进词典的词，或 `null`）；只比较，不保存 |
+| POST | `/profile` | JSON `{llm, items}`：历史里的术语纠正和意图，返回 `{profile}`；只读取，不保存 |
 | POST | `/models/download` | 开始下载语音模型，进度见 `/health` |
 
 ## 测试

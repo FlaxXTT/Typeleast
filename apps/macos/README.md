@@ -6,7 +6,7 @@ caret. Recognition and cleanup are done by the TypeLeast local service
 (`../../service`), which this app starts, watches and stops by itself.
 
 The bundle id is `com.dsh.voice` for continuity with earlier builds (settings,
-history and the dictionary carry over).
+and history carry over).
 
 ## Requirements
 
@@ -47,7 +47,7 @@ history and the dictionary carry over).
 
 | Path | What |
 |---|---|
-| `~/Library/Application Support/TypeLeast/` | the service's token, runtime file, history, dictionary, `config.json` |
+| `~/Library/Application Support/TypeLeast/` | the service's token, runtime file, history, `config.json` |
 | `~/Library/Application Support/TypeLeast/models/` | speech models (about 241 MB) |
 | `~/Library/Preferences/com.dsh.voice.plist` | the app's settings and AES-GCM encrypted history |
 | `~/Library/Logs/TypeLeast/typeleast.log` | events, error codes and timings only (never keys or dictated text) |

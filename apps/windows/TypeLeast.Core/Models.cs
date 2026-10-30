@@ -112,52 +112,12 @@ public sealed class BetaInfo
     [JsonPropertyName("patched")] public bool? Patched { get; set; }
 }
 
-public sealed record SuggestionCandidate(string Word, string HeardAs);
-
-/// <summary>Bad optional suggestions never prevent decoding the actual dictation.</summary>
-public sealed class SuggestionListConverter : JsonConverter<List<SuggestionCandidate>>
+/// <summary>A term the cleanup model corrected, kept in History for the description of the user's work.</summary>
+public sealed class TermCorrection
 {
-    public override bool HandleNull => true;
-    public override List<SuggestionCandidate> Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
-    {
-        using var doc = JsonDocument.ParseValue(ref reader);
-        var result = new List<SuggestionCandidate>();
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return result;
-        foreach (var item in doc.RootElement.EnumerateArray().Take(8))
-        {
-            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("word", out var word) ||
-                word.ValueKind != JsonValueKind.String || !item.TryGetProperty("heardAs", out var heard) || heard.ValueKind != JsonValueKind.String) continue;
-            var w = word.GetString()!; var h = heard.GetString()!;
-            if (WordSuggestions.ValidCandidate(w, h))
-                result.Add(new(w, h));
-        }
-        return result;
-    }
-    public override void Write(Utf8JsonWriter writer, List<SuggestionCandidate> value, JsonSerializerOptions options)
-    {
-        writer.WriteStartArray();
-        foreach (var item in value.Take(8)) { writer.WriteStartObject(); writer.WriteString("word", item.Word); writer.WriteString("heardAs", item.HeardAs); writer.WriteEndObject(); }
-        writer.WriteEndArray();
-    }
-}
-
-public sealed class NameClarification
-{
-    [JsonPropertyName("candidate")] public string? Candidate {get;set;}
-    [JsonPropertyName("reason")] public string? Reason {get;set;}
-    [JsonPropertyName("question")] public string Question { get; set; } = "";
-    [JsonPropertyName("evidence")] public string Evidence { get; set; } = "";
-    [JsonPropertyName("target")] public string? Target { get; set; }
-    [JsonPropertyName("kind")] public string? Kind { get; set; }
-    [JsonPropertyName("personalizationDisabled")] public bool? PersonalizationDisabled { get; set; }
-    [JsonPropertyName("markerId")] public string? MarkerId { get; set; }
-}
-
-public sealed class ExplanationReceipt
-{
-    [JsonPropertyName("used")] public bool Used { get; set; }
-    [JsonPropertyName("segments")] public int Segments { get; set; }
-    [JsonPropertyName("markerId")] public string MarkerId { get; set; } = "";
+    [JsonPropertyName("from")] public string From { get; set; } = "";
+    [JsonPropertyName("to")] public string To { get; set; } = "";
+    [JsonPropertyName("reason")] public string? Reason { get; set; }
 }
 
 public sealed class TaskProgress
@@ -179,18 +139,13 @@ public sealed class DictateResponse
     [JsonPropertyName("raw")] public string Raw { get; set; } = "";
     [JsonPropertyName("fallback")] public bool Fallback { get; set; }
     [JsonPropertyName("fallbackReason")] public string? FallbackReason { get; set; }
-    /// <summary>The cleaned result was inserted although a check could not confirm it.</summary>
-    [JsonPropertyName("uncertain")] public bool Uncertain { get; set; }
     [JsonPropertyName("model")] public string? Model { get; set; }
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("ms")] public MsBreakdown? Ms { get; set; }
-    [JsonPropertyName("contextOnly")] public bool ContextOnly { get; set; }
-    [JsonPropertyName("explanation")] public ExplanationReceipt? Explanation { get; set; }
-    [JsonPropertyName("personalization")] public PersonalizationTrace? Personalization { get; set; }
-    [JsonPropertyName("clarification")] public NameClarification? Clarification { get; set; }
     [JsonPropertyName("beta")] public BetaInfo? Beta { get; set; }
-    [JsonPropertyName("suggestions"), JsonConverter(typeof(SuggestionListConverter))]
-    public List<SuggestionCandidate> Suggestions { get; set; } = new();
+    /// <summary>What the cleanup model corrected and understood; stored in History, never inserted.</summary>
+    [JsonPropertyName("corrections"), JsonConverter(typeof(LenientConverter<List<TermCorrection>>))] public List<TermCorrection>? Corrections { get; set; }
+    [JsonPropertyName("intention"), JsonConverter(typeof(LenientConverter<string>))] public string? Intention { get; set; }
     /// <summary>翻译模式: the language the text was written in.</summary>
     [JsonPropertyName("translated")] public string? Translated { get; set; }
 
@@ -200,7 +155,20 @@ public sealed class DictateResponse
 
     /// <summary>When fallback is true the service has already put the raw transcript in Text.</summary>
     [JsonIgnore] public bool BetaWaiting => !string.IsNullOrWhiteSpace(Beta?.SessionId);
-    [JsonIgnore] public string InsertableText => BetaWaiting || Clarification is not null || ContextOnly ? "" : Text.Length > 0 ? Text : Raw;
+    [JsonIgnore] public string InsertableText => BetaWaiting ? "" : Text.Length > 0 ? Text : Raw;
+}
+
+/// <summary>An optional field of the wrong shape is read as absent instead of failing the whole response.</summary>
+public sealed class LenientConverter<T> : JsonConverter<T> where T : class
+{
+    public override bool HandleNull => true;
+    public override T? Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+    {
+        using var doc = JsonDocument.ParseValue(ref reader);
+        try { return doc.RootElement.Deserialize<T>(options); }
+        catch (JsonException) { return null; }
+    }
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => JsonSerializer.Serialize(writer, value, options);
 }
 
 public sealed class LlmTestResult
@@ -210,65 +178,6 @@ public sealed class LlmTestResult
     [JsonPropertyName("code")] public string? Code { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
     [JsonPropertyName("sample")] public string? Sample { get; set; }
-}
-
-/// <summary>Answer of POST /learned-word: the word a fix right after a paste teaches, or null.</summary>
-public sealed class LearnedWordResult
-{
-    [JsonPropertyName("word")] public string? Word { get; set; }
-}
-
-/// <summary>An installed plugin as the service describes it.</summary>
-public sealed class PluginSummary
-{
-    [JsonPropertyName("id")] public string Id { get; set; } = "";
-    [JsonPropertyName("version")] public string Version { get; set; } = "";
-    [JsonPropertyName("type")] public string Type { get; set; } = "";
-    [JsonPropertyName("name")] public Dictionary<string, string> Name { get; set; } = new();
-    [JsonPropertyName("description")] public Dictionary<string, string> Description { get; set; } = new();
-    [JsonPropertyName("author")] public string Author { get; set; } = "";
-    [JsonPropertyName("license")] public string License { get; set; } = "";
-    [JsonPropertyName("homepage")] public string? Homepage { get; set; }
-    [JsonPropertyName("termCount")] public int? TermCount { get; set; }
-    [JsonPropertyName("termsPreview")] public List<string>? TermsPreview { get; set; }
-    [JsonPropertyName("aliasCount")] public int? AliasCount { get; set; }
-    [JsonPropertyName("aliasesPreview")] public List<PluginAliasPreview>? AliasesPreview { get; set; }
-    [JsonPropertyName("source")] public string? Source { get; set; }
-    [JsonPropertyName("enabled")] public bool? Enabled { get; set; }
-
-    [JsonIgnore] public string Title => Name.GetValueOrDefault(L10n.Language == "en" ? "en" : "zh-Hans") ?? Id;
-    [JsonIgnore] public string Summary => Description.GetValueOrDefault(L10n.Language == "en" ? "en" : "zh-Hans") ?? "";
-}
-
-public sealed class PluginAliasPreview
-{
-    [JsonPropertyName("heard")] public string Heard { get; set; } = "";
-    [JsonPropertyName("term")] public string Term { get; set; } = "";
-    [JsonPropertyName("cues")] public List<string> Cues { get; set; } = new();
-    [JsonPropertyName("blockers")] public List<string>? Blockers { get; set; }
-}
-
-/// <summary>Answer of GET /plugins and of every change.</summary>
-public sealed class PluginState
-{
-    [JsonPropertyName("plugins")] public List<PluginSummary> Plugins { get; set; } = new();
-    [JsonPropertyName("style")] public string? Style { get; set; }
-    [JsonPropertyName("problems")] public List<string>? Problems { get; set; }
-}
-
-/// <summary>What the Dictionary page says for a plugin error code.</summary>
-public static class PluginMessages
-{
-    public static string Describe(string? code) => code switch
-    {
-        "plugin-terms-limit" => L10n.T("已启用的词库合计最多 10000 个词"),
-        "plugin-aliases-limit" => L10n.T("已启用的读音提示合计最多 1000 条"),
-        "plugin-not-found" => L10n.T("找不到插件，请刷新"),
-        _ => L10n.T("没有完成，请重试"),
-    };
-
-    public static string Describe(ServiceException error) =>
-        error.Kind == ServiceErrorKind.Http ? Describe(error.Code) : L10n.T("本地服务未就绪，请稍后重试");
 }
 
 public sealed class ApiErrorBody

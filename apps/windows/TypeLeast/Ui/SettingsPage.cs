@@ -208,8 +208,7 @@ internal sealed class SettingsPage : IPage
                 Theme.SettingRow(L10n.T("提示音"), null, Theme.Toggle(s.PlaySounds, v => { s.PlaySounds = v; host.SaveSettings(); })),
                 Theme.SettingRow(L10n.T("听写时静音"), null, Theme.Toggle(s.MuteOtherAudio, v => { s.MuteOtherAudio = v; host.SaveSettings(); }))),
             Section(L10n.T("整理选项"),
-                Theme.SettingRow(L10n.T("参考输入框内容"), null, Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); })),
-                Theme.SettingRow(L10n.T("自动加词"), Theme.Text(L10n.T("粘贴后你改过的词加入词典。"), 12, Theme.Grey), Theme.Toggle(s.LearnCorrections, v => { s.LearnCorrections = v; if (host.SaveSettings() && !v) host.Dictionary.StopWatching(); }))));
+                Theme.SettingRow(L10n.T("参考输入框内容"), null, Theme.Toggle(s.UseFieldContext, v => { s.UseFieldContext = v; host.SaveSettings(); }))));
         AddTab(L10n.T("模型"),
             modelSection,
             Section(L10n.T("语音模型"),

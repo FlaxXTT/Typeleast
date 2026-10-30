@@ -57,8 +57,8 @@ public sealed class AppSettings
     public bool GuideDismissed { get; set; }
     /// <summary>-1 = the system default microphone.</summary>
     public int MicrophoneDevice { get; set; } = -1;
-    public List<string> Words { get; set; } = new();
-    public List<WordEntry> DictionaryEntries { get; set; } = new();
+    /// <summary>The dictionary of earlier versions, sealed; no longer used, kept so nothing is lost.</summary>
+    public string? ProtectedVocabulary { get; set; }
     public string HistoryRetention { get; set; } = "forever";
     /// <summary>Keep each recording for five minutes (RetainedAudio.Lifetime) for History's retry; the stored name is older.</summary>
     public bool KeepAudio24h { get; set; }
@@ -66,14 +66,6 @@ public sealed class AppSettings
     public bool ShowInTaskbar { get; set; } = true;
     public bool ShowIdleBar { get; set; }
     public bool UseFieldContext { get; set; }
-    /// <summary>On by default (as on the Mac): it compares the field on this computer only.</summary>
-    public bool LearnCorrections { get; set; } = true;
-    /// <summary>1 once LearnCorrections got its new default; before 1.17.6 it was off for everyone.</summary>
-    public int LearningDefaults { get; set; }
-    /// <summary>Terms the cleanup model corrected, waiting on the Dictionary page.</summary>
-    public List<WordSuggestion> WordSuggestions { get; set; } = new();
-    /// <summary>Suggestions the user ignored (lowercase), never offered again.</summary>
-    public List<string> DismissedSuggestions { get; set; } = new();
     public bool PlaySounds { get; set; } = true;
     public bool MuteOtherAudio { get; set; }
     /// <summary>Ctrl+Shift+V is paste in terminals and paste-as-plain-text in browsers and Office,
@@ -130,23 +122,13 @@ public sealed class AppSettings
                     if (!document.RootElement.EnumerateObject().Any(x => string.Equals(x.Name, "PracticeGateRequired", StringComparison.OrdinalIgnoreCase)))
                         loaded.PracticeGateRequired = false;
                 }
-                using(var document=JsonDocument.Parse(File.ReadAllText(path)))VocabularyStorage.Decode(document.RootElement,loaded,protection);
                 loaded.Strength = CleanupModes.Stored(loaded.Strength);
                 loaded.ApplyUnifiedDictation();
                 loaded.LlmBaseUrls ??= new();
                 loaded.LlmModels ??= new();
-                loaded.Words ??= new();
-                loaded.DictionaryEntries ??= new();
-                loaded.WordSuggestions ??= new();
-                loaded.DismissedSuggestions ??= new();
-                if (loaded.DictionaryEntries.Any(e => e is null || e.Word is null || e.HeardAs is null || WordEntry.Parse(e.Word, e.HeardAs, e.Source) is null)) throw new JsonException("Invalid dictionary entries");
                 if (!Enum.IsDefined(loaded.Hotkey)) loaded.Hotkey = DictationKey.RightAlt;
                 if (loaded.TranslateHotkey is { } key && !Enum.IsDefined(key)) loaded.TranslateHotkey = null;
                 if (loaded.AssistantHotkey is { } assistant && !Enum.IsDefined(assistant)) loaded.AssistantHotkey = null;
-                // Settings from before structured entries kept plain strings here; read once, no longer written.
-                if (loaded.DictionaryEntries.Count == 0)
-                    loaded.DictionaryEntries = loaded.Words.Select(WordEntry.FromLegacy).OfType<WordEntry>().ToList();
-                loaded.Words = new();
                 if (!new[] { "forever", "year", "month", "week", "day", "never" }.Contains(loaded.HistoryRetention)) loaded.HistoryRetention = "forever";
                 if (!new[] { "system", "light", "dark" }.Contains(loaded.Appearance)) loaded.Appearance = "system";
                 if (!UpdateSources.Modes.Contains(loaded.UpdateSource)) loaded.UpdateSource = "auto";
@@ -157,8 +139,6 @@ public sealed class AppSettings
                 // The two keys must differ; the dictation key wins.
                 if (loaded.TranslateHotkey == loaded.Hotkey) loaded.TranslateHotkey = null;
                 if (loaded.AssistantHotkey == loaded.Hotkey || loaded.AssistantHotkey == loaded.TranslateHotkey) loaded.AssistantHotkey = null;
-                // Learning used to be off by default and was easy to miss: switch it on once.
-                if (loaded.LearningDefaults < 1) { loaded.LearnCorrections = true; loaded.LearningDefaults = 1; }
                 // The old default took Ctrl+Shift+V from every app: move it once.
                 if (loaded.PasteShortcutDefaults < 1)
                 {
@@ -186,7 +166,7 @@ public sealed class AppSettings
         ApplyUnifiedDictation();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
-        File.WriteAllText(temp, VocabularyStorage.Encode(this, protection));
+        File.WriteAllText(temp, JsonSerializer.Serialize(this, Json.Options));
         File.Move(temp, path, overwrite: true);
     }
 }

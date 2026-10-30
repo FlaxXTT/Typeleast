@@ -22,8 +22,8 @@ internal static class ContextPreferencesTests
             Assert("a failed cleanup does not pass",progress.Accept(response,2)==PracticeProgress.Outcome.NotCleaned&&!progress.Complete);response.Fallback=false;
             response.Text="周四交，不超过三页。";
             Assert("any recognised and cleaned sentence passes",progress.Accept(response,2)==PracticeProgress.Outcome.Passed&&progress.Complete);
-            response.ContextOnly=true;
-            Assert("context-only response is never insertable",response.InsertableText=="");
+            response.Corrections=new() {new TermCorrection {From="哭达",To="CUDA"}};response.Intention="交周报";
+            Assert("corrections and intention never reach the inserted text",response.InsertableText=="周四交，不超过三页。");
         } finally {Directory.Delete(directory,true);}
     }
 }
