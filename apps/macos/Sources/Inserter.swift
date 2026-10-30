@@ -20,9 +20,6 @@ enum PasteResult {
 
     var ok: Bool { self == .pasted || self == .unverified }
 
-    /// Whether the menu should offer the permission path.
-    var needsAccessibility: Bool { self == .unverified }
-
     var message: String {
         switch self {
         case .pasted: return L10n.text("已粘贴")

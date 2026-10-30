@@ -243,11 +243,6 @@ struct SettingsPage: View {
         }
     }
 
-    private var speechDetail: String {
-        let problem = AppDelegate.speechProblem(model.speech)
-        return problem.isEmpty ? L10n.text("就绪，音频不出本机") : problem
-    }
-
     private var loginDetail: String {
         if !loginError.isEmpty { return loginError }
         // Switched off under System Settings → Login Items: only the user can allow it again there.

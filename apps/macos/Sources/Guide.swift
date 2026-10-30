@@ -52,25 +52,6 @@ struct GuideList: View {
     }
 }
 
-/// 「设置在哪」on the home page until the user says they know.
-struct GuideCard: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(L10n.text("设置位置")).font(.system(size: 14, weight: .semibold))
-                    Spacer()
-                    Button(L10n.text("好")) { model.dismissGuide() }
-                        .buttonStyle(.plain).font(.system(size: 12.5)).foregroundColor(Theme.secondary)
-                }
-                GuideList { SettingsGuide.open($0, in: model) }
-            }
-        }
-    }
-}
-
 /// Speech models come from huggingface.co, which some networks block or slow down.
 enum ModelMirror {
     static let suggested = "https://hf-mirror.com"

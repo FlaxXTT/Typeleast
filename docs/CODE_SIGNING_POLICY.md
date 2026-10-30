@@ -58,7 +58,6 @@ Visual C++ runtime:
 | Node.js | MIT |
 | sherpa-onnx (including ONNX Runtime) | Apache-2.0 (ONNX Runtime: MIT) |
 | opencc-js | MIT and Apache-2.0 |
-| pinyin-pro (Chinese to pinyin, for local dictionary suggestions) | MIT |
 | Inter, Noto Sans SC fonts | SIL Open Font License 1.1 |
 | Microsoft Visual C++ runtime (`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`) | Microsoft redistributable system runtime, shipped beside sherpa-onnx so it loads on Windows without the redistributable installed |
 

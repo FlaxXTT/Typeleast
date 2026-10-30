@@ -27,7 +27,6 @@ internal static class Native
     [DllImport("user32.dll")] public static extern IntPtr GetOpenClipboardWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner();
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     /// <summary>Move a window to a position in physical pixels (no size, z-order or activation change).</summary>
@@ -41,12 +40,6 @@ internal static class Native
         return root == IntPtr.Zero ? hwnd : root;
     }
 
-    /// <summary>Windows 11 rounded corners for a window (DWMWA_WINDOW_CORNER_PREFERENCE); ignored on Windows 10.</summary>
-    public static void RoundCorners(IntPtr hwnd, bool small)
-    {
-        var preference = small ? 3 : 2;
-        try { DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int)); } catch (Exception) { }
-    }
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
     public const int WH_KEYBOARD_LL = 13;
@@ -134,9 +127,6 @@ internal static class Native
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-    [DllImport("user32.dll")]
-    public static extern short GetKeyState(int nVirtKey);
 
     // ---- Credential Manager
 

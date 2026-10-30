@@ -142,13 +142,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func selectStrength(_ code: String) {
-        guard phase == .idle else { return }
-        if let actions = actions { actions.setCleanupMode(code) }
-        else { setting(\.strength).wrappedValue = code }
-        objectWillChange.send()
-    }
-
     var hotkeyLabel: String {
         let main = settings.hotkeyMain
         return main.isFn ? "fn" : HotKeyCentre.describe(keyCode: main.keyCode, modifiers: main.modifiers)

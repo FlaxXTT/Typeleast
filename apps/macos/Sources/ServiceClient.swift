@@ -194,7 +194,6 @@ struct HealthResponse: Codable, Equatable {
     }
 
     var speechReady: Bool { speech?.ready ?? false }
-    var speechPhase: String { speech?.phase ?? "" }
 }
 
 // MARK: - Response models (frozen contract)
@@ -729,22 +728,6 @@ final class ServiceClient {
         }
     }
 
-    /// Start the one-time model download (about 241 MB); progress shows in /health.
-    func downloadModelsSync(endpoint: String? = nil) throws {
-        try withPortRetry {
-            try withTokenRetry { token in
-                var object: [String: Any] = [:]
-                // Always sent: an empty mirror means huggingface.co, so clearing it needs no service restart.
-                object["endpoint"] = endpoint ?? ""
-                let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
-                let req = try makeRequest(path: "/api/voice-polish/models/download", method: "POST", token: token,
-                                          headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)
-                let (data, resp) = try performSync(req, timeout: healthTimeout)
-                guard resp.statusCode == 202 || resp.statusCode == 200 else { throw httpError(resp, data) }
-            }
-        }
-    }
-
     func speechModelsSync() throws -> SpeechModelCatalog {
         try withPortRetry { try withTokenRetry { token in
             let req = try makeRequest(path: "/api/voice-polish/models", method: "GET", token: token, timeout: healthTimeout)
@@ -824,8 +807,6 @@ final class ServiceClient {
         guard resp.statusCode == 200 else { throw ServiceError.http(status: resp.statusCode, code: nil, message: "") }
         return LLMRoute.modelIDs(from: data)
     }
-
-    func isReachable() -> Bool { (try? healthSync()) != nil }
 }
 
 /// A model reached with the user's own key over the OpenAI-compatible protocol.

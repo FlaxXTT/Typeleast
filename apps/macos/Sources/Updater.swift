@@ -154,9 +154,6 @@ enum Updater {
               let release = release(from: data) else { throw UpdateError.unreachable }
         return release
     }
-    static func publicLatestTag() -> String? {
-        (try? latestRelease()).map { "v" + $0.version }
-    }
 
     /// Download a release file from the public release page into `folder`, reporting bytes
     /// received and the total (when the server says it) as it goes.
@@ -205,11 +202,6 @@ enum Updater {
             if error != nil { saved = false }
             done.signal()
         }
-    }
-
-    /// The newest published version, e.g. "1.4.0".
-    static func latestVersion() throws -> String {
-        try latestRelease().version
     }
 
     // MARK: this Mac's signing certificate

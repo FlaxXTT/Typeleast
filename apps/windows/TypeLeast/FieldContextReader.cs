@@ -35,17 +35,4 @@ internal static class FieldContextReader
         try { using var doc = System.Text.Json.JsonDocument.Parse(json); return doc.RootElement.GetProperty("before").GetString(); }
         catch (Exception) { return null; }
     }
-
-    public static string? ReadLearningField(FieldTarget target)
-    {
-        if (Read(target) is null) return null;
-        try
-        {
-            var field = AutomationElement.FocusedElement;
-            if (field?.TryGetCurrentPattern(TextPattern.Pattern, out var pattern) != true) return null;
-            var value = ((TextPattern)pattern).DocumentRange.GetText(2001);
-            return value.Length <= 2000 ? value : null;
-        }
-        catch (Exception) { return null; }
-    }
 }

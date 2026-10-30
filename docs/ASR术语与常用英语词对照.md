@@ -4,7 +4,7 @@
 
 本机 ASR 给出文字，整理模型只负责修正有证据支持的写法。一个普通英语词与产品名同形、同音，**读音相近并不能证明说话人指的是产品**。词库关闭时，自然整理提示词不再列举任何技术品牌。
 
-分析时参考 [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict) 的美式英语读音和 [Ghent University SUBTLEX-US](https://www.ugent.be/plone_portal/pp/experimentele-psychologie/en/research/documents/subtlexus/overview.htm) 的常用词频。读音和词频只能帮助找出易混淆的词，不能单独决定一句话的意思；资料只用于开发分析，不随安装包分发。中文近音仍使用项目已有的 `pinyin-pro`，不能据此推断说话人的口音。
+分析时参考 [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict) 的美式英语读音和 [Ghent University SUBTLEX-US](https://www.ugent.be/plone_portal/pp/experimentele-psychologie/en/research/documents/subtlexus/overview.htm) 的常用词频。读音和词频只能帮助找出易混淆的词，不能单独决定一句话的意思；资料只用于开发分析，不随安装包分发。这些资料不能用来推断说话人的口音。
 
 | 类别 | 原话样例 | 可能的专名 | 处理依据 |
 |---|---|---|---|

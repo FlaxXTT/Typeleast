@@ -135,13 +135,6 @@ internal sealed class TrayMenu : Window
 
     private void Separator() => rows.Children.Add(new Border { Height = 1, Background = Theme.Line, Margin = new Thickness(10, 5, 10, 5) });
 
-    private void Heading(string text)
-    {
-        var label = Theme.Text(text, 11.5, Theme.Grey, wrap: false);
-        label.Margin = new Thickness(10, 4, 10, 2);
-        rows.Children.Add(label);
-    }
-
     private void Item(string glyph, string label, string shortcut, bool enabled, Action action, bool chosen = false)
     {
         var grid = new Grid { Height = 34 };
