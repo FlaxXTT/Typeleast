@@ -316,12 +316,6 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.launchAtLogin"); changed() }
     }
 
-    /// The home page's 「设置在哪」 card was dismissed with 知道了.
-    var guideDismissed: Bool {
-        get { d.bool(forKey: "ui.guideDismissed.v1") }
-        set { d.set(newValue, forKey: "ui.guideDismissed.v1"); changed() }
-    }
-
     var needsPractice: Bool { d.bool(forKey: "ui.practiceGate.v1") && !onboardingDone }
 
     var onboardingDone: Bool {

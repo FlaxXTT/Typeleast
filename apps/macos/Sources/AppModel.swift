@@ -128,11 +128,6 @@ final class AppModel: ObservableObject {
         )
     }
 
-    func dismissGuide() {
-        settings.guideDismissed = true
-        objectWillChange.send()
-    }
-
     /// Download again after a failure: the model whose download failed, else the default one.
     func retryModelDownload() {
         if let operation = speech?.operation ?? speechCatalog?.operation, operation.phase == "error" {
