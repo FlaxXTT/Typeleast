@@ -429,45 +429,33 @@ final class DictationController {
     // MARK: insertion
 
     func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?) {
-        // A terminal gets one line without control characters: this reduces accidental command execution.
-        // Elsewhere a list never starts right after the text the cursor follows.
-        let text = TerminalGuard.isTerminal(appBundleId) ? TerminalGuard.safeText(text, bundleId: appBundleId)
-            : Inserter.separatingList(text, before: field?.bundleId == appBundleId ? field?.context.before : nil)
-        // The user may have moved on while the text was being cleaned up. Pasting
-        // into whatever is in front now could type into a terminal or the wrong
-        // chat, so nothing is pasted and the clipboard is left alone; the text is
-        // in History and one "paste last" away.
-        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        func notPasted(_ short: String, _ long: String) {
-            if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
-            let paste = settings.hotkeyPasteLast
-            let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
-            recordingBar.showResult(short + (key.isEmpty ? L10n.text("，未粘贴 · 见历史") : L10n.text("，未粘贴 · 按 ") + key + L10n.text(" 贴到这里")),
-                                    warning: true)
-            setHint(long + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 贴到这里。历史里也有。")),
-                    warning: true)
-            applyState()
-        }
-        guard PasteTarget.matches(expected: appBundleId, frontmost: frontmost) else {
-            notPasted(L10n.text("已切换应用"), L10n.text("整理时切换了应用，未粘贴。"))
-            return
-        }
-        // The cursor the user placed first is where the text goes, even if it moved meanwhile.
-        // When that field is gone (closed, another tab), pasting into whatever has focus now
-        // would put the text in the wrong place.
-        if let field, field.bundleId == appBundleId, FieldContextReader.restoreCaret(field) == .lost {
-            notPasted(L10n.text("输入框已切换"), L10n.text("整理时原来的输入框已关闭或切换，未粘贴。"))
-            return
-        }
-        let rich = Inserter.richListApps.contains(appBundleId)
-            ? Inserter.listHTML(for: text) : nil
-        Inserter.shared.insert(text, richHTML: rich) { [weak self] result, _ in
+        let text = Delivery.prepare(text, appBundleId: appBundleId, field: field)
+        Delivery.deliver(text, appBundleId: appBundleId, field: field) { [weak self] outcome in
             guard let self = self else { return }
-            self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message, warning: !result.ok)
-            self.recordingBar.showResult(text, warning: !result.ok || fallback)
-            if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
-            self.applyState()
+            switch outcome {
+            case .pasted(let result):
+                self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message, warning: !result.ok)
+                self.recordingBar.showResult(text, warning: !result.ok || fallback)
+                if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
+                self.applyState()
+            case .appChanged:
+                self.notPasted(entryId, L10n.text("已切换应用"), L10n.text("整理时切换了应用，未粘贴。"))
+            case .fieldLost:
+                self.notPasted(entryId, L10n.text("输入框已切换"), L10n.text("整理时原来的输入框已关闭或切换，未粘贴。"))
+            }
         }
+    }
+
+    /// Nothing was pasted: say why, and how to paste it from History.
+    private func notPasted(_ entryId: String?, _ short: String, _ long: String) {
+        if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
+        let paste = settings.hotkeyPasteLast
+        let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
+        recordingBar.showResult(short + (key.isEmpty ? L10n.text("，未粘贴 · 见历史") : L10n.text("，未粘贴 · 按 ") + key + L10n.text(" 贴到这里")),
+                                warning: true)
+        setHint(long + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 贴到这里。历史里也有。")),
+                warning: true)
+        applyState()
     }
 
     /// "Paste last transcript": re-insert the newest entry at the cursor.

@@ -30,16 +30,6 @@ enum PasteResult {
     }
 }
 
-/// Where a finished dictation may be pasted.
-enum PasteTarget {
-    /// Only into the app the dictation started in. Cleanup takes about a second, and a
-    /// paste that follows the user to another window (a terminal, a chat) is worse than
-    /// no paste at all. An unknown starting app cannot be checked, so it is allowed.
-    static func matches(expected: String, frontmost: String) -> Bool {
-        expected.isEmpty || expected == frontmost
-    }
-}
-
 final class Inserter {
     static let shared = Inserter()
 
