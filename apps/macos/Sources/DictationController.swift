@@ -437,6 +437,8 @@ final class DictationController {
             applyState()
             return
         }
+        // The cursor the user placed first is where the text goes, even if it moved meanwhile.
+        if let field, field.bundleId == appBundleId { FieldContextReader.restoreCaret(field) }
         let rich = Inserter.richListApps.contains(appBundleId)
             ? Inserter.listHTML(for: text) : nil
         Inserter.shared.insert(text, richHTML: rich) { [weak self] result, _ in

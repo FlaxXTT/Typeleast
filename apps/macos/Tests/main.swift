@@ -622,7 +622,7 @@ do {
           "level=" + String(policy.level))
     check("pill panel joins all spaces", policy.joinsAllSpaces)
     check("pill panel shows over full-screen apps", policy.fullScreenAuxiliary)
-    check("pill panel cannot become key while idle", !policy.canBecomeKey)
+    check("pill panel can never become key, so a paste never lands in it", !policy.canBecomeKey)
     check("pill panel can never become main", !policy.canBecomeMain)
     check("pill panel reports itself off screen", !policy.onScreen)
 
@@ -717,6 +717,14 @@ do {
     checkEq("a bullet after text starts on a new line", Inserter.separatingList("- 第一项", before: "前文"), "\n- 第一项")
     checkEq("ordinary text is never moved", Inserter.separatingList("2026 年的计划", before: "他说的话"), "2026 年的计划")
     checkEq("…nor a decimal at the start", Inserter.separatingList("3.5 万元的预算", before: "他说的话"), "3.5 万元的预算")
+    check("the first cursor still holds when text after it changed",
+          CaretAnchor.stillValid(before: "你好，", selected: "", value: "你好，世界又多了几个字", location: 3, length: 0))
+    check("…and when the selection then is still there",
+          CaretAnchor.stillValid(before: "你好，", selected: "世界", value: "你好，世界", location: 3, length: 2))
+    check("an edit before the first cursor drops the anchor",
+          !CaretAnchor.stillValid(before: "你好，", selected: "", value: "您好，世界", location: 3, length: 0))
+    check("…as does an offset past the end",
+          !CaretAnchor.stillValid(before: "", selected: "", value: "短", location: 5, length: 0))
     let html = Inserter.listHTML(for: "我说三点：\n1. 要快\n2. 要准\n3. 要便宜")
     check("numbered lines become an ordered list", html?.contains("<ol><li>要快</li><li>要准</li><li>要便宜</li></ol>") == true, html ?? "nil")
     check("the lead-in stays a paragraph", html?.contains("<p>我说三点：</p>") == true)
