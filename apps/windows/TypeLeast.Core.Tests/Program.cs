@@ -882,7 +882,7 @@ using (var notes = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.B
 // ---- new-user guide: every entry names a place; a failed model download offers a mirror
 {
     var entries = SettingsGuide.Entries;
-    Eq("the guide lists six places", entries.Count, 6);
+    Eq("the guide lists five places", entries.Count, 5);
     Check("every guide entry says where it is", entries.All(e => e.Place.Length > 0));
     Eq("the API key lives under Settings › Models", entries.First(e => e.Title == L10n.T("API Key")).Tab, 1);
     Eq("the speech model lives under Settings › Models", entries.First(e => e.Title == L10n.T("语音模型")).Tab, 1);
