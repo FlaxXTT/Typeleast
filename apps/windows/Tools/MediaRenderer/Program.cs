@@ -142,7 +142,7 @@ class P
         host.SetStrength("concise");
         Check(host.Settings.Strength == mode, "a tier selection does not change the single mode");
         var beta = new BetaController(new ServiceClient(), () => { });
-        var options = new DictationOptions("zh", "promptbeta", null, null, null, "clipboardOnly", false);
+        var options = new DictationOptions("zh", "promptbeta", null, null, null, "clipboardOnly");
         var first = new DictateResponse { Beta = new BetaInfo { SessionId = "round1" } };
         Check(beta.Show(first, options, new IntPtr(123), "original.exe", null, "F8"), "first Beta round");
         var next = new DictateResponse { Beta = new BetaInfo { SessionId = "round2" } };

@@ -598,8 +598,6 @@ Eq("terminal paste strips controls", TerminalGuard.SafeText("a\u001bb\u0003c\u20
         Eq("the description is capped at 1000 characters", history.Profile.Length, 1000);
         history.Clear();
         Eq("clearing History clears the description", history.Profile, "");
-        var settingsPath = Path.Combine(dir, "settings.json");
-        var settings = LoadSettings(settingsPath);
         File.WriteAllText(settingsPath, "{broken"); var broken = LoadSettings(settingsPath);
         Check("corrupt settings block writes", broken.PersistenceBlocked);
         try { broken.Save(settingsPath, TestHistoryProtection.Shared); Check("cannot replace corrupt settings", false); } catch (IOException) { Check("cannot replace corrupt settings", File.ReadAllText(settingsPath) == "{broken"); }
