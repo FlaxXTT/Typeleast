@@ -73,7 +73,6 @@ npm start
 ```bash
 npm test
 node scripts/check-redaction.mjs
-node scripts/check-facts.mjs
 node scripts/tune-novelty.mjs
 ```
 

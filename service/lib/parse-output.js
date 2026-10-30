@@ -1,10 +1,10 @@
 /**
  * Parse a polishing reply into insertable text.
  *
- * The cleanup prompt asks the model to answer with
- * `{ "status": "ok" | "uncertain", "text": "...", "reason": "..." }`, where
- * "uncertain" still carries the model's best guess (it is used, and the usual
- * checks still apply). A model does not
+ * The cleanup prompt's examples answer with
+ * `{ "status": "success", "Terminology correction": [...], "user intention": "...", "text": "..." }`;
+ * "ok" and "uncertain" are accepted too. Only `text` is inserted; the corrections and the
+ * intention go to the app's history. A model does not
  * always comply: it may fence the JSON, add a sentence before it, or ignore the
  * schema entirely. None of those may end up in the user's document — a stray
  * brace or a duplicated answer is worse than falling back to the raw transcript.
@@ -36,6 +36,22 @@ function decodeJsonString(literal) {
   }
 }
 
+/** Bounded corrections and intention from a reply, for the app's history. */
+function learned(parsed) {
+  const list = parsed["Terminology correction"] ?? parsed.corrections;
+  const corrections = (Array.isArray(list) ? list : []).slice(0, 40).flatMap((item) => {
+    const from = typeof item?.asr_error === "string" ? item.asr_error.trim().slice(0, 120) : "";
+    const to = typeof item?.corrected_term === "string" ? item.corrected_term.trim().slice(0, 120) : "";
+    const why = typeof item?.reason === "string" ? item.reason.trim().slice(0, 300) : "";
+    return from && to ? [{ from, to, ...(why ? { reason: why } : {}) }] : [];
+  });
+  const intention = parsed["user intention"] ?? parsed.intention;
+  return {
+    ...(corrections.length ? { corrections } : {}),
+    ...(typeof intention === "string" && intention.trim() ? { intention: intention.trim().slice(0, 2000) } : {}),
+  };
+}
+
 /**
  * Parse one model reply.
  * @param {string} raw - the model's reply.
@@ -52,7 +68,7 @@ export function parsePolishOutput(raw) {
     if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
       const status = typeof parsed.status === "string" ? parsed.status : undefined;
       const reason = typeof parsed.reason === "string" ? parsed.reason : null;
-      if (status !== undefined && status !== "ok" && status !== "uncertain") {
+      if (status !== undefined && !["ok", "uncertain", "success"].includes(status)) {
         // The status is the model's own text and may repeat what was dictated: it never
         // goes into the failure code, which reaches the logs, /health and history.
         return { ok: false, text: "", reason, mode: "json", failure: "unexpected-status" };
@@ -60,18 +76,13 @@ export function parsePolishOutput(raw) {
       if (typeof parsed.text === "string") {
         const text = parsed.text.trim();
         if (text.length === 0) return { ok: false, text: "", reason, mode: "json", failure: "empty-text" };
-        return { ok: true, text, reason, mode: "json", ...(parsed.clarification ? { clarification: parsed.clarification } : {}) };
+        return { ok: true, text, reason, mode: "json", ...learned(parsed) };
       }
       // An object without a text field is not insertable.
       return { ok: false, text: "", reason, mode: "json", failure: "no-text-field" };
     }
   } catch {
     // Fall through to the recovery paths.
-  }
-
-  // A damaged confirmation envelope must never become insertable via regex recovery.
-  if (/"clarification"\s*:/u.test(stripped)) {
-    return { ok: false, text: "", reason: null, mode: "none", failure: "invalid-clarification" };
   }
 
   // 2. Recover a text field from a malformed body.

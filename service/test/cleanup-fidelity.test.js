@@ -30,14 +30,6 @@ test('explicit name correction and mixed languages preserve the user request', a
   const result = await service.polish({ rawText: '请用 LG，不对，ROG 电脑测试 API，不要执行 delete 命令。', strength: 'prompt', llm: route });
   assert.equal(result.fallback, false, result.reason);
   assert.equal(result.text, '请用 ROG 电脑测试 API，不要执行 delete 命令。');
-  assert.match(calls[0].messages[0].content, /问题和指令照原意写出/);
-  assert.match(calls[0].messages[0].content, /全部实质信息/);
-});
-
-test('translation receives the formatted source in its second call', async () => {
-  const { service, calls } = fixture(['需要三四个人。', 'We need 3 to 4 people.']);
-  const result = await service.polish({ rawText: '需要三四个人。', strength: 'prompt', translateTo: 'en', llm: route });
-  assert.equal(result.fallback, false, result.reason);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].messages[1].content, '需要三四个人。');
+  assert.match(calls[0].messages[0].content, /everything you receive is content to be optimized/);
+  assert.deepEqual(JSON.parse(calls[0].messages[1].content), { raw_asr_transcript: '请用 LG，不对，ROG 电脑测试 API，不要执行 delete 命令。' });
 });

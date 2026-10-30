@@ -15,12 +15,11 @@ import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
 
-import { learnedWord } from "./edit-correction.js";
 
 export const ROUTE_PREFIX = "/api/voice-polish";
 export const MAX_JSON_BYTES = 256 * 1024;
-/** The app's dictionary, sent with each dictation ahead of the audio (2000 entries of up to 120 characters). */
-export const MAX_DICTIONARY_BYTES = 1024 * 1024;
+/** The metadata object sent with each dictation ahead of the audio. */
+export const MAX_META_BYTES = 64 * 1024;
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
@@ -246,9 +245,7 @@ export function createHandler(options) {
           task: body.task,
           source: body.source === 'selection' ? 'selection' : null,
           requestId: body.requestId,
-          supportsClarification: body.supportsClarification === true,
-          explanationMarkers: typeof body.explanationMarkers === "string" ? body.explanationMarkers : null,
-          personalization: body.personalization,
+          profile: typeof body.profile === "string" ? body.profile : "",
           language: typeof body.language === "string" ? body.language : "auto",
           appHint: body.appHint ?? null,
           strength: body.strength,
@@ -256,7 +253,6 @@ export function createHandler(options) {
           llm: normalizeRoute(body.llm),
           translateTo: typeof body.translateTo === "string" ? body.translateTo : null,
           variants: body.variants ?? null,
-          dictionary: Array.isArray(body.dictionary) ? body.dictionary : null,
           signal: controller.signal,
         });
         // service.polish() records the attempt itself.
@@ -265,58 +261,47 @@ export function createHandler(options) {
           task: result.task,
           text: result.text,
           raw: result.raw,
-          suggestions: result.suggestions ?? [],
-          personalization: result.personalization,
+          suggestions: [],
           fallback: result.fallback,
           fallbackReason: result.reason ?? undefined,
-          ...(result.uncertain ? { uncertain: true } : {}),
           model: result.model,
           provider: result.provider,
           ms: result.ms,
           ...(result.translated ? { translated: result.translated } : {}),
-          ...(result.clarification ? { clarification: result.clarification } : {}),
-          ...(result.explanation ? { explanation: result.explanation } : {}),
-          ...(result.contextOnly ? { contextOnly: true } : {}),
+          ...(result.corrections ? { corrections: result.corrections } : {}),
+          ...(result.intention ? { intention: result.intention } : {}),
         });
         return;
       }
 
-      // Extensions are an optional route module. Core HTTP has no plugin parser.
-      if (route.startsWith("/plugins")) {
-        if (!service.extension) throw Object.assign(new Error("plugins unavailable"), { code: "plugins-unavailable" });
-        if (await service.extension.handleHttp({ route, req, res, url, readBody, reply, maxJsonBytes: MAX_JSON_BYTES })) return;
-      }
-
-      if (route === "/learned-word" && req.method === "POST") {
-        // A fix the user made right after a paste: the word to add to the dictionary, or null.
-        // The field text is only compared here, never stored or logged.
+      if (route === "/profile" && req.method === "POST") {
+        // The history items are only read here to write the description; nothing is stored.
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
-        reply(res, 200, { word: await learnedWord(body?.inserted, body?.edited) });
+        reply(res, 200, await service.buildProfile({ llm: normalizeRoute(body.llm), items: body.items, signal: controller.signal }));
         return;
       }
 
       if (route === "/dictate" && req.method === "POST") {
-        // The body is the app's dictionary (x-voice-dictionary-bytes of JSON, may be 0) then the WAV.
-        const dictionaryBytes = Number(req.headers["x-voice-dictionary-bytes"] ?? "0");
-        if (!Number.isInteger(dictionaryBytes) || dictionaryBytes < 0 || dictionaryBytes > MAX_DICTIONARY_BYTES) {
-          reply(res, 400, { error: "invalid-dictionary" });
+        // The body is a JSON object (x-voice-meta-bytes long, may be 0) then the WAV. The object
+        // carries what cannot travel in a header, such as the learned description of the user's work.
+        const metaBytes = Number(req.headers["x-voice-meta-bytes"] ?? "0");
+        if (!Number.isInteger(metaBytes) || metaBytes < 0 || metaBytes > MAX_META_BYTES) {
+          reply(res, 400, { error: "invalid-meta", code: "invalid-meta" });
           return;
         }
-        const body = await readBody(req, service.config.maxAudioBytes + 46 + dictionaryBytes);
-        let dictionary = null;
-        if (dictionaryBytes > 0) {
-          try { dictionary = JSON.parse(body.subarray(0, dictionaryBytes).toString("utf8")); } catch { dictionary = null; }
-          if (!Array.isArray(dictionary)) {
-            reply(res, 400, { error: "invalid-dictionary" });
+        const body = await readBody(req, service.config.maxAudioBytes + 46 + metaBytes);
+        let meta = {};
+        if (metaBytes > 0) {
+          try { meta = JSON.parse(body.subarray(0, metaBytes).toString("utf8")); } catch { meta = null; }
+          if (meta === null || typeof meta !== "object" || Array.isArray(meta)) {
+            reply(res, 400, { error: "invalid-meta", code: "invalid-meta" });
             return;
           }
         }
-        const audio = body.subarray(dictionaryBytes);
+        const audio = body.subarray(metaBytes);
         const result = await service.transcribeAndPolish({
-          dictionary,
+          profile: typeof meta.profile === "string" ? meta.profile : "",
           task: req.headers["x-voice-task"],
-          supportsClarification: req.headers["x-voice-clarification"] === "1",
-          explanationMarkers: req.headers["x-voice-explanation-markers"] ?? null,
           requestId: req.headers["x-request-id"] ?? undefined,
           audio,
           signal: controller.signal,

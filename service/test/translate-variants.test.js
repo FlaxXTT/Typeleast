@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
-import { TRANSLATE_LANGUAGES, translatePrompt } from "../lib/prompts/translate.js";
+import { directTranslatePrompt, TRANSLATE_LANGUAGES } from "../lib/prompts/translate.js";
 import { applyVariants, parseVariants, variantInstruction } from "../lib/variants.js";
 
 const ROUTE = { baseURL: "https://api.example.com/v1", model: "m", apiKey: "test-key" };
@@ -28,72 +28,39 @@ function makeService(fetchImpl, history = []) {
   });
 }
 
-test("翻译：先验证原语言整理稿，再把它交给第二次调用译成自然英文", async () => {
-  const cleaned = "周四下午三点开会，大家记得带电脑。";
-  const { calls, fetchImpl } = provider(calls => calls.length === 1
-    ? JSON.stringify({ status: "ok", text: cleaned, reason: "保留最后的改口" })
-    : "The meeting is on Thursday at 3 pm. Please bring your laptops.");
+test("翻译：一次调用直接整理并译成目标语言，不用听写整理提示词", async () => {
+  const { calls, fetchImpl } = provider("The meeting is on Thursday at 3 pm. Please bring your laptops.");
   const service = makeService(fetchImpl);
   const result = await service.polish({ rawText: SPOKEN, strength: "prompt", llm: ROUTE, translateTo: "en" });
   assert.equal(result.fallback, false);
   assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
   assert.equal(result.translated, "en");
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].user, SPOKEN);
-  assert.match(calls[0].system, /整理成可以直接使用的书面文字/);
-  assert.equal(calls[1].user, cleaned, "second call sees the cleaned source, not the raw correction");
-  assert.match(calls[1].system, /译成English/);
-  assert.match(calls[1].system, /问题和指令照原意译出/);
-  assert.match(calls[1].system, /地道自然/);
-  assert.equal(service.stats.modelCalls, 2);
-  assert.equal(service.stats.modelFallbacks, 0);
+  assert.match(calls[0].system, /把语音识别文本理解并整理后译成English/);
+  assert.doesNotMatch(calls[0].system, /# Profile/);
+  assert.equal(service.stats.modelCalls, 1);
 });
 
-test("翻译不受整理档位影响：旧的 off 值也先整理再翻译", async () => {
-  const cleaned = "周四下午三点开会，大家记得带电脑。";
-  const { calls, fetchImpl } = provider(calls => calls.length === 1
-    ? JSON.stringify({ status: "ok", text: cleaned, reason: "改口" })
-    : "会議は木曜日の午後3時です。皆さん、パソコンを持参してください。");
-  const result = await makeService(fetchImpl).polish({ rawText: SPOKEN, strength: "off", llm: ROUTE, translateTo: "ja" });
-  assert.equal(result.text, "会議は木曜日の午後3時です。皆さん、パソコンを持参してください。");
-  assert.equal(calls.length, 2);
-});
-
-for (const [reply,reason] of [
- ['{"status":"ok","text": }','output-format'],
-]) test('source cleanup failure holds translation without bypassing the first step: '+reason, async()=>{
- const {calls,fetchImpl}=provider(reply);
- const result=await makeService(fetchImpl).polish({rawText:SPOKEN,llm:ROUTE,translateTo:'en'});
- assert.equal(calls.length,1);assert.notEqual(result.text, '', 'a result is inserted, never held');assert.ok(result.fallback || result.uncertain, 'not a clean pass');
- assert.equal(result.reason,reason);assert.equal(result.clarification,undefined);
-});
-
-test("translation request fails: the validated source remains insertable", async () => {
-  const cleaned = "周四下午三点开会，大家记得带电脑。";
-  let calls = 0;
-  const fetchImpl = async () => {
-    calls++;
-    if (calls === 1) return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: "ok", text: cleaned, reason: "改口" }) }, finish_reason: "stop" }] }) };
-    return { ok: false, status: 401, body: { cancel: async () => {} } };
-  };
+test("翻译请求失败：插入整理过语气词的原文", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 401, body: { cancel: async () => {} } });
   const result = await makeService(fetchImpl).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "en" });
-  assert.equal(calls, 2);
-  assert.ok(result.fallback || result.uncertain, 'not a clean pass');
-  assert.equal(result.text, cleaned);
+  assert.equal(result.fallback, true);
   assert.equal(result.reason, "model-error:HTTP_401");
+  assert.notEqual(result.text, "");
 });
 
 test("不认识的目标语言按普通整理处理", async () => {
   const { calls, fetchImpl } = provider('{"status":"ok","text":"周四下午三点开会，大家记得带电脑。"}');
   const result = await makeService(fetchImpl).polish({ rawText: SPOKEN, strength: "prompt", llm: ROUTE, translateTo: "xx" });
   assert.equal(result.translated, undefined);
-  assert.doesNotMatch(calls[0].system, /口述翻译/);
+  assert.match(calls[0].system, /# Profile/);
 });
 
 test("翻译提示词：十种目标语言，中文先写简体再按变体转换", () => {
   assert.equal(Object.keys(TRANSLATE_LANGUAGES).length, 10);
-  assert.match(translatePrompt("zh"), /简体中文/);
-  assert.match(translatePrompt("unknown"), /English/);
+  assert.match(directTranslatePrompt("zh"), /简体中文/);
+  assert.match(directTranslatePrompt("unknown"), /English/);
 });
 
 test("语言变体：解析请求头，忽略不认识的值", () => {
@@ -117,12 +84,10 @@ test("繁体只用于中文：日文汉字和译成其他语言的结果不转�
   assert.equal(await applyVariants("会社の設定を変更してください。", { zh: "tw" }, "zh"), "会社の設定を変更してください。");
   assert.equal(await applyVariants("金曜日までに企画書を送ってください。", { zh: "hk" }, "zh"), "金曜日までに企画書を送ってください。");
   const japanese = "会議は木曜日の午後3時です。";
-  const { fetchImpl } = provider(calls => calls.length === 1
-    ? JSON.stringify({ status: "ok", text: "周四下午三点开会。", reason: "改口" }) : japanese);
+  const { fetchImpl } = provider(japanese);
   const translated = await makeService(fetchImpl).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "ja", variants: "zh=tw" });
   assert.equal(translated.text, japanese);
-  const { fetchImpl: toChinese } = provider(calls => calls.length === 1
-    ? JSON.stringify({ status: "ok", text: "周四下午三点开会。", reason: "改口" }) : "这个软件周四更新。");
+  const { fetchImpl: toChinese } = provider("这个软件周四更新。");
   const chinese = await makeService(toChinese).polish({ rawText: SPOKEN, llm: ROUTE, translateTo: "zh", variants: "zh=tw" });
   assert.equal(chinese.text, "這個軟體週四更新。");
   // Recognised as Japanese: no kana does not make it Chinese (企画書 must not become 企畫書).
@@ -165,12 +130,3 @@ test("recognizer metadata reaches the output-language gate without another model
     assert.equal(result.text, expected);
   }
 });
-
-test("翻译的防编造按数值比对：换写法的时间日期能过，凭空出现的数字被拦下", async () => {
-  const { translationInventedNumbers } = await import("../lib/validate.js");
-  const raw = "十月十九日下午三点半交一千二百块，不对，是周四下午三点";
-  assert.deepEqual(translationInventedNumbers(raw, "Pay 1,200 yuan on October 19 at 3:30 p.m. — no, Thursday at 15:00."), []);
-  assert.deepEqual(translationInventedNumbers(raw, "Pay 1,200 yuan in room 512."), ["512"]);
-  assert.deepEqual(translationInventedNumbers("一共 3.5 万", "35,000 in total"), ["35000"]);
-});
-

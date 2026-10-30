@@ -39,7 +39,7 @@ const FIELDS = {
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
   maxAudioBytes: { kind: "integer", default: 24 * 1024 * 1024, help: "Largest accepted WAV body." },
   maxDurationSeconds: { kind: "integer", default: 600, help: "Longest accepted recording." },
-  dictionary: { kind: "stringArray", default: [], help: "Words whose spelling must be preserved verbatim." },
+  dictionary: { kind: "stringArray", default: [], help: "Unused since the dictionary was removed; kept so an older config.json still loads." },
   redactSecrets: { kind: "boolean", default: true, help: "Strip key-shaped strings from model context." },
 };
 

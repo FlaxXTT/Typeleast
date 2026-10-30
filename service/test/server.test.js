@@ -54,7 +54,6 @@ test("the service listens on loopback, publishes its port, and serves the contra
   await withDir(async (dir) => {
     const handle = await startService({ stateDir: dir, modelsDir: join(dir, "models"), logger: quiet, recognizer });
     try {
-      assert.equal(handle.service.extension.state().plugins.some(p => p.id === 'typeleast.tech-terms'), false, 'fresh installs stay general');
       const runtime = JSON.parse(await readFile(join(dir, "runtime.json"), "utf8"));
       assert.equal(runtime.port, handle.port);
       assert.equal(runtime.host, "127.0.0.1");
@@ -79,56 +78,25 @@ test("the service listens on loopback, publishes its port, and serves the contra
       assert.equal(dictated.json.fallback, true);
       assert.equal(dictated.json.fallbackReason, "no-api-key");
       assert.notEqual(dictated.json.text, '', 'a result is inserted, never held');
-      // The app's dictionary rides ahead of the audio.
-      const dictionary = Buffer.from(JSON.stringify(["TypeLeast"]));
-      const withDictionary = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
-        headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": String(dictionary.length) }, body: Buffer.concat([dictionary, wav(0.5)]) });
-      assert.equal(withDictionary.status, 200);
-      assert.notEqual(withDictionary.json.text, "");
-      const badLength = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
-        headers: { ...auth, "content-type": "audio/wav", "x-voice-dictionary-bytes": "-1" }, body: wav(0.5) });
-      assert.equal(badLength.status, 400);
+      // The learned description rides ahead of the audio in a JSON object.
+      const meta = Buffer.from(JSON.stringify({ profile: "做 CFD 仿真" }));
+      const withMeta = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
+        headers: { ...auth, "content-type": "audio/wav", "x-voice-meta-bytes": String(meta.length) }, body: Buffer.concat([meta, wav(0.5)]) });
+      assert.equal(withMeta.status, 200);
+      assert.notEqual(withMeta.json.text, "");
+      for (const bad of ["-1", "2"]) {
+        const refused = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
+          headers: { ...auth, "content-type": "audio/wav", "x-voice-meta-bytes": bad }, body: wav(0.5) });
+        assert.equal(refused.status, 400, bad);
+      }
       // Removed endpoints are gone.
-      for (const path of ["/api/voice-polish/history", "/api/voice-polish/dictionary"]) {
+      for (const path of ["/api/voice-polish/history", "/api/voice-polish/dictionary", "/api/voice-polish/plugins", "/api/voice-polish/learned-word"]) {
         assert.equal((await raw(handle.port, { path, headers: auth })).status, 404, path);
       }
     } finally {
       await handle.close();
     }
     await assert.rejects(stat(join(dir, "runtime.json")), "closing withdraws runtime.json");
-  });
-});
-
-test('an existing state gets bundled terminology once without a market request', async () => {
-  await withDir(async dir => {
-    await writeFile(join(dir, 'api-token'), 'a'.repeat(64) + '\n');
-    const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
-    try {
-      const pack = handle.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms');
-      assert.equal(pack?.enabled, true);
-      assert.equal(pack?.source, 'bundled');
-      await handle.service.extension.store.setEnabled(pack.id, false);
-    } finally { await handle.close(); }
-    const again = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer });
-    try { assert.equal(again.service.extension.state().plugins.find(p => p.id === 'typeleast.tech-terms')?.enabled, false); }
-    finally { await again.close(); }
-  });
-});
-
-test('core dictation starts and answers with the extension module disabled', async () => {
-  await withDir(async dir => {
-    const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer, extensions: false });
-    try {
-      assert.equal(handle.service.extension, null);
-      await assert.rejects(stat(join(dir, 'plugins')), 'no extension state is created');
-      const token = (await readFile(join(dir, 'api-token'), 'utf8')).trim();
-      const headers = { host: `127.0.0.1:${handle.port}`, authorization: `Bearer ${token}` };
-      const plugins = await raw(handle.port, { path: '/api/voice-polish/plugins', headers });
-      assert.deepEqual([plugins.status, plugins.json.code], [503, 'plugins-unavailable']);
-      const dictated = await raw(handle.port, { method: 'POST', path: '/api/voice-polish/dictate',
-        headers: { ...headers, 'content-type': 'audio/wav' }, body: wav(0.5) });
-      assert.deepEqual([dictated.status, dictated.json.text.length > 0], [200, true]);
-    } finally { await handle.close(); }
   });
 });
 

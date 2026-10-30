@@ -10,7 +10,7 @@
  * @module typeleast-service/server
  */
 import { createServer } from "node:http";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { format } from "node:util";
 import { SpeechModels } from "./speech-models.js";
@@ -41,35 +41,17 @@ export async function startService(options = {}) {
   const logger = options.logger ?? stderrLogger;
   const host = "127.0.0.1";
 
-  const existingInstallation = await stat(join(stateDir, "api-token")).then(info => info.isFile()).catch(() => false);
   await mkdir(stateDir, { recursive: true });
   const { value: config, issues } = await loadConfig(stateDir);
   for (const issue of issues) logger.warn?.("config.json: %s", issue.message);
 
   // Versions up to 1.17.8 kept a history of digests and a copy of the dictionary here;
-  // the apps own both now, so the leftovers are removed.
+  // the apps own the history now, so the leftovers are removed.
   for (const leftover of ["history.jsonl", "dictionary.json"]) await rm(join(stateDir, leftover), { force: true }).catch(() => {});
   const recognizer = options.recognizer ?? new SpeechModels({ modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads, language: config.language, logger });
-  // This is the one composition point for the optional extension module.
-  // A stripped or disabled build can omit it without changing dictation.
-  let extension = null;
-  if (options.extensions !== false) {
-    try {
-      const [{ PluginStore }, { PluginRuntime }] = await Promise.all([
-        import("./plugins.js"), import("./plugin-runtime.js"),
-      ]);
-      const plugins = new PluginStore(join(stateDir, "plugins"));
-      await plugins.load();
-      await plugins.migrateTechnicalPack(existingInstallation).catch(() => logger.warn?.("retired vocabulary cleanup incomplete; original retained"));
-      extension = new PluginRuntime(plugins);
-    } catch (error) {
-      logger.warn?.("plugins could not be read (%s)", error?.code ?? "error");
-    }
-  }
   const service = new VoicePolishService({
     recognizer,
     config,
-    extension,
     logger,
     version: VERSION,
   });
