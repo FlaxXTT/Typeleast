@@ -240,6 +240,12 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.strength"); changed() }
     }
 
+    /// Selecting text with the mouse offers a 「翻译」 button; the translation shows in a bubble.
+    var selectionTranslate: Bool {
+        get { bool("voice.selectionTranslate", default: true) }
+        set { d.set(newValue, forKey: "voice.selectionTranslate"); changed() }
+    }
+
     /// Read the text around the cursor at dictation start and send it as context.
     var readFieldContext: Bool {
         // Off by default (as on Windows): when on, text near the cursor and the window

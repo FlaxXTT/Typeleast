@@ -103,6 +103,8 @@ struct SettingsPage: View {
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 150)
             }
+            ToggleRow(title: L10n.text("选中即翻译"), detail: L10n.text("用鼠标选中文字，旁边出现「翻译」按钮，译文在气泡里显示。"),
+                      isOn: model.setting(\.selectionTranslate))
             SettingRow(title: L10n.text("中文字形"), detail: nil) {
                 Picker("", selection: model.setting(\.zhVariant)) {
                     ForEach(ChineseVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }

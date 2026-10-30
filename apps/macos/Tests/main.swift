@@ -723,6 +723,11 @@ do {
             Delivery.prepare("1. 第一项\n2. 第二项", appBundleId: "com.apple.Terminal", field: nil), "1. 第一项 2. 第二项")
     checkEq("delivery: elsewhere a list after unread text starts on a new line",
             Delivery.prepare("1. 第一项", appBundleId: "com.apple.Notes", field: nil), "\n1. 第一项")
+    checkEq("selection: Chinese goes to the translate target", SelectionTranslator.target(for: "今天开会", preferred: "en"), "en")
+    checkEq("selection: English with an English target comes back in Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "en"), "zh")
+    checkEq("selection: with a Chinese target, Chinese goes to English", SelectionTranslator.target(for: "今天开会", preferred: "zh"), "en")
+    checkEq("selection: with a Chinese target, English goes to Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "zh"), "zh")
+    checkEq("selection: other targets are kept", SelectionTranslator.target(for: "Ship it today", preferred: "ja"), "ja")
     check("the first cursor still holds when text after it changed",
           CaretAnchor.stillValid(before: "你好，", selected: "", value: "你好，世界又多了几个字", location: 3, length: 0))
     check("…and when the selection then is still there",

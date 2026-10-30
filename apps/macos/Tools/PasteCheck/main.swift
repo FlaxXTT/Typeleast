@@ -159,6 +159,50 @@ if mode == "all" || mode == "beta" {
 }
 
 
+if mode == "all" || mode == "selection" {
+    // 选中即翻译: a mouse drag over text shows the button; a click shows the bubble; the app
+    // being read keeps its focus and its selection.
+    if let e = freshDoc("Hello world from TypeLeast", caret: 0) {
+        let translator = SelectionTranslator()
+        var asked: (String, String)?
+        translator.translate = { text, target, done in asked = (text, target); done(.success("你好，世界")) }
+        translator.preferredTarget = { "en" }
+        translator.start()
+        var range = CFRange(location: 0, length: 11)
+        var raw: CFTypeRef?
+        var rect = CGRect.zero
+        if AXUIElementCopyParameterizedAttributeValue(e, kAXBoundsForRangeParameterizedAttribute as CFString,
+                                                      AXValueCreate(.cfRange, &range)!, &raw) == .success, let raw {
+            AXValueGetValue(raw as! AXValue, .cgRect, &rect)
+        }
+        let from = CGPoint(x: rect.minX + 1, y: rect.midY), to = CGPoint(x: rect.maxX - 1, y: rect.midY)
+        let src = CGEventSource(stateID: .combinedSessionState)
+        CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: from, mouseButton: .left)?.post(tap: .cghidEventTap)
+        pump(0.1)
+        for i in 1...10 {
+            let p = CGPoint(x: from.x + (to.x - from.x) * Double(i) / 10, y: from.y)
+            CGEvent(mouseEventSource: src, mouseType: .leftMouseDragged, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            pump(0.03)
+        }
+        CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: to, mouseButton: .left)?.post(tap: .cghidEventTap)
+        pump(0.8)
+        let button = NSApp.windows.first { $0.isVisible && $0.level == .popUpMenu }
+        report("S1 a drag selection shows the 翻译 button", button != nil && SelectionTranslator.selectedText() == "Hello world",
+               "selected=" + (SelectionTranslator.selectedText() ?? "nil"))
+        if let button {
+            click(NSPoint(x: button.frame.midX, y: button.frame.midY))
+            pump(0.6)
+            let bubble = NSApp.windows.first { $0.isVisible && $0.level == .popUpMenu }
+            let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+            report("S2 a click translates the selection into a bubble", asked?.0 == "Hello world" && asked?.1 == "zh" && (bubble?.frame.width ?? 0) > 300,
+                   "asked=" + String(describing: asked) + " bubbleWidth=" + String(describing: bubble?.frame.width))
+            report("S3 the app keeps focus and selection", front == te && SelectionTranslator.selectedText() == "Hello world" && !(bubble?.isKeyWindow ?? true),
+                   "front=" + front + " selected=" + (SelectionTranslator.selectedText() ?? "nil"))
+        }
+        translator.stop()
+    }
+}
+
 if mode.hasPrefix("browser:") {
     // browser:<App name>:<bundle id>
     let parts = mode.split(separator: ":").map(String.init)

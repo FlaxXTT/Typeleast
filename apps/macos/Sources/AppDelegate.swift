@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let recorder = Recorder()
     /// Floating capsule shown while listening and thinking.
     let recordingBar = RecordingBar()
+    let selectionTranslator = SelectionTranslator()
     /// Resting bar at the bottom of the screen ("show voice bar").
     let idleBar = IdleBar()
     let settings = Settings.shared
@@ -125,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
         recordingBar.onCancel = { [weak self] in self?.cancelDictation() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
+        startSelectionTranslator()
         idleBar.onClick = { [weak self] in self?.toggleDictation() }
 
         let center = NotificationCenter.default
@@ -386,6 +388,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             return
         }
         toggleDictation(translateTo: settings.translateTarget)
+    }
+
+    /// 选中即翻译: the button and bubble next to a mouse selection. Nothing is inserted or recorded.
+    func startSelectionTranslator() {
+        selectionTranslator.enabled = { [weak self] in
+            guard let self else { return false }
+            return self.settings.selectionTranslate && self.phase == .idle && !self.settings.needsPractice
+        }
+        selectionTranslator.preferredTarget = { [weak self] in self?.settings.translateTarget ?? "en" }
+        selectionTranslator.translate = { [weak self] text, target, done in
+            guard let self, let route = self.settings.activeLLMRoute else {
+                return done(.failure(ServiceError.transport(L10n.text("请先配置可用的整理模型。"))))
+            }
+            let language = self.settings.language, variants = self.settings.variantsHeader
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = Result { try self.client.polishSync(text: text, language: language, strength: "prompt", llm: route,
+                                                                 translateTo: target, variants: variants) }
+                DispatchQueue.main.async {
+                    switch result {
+                    // A failed translation comes back as the original text: say so instead of showing it.
+                    case .success(let response) where !response.fallback && !response.insertableText.isEmpty:
+                        done(.success(response.insertableText))
+                    case .success: done(.failure(ServiceError.transport(L10n.text("翻译失败"))))
+                    case .failure(let error): done(.failure(error))
+                    }
+                }
+            }
+        }
+        selectionTranslator.start()
     }
 
     /// A clean Fn tap. Stopping is immediate; starting waits a moment, and if the
