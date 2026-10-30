@@ -2,6 +2,12 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.24.11（2026-10-30）
+
+发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 45。
+
+- 精简与解耦（功能不变）：本地服务的听写、翻译、提示词模式、用户描述拆成独立任务模块（`service/lib/tasks/`），通过统一的上下文与服务交互；Mac 的粘贴交付拆成 `Delivery` 模块，控制器只管界面和历史。删去两端无人调用的代码、约 600 条遗留翻译条目和未使用的 `pinyin-pro` 依赖。
+
 ## 1.24.10（2026-10-30）
 
 发布范围：Mac Apple 芯片 DMG / ZIP、Windows x64 安装版 / 便携版。Mac 构建号为 44。1.24.9 没有发布，内容并入本版。
