@@ -717,6 +717,10 @@ do {
     checkEq("a bullet after text starts on a new line", Inserter.separatingList("- 第一项", before: "前文"), "\n- 第一项")
     checkEq("ordinary text is never moved", Inserter.separatingList("2026 年的计划", before: "他说的话"), "2026 年的计划")
     checkEq("…nor a decimal at the start", Inserter.separatingList("3.5 万元的预算", before: "他说的话"), "3.5 万元的预算")
+    checkEq("delivery: a terminal gets one line, never a list break",
+            Delivery.prepare("1. 第一项\n2. 第二项", appBundleId: "com.apple.Terminal", field: nil), "1. 第一项 2. 第二项")
+    checkEq("delivery: elsewhere a list after unread text starts on a new line",
+            Delivery.prepare("1. 第一项", appBundleId: "com.apple.Notes", field: nil), "\n1. 第一项")
     check("the first cursor still holds when text after it changed",
           CaretAnchor.stillValid(before: "你好，", selected: "", value: "你好，世界又多了几个字", location: 3, length: 0))
     check("…and when the selection then is still there",
