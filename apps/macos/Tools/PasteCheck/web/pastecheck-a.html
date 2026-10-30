@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>pastecheck A</title>
+<textarea id="t1" rows="3" cols="40">AAAABBBB</textarea><br><textarea id="t2" rows="3" cols="40">CCCC</textarea>
+<script>
+const t1=document.getElementById('t1'), t2=document.getElementById('t2');
+t1.focus(); t1.setSelectionRange(4,4);
+const move=new URLSearchParams(location.search).get('move');
+if(move) setTimeout(()=>{ t2.focus(); t2.setSelectionRange(4,4); }, Number(move));
+</script>

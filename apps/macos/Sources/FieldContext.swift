@@ -21,12 +21,27 @@ struct FieldContext: Codable, Equatable {
     func encoded() -> Data? { isEmpty ? nil : try? JSONEncoder().encode(self) }
 }
 
-/// A focused text element captured at dictation start, kept so the edit learner can
-/// read the same element again after the paste.
+/// A focused text element captured at dictation start. Where the cursor was then is
+/// where the text goes: `range` puts it back if it moved while the user was speaking.
 struct FocusedField {
     let element: AXUIElement
     let bundleId: String
     let context: FieldContext
+    var range: CFRange? = nil
+}
+
+/// Whether a caret position captured at dictation start still points at the same place.
+enum CaretAnchor {
+    /// True when the text before `location` still ends with what preceded the cursor then,
+    /// and the selection then is still selectable. Edits elsewhere in the field are fine;
+    /// an edit before the cursor shifts the offset, so the anchor is not used.
+    static func stillValid(before: String, selected: String, value: String, location: Int, length: Int) -> Bool {
+        let ns = value as NSString
+        guard location >= 0, length >= 0, location + length <= ns.length else { return false }
+        // NSString answers false for an empty prefix or suffix, so those are checked first.
+        guard before.isEmpty || (ns.substring(to: location) as NSString).hasSuffix(before) else { return false }
+        return selected.isEmpty || (ns.substring(with: NSRange(location: location, length: length)) as NSString).hasPrefix(selected)
+    }
 }
 
 enum FieldContextReader {
@@ -57,13 +72,17 @@ enum FieldContextReader {
         let subrole: String? = copy(element, kAXSubroleAttribute)
         if subrole == (kAXSecureTextFieldSubrole as String) { return nil }
 
-        let value: String = copy(element, kAXValueAttribute) ?? ""
+        let readable: String? = copy(element, kAXValueAttribute)
+        let value = readable ?? ""
         let selected: String = copy(element, kAXSelectedTextAttribute) ?? ""
         var before = ""
         var after = ""
+        var anchor: CFRange?
         let ns = value as NSString
         if let range = selectedRange(element), range.location != kCFNotFound,
            range.location >= 0, range.location + range.length <= ns.length {
+            // Only a field whose text can be read again can be checked before the paste.
+            if readable != nil { anchor = range }
             let start = max(0, range.location - beforeLimit)
             before = ns.substring(with: NSRange(location: start, length: range.location - start))
             let tail = range.location + range.length
@@ -73,7 +92,62 @@ enum FieldContextReader {
         }
         let context = FieldContext(before: before, selected: String(selected.prefix(400)),
                                    after: after, windowTitle: windowTitle() ?? "")
-        return FocusedField(element: element, bundleId: bundleId, context: context)
+        return FocusedField(element: element, bundleId: bundleId, context: context, range: anchor)
+    }
+
+    enum CaretRestore: Equatable {
+        /// Focus and cursor are back where the dictation started.
+        case restored
+        /// Focus is in the starting field, but the cursor stays where it is now: the text
+        /// before the starting point changed, or the field refused the position.
+        case sameField
+        /// Nothing was captured at the start (no Accessibility, no text field): paste as is.
+        case unknown
+        /// The starting field is gone or cannot take focus back (closed, another tab).
+        case lost
+    }
+
+    /// Put focus and the cursor back where the dictation started, before the paste.
+    /// The cursor is only moved when the text before that point is unchanged, so the
+    /// text never lands at a stale offset.
+    @discardableResult
+    static func restoreCaret(_ field: FocusedField) -> CaretRestore {
+        guard let range = field.range, AXIsProcessTrusted() else { return .unknown }
+        let element = field.element
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        // A field that no longer answers was closed or left with its page.
+        guard let value: String = copy(element, kAXValueAttribute) else { return .lost }
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.25)
+        func focusedHere() -> Bool {
+            let focused: AXUIElement? = copy(system, kAXFocusedUIElementAttribute)
+            return focused.map { CFEqual($0, element) } ?? false
+        }
+        if !focusedHere() {
+            // The field may sit in another window of the same app: bring that window forward first.
+            if let window: AXUIElement = copy(element, kAXWindowAttribute) {
+                AXUIElementSetMessagingTimeout(window, 0.25)
+                AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+                AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
+            }
+            AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+            // A browser switches back to the field's tab first; give it a moment.
+            var back = focusedHere()
+            for _ in 0..<4 where !back {
+                usleep(50_000)
+                back = focusedHere()
+            }
+            guard back else { return .lost }
+        }
+        guard CaretAnchor.stillValid(before: field.context.before, selected: field.context.selected,
+                                     value: value, location: range.location, length: range.length) else { return .sameField }
+        if let current = selectedRange(element), current.location == range.location, current.length == range.length {
+            return .restored
+        }
+        var wanted = range
+        guard let axRange = AXValueCreate(.cfRange, &wanted),
+              AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, axRange) == .success else { return .sameField }
+        return .restored
     }
 
     /// The whole current value of an element captured earlier, for the edit learner.

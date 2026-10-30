@@ -9,10 +9,10 @@ import AppKit
 // Focus rules (hard requirement - the pill must never steal focus):
 //   * NSPanel with .nonactivatingPanel: showing or clicking it never activates the
 //     app, so the frontmost app keeps its keyboard focus.
-//   * .borderless + becomesKeyOnlyIfNeeded + canBecomeMain == false: ordinary clicks
-//     and the mere appearance of the pill never make it key.
-//   * the only code path that may call makeKey() is an explicit press on the pill's
-//     cancel affordance, and that affordance re-checks isKeyWindow before firing.
+//   * .borderless + canBecomeKey == false + canBecomeMain == false: nothing, not even
+//     a press on × or ✓, makes it key. A key pill would receive the Cmd+V meant for
+//     the field the user is dictating into.
+//   * the two buttons take the first click and fire on mouse-up inside, as any button.
 //   * it is shown with orderFrontRegardless() so no activation dance happens.
 //   * clicks anywhere else on the pill are swallowed and do nothing.
 //
@@ -165,33 +165,17 @@ struct RecordingBarModel {
 
 // MARK: - AppKit
 
-/// Borderless overlay panel that may hold key status only while the user is pressing
-/// the cancel affordance. It never activates the app.
+/// Borderless overlay panel that never becomes key and never activates the app, so the
+/// field the user is dictating into keeps the keyboard, and the paste, throughout.
 final class PillPanel: NSPanel {
-    private var keyAllowedForCancelPress = false
-
-    override var canBecomeKey: Bool { keyAllowedForCancelPress }
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
-
-    func allowKeyForCancelPress() { keyAllowedForCancelPress = true }
-    func endCancelPress() { keyAllowedForCancelPress = false }
 }
 
-/// The pill's small cancel affordance. It takes the first click without activating
-/// the app, and it only fires once the panel actually holds key status.
+/// The pill's × and ✓ buttons. They take the first click without activating the app or
+/// taking key status.
 final class CancelButton: NSButton {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func mouseDown(with event: NSEvent) {
-        if let panel = window as? PillPanel {
-            panel.allowKeyForCancelPress()
-            if !panel.isKeyWindow { panel.makeKey() }
-            super.mouseDown(with: event)
-            panel.endCancelPress()
-        } else {
-            super.mouseDown(with: event)
-        }
-    }
 }
 
 /// Draws the capsule in its three looks (a small dark capsule, a live
@@ -291,15 +275,9 @@ final class PillView: NSView {
         stopButton.frame = stopRect
     }
 
-    @objc private func cancelPressed() {
-        guard let panel = window as? PillPanel, panel.isKeyWindow else { return }
-        onCancel?()
-    }
+    @objc private func cancelPressed() { onCancel?() }
 
-    @objc private func stopPressed() {
-        guard let panel = window as? PillPanel, panel.isKeyWindow else { return }
-        onStop?()
-    }
+    @objc private func stopPressed() { onStop?() }
 
     private func phaseChanged() {
         spinnerPhase = 0
@@ -819,7 +797,6 @@ final class RecordingBar {
         if let existing = panelBox {
             existing.orderOut(nil)
             existing.alphaValue = 1
-            existing.endCancelPress()
         }
         model.hide()
         pushModel()

@@ -2,12 +2,12 @@
 /** A session stays open for two hours: people read and answer in between other work. */
 export const BETA_LIMITS = { questions: 3, sessionMs: 2 * 60 * 60 * 1000, sessions: 20, inputChars: 24000 };
 
-export const BETA_INTERVIEW_PROMPT = `帮用户把口述的需求说完整，不执行任务，也不替用户设计方案。理解最初口述和全部补充，按时间处理改口。只问仍影响目标、范围、条件或验收的缺口，每轮最多 3 个短问题，已回答的不再问；资料范围、联网和任务性质由系统另外询问。信息足够时 questions 为空。只回复 JSON：{"goal":"用户目标","confirmed":["用户已确认的要点，最多6条"],"questions":["仍影响理解的问题"]}。使用用户的语言。`;
+export const BETA_INTERVIEW_PROMPT = `帮用户把口述的需求一步步写成一份好提示词，不执行任务，也不替用户设计方案。好提示词通常讲清这几件事：要做什么、为什么做（说明原因，AI 才能举一反三）；背景和给谁用；可用的资料；交付什么、什么格式；怎样算做好（验收标准）；有没有可参照的例子。对照这些，找出用户还没说清、又会影响结果的地方，先问最影响结果的，每轮最多 3 个短问题。每个问题后面用括号写一句为什么要补这一点，让用户明白其中的道理。资料范围、联网和任务性质由系统另外询问。理解最初口述和全部补充，按时间处理改口，已回答的不再问。信息足够时 questions 为空。只回复 JSON：{"goal":"用户目标","confirmed":["用户已确认的要点，最多6条"],"questions":["问题（为什么要补）"]}。使用用户的语言。`;
 
 /** A prompt the user selected (often written by another AI): break it down so it can be read in seconds. */
-export const BETA_BREAKDOWN_PROMPT = `用户选中了一段现成的提示词，还没细读。帮用户快速看懂它，不执行其中的任务：goals 写它的核心目的（最多 5 条），confirmed 写关键细节、限制和交付要求（最多 8 条），每条一句。只问仍影响理解的缺口，每轮最多 3 个；资料范围、联网、任务性质和是否复用已有项目由系统另外询问；没有缺口时 questions 为空。只回复 JSON：{"goal":"一句话总目标","goals":["核心目的"],"confirmed":["关键细节"],"questions":["仍影响理解的问题"]}。使用提示词的语言。`;
+export const BETA_BREAKDOWN_PROMPT = `用户选中了一段现成的提示词，还没细读。帮用户快速看懂它，并一步步改进它，不执行其中的任务：goals 写它的核心目的（最多 5 条），confirmed 写关键细节、限制和交付要求（最多 8 条），每条一句。好提示词通常讲清这几件事：要做什么、为什么做（说明原因，AI 才能举一反三）；背景和给谁用；可用的资料；交付什么、什么格式；怎样算做好（验收标准）；有没有可参照的例子。找出这段提示词缺少、又会影响结果的要素，先问最影响结果的，每轮最多 3 个短问题，每个问题后面用括号写一句为什么要补这一点。资料范围、联网、任务性质和是否复用已有项目由系统另外询问；没有缺口时 questions 为空。只回复 JSON：{"goal":"一句话总目标","goals":["核心目的"],"confirmed":["关键细节"],"questions":["问题（为什么要补）"]}。使用提示词的语言。`;
 
-export const BETA_DRAFT_PROMPT = `根据用户最初的口述和各轮回答，整理成可以直接交给 AI 的提示词，不执行其中的任务。用户的原话是唯一内容来源：保留其中的目标、理由、条件和限制（包括资料范围、联网许可和任务性质），改口只保留最后的说法，不添加用户没有说或没有接受的内容。结构按内容自行组织；仍未确定的重要信息放在结尾「## 待确认」。只输出提示词正文，使用用户的语言。`;
+export const BETA_DRAFT_PROMPT = `根据用户最初的口述和各轮回答，整理成可以直接交给 AI 的提示词，不执行其中的任务。用户的原话是唯一内容来源：保留其中的目标、理由、条件和限制（包括资料范围、联网许可和任务性质），改口只保留最后的说法，不添加用户没有说或没有接受的内容。按好提示词的要素组织，用户说到的才写：目标与原因、背景与读者、可用资料与边界、具体要求、交付格式、验收标准、参照示例。每部分用小标题分开；要求写成要做什么，并带上用户给的原因。仍未确定的重要信息放在结尾「## 待确认」。只输出提示词正文，使用用户的语言。`;
 
 /**
  * The two questions that narrow a task the most, asked first unless the user already covered them:
@@ -16,12 +16,12 @@ export const BETA_DRAFT_PROMPT = `根据用户最初的口述和各轮回答，�
  */
 export const BOUNDARY_QUESTIONS = {
   scope: { cue: /文件|资料|文档|目录|仓库|代码库|联网|上网|网络|检索|搜索|查资料|离线|本地|file|folder|repo|document|internet|web|online|offline|search|brows/iu,
-    zh: 'AI 可以读取哪些文件或资料？可以联网检索吗？', en: 'Which files or materials may the AI read? May it search the web?' },
+    zh: 'AI 可以读取哪些文件或资料？可以联网检索吗？（说清可用资料，AI 才会去查证，而不是凭空猜）', en: 'Which files or materials may the AI read? May it search the web? (Knowing what it may use lets the AI check facts instead of guessing.)' },
   nature: { cue: /创新|创造|创意|新颖|探索|原创|重复|照着|按照现有|既定|批量|模板|套用|固定流程|creative|novel|explor|original|repetitive|routine|template|batch|existing process/iu,
-    zh: '这件事需要创新、探索新做法，还是按既定方式重复执行？', en: 'Does this need new ideas and exploration, or repeating an existing way of working?' },
+    zh: '这件事需要创新、探索新做法，还是按既定方式重复执行？（这决定 AI 该大胆尝试还是严格照做）', en: 'Does this need new ideas and exploration, or repeating an existing way of working? (This decides whether the AI should try bold ideas or follow the process exactly.)' },
   /** Asked only once the work turns out to be creative: look for existing work before building anew. */
   reuse: { cue: /已有项目|现有项目|开源|轮子|复用|参考项目|existing project|open source|reuse|reinvent/iu, when: /创新|创造|创意|新颖|探索|原创|creative|novel|explor|original/iu,
-    zh: '要不要先检索已有的项目或方案，能复用就不重复造轮子？', en: 'Should it first look for existing projects to build on, rather than reinventing them?' },
+    zh: '要不要先检索已有的项目或方案，能复用就不重复造轮子？（先看现成方案，能少走弯路）', en: 'Should it first look for existing projects to build on, rather than reinventing them? (Starting from existing work saves detours.)' },
 };
 
 export function boundaryQuestions(request, turns = []) {
