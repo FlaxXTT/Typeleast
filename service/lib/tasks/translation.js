@@ -6,7 +6,7 @@
  */
 import { CleanupTask, cleanupParameters } from "../cleanup-task.js";
 import { failureReason } from "../llm.js";
-import { directTranslatePrompt } from "../prompts/translate.js";
+import { directTranslatePrompt, translateBatches, translateUserMessage } from "../prompts/translate.js";
 import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
@@ -17,14 +17,20 @@ export async function runTranslation(ctx, target) {
   const task = new CleanupTask(request.signal);
   try {
     ctx.progress("translating");
-    const result = await ctx.complete({ system: directTranslatePrompt(target)
-      + (target === "en" ? variantInstruction(parseVariants(request.variants)) : ""),
-      user: ctx.redact(rawText),
-      ...cleanupParameters(rawText, "prompt", config), temperature: 0.2, signal: task.signal, retryBudget: task });
-    const translated = unwrap(String(result.text ?? "")).text.trim();
+    const system = directTranslatePrompt(target) + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
+    // At most TRANSLATE_BATCH paragraphs per request; the rest follow in later batches.
+    const parts = [];
+    let attempts = 0;
+    for (const batch of translateBatches(rawText)) {
+      const result = await ctx.complete({ system, user: translateUserMessage(target, ctx.redact(batch)),
+        ...cleanupParameters(batch, "prompt", config), temperature: 0, signal: task.signal, retryBudget: task });
+      attempts += result.attempts ?? 1;
+      parts.push(unwrap(String(result.text ?? "")).text.trim());
+    }
+    const translated = parts.filter(Boolean).join("\n");
     task.assertTime();
     if (!translated) return ctx.fail({ ...base, text: tidy(rawText).text, fallback: true, reason: "empty-output", ms: timing(started, 0), translated: target });
-    return ctx.done({ ...base, text: translated, translated: target, ms: timing(started, 0), attempts: result.attempts });
+    return ctx.done({ ...base, text: translated, translated: target, ms: timing(started, 0), attempts });
   } catch (error) {
     const reason = request.signal?.aborted ? "cancelled" : task.deadline.timedOut() ? "model-timeout" : failureReason(error);
     return ctx.fail({ ...base, text: tidy(rawText).text, fallback: true, reason, ms: timing(started, 0), translated: target });

@@ -36,8 +36,8 @@ test("翻译：一次调用直接整理并译成目标语言，不用听写整�
   assert.equal(result.text, "The meeting is on Thursday at 3 pm. Please bring your laptops.");
   assert.equal(result.translated, "en");
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].user, SPOKEN);
-  assert.match(calls[0].system, /把语音识别文本理解并整理后译成English/);
+  assert.equal(calls[0].user, "Translate to English:\n\n" + SPOKEN.trim());
+  assert.match(calls[0].system, /^Translate academic and research content into English/);
   assert.doesNotMatch(calls[0].system, /# Profile/);
   assert.equal(service.stats.modelCalls, 1);
 });

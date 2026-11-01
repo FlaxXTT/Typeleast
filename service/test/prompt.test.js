@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CLEANUP_PROMPT, cleanupSystemPrompt, PROFILE_LIMIT } from "../lib/prompts/cleanup.js";
-import { directTranslatePrompt } from "../lib/prompts/translate.js";
+import { directTranslatePrompt, translateBatches, translateUserMessage } from "../lib/prompts/translate.js";
 import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSION, systemPromptFor } from "../lib/prompt.js";
 import { PROFILE_PROMPT, profileMessage, readProfile } from "../lib/prompts/profile.js";
 
@@ -39,12 +39,14 @@ test("the user message has the shape the examples use", () => {
   assert.deepEqual(JSON.parse(buildUserMessage({ rawText: "你好" })), { raw_asr_transcript: "你好" });
 });
 
-test("translation is one call with its own prompt and no JSON contract", () => {
+test("translation uses the maintainer's prompt and user template, in batches of 8 paragraphs", () => {
   const prompt = directTranslatePrompt("en");
-  assert.match(prompt, /译成English/);
-  assert.match(prompt, /忠实边界/);
-  assert.match(prompt, /只输出译文。$/);
-  assert.doesNotMatch(prompt, /"status"|# Profile/);
+  assert.match(prompt, /^Translate academic and research content into English using/);
+  assert.match(prompt, /Smith et al\. \(2021\)`; translate only the surrounding prose\./);
+  assert.doesNotMatch(prompt, /\{\{|"status"|# Profile/);
+  assert.equal(translateUserMessage("zh", "Hello"), "Translate to 中文（简体中文）:\n\nHello");
+  assert.deepEqual(translateBatches("a\n\nb"), ["a\nb"]);
+  assert.equal(translateBatches(Array.from({ length: 17 }, (_, i) => "p" + i).join("\n")).length, 3);
 });
 
 test("the description is learned from corrections and intentions only", () => {
