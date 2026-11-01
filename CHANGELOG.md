@@ -2,6 +2,12 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 1.24.15（2026-11-01）
+
+发布范围：仅 Mac Apple 芯片 DMG / ZIP，Mac 构建号为 52。Windows 仍为 1.24.13。
+
+- Mac：设置 › 听写 新增「翻译提示词」，可修改、保存和恢复默认，说话翻译和选中翻译都使用它。
+
 ## 1.24.14（2026-11-01）
 
 发布范围：仅 Mac Apple 芯片 DMG / ZIP，Mac 构建号为 51。Windows 仍为 1.24.13。

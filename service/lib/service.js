@@ -301,6 +301,7 @@ export class VoicePolishService {
         signal: request.signal,
         betaSession: request.betaSession ?? null,
         baseline: request.baseline ?? null,
+        translatePrompt: request.translatePrompt ?? "",
         translateTo: request.translateTo ?? null,
         variants: request.variants ?? null,
         profile: request.profile ?? "",

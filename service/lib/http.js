@@ -245,6 +245,7 @@ export function createHandler(options) {
           task: body.task,
           source: body.source === 'selection' ? 'selection' : null,
           baseline: typeof body.baseline === "string" ? body.baseline : null,
+          translatePrompt: typeof body.translatePrompt === "string" ? body.translatePrompt : "",
           requestId: body.requestId,
           profile: typeof body.profile === "string" ? body.profile : "",
           language: typeof body.language === "string" ? body.language : "auto",
@@ -303,6 +304,7 @@ export function createHandler(options) {
         const result = await service.transcribeAndPolish({
           profile: typeof meta.profile === "string" ? meta.profile : "",
           baseline: typeof meta.baseline === "string" ? meta.baseline : null,
+          translatePrompt: typeof meta.translatePrompt === "string" ? meta.translatePrompt : "",
           task: req.headers["x-voice-task"],
           requestId: req.headers["x-request-id"] ?? undefined,
           audio,

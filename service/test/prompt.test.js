@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CLEANUP_PROMPT, cleanupSystemPrompt, PROFILE_LIMIT } from "../lib/prompts/cleanup.js";
-import { directTranslatePrompt, translateBatches, translateUserMessage } from "../lib/prompts/translate.js";
+import { directTranslatePrompt, TRANSLATE_PROMPT, translateBatches, translateUserMessage } from "../lib/prompts/translate.js";
 import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSION, systemPromptFor } from "../lib/prompt.js";
 import { PROFILE_PROMPT, profileMessage, readProfile } from "../lib/prompts/profile.js";
 
@@ -59,4 +59,14 @@ test("the description is learned from corrections and intentions only", () => {
   assert.match(PROFILE_PROMPT, /1000/);
   assert.equal(Array.from(readProfile("x".repeat(1500))).length, PROFILE_LIMIT);
   assert.equal(readProfile("  一段\n描述  "), "一段 描述");
+});
+
+test("a prompt saved in Settings replaces the default; empty means the default", () => {
+  assert.equal(directTranslatePrompt("en", "Into {{to}}, plainly."), "Into English, plainly.");
+  assert.equal(directTranslatePrompt("en", "  "), directTranslatePrompt("en"));
+});
+
+test("the Mac app's default prompt is the service's", () => {
+  const swift = readFileSync(new URL("../../apps/macos/Sources/Settings.swift", import.meta.url), "utf8");
+  assert.ok(swift.includes(JSON.stringify(TRANSLATE_PROMPT)));
 });

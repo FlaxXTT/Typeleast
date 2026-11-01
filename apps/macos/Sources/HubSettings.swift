@@ -28,7 +28,7 @@ struct SettingsPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     switch model.settingsCategory {
-                    case 0: shortcuts; language; audio; cleanup
+                    case 0: shortcuts; language; translatePrompt; audio; cleanup
                     case 1: ModelSection(); speech
                     default: general; privacy; permissions; updates; advanced
                     }
@@ -73,6 +73,10 @@ struct SettingsPage: View {
                         action: L10n.text("打开键盘设置")) { model.actions?.openKeyboardSettings() }
             }
         }
+    }
+
+    private var translatePrompt: some View {
+        SettingsSection(title: L10n.text("翻译提示词")) { TranslatePromptEditor() }
     }
 
     private var cleanup: some View {
@@ -732,5 +736,39 @@ struct ModelSection: View {
             return explain(code: "HTTP_" + String(status), message: nil)
         }
         return L10n.text("连不上服务商：") + ((error as? ServiceError)?.description ?? error.localizedDescription) + L10n.text("。请检查网络或代理")
+    }
+}
+
+/// Edits 翻译's system prompt; nothing changes until 保存.
+struct TranslatePromptEditor: View {
+    @State private var draft = Settings.shared.translatePrompt
+    @State private var saved = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.text("说话翻译和选中翻译都用它。{{to}} 代表目标语言。"))
+                .font(.system(size: 12)).foregroundColor(.secondary)
+            TextEditor(text: $draft)
+                .font(.system(size: 12))
+                .frame(height: 150)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.12)))
+                .onChange(of: draft) { _ in saved = false }
+            HStack {
+                Button(L10n.text("恢复默认")) {
+                    Settings.shared.translatePrompt = Settings.defaultTranslatePrompt
+                    draft = Settings.defaultTranslatePrompt
+                    saved = true
+                }
+                Spacer()
+                if saved { Text(L10n.text("已保存")).font(.system(size: 12)).foregroundColor(.secondary) }
+                Button(L10n.text("保存")) {
+                    Settings.shared.translatePrompt = draft
+                    draft = Settings.shared.translatePrompt
+                    saved = true
+                }
+                .disabled(draft == Settings.shared.translatePrompt)
+            }
+        }
+        .padding(12)
     }
 }

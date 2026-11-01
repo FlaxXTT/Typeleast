@@ -17,7 +17,7 @@ export async function runTranslation(ctx, target) {
   const task = new CleanupTask(request.signal);
   try {
     ctx.progress("translating");
-    const system = directTranslatePrompt(target) + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
+    const system = directTranslatePrompt(target, request.translatePrompt) + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "");
     // At most TRANSLATE_BATCH paragraphs per request; the rest follow in later batches.
     const parts = [];
     let attempts = 0;

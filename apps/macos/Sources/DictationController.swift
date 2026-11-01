@@ -295,6 +295,7 @@ final class DictationController {
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
         let profile = HistoryStore.shared.profile
+        let ownPrompt = settings.customTranslatePrompt
         let progressID = UUID(); self.progressID = progressID
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -309,7 +310,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              profile: profile, baseline: baseline,
+                                                              profile: profile, baseline: baseline, translatePrompt: ownPrompt,
                                                               onProgress: { [weak self] progress in DispatchQueue.main.async {
                                                                   guard let self, self.phase == .thinking, self.progressID == progressID else { return }
                                                                   self.recordingBar.showThinking(detail:progress.label)
@@ -601,10 +602,11 @@ final class DictationController {
         let text = field.selection, language = settings.language, variants = settings.variantsHeader
         let profile = HistoryStore.shared.profile
         let generation = UUID(); progressID = generation
+        let ownPrompt = settings.customTranslatePrompt
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.polishSync(text: text, language: language, strength: "prompt", llm: route,
-                                                              translateTo: target, variants: variants, profile: profile) }
+                                                              translateTo: target, variants: variants, profile: profile, translatePrompt: ownPrompt) }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
                 self.finishRequest(outcome, appBundleId: field.bundleId, language: language, strength: "prompt", audioPath: nil,

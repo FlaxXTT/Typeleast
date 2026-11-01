@@ -240,6 +240,22 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.strength"); changed() }
     }
 
+    /// The service's default translation prompt, shown for editing (a service test keeps them equal).
+    static let defaultTranslatePrompt = "Translate academic and research content into {{to}} using precise disciplinary terminology and a formal scholarly register. Preserve the scope, uncertainty, complexity, and logical force of claims without simplifying or strengthening them. Treat quantitative expressions and author-year citations as protected source spans: copy formulas, statistical labels, values, brackets, ASCII punctuation, and author strings exactly as written, including forms such as `β = 0.42`, `95% CI [0.10, 0.74]`, `p < 0.05`, and `Smith et al. (2021)`; translate only the surrounding prose. Keep scientific notation, symbols, references, bibliographic data, abbreviations, and named methods accurate, using established target-language terminology where available outside those protected spans.\n{{title_prompt}}{{summary_prompt}}{{terms_prompt}}"
+
+    /// 翻译's system prompt as saved in Settings; {{to}} is the target language.
+    var translatePrompt: String {
+        get { d.string(forKey: "voice.translatePrompt") ?? Settings.defaultTranslatePrompt }
+        set {
+            let isDefault = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newValue == Settings.defaultTranslatePrompt
+            if isDefault { d.removeObject(forKey: "voice.translatePrompt") } else { d.set(newValue, forKey: "voice.translatePrompt") }
+            changed()
+        }
+    }
+
+    /// What requests carry: nil while the default is in use.
+    var customTranslatePrompt: String? { d.string(forKey: "voice.translatePrompt") }
+
     /// Selecting text with the mouse offers a 「翻译」 button; the translation shows in a bubble.
     var selectionTranslate: Bool {
         get { bool("voice.selectionTranslate", default: true) }

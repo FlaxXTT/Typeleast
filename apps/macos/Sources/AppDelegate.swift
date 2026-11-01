@@ -401,10 +401,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             guard let self, let route = self.settings.activeLLMRoute else {
                 return done(.failure(ServiceError.transport(L10n.text("请先配置可用的整理模型。"))))
             }
-            let language = self.settings.language, variants = self.settings.variantsHeader
+            let language = self.settings.language, variants = self.settings.variantsHeader, ownPrompt = self.settings.customTranslatePrompt
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = Result { try self.client.polishSync(text: text, language: language, strength: "prompt", llm: route,
-                                                                 translateTo: target, variants: variants) }
+                                                                 translateTo: target, variants: variants, translatePrompt: ownPrompt) }
                 DispatchQueue.main.async {
                     switch result {
                     // A failed translation comes back as the original text: say so instead of showing it.
