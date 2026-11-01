@@ -67,7 +67,7 @@ final class SelectionTranslator {
         // The first time, a browser or Electron app (Claude, VS Code, Slack…) builds its
         // Accessibility tree only now: give it longer than the usual moment.
         let fresh = FieldContextReader.exposeContent(bundleId: bundle)
-        let copies = Inserter.readsSelectionByCopy(bundle) || SelectionTranslator.isElectron(app)
+        let copies = SelectionTranslator.readsByCopy(bundleId: bundle, bundleURL: app.bundleURL)
         DispatchQueue.main.asyncAfter(deadline: .now() + (fresh ? 0.6 : 0.15)) { [weak self] in
             guard let self, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle else { return }
             let text = SelectionTranslator.selectedText()
@@ -80,11 +80,25 @@ final class SelectionTranslator {
         }
     }
 
-    /// Electron apps (Claude, VS Code, Slack, Notion…) often keep a web page's selection out of
-    /// Accessibility; they are recognised by the framework they ship.
-    static func isElectron(_ app: NSRunningApplication) -> Bool {
-        guard let url = app.bundleURL else { return false }
-        return FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Frameworks/Electron Framework.framework").path)
+    /// AI tools that may hide their selection from Accessibility but are not recognisable as Electron.
+    static let agentApps = ["com.openai.chat", "com.openai.codex", "com.anthropic.claudefordesktop", "com.todesktop.",
+                            "com.exafunction.windsurf", "dev.zed.Zed", "com.trae.", "com.google.antigravity",
+                            "ai.opencode.", "com.claude-prism.", "com.deepseek.dsh", "com.microsoft.VSCode"]
+
+    /// Electron apps, recognised by what they ship: some rename the framework (ChatGPT's is
+    /// "Codex Framework"), but the app.asar stays.
+    static func isElectron(bundleURL url: URL) -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath: url.appendingPathComponent("Contents/Frameworks/Electron Framework.framework").path)
+            || fm.fileExists(atPath: url.appendingPathComponent("Contents/Resources/app.asar").path)
+    }
+
+    /// Whether a drag in this app may be a selection that only a ⌘C can read: browsers, AI tools,
+    /// Electron apps and terminals (where Claude Code and Codex run). ⌘C is sent only after a click on the button.
+    static func readsByCopy(bundleId: String, bundleURL: URL?) -> Bool {
+        Inserter.readsSelectionByCopy(bundleId) || TerminalGuard.isTerminal(bundleId)
+            || agentApps.contains { bundleId == $0 || ($0.hasSuffix(".") && bundleId.hasPrefix($0)) }
+            || (bundleURL.map(isElectron(bundleURL:)) ?? false)
     }
 
     /// The focused element's selected text; nil when it cannot be read, and for password fields.

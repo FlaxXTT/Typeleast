@@ -727,6 +727,18 @@ do {
     checkEq("selection: English with an English target comes back in Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "en"), "zh")
     checkEq("selection: with a Chinese target, Chinese goes to English", SelectionTranslator.target(for: "今天开会", preferred: "zh"), "en")
     checkEq("selection: with a Chinese target, English goes to Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "zh"), "zh")
+    check("selection: ChatGPT, Codex and terminals read by copy",
+          SelectionTranslator.readsByCopy(bundleId: "com.openai.chat", bundleURL: nil) && SelectionTranslator.readsByCopy(bundleId: "com.openai.codex", bundleURL: nil)
+          && SelectionTranslator.readsByCopy(bundleId: "com.todesktop.230313mzl4w4u92", bundleURL: nil) && SelectionTranslator.readsByCopy(bundleId: "com.googlecode.iterm2", bundleURL: nil))
+    check("selection: an ordinary app does not", !SelectionTranslator.readsByCopy(bundleId: "com.apple.Finder", bundleURL: nil))
+    do {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent("tl-" + UUID().uuidString + ".app")
+        try? FileManager.default.createDirectory(at: app.appendingPathComponent("Contents/Resources"), withIntermediateDirectories: true)
+        check("selection: a plain app is not Electron", !SelectionTranslator.isElectron(bundleURL: app))
+        FileManager.default.createFile(atPath: app.appendingPathComponent("Contents/Resources/app.asar").path, contents: Data())
+        check("selection: app.asar marks Electron even with a renamed framework", SelectionTranslator.isElectron(bundleURL: app))
+        try? FileManager.default.removeItem(at: app)
+    }
     checkEq("selection: other targets are kept", SelectionTranslator.target(for: "Ship it today", preferred: "ja"), "ja")
     check("the first cursor still holds when text after it changed",
           CaretAnchor.stillValid(before: "你好，", selected: "", value: "你好，世界又多了几个字", location: 3, length: 0))
