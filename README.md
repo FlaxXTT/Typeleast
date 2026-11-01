@@ -97,7 +97,7 @@
 
 ## 下载
 
-最新版：Mac [**v1.24.14**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.14)，Windows [**v1.24.13**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.13)
+最新版：Mac [**v1.24.15**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.15)，Windows [**v1.24.13**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.13)
 
 | 电脑 | 文件 |
 |---|---|
