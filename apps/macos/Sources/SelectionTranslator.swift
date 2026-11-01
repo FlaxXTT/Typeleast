@@ -224,10 +224,11 @@ struct SelectionButtonView: View {
     var body: some View {
         // A small round icon, so it covers as little of the text as possible.
         Button(action: action) {
-            Image(systemName: "character.bubble").font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white)
+            // The app's icon, enlarged a little so the circle crops its transparent margin.
+            Image(nsImage: NSApp.applicationIconImage).resizable()
+                .frame(width: 25, height: 25)
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(Color(white: 0.09).opacity(0.88)))
+                .clipShape(Circle())
                 .overlay(Circle().stroke(Color.white.opacity(0.14)))
         }
         .buttonStyle(.plain)
