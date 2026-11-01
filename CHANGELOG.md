@@ -2,8 +2,11 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
-## 下一版（未发布）
+## 1.24.16（2026-11-02）
 
+发布范围：仅 Mac Apple 芯片 DMG / ZIP，Mac 构建号为 53。Windows 仍为 1.24.13。
+
+- Mac：选中文字后旁边显示一个小白点，点它翻译；译文面板可以拖动，取消选择或点别处都不会消失，点 × 才关闭。
 - Mac：选中翻译适配更多 AI 工具：ChatGPT、Codex、Claude、Cursor、Windsurf、Zed、Trae、OpenCode、VS Code，以及所有 Electron 应用（含改名框架的）和终端里的 Claude Code、Codex。读不到选区时，点按钮后用复制读取并还原剪贴板。
 
 ## 1.24.15（2026-11-01）

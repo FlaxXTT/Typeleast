@@ -198,6 +198,23 @@ if mode == "all" || mode == "selection" {
                    "asked=" + String(describing: asked) + " bubbleWidth=" + String(describing: bubble?.frame.width))
             report("S3 the app keeps focus and selection", front == te && SelectionTranslator.selectedText() == "Hello world" && !(bubble?.isKeyWindow ?? true),
                    "front=" + front + " selected=" + (SelectionTranslator.selectedText() ?? "nil"))
+            if let bubble {
+                let before = bubble.frame.origin
+                let start = CGPoint(x: bubble.frame.midX, y: NSScreen.screens[0].frame.height - bubble.frame.midY)
+                CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: start, mouseButton: .left)?.post(tap: .cghidEventTap)
+                pump(0.1)
+                for i in 1...10 {
+                    CGEvent(mouseEventSource: src, mouseType: .leftMouseDragged, mouseCursorPosition: CGPoint(x: start.x + Double(i) * 6, y: start.y + Double(i) * 3), mouseButton: .left)?.post(tap: .cghidEventTap)
+                    pump(0.03)
+                }
+                CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: CGPoint(x: start.x + 60, y: start.y + 30), mouseButton: .left)?.post(tap: .cghidEventTap)
+                pump(0.3)
+                report("S4 the translation can be dragged", abs(bubble.frame.origin.x - before.x) > 30, "moved=" + String(describing: bubble.frame.origin.x - before.x))
+                setCaret(e, 2)
+                click(NSPoint(x: rect.minX + 2, y: NSScreen.screens[0].frame.height - rect.midY))
+                pump(0.4)
+                report("S5 it stays after the selection is gone", bubble.isVisible, "selected=" + (SelectionTranslator.selectedText() ?? "nil"))
+            }
         }
         translator.stop()
     }

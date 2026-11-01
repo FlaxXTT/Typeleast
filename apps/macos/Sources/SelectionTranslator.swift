@@ -24,19 +24,21 @@ final class SelectionTranslator {
 
     private var monitors: [Any] = []
     private var dragged = false
-    private let panel = SelectionPanel()
+    private let dot = SelectionPanel()
+    private let bubble = SelectionPanel()
     private var hideTimer: Timer?
-    private var generation = 0
+    private var offerToken = 0
+    private var runToken = 0
 
     func start() {
         guard monitors.isEmpty else { return }
         let events: [(NSEvent.EventTypeMask, (NSEvent) -> Void)] = [
-            // Clicks in TypeLeast's own panels never reach a global monitor, so any click here is elsewhere.
-            (.leftMouseDown, { [weak self] _ in self?.dragged = false; self?.hide() }),
+            // A click elsewhere or typing withdraws the dot; the translation stays until its × is clicked.
+            (.leftMouseDown, { [weak self] _ in self?.dragged = false; self?.hideOffer() }),
             (.leftMouseDragged, { [weak self] _ in self?.dragged = true }),
             (.leftMouseUp, { [weak self] event in self?.mouseUp(event) }),
-            // Typing closes it; a ⌘ shortcut does not (the ⌘C that reads a browser's selection is one).
-            (.keyDown, { [weak self] event in if !event.modifierFlags.contains(.command) { self?.hide() } }),
+            // A ⌘ shortcut does not withdraw it (the ⌘C that reads a browser's selection is one).
+            (.keyDown, { [weak self] event in if !event.modifierFlags.contains(.command) { self?.hideOffer() } }),
         ]
         for (mask, handler) in events {
             if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler) { monitors.append(monitor) }
@@ -50,10 +52,20 @@ final class SelectionTranslator {
     }
 
     func hide() {
-        generation += 1
+        hideOffer()
+        closeBubble()
+    }
+
+    private func hideOffer() {
+        offerToken += 1
         hideTimer?.invalidate()
         hideTimer = nil
-        panel.hide()
+        dot.hide()
+    }
+
+    private func closeBubble() {
+        runToken += 1
+        bubble.hide()
     }
 
     private func mouseUp(_ event: NSEvent) {
@@ -130,35 +142,40 @@ final class SelectionTranslator {
     }
 
     private func offer(at point: NSPoint, read: @escaping (@escaping (String?) -> Void) -> Void) {
-        let token = generation + 1
-        generation = token
-        panel.showButton(at: point) { [weak self] in
-            guard let self, self.generation == token else { return }
-            self.hideTimer?.invalidate()
-            self.panel.showBubble(.loading)
+        hideOffer()
+        let token = offerToken
+        dot.showDot(at: point) { [weak self] in
+            guard let self, self.offerToken == token else { return }
+            self.hideOffer()
+            self.runToken += 1
+            let run = self.runToken
+            self.showBubble(.loading, at: point)
             read { [weak self] text in
-                guard let self, self.generation == token else { return }
-                guard let text, DictationController.hasText(text) else { return self.hide() }
-                self.run(String(text.prefix(SelectionTranslator.limit)), token: token)
+                guard let self, self.runToken == run else { return }
+                guard let text, DictationController.hasText(text) else { return self.closeBubble() }
+                self.run(String(text.prefix(SelectionTranslator.limit)), token: run, at: point)
             }
         }
-        hideTimer?.invalidate()
         let timer = Timer(timeInterval: SelectionTranslator.buttonSeconds, repeats: false) { [weak self] _ in
-            guard let self, self.generation == token, self.panel.showsButton else { return }
-            self.hide()
+            guard let self, self.offerToken == token else { return }
+            self.hideOffer()
         }
         RunLoop.main.add(timer, forMode: .common)
         hideTimer = timer
     }
 
-    private func run(_ text: String, token: Int) {
-        guard let translate else { return panel.showBubble(.failed(L10n.text("请先配置可用的整理模型。"))) }
+    private func showBubble(_ state: SelectionBubble, at point: NSPoint) {
+        bubble.showBubble(state, at: point) { [weak self] in self?.closeBubble() }
+    }
+
+    private func run(_ text: String, token: Int, at point: NSPoint) {
+        guard let translate else { return showBubble(.failed(L10n.text("请先配置可用的整理模型。")), at: point) }
         translate(text, SelectionTranslator.target(for: text, preferred: preferredTarget())) { [weak self] result in
-            guard let self, self.generation == token else { return }
+            guard let self, self.runToken == token else { return }
             switch result {
-            case .success(let translated): self.panel.showBubble(.done(translated))
+            case .success(let translated): self.showBubble(.done(translated), at: point)
             case .failure(let error):
-                self.panel.showBubble(.failed((error as? ServiceError)?.description ?? L10n.text("翻译失败")))
+                self.showBubble(.failed((error as? ServiceError)?.description ?? L10n.text("翻译失败")), at: point)
             }
         }
     }
@@ -172,7 +189,7 @@ enum SelectionBubble: Equatable {
     case failed(String)
 }
 
-/// One borderless, non-activating panel that shows either the button or the bubble.
+/// A borderless, non-activating panel holding the dot or the translation.
 final class SelectionPanel {
     private final class Panel: NSPanel {
         override var canBecomeKey: Bool { false }
@@ -188,40 +205,54 @@ final class SelectionPanel {
         p.backgroundColor = .clear
         p.isOpaque = false
         p.hasShadow = true
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         return p
     }()
     private var anchor = NSPoint.zero
-    private(set) var showsButton = false
+    private var dragOffset: NSPoint?
 
-    func showButton(at point: NSPoint, action: @escaping () -> Void) {
+    func showDot(at point: NSPoint, action: @escaping () -> Void) {
         anchor = point
-        showsButton = true
-        show(SelectionButtonView(action: action))
+        show(SelectionDotView(action: action))
     }
 
-    func showBubble(_ state: SelectionBubble) {
-        showsButton = false
-        show(SelectionBubbleView(state: state, close: { [weak self] in self?.hide() }))
+    func showBubble(_ state: SelectionBubble, at point: NSPoint, close: @escaping () -> Void) {
+        anchor = point
+        show(SelectionBubbleView(state: state, close: close,
+                                 drag: { [weak self] in self?.drag() }, dragEnded: { [weak self] in self?.dragOffset = nil }))
     }
 
     func hide() {
-        showsButton = false
         panel.orderOut(nil)
+    }
+
+    /// Follows the mouse, in screen coordinates: the view moves with the panel, so its own are useless.
+    private func drag() {
+        let mouse = NSEvent.mouseLocation
+        let offset = dragOffset ?? NSPoint(x: panel.frame.minX - mouse.x, y: panel.frame.minY - mouse.y)
+        dragOffset = offset
+        panel.setFrameOrigin(NSPoint(x: mouse.x + offset.x, y: mouse.y + offset.y))
     }
 
     private func show<V: View>(_ view: V) {
         let host = FirstClickHostingView(rootView: view)
         let size = host.fittingSize
+        // A panel already open stays where it is (the user may have moved it), its top edge fixed.
+        let top = panel.isVisible ? panel.frame.maxY : nil
+        let left = panel.frame.minX
         panel.contentView = host
         panel.setContentSize(size)
-        // Below and to the right of the mouse, kept on the screen it is on.
-        let screen = NSScreen.screens.first { $0.frame.contains(anchor) }?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        var origin = NSPoint(x: anchor.x + 8, y: anchor.y - size.height - 12)
-        if origin.y < screen.minY { origin.y = anchor.y + 16 }
-        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
-        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
-        panel.setFrameOrigin(origin)
+        if let top {
+            panel.setFrameOrigin(NSPoint(x: left, y: top - size.height))
+        } else {
+            // Below and to the right of the mouse, kept on the screen it is on.
+            let screen = NSScreen.screens.first { $0.frame.contains(anchor) }?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+            var origin = NSPoint(x: anchor.x + 8, y: anchor.y - size.height - 12)
+            if origin.y < screen.minY { origin.y = anchor.y + 16 }
+            origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+            origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+            panel.setFrameOrigin(origin)
+        }
         panel.orderFrontRegardless()
     }
 }
@@ -231,34 +262,42 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// The dark capsule offered next to a selection.
-struct SelectionButtonView: View {
+/// The small white dot offered next to a selection; the hit area is larger than the dot.
+struct SelectionDotView: View {
     let action: () -> Void
 
     var body: some View {
-        // A small round icon, so it covers as little of the text as possible.
         Button(action: action) {
-            // The app's icon, enlarged a little so the circle crops its transparent margin.
-            Image(nsImage: NSApp.applicationIconImage).resizable()
-                .frame(width: 25, height: 25)
+            Circle().fill(Color.white)
+                .overlay(Circle().stroke(Color.black.opacity(0.28), lineWidth: 0.5))
+                .frame(width: 10, height: 10)
                 .frame(width: 20, height: 20)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.14)))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(L10n.text("翻译"))
-        .padding(2)
     }
 }
 
-/// The translation, with copy and close.
+/// The translation: drag it anywhere; it stays until its × is clicked.
 struct SelectionBubbleView: View {
     let state: SelectionBubble
     let close: () -> Void
+    let drag: () -> Void
+    let dragEnded: () -> Void
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Spacer()
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary).frame(width: 18, height: 18).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L10n.text("关闭"))
+            }
             switch state {
             case .loading:
                 HStack(spacing: 8) {
@@ -277,22 +316,21 @@ struct SelectionBubbleView: View {
                         Inserter.shared.setString(text)
                         copied = true
                     }
-                    Button(L10n.text("关闭"), action: close)
                 }
                 .controlSize(.small)
             case .failed(let message):
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle").foregroundColor(.orange)
                     Text(message).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                    Button(L10n.text("关闭"), action: close).controlSize(.small)
                 }
             }
         }
-        .padding(14)
+        .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 14)
         .frame(width: 360, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .windowBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.1)))
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
         .padding(4)
     }
 }
