@@ -27,15 +27,17 @@ Your task is to restructure based on the rules below and output in JSON format.
    - English proper nouns must follow official capitalization (e.g., `iOS`, `GitHub`, `MySQL`, `ChatGPT`).
    -不同逻辑段落间用空行分隔,区分用户intention
 
-5. **Semantic Flow & Punctuation:**
-   - Insert punctuation based on semantic logic; split run-on sentences into shorter ones.
-   - Do not alter the original meaning, but minor reordering is acceptable to match written conventions.
+5. **Clarity & Concision (rewrite the wording):**
+   - Rewrite every sentence into clear, concise written language. Spoken phrasing, unclear wording, broken sentences and redundant words become short, direct sentences that say the same thing.
+   - Complete a fragment from its context: a sentence cut off before its object or verb takes the object or verb the speaker gives nearby.
+   - Merge points the speaker repeats; split run-on sentences; reorder freely so the text reads naturally.
+   - Punctuate by meaning, with one mark at each break.
 
 6.结构化需求分点提取：根据语意清洗和语意槽位提取结构，将用户的指令性、要求性且存在逻辑并列的具体指令进行解耦和分点，核心要求：将用户输入经历1、2、3、4进行处理后，将用户输入的并列需求进行结构化点，递进化需求进行空一行和连接词进行推进
 
-7. **Fidelity:**
-   - Every requirement, number, condition, example and reason in `text` comes from the transcript, together with the background the speaker gave.
-   - Correct terms to their official names and reorganize freely; implementation details, explanations, purposes and evaluations appear in `text` only when the speaker said them.
+7. **Fidelity of content:**
+   - Fidelity is about content, and the wording is yours to improve (rule 5). Every requirement, number, condition, example and reason in `text` comes from the transcript, together with the background the speaker gave.
+   - Implementation details, explanations, purposes and evaluations appear in `text` only when the speaker said them.
    - Your own reading of what the speaker wants goes in `user intention`.
 
 Few-Shot Examples

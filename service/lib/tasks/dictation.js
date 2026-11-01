@@ -17,6 +17,7 @@ import { redactFieldContext } from "../context.js";
 import { failureDetail, failureReason, ModelCallError } from "../llm.js";
 import { parsePolishOutput } from "../parse-output.js";
 import { buildUserMessage, systemPromptFor } from "../prompt.js";
+import { normalizePunctuation } from "../punctuation.js";
 import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
@@ -51,8 +52,9 @@ export async function runDictation(ctx) {
         ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
     }
     if (parsed.mode !== "json") stats.jsonRecovered += 1;
-    // The cleaned text is inserted as the model wrote it, minus a wrapper a chatty model may add.
-    const candidate = unwrap(parsed.text).text.trim();
+    // The cleaned text is inserted as the model wrote it, minus a wrapper a chatty model may add
+    // and redundant punctuation runs (「。，」) it sometimes keeps from the transcript.
+    const candidate = normalizePunctuation(unwrap(parsed.text).text).trim();
     if (!candidate) {
       const tidyOnly = tidy(rawText);
       return await ctx.fail({ ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",

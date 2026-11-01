@@ -120,6 +120,13 @@ test("a success reply inserts its text; corrections and intention come back for 
   assert.equal(result.intention, "1. 修复显存溢出");
 });
 
+test("redundant punctuation the model keeps is removed; code and quotes are not touched", async () => {
+  const reply = JSON.stringify({ status: "success", text: "禁止二级标题。，话术要简明。，运行 `a.,b` 和“好，。”" });
+  const service = makeService({ model: fakeModel(reply) });
+  const result = await service.polish({ rawText: "禁止二级标题", llm: ROUTE });
+  assert.equal(result.text, "禁止二级标题。话术要简明。运行 `a.,b` 和“好，。”");
+});
+
 test("the description of the user's work is built from history items in one call", async () => {
   const model = fakeModel("从事流体仿真，常用 OpenFOAM。");
   const service = makeService({ model });
