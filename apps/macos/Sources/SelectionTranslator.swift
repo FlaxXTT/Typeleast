@@ -64,18 +64,27 @@ final class SelectionTranslator {
               let app = NSWorkspace.shared.frontmostApplication, let bundle = app.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier, !FieldContextReader.isBlocked(bundleId: bundle) else { return }
         let point = NSEvent.mouseLocation
-        FieldContextReader.exposeContent(bundleId: bundle)
-        // Give the app a moment to update its selection.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        // The first time, a browser or Electron app (Claude, VS Code, Slack…) builds its
+        // Accessibility tree only now: give it longer than the usual moment.
+        let fresh = FieldContextReader.exposeContent(bundleId: bundle)
+        let copies = Inserter.readsSelectionByCopy(bundle) || SelectionTranslator.isElectron(app)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (fresh ? 0.6 : 0.15)) { [weak self] in
             guard let self, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle else { return }
             let text = SelectionTranslator.selectedText()
             if let text, DictationController.hasText(text) {
                 self.offer(at: point) { $0(text) }
-            } else if text == nil, Inserter.readsSelectionByCopy(bundle) {
-                // A browser that hides the selection: copy it, but only once the user asks.
+            } else if copies, text?.isEmpty != false {
+                // An app that hides its selection: copy it, but only once the user asks.
                 self.offer(at: point) { done in Inserter.shared.copySelection { done($0) } }
             }
         }
+    }
+
+    /// Electron apps (Claude, VS Code, Slack, Notion…) often keep a web page's selection out of
+    /// Accessibility; they are recognised by the framework they ship.
+    static func isElectron(_ app: NSRunningApplication) -> Bool {
+        guard let url = app.bundleURL else { return false }
+        return FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Frameworks/Electron Framework.framework").path)
     }
 
     /// The focused element's selected text; nil when it cannot be read, and for password fields.
@@ -213,18 +222,17 @@ struct SelectionButtonView: View {
     let action: () -> Void
 
     var body: some View {
+        // A small round icon, so it covers as little of the text as possible.
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: "character.bubble").font(.system(size: 12, weight: .semibold))
-                Text(L10n.text("翻译")).font(.system(size: 12.5, weight: .semibold)).fixedSize()
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Capsule().fill(Color(white: 0.09)))
-            .overlay(Capsule().stroke(Color.white.opacity(0.12)))
+            Image(systemName: "character.bubble").font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color(white: 0.09).opacity(0.88)))
+                .overlay(Circle().stroke(Color.white.opacity(0.14)))
         }
         .buttonStyle(.plain)
-        .padding(4)
+        .help(L10n.text("翻译"))
+        .padding(2)
     }
 }
 

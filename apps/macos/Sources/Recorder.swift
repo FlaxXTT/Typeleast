@@ -29,7 +29,9 @@ final class Recorder {
     static let targetSampleRate: Double = 16000
     static let bytesPerSecond = 32000      // 16000 Hz * 2 bytes * 1 channel
 
-    private let engine = AVAudioEngine()
+    /// Rebuilt for every recording: after sleep, a restart or a device change, a long-lived engine
+    /// keeps the old input format, and installing a tap with it raises an exception that aborts the app.
+    private var engine = AVAudioEngine()
     private let lock = NSLock()
     private var pcm = Data()
     private var converter: AVAudioConverter?
@@ -175,6 +177,7 @@ final class Recorder {
         if status == .denied || status == .restricted { throw RecorderError.permissionDenied }
         if status == .notDetermined { throw RecorderError.permissionNotDetermined }
 
+        engine = AVAudioEngine()
         // Host hook, e.g. to select a non-default microphone, before the input format is read.
         prepareEngine?(engine)
         let input = engine.inputNode

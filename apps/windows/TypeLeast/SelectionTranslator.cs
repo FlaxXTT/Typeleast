@@ -160,18 +160,19 @@ internal sealed class SelectionPopup : Window
     {
         anchor = new Native.MSLLHOOKSTRUCT { X = x, Y = y };
         ShowsButton = true;
-        var label = new StackPanel { Orientation = Orientation.Horizontal };
-        label.Children.Add(Theme.Text(L10n.T("翻译"), 13, Brushes.White, bold: true, wrap: false));
+        // A small round icon, so it covers as little of the text as possible.
         var button = new Border
         {
-            Background = Theme.Hex("#171717"),
-            BorderBrush = Theme.Hex("#1FFFFFFF"),
+            Width = 22, Height = 22,
+            Background = Theme.Hex("#E0171717"),
+            BorderBrush = Theme.Hex("#24FFFFFF"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(15),
-            Padding = new Thickness(14, 6, 14, 6),
-            Margin = new Thickness(4),
+            CornerRadius = new CornerRadius(11),
+            Margin = new Thickness(2),
             Cursor = Cursors.Hand,
-            Child = label,
+            ToolTip = L10n.T("翻译"),
+            Child = new TextBlock { Text = "译", Foreground = Brushes.White, FontSize = 11, FontFamily = Theme.Font,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
         button.MouseLeftButtonUp += (_, _) => click();
         Present(button);
