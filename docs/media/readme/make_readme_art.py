@@ -84,7 +84,7 @@ def hero(t):
     # App icon with listening bars.
     body.append(f'<rect x="392" y="22" width="96" height="96" rx="23" fill="{t["icon"]}" stroke="{t["iconEdge"]}"/>')
     body.append(icon_bars(440, 70, 1.0, "#ffffff", True, "hb"))
-    body.append(text(440, 188, "TypeLeast", 62, "ink", 700, "middle", 'letter-spacing="-1.5"'))
+    body.append(text(440, 188, "Hermes", 62, "ink", 700, "middle", 'letter-spacing="-1.5"'))
     body.append(text(440, 240, "说话，得到文字。", 32, "ink", 600, "middle", 'letter-spacing="0.5"'))
     body.append(text(440, 276, "按一下，说话。再按一下，文字写到光标处。", 17, "gray", 400, "middle"))
 
@@ -161,7 +161,7 @@ def hero(t):
 @keyframes caret0 { 0%,3% { opacity: 1; } 3.01%,100% { opacity: 0; } }
 """
     return svg(W, H, "\n".join(body), css, t,
-               "TypeLeast：说话，得到文字。按一下说话，再按一下，文字写到光标处。")
+               "Hermes：说话，得到文字。按一下说话，再按一下，文字写到光标处。")
 
 
 # ---------------------------------------------------------------- feature grid

@@ -36,7 +36,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>TypeLeast</string>
+	<string>Hermes</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hermes 录制你的语音，在本机识别。</string>
 </dict>
