@@ -1,23 +1,24 @@
-TypeLeast：按一下，说话。再按一下，文字写到光标处。
+Hermes（原 TypeLeast）：按一下，说话。再按一下，文字写到光标处。
 
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 选中翻译改为小白点；译文面板可拖动，点 × 才关闭。
-- 选中翻译适配 ChatGPT、Codex、Cursor 等 AI 工具和终端。
+- 产品显示名称更新为 Hermes；原有设置、历史和模型继续使用。
+- 选中文字后的翻译入口改为灰白色开口圆环。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Selection translation now shows a small white dot; the panel can be dragged and stays until you click ×.
-- Selection translation works in ChatGPT, Codex, Cursor, other AI tools and terminals.
+- The product is now named Hermes. Existing settings, history and models remain available.
+- The selection translation button is now a light grey open ring.
 <!-- /typeleast-update -->
 
 ## 下载
 
 | 电脑 | 安装包 |
 |---|---|
-| macOS 13 以上，Apple 芯片 | `TypeLeast-1.24.16-macOS-AppleSilicon.dmg` 或 `.zip` |
+| macOS 13 以上，Apple 芯片 | `TypeLeast-1.24.17-macOS-AppleSilicon.dmg` 或 `.zip` |
+| Windows x64 | `TypeLeast-1.24.17-Windows-x64-Setup.exe` 或 `TypeLeast-1.24.17-Windows-x64-Portable.zip` |
 
-Mac 构建号 53。旧的风格设置和词典不再生效，数据保留。
+安装包和内部路径沿用旧名称，以兼容已有更新和数据。Mac 构建号 54。
 
 [完整记录](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md) · [代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)
