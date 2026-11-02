@@ -79,7 +79,7 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 AppMarkView(size: 26)
-                Text("TypeLeast").font(.system(size: 16, weight: .bold))
+                Text("TypeLeast").font(.custom("Snell Roundhand", size: 21))
             }
             .padding(.top, 44)
             .padding(.horizontal, 18)
