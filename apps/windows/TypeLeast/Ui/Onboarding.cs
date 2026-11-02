@@ -23,7 +23,7 @@ internal sealed class Onboarding : Window
     public Onboarding(AppHost host)
     {
         this.host=host;speechModels=new SpeechModelsPanel(host);practice=new OnboardingPracticeController(host,Dispatcher);
-        Title="Hermes";Width=640;Height=660;MinWidth=480;MinHeight=480;Background=Theme.Background;
+        Title="TypeLeast";Width=640;Height=660;MinWidth=480;MinHeight=480;Background=Theme.Background;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
         Content=new ScrollViewer {Content=content,Padding=new Thickness(28),VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         practice.Changed+=PracticeChanged;host.Changed+=Refresh;
@@ -48,7 +48,7 @@ internal sealed class Onboarding : Window
     private void Render()
     {
         content.Children.Clear();content.Children.Add(Theme.Text($"{step+1} / {titles.Length}",12,Theme.Grey));
-        content.Children.Add(Theme.Text(L10n.T(titles[step]).Replace("TypeLeast", "Hermes"),25,bold:true));
+        content.Children.Add(Theme.Text(L10n.T(titles[step]),25,bold:true));
         var description=step switch {
             1=>host.ServiceSummary,
             2=>L10n.T("需要麦克风权限才能完成真实语音练习。"),

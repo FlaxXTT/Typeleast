@@ -27,7 +27,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     private func makeWindow() -> NSWindow {
         let host = NSHostingController(rootView: HubRootView().environmentObject(model))
         let window = NSWindow(contentViewController: host)
-        window.title = "Hermes"
+        window.title = "TypeLeast"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -79,7 +79,7 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 AppMarkView(size: 26)
-                Text("Hermes").font(.system(size: 16, weight: .bold))
+                Text("TypeLeast").font(.system(size: 16, weight: .bold))
             }
             .padding(.top, 44)
             .padding(.horizontal, 18)

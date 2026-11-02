@@ -1,7 +1,7 @@
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/hero-dark.svg">
-  <img src="docs/media/readme/hero-light.svg" alt="Hermes：说话，得到文字。按一下说话，再按一下，文字写到光标处。" width="880">
+  <img src="docs/media/readme/hero-light.svg" alt="TypeLeast：说话，得到文字。按一下说话，再按一下，文字写到光标处。" width="880">
 </picture>
 </p>
 
@@ -125,7 +125,7 @@
 <details>
 <summary><b>macOS 安装</b></summary>
 
-1. 打开 `.dmg`，把 **Hermes**（原 TypeLeast）拖进「应用程序」。应用文件仍命名为 TypeLeast.app，以兼容原有更新。
+1. 打开 `.dmg`，把 **TypeLeast** 拖进「应用程序」。
 2. 系统拦截时：打开「系统设置 → 隐私与安全性」，点 **「仍要打开」**。或在「终端」运行：
 
    ```bash
@@ -146,7 +146,7 @@
 3. 在新手引导中配置整理模型和 API Key，下载并加载识别模型。录不到声音：「设置 → 隐私和安全性 → 麦克风」允许桌面应用。
 4. 完成三组真实语音练习后进入主界面。仅新用户强制，旧用户可重新学习。
 
-**卸载**：「设置 → 应用 → 已安装的应用」→ Hermes →「卸载」。卸载时可选是否删除数据。免安装版：删除文件夹。
+**卸载**：「设置 → 应用 → 已安装的应用」→ TypeLeast →「卸载」。卸载时可选是否删除数据。免安装版：删除文件夹。
 
 </details>
 
@@ -246,17 +246,17 @@ Windows code signing via SignPath Foundation is currently pending approval.
 | `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt` | `models/sensevoice/tokens.txt` | 315,894 |
 | `https://huggingface.co/csukuangfj/vad/resolve/main/silero_vad.onnx` | `models/vad/silero_vad.onnx` | 1,807,522 |
 
-**Mac 没有粘贴**：「系统设置 → 隐私与安全性 → 辅助功能」打开 Hermes。更新后可能要重新打开。
+**Mac 没有粘贴**：「系统设置 → 隐私与安全性 → 辅助功能」打开 TypeLeast。更新后可能要重新打开。
 
 **Mac 按 Fn 切换了输入法**：「按下 🌐 键时」设为「无操作」。
 
-**Windows 录不到声音**：允许桌面应用使用麦克风，并在 Hermes 里选对设备。
+**Windows 录不到声音**：允许桌面应用使用麦克风，并在 TypeLeast 里选对设备。
 
 **Windows 右 Alt 没反应**：可能是 AltGr 或被占用。换一个键。
 
 **Windows 粘贴失败**：管理员窗口不接受模拟按键。按 Ctrl+V。
 
-**杀毒软件提示风险**：Hermes 用键盘钩子检测快捷键，且没有签名。它只检测快捷键和 Esc，不记录输入。
+**杀毒软件提示风险**：TypeLeast 用键盘钩子检测快捷键，且没有签名。它只检测快捷键和 Esc，不记录输入。
 
 </details>
 
@@ -329,7 +329,7 @@ dotnet build TypeLeast\TypeLeast.csproj -c Release
 
 [GNU GPL v3.0](LICENSE)。可以使用、修改和再分发。修改后发布的版本也必须用 GPL-3.0。
 
-按 GPL-3.0 第 15、16 条，Hermes 按「现状」提供，不附带任何担保。模型生成的结果可能出错，使用前请核对。
+按 GPL-3.0 第 15、16 条，TypeLeast 按「现状」提供，不附带任何担保。模型生成的结果可能出错，使用前请核对。
 
 第三方组件见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
 

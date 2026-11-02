@@ -65,7 +65,7 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     private func buildMenu() {
         menu.autoenablesItems = false
-        statusLine = item("Hermes", nil)
+        statusLine = item("TypeLeast", nil)
         statusLine.isEnabled = false
         menu.addItem(statusLine)
         menu.addItem(.separator())
@@ -87,7 +87,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         launchItem = item(L10n.text("重启本地服务"), #selector(onLaunch))
         menu.addItem(launchItem)
         menu.addItem(.separator())
-        menu.addItem(item(L10n.text("打开 TypeLeast").replacingOccurrences(of: "TypeLeast", with: "Hermes"), #selector(onOpenHome)))
+        menu.addItem(item(L10n.text("打开 TypeLeast"), #selector(onOpenHome)))
         menu.addItem(item(L10n.text("历史…"), #selector(onOpenHistory)))
         let settings = item(L10n.text("设置…"), #selector(onOpenSettings))
         settings.keyEquivalent = ","
@@ -95,7 +95,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         updateItem = item(L10n.text("检查更新…"), #selector(onCheckForUpdates))
         menu.addItem(updateItem)
         menu.addItem(.separator())
-        let quit = item(L10n.text("退出 TypeLeast").replacingOccurrences(of: "TypeLeast", with: "Hermes"), #selector(onQuit))
+        let quit = item(L10n.text("退出 TypeLeast"), #selector(onQuit))
         quit.keyEquivalent = "q"
         menu.addItem(quit)
     }
@@ -132,7 +132,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         }
         axItem.isHidden = s.accessibilityTrusted
         launchItem.isHidden = s.serviceUp
-        statusItem.button?.toolTip = "Hermes · " + statusLine.title
+        statusItem.button?.toolTip = "TypeLeast · " + statusLine.title
     }
 
     /// A newer version was found: say so on the menu item (nil: back to "检查更新…").
@@ -141,7 +141,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     private func setIcon(_ symbol: String) {
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Hermes")
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "TypeLeast")
         image?.isTemplate = true
         statusItem.button?.image = image
     }

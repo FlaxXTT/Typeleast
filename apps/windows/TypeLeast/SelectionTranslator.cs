@@ -161,13 +161,14 @@ internal sealed class SelectionPopup : Window
         anchor = new Native.MSLLHOOKSTRUCT { X = x, Y = y };
         ShowsButton = true;
         // A small round icon, so it covers as little of the text as possible.
-        var arc = new System.Windows.Shapes.Path
+        var dot = new Border
         {
-            Data = Geometry.Parse("M 6,3 A 7,7 0 1 1 3,14"),
-            Stroke = Theme.Hex("#D9E8E8E8"), StrokeThickness = 3,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            Width = 14, Height = 14, CornerRadius = new CornerRadius(7),
+            Background = Theme.Hex("#FFFAFC"), BorderBrush = Theme.Hex("#FFFAFC"),
+            BorderThickness = new Thickness(2),
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
+            Child = new Border { Background = Theme.Hex("#FCB3B5"), CornerRadius = new CornerRadius(5) },
         };
         var button = new Border
         {
@@ -176,7 +177,7 @@ internal sealed class SelectionPopup : Window
             Margin = new Thickness(2),
             Cursor = Cursors.Hand,
             ToolTip = L10n.T("翻译"),
-            Child = arc,
+            Child = dot,
         };
         button.MouseLeftButtonUp += (_, _) => click();
         Present(button);

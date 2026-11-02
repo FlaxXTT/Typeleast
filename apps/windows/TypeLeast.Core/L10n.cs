@@ -27,9 +27,7 @@ public static class L10n
     public static string T(string key, params object?[] arguments) => Render(key, Language, arguments);
     public static string Render(string key, string language, params object?[] arguments)
     {
-        // User arguments are substituted afterwards and keep their original text.
-        var template = (language == "en" && English.TryGetValue(key, out var translated) ? translated : key)
-            .Replace("TypeLeast", "Hermes", StringComparison.Ordinal);
+        var template = language == "en" && English.TryGetValue(key, out var translated) ? translated : key;
         var culture = CultureInfo.GetCultureInfo(language == "en" ? "en-US" : "zh-CN");
         return Regex.Replace(template, @"\{([0-9]+)\}", m =>
         {

@@ -27,7 +27,7 @@ internal sealed class HistoryPage : IPage
         root.Children.Add(Theme.Card(Theme.Stack(12, Theme.SettingRow(L10n.T("保留时长"), null, retention),
             Theme.Row(8, filter, search, Theme.Secondary(L10n.T("清空全部历史"), () =>
             {
-                if (MessageBox.Show(L10n.T("删除全部历史、统计和录音？无法撤销。"), "Hermes", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory();
+                if (MessageBox.Show(L10n.T("删除全部历史、统计和录音？无法撤销。"), "TypeLeast", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK) host.ClearHistory();
             })))));
         root.Children.Add(list);
         search.TextChanged += (_, _) => Render(); filter.SelectionChanged += (_, _) => Render();

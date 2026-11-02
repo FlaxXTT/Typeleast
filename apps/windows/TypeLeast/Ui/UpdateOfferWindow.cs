@@ -14,7 +14,7 @@ internal sealed class UpdateOfferWindow : Window
 
     public UpdateOfferWindow(WindowsReleaseInfo release, string currentVersion, bool installedCopy)
     {
-        Title = "Hermes";
+        Title = "TypeLeast";
         Width = 440; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
         // The main window is often hidden in the tray, so this stands on its own.
         WindowStartupLocation = WindowStartupLocation.CenterScreen; Topmost = true;

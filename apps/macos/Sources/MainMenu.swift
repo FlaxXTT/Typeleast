@@ -14,20 +14,20 @@ final class MainMenu: NSObject {
         let bar = NSMenu()
 
         // The first menu's title is ignored: macOS shows the bundle name there.
-        let app = NSMenu(title: "Hermes")
-        app.addItem(withTitle: L10n.text("关于 TypeLeast").replacingOccurrences(of: "TypeLeast", with: "Hermes"),
+        let app = NSMenu(title: "TypeLeast")
+        app.addItem(withTitle: L10n.text("关于 TypeLeast"),
                     action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
         app.addItem(own(L10n.text("设置…"), #selector(onSettings), ","))
         app.addItem(own(L10n.text("检查更新…"), #selector(onCheckForUpdates), ""))
         app.addItem(.separator())
-        app.addItem(withTitle: L10n.text("隐藏 TypeLeast").replacingOccurrences(of: "TypeLeast", with: "Hermes"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: L10n.text("隐藏 TypeLeast"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let others = app.addItem(withTitle: L10n.text("隐藏其他"),
                                  action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         others.keyEquivalentModifierMask = [.command, .option]
         app.addItem(withTitle: L10n.text("全部显示"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(own(L10n.text("退出 TypeLeast").replacingOccurrences(of: "TypeLeast", with: "Hermes"), #selector(onQuit), "q"))
+        app.addItem(own(L10n.text("退出 TypeLeast"), #selector(onQuit), "q"))
         add(app, to: bar)
 
         // Standard edit actions go to the first responder (target nil).
