@@ -101,3 +101,48 @@ jobs:
           name: windows-render
           path: ${{ runner.temp }}/render/*.png
           if-no-files-found: error
+
+  release-package-macos:
+    name: Release package (macOS)
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: apps/macos/package.sh arm64 "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-check-macos
+          path: |
+            out/*.dmg
+            out/*.zip
+          if-no-files-found: error
+
+  release-package-windows:
+    name: Release package (Windows)
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Package
+        shell: pwsh
+        run: ./apps/windows/package.ps1 -OutDir "$env:GITHUB_WORKSPACE\out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-check-windows
+          path: |
+            out/*.exe
+            out/*.zip
+          if-no-files-found: error
