@@ -229,7 +229,7 @@ internal sealed class SettingsPage : IPage
                 Theme.SettingRow(L10n.T("麦克风"), microphoneStatus, Theme.Secondary(L10n.T("打开系统权限"), () => Shell.Open("ms-settings:privacy-microphone"))),
                 Theme.SettingRow(L10n.T("键盘与插入"), keyboardStatus, Theme.Text(L10n.T("在管理员窗口中粘贴可能失败，请手动粘贴。"), 12, Theme.Grey))),
             Section(L10n.T("版本与更新"),
-                Theme.SettingRow("TypeLeast " + version, updateStatus,
+                Theme.SettingRow("Hermes " + version, updateStatus,
                     Theme.Row(8, Theme.Secondary(L10n.T("检查更新"), () => _ = CheckUpdates()), installUpdate)),
                 Theme.SettingRow(L10n.T("更新提醒"), null,
                     Theme.Toggle(s.AutoUpdate, v => { s.AutoUpdate = v; host.SaveSettings(); }))),

@@ -8,7 +8,7 @@ import AppKit
 struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
 
-    static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
+    static let shareText = "Hermes · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
     static let shareItems: [Any] = [shareText, URL(string: "https://typeleast.promptking.workers.dev")!, URL(string: "https://github.com/FlaxXTT/Typeleast")!]
 
     var body: some View {

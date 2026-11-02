@@ -142,7 +142,7 @@ struct OnboardingView: View {
             }
         case .accessibility:
             StepView(symbol: "accessibility", title: L10n.text("允许辅助功能"),
-                     text: L10n.text("请在系统设置里打开 TypeLeast。")) {
+                     text: L10n.text("请在系统设置里打开 TypeLeast。").replacingOccurrences(of: "TypeLeast", with: "Hermes")) {
                 permissionState(granted: model.accessibilityTrusted, denied: false,
                                 ask: { model.actions?.requestAccessibility() }, open: nil)
             }

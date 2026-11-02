@@ -50,7 +50,7 @@ internal static class ActivityView
         share.ToolTip = L10n.T("分享官网和 GitHub 链接");
         var menu = new ContextMenu();
         void Add(string title, Action run) { var item = new MenuItem { Header = title }; item.Click += (_, _) => run(); menu.Items.Add(item); }
-        Add(L10n.T("复制链接"), () => Paster.SetText("TypeLeast · " + Site + " · " + GitHub));
+        Add(L10n.T("复制链接"), () => Paster.SetText("Hermes · " + Site + " · " + GitHub));
         Add(L10n.T("打开官网"), () => Shell.Open(Site));
         Add(L10n.T("打开 GitHub"), () => Shell.Open(GitHub));
         share.Click += (_, _) => { menu.PlacementTarget = share; menu.IsOpen = true; };

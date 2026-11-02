@@ -30,7 +30,7 @@ internal sealed class MainWindow : Window
     public MainWindow(AppHost host)
     {
         this.host = host;
-        Title = "TypeLeast";
+        Title = "Hermes";
         Width = double.IsFinite(host.Settings.WindowWidth) ? Math.Clamp(host.Settings.WindowWidth, Math.Min(836, SystemParameters.WorkArea.Width), SystemParameters.WorkArea.Width) : Math.Min(956, SystemParameters.WorkArea.Width);
         Height = double.IsFinite(host.Settings.WindowHeight) ? Math.Clamp(host.Settings.WindowHeight, Math.Min(599, SystemParameters.WorkArea.Height), SystemParameters.WorkArea.Height) : Math.Min(679, SystemParameters.WorkArea.Height);
         MinWidth = Math.Min(836, SystemParameters.WorkArea.Width);
@@ -45,7 +45,7 @@ internal sealed class MainWindow : Window
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var side = new DockPanel { Background = Theme.Sidebar, LastChildFill = false };
-        var brand = Theme.Row(9, BrandIcon(), Theme.Text("TypeLeast", 17, bold: true));
+        var brand = Theme.Row(9, BrandIcon(), Theme.Text("Hermes", 17, bold: true));
         brand.Margin = new Thickness(20, 22, 0, 18);
         DockPanel.SetDock(brand, Dock.Top);
         side.Children.Add(brand);

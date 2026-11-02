@@ -14,12 +14,12 @@
 
 [Setup]
 AppId={{1E95D4F9-E355-487A-BEEA-B05346DEC899}
-AppName=TypeLeast
+AppName=Hermes
 AppVersion={#AppVersion}
-AppVerName=TypeLeast {#AppVersion}
+AppVerName=Hermes {#AppVersion}
 AppPublisher=TypeLeast
 DefaultDirName={localappdata}\Programs\TypeLeast
-DefaultGroupName=TypeLeast
+DefaultGroupName=Hermes
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
@@ -44,9 +44,9 @@ Name: "zh"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 #endif
 
 [CustomMessages]
-en.RemoveUserData=Also remove your TypeLeast data from this computer?%n%nSettings, dictation history, saved recordings, downloaded speech models and the API keys saved in Windows Credential Manager will be deleted. Choose No to keep them for a later reinstall.
+en.RemoveUserData=Also remove your Hermes data from this computer?%n%nSettings, dictation history, saved recordings, downloaded speech models and the API keys saved in Windows Credential Manager will be deleted. Choose No to keep them for a later reinstall.
 #if FileExists(CompilerPath + "Languages\ChineseSimplified.isl")
-zh.RemoveUserData=是否同时删除这台电脑上的 TypeLeast 数据？%n%n会删除设置、听写历史、保存的录音、下载的语音模型，以及保存在 Windows 凭据管理器里的 API Key。选「否」则保留，以后重新安装还能用。
+zh.RemoveUserData=是否同时删除这台电脑上的 Hermes 数据？%n%n会删除设置、听写历史、保存的录音、下载的语音模型，以及保存在 Windows 凭据管理器里的 API Key。选「否」则保留，以后重新安装还能用。
 #endif
 
 [Tasks]
@@ -56,8 +56,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\TypeLeast"; Filename: "{app}\TypeLeast.exe"
-Name: "{autodesktop}\TypeLeast"; Filename: "{app}\TypeLeast.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Hermes"; Filename: "{app}\TypeLeast.exe"
+Name: "{autodesktop}\Hermes"; Filename: "{app}\TypeLeast.exe"; Tasks: desktopicon
 
 [Registry]
 ; The app adds this value itself when "登录启动" is on; uninstalling removes it, and the
@@ -66,7 +66,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueType: none; ValueName: "TypeLeast"; Flags: uninsdeletevalue dontcreatekey
 
 [Run]
-Filename: "{app}\TypeLeast.exe"; Description: "{cm:LaunchProgram,TypeLeast}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\TypeLeast.exe"; Description: "{cm:LaunchProgram,Hermes}"; Flags: nowait postinstall skipifsilent
 ; An in-app update runs this installer silently with /RELAUNCH=1: start the new version again.
 Filename: "{app}\TypeLeast.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 

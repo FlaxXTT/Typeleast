@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_CN</string>
 	<key>CFBundleDisplayName</key>
-	<string>TypeLeast</string>
+	<string>Hermes</string>
 	<key>CFBundleExecutable</key>
 	<string>TypeLeast</string>
 	<key>CFBundleIconFile</key>
@@ -20,7 +20,7 @@
 		<string>en</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>TypeLeast</string>
+	<string>Hermes</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -38,6 +38,6 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>TypeLeast</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TypeLeast 录制你的语音，在本机识别。</string>
+	<string>Hermes 录制你的语音，在本机识别。</string>
 </dict>
 </plist>

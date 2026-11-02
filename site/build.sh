@@ -18,7 +18,11 @@ cp "$media/windows/recording-bar.mp4" "$media/windows/recording-bar-poster.png" 
 for page in home-light home-dark settings-light history-light; do cp "$media/windows/$page.png" "$out/assets/win-$page.png"; done
 for page in home history settings dictionary-dark; do cp "$media/$page.png" "$out/assets/mac-$page.png"; done
 # The plugin catalog (market/), still read by app versions before 1.24 when their market opens.
-mkdir -p "$out/market/plugins"
-cp "$root/market/catalog.json" "$out/market/"
-cp "$root/market/plugins/"*.typeleast-plugin "$out/market/plugins/"
+if [ -f "$root/market/catalog.json" ]; then
+  mkdir -p "$out/market/plugins"
+  cp "$root/market/catalog.json" "$out/market/"
+  for plugin in "$root/market/plugins/"*.typeleast-plugin; do
+    [ -f "$plugin" ] && cp "$plugin" "$out/market/plugins/"
+  done
+fi
 echo "site: $out"

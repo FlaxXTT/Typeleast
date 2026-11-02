@@ -161,7 +161,7 @@ ${L.modes.map(([, d], i) => `<div class="a desc" data-k="desc${i}">${esc(d)}</di
 
 <div class="a ring" data-k="ring">${bars(7)}</div>
 <div class="a facts" data-k="facts">${L.facts.map((f) => `<span>${esc(f)}</span>`).join("")}</div>
-<div class="a end" data-k="end"><div class="ic">${bars(7)}</div><h3>TypeLeast</h3><p>${esc(L.platforms)}</p></div>
+<div class="a end" data-k="end"><div class="ic">${bars(7)}</div><h3>Hermes</h3><p>${esc(L.platforms)}</p></div>
 </div>`;
   }
 

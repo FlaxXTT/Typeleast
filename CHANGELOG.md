@@ -2,6 +2,11 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 未发布
+
+- 产品显示名称改为 Hermes；原应用数据、凭据和更新兼容标识保留。
+- 选中文字后的翻译按钮改为灰白色开口圆环，译文面板的操作保持不变。
+
 ## 1.24.16（2026-11-02）
 
 发布范围：仅 Mac Apple 芯片 DMG / ZIP，Mac 构建号为 53。Windows 仍为 1.24.13。

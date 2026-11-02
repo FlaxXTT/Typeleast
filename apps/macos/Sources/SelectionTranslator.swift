@@ -268,10 +268,14 @@ struct SelectionDotView: View {
 
     var body: some View {
         Button(action: action) {
-            Circle().fill(Color.white)
-                .overlay(Circle().stroke(Color.black.opacity(0.28), lineWidth: 0.5))
-                .frame(width: 10, height: 10)
-                .frame(width: 20, height: 20)
+            Circle().trim(from: 0, to: 0.75)
+                .stroke(Color.gray.opacity(0.45), style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                .overlay(Circle().trim(from: 0, to: 0.75)
+                    .stroke(Color.white.opacity(0.82), style: StrokeStyle(lineWidth: 2, lineCap: .round)))
+                .rotationEffect(.degrees(-45))
+                .frame(width: 14, height: 14)
+                .shadow(color: .black.opacity(0.25), radius: 2)
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

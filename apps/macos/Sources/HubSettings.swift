@@ -252,7 +252,7 @@ struct SettingsPage: View {
     private var loginDetail: String {
         if !loginError.isEmpty { return loginError }
         // Switched off under System Settings → Login Items: only the user can allow it again there.
-        if SMAppService.mainApp.status == .requiresApproval { return L10n.text("请在「系统设置 → 通用 → 登录项」允许 TypeLeast") }
+        if SMAppService.mainApp.status == .requiresApproval { return L10n.text("请在「系统设置 → 通用 → 登录项」允许 TypeLeast").replacingOccurrences(of: "TypeLeast", with: "Hermes") }
         return ""
     }
 

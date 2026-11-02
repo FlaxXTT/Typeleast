@@ -20,7 +20,9 @@ enum L10n {
     }
     static func render(_ key: String, arguments: [Any], language selected: String? = nil) -> String {
         let current = selected ?? language
-        let template = current == "en" ? (english[key] ?? key) : key
+        // Apply the display brand only to the UI template, never to user text arguments.
+        let template = (current == "en" ? (english[key] ?? key) : key)
+            .replacingOccurrences(of: "TypeLeast", with: "Hermes")
         // Replace all slots in a single pass so user text containing {1} stays verbatim.
         let pattern = try! NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
         var result = template

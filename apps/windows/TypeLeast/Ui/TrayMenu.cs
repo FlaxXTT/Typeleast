@@ -50,7 +50,7 @@ internal sealed class TrayMenu : Window
         var stateRow = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
         stateRow.Children.Add(dot); stateRow.Children.Add(state);
         var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        titles.Children.Add(Theme.Text("TypeLeast", 14, bold: true, wrap: false));
+        titles.Children.Add(Theme.Text("Hermes", 14, bold: true, wrap: false));
         titles.Children.Add(stateRow);
         var header = new DockPanel { Margin = new Thickness(10, 8, 10, 8) };
         var icon = MainWindow.BrandIcon(28);
@@ -70,12 +70,12 @@ internal sealed class TrayMenu : Window
         Item("\uE77F", L10n.T("粘贴上一条"), PasteShortcut(host.Settings.PasteLastShortcut), !busy, () => _ = host.PasteLast());
         Item("\uE8C8", L10n.T("复制上一条"), "", true, host.CopyLast);
         Separator();
-        Item("\uE80F", L10n.T("打开 TypeLeast"), "", true, () => host.ShowWindow(MainWindow.Page.Home));
+        Item("\uE80F", L10n.T("打开 TypeLeast").Replace("TypeLeast", "Hermes"), "", true, () => host.ShowWindow(MainWindow.Page.Home));
         Item("\uE81C", L10n.T("历史"), "", true, () => host.ShowWindow(MainWindow.Page.History));
         Item("\uE713", L10n.T("设置"), "", true, () => host.ShowWindow(MainWindow.Page.Settings));
         Separator();
         Item("\uE72C", L10n.T("重启本地服务"), "", true, host.RestartService);
-        Item("\uE7E8", L10n.T("退出 TypeLeast"), "", true, host.Quit);
+        Item("\uE7E8", L10n.T("退出 TypeLeast").Replace("TypeLeast", "Hermes"), "", true, host.Quit);
 
         Content = new Border
         {
