@@ -19,6 +19,7 @@ HistorySeal.reset()
 // Discard only this command-line tool's generated fixtures from earlier renders.
 UserDefaults.standard.removeObject(forKey: "voice.history.sealed.v1")
 UserDefaults.standard.removeObject(forKey: "voice.activity.v1")
+try? FileManager.default.removeItem(atPath: (isolatedState as NSString).appendingPathComponent("history.sqlite"))
 L10n.language = L10n.resolve(ProcessInfo.processInfo.environment["TYPELEAST_RENDER_LANGUAGE"] ?? "zh-Hans")
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
@@ -47,12 +48,6 @@ for (i, s) in samples.enumerated() {
                                      inserted: true, seconds: s.4))
 }
 UserDefaults.standard.set(try! JSONEncoder().encode(entries), forKey: "voice.history.v1")
-Settings.shared.words = [
-    LocalWord(id: "1", word: "DeepSeek", heardAs: "德普西克", source: .manual, addedAt: now),
-    LocalWord(id: "2", word: "TypeLeast", heardAs: nil, source: .manual, addedAt: now),
-    LocalWord(id: "3", word: "SenseVoice", heardAs: nil, source: .auto, addedAt: now),
-    LocalWord(id: "4", word: "GitHub", heardAs: nil, source: .auto, addedAt: now),
-]
 KeychainStore.stub?["deepseek"] = "sk-0000000000000000000000000000"
 Settings.shared.llmPresetID = "deepseek"
 Settings.shared.llmModel = "deepseek-chat"
@@ -61,7 +56,6 @@ precondition(HistoryStore.shared.entries.count == entries.count, "Sample history
 ActivityLog.shared.seedIfNeeded(from: entries.map { ($0.ts, DictationStats.countWords($0.displayText).cjk + DictationStats.countWords($0.displayText).latin) })
 let model = AppModel.shared
 model.reloadHistory()
-model.reloadWords()
 model.serviceUp = true
 model.serviceState = .running(port: 1)
 model.nodeDescription = "v24.21.0 · App 内置"
