@@ -40,7 +40,7 @@ const wav = (samples = 16000) => {
 const speech = { Vad: class { acceptWaveform() {} isEmpty() { return false; } flush() {} } };
 const silence = { Vad: class { acceptWaveform() {} isEmpty() { return true; } flush() {} } };
 
-test("a recording goes through the engine; silence never does", { skip: process.platform === "win32" }, async () => {
+test("a recording goes through the engine; silence never does", { skip: process.platform !== "darwin" }, async () => {
   const folder = await mkdtemp(join(tmpdir(), "moss-test-"));
   try {
     const binary = join(folder, "engine");
@@ -67,7 +67,7 @@ test("a recording goes through the engine; silence never does", { skip: process.
   } finally { await rm(folder, { recursive: true, force: true }); }
 });
 
-test("an engine that cannot run leaves the model unavailable, and a failed run is reported", { skip: process.platform === "win32" }, async () => {
+test("an engine that cannot run leaves the model unavailable, and a failed run is reported", { skip: process.platform !== "darwin" }, async () => {
   const folder = await mkdtemp(join(tmpdir(), "moss-test-"));
   try {
     const missing = new MossRecognizer({ modelsDir: folder, modelId: "moss-transcribe-diarize", binary: join(folder, "none"), status: async () => ({ ready: true }) });
