@@ -10,6 +10,7 @@ import { LocalModelProcess } from './local-recognizer.js';
 import { MossRecognizer } from './moss-recognizer.js';
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
+export const MEETING_MODEL_ID = 'moss-transcribe-diarize';
 export class SpeechModels {
   constructor(options) {
     this.options = options;
@@ -69,6 +70,14 @@ export class SpeechModels {
     if (!this.activeId) throw fail('speech-not-ready', 'select a speech model first');
     return this.current.transcribe(audio, language, signal);
   }); }
+  /** The engine for meetings, kept apart from the dictation model and its queue. */
+  async meetingRecognizer() {
+    this.meeting ??= this.factory(MEETING_MODEL_ID);
+    const phase = await this.meeting.prepare();
+    if (phase === 'missing-model') throw fail('model-not-installed', 'the meeting model is not installed');
+    if (phase !== 'ready') throw fail('meeting-unavailable', 'the meeting engine could not start');
+    return this.meeting;
+  }
   snapshot() {
     if (!this.activeId) return { phase: 'missing-model', ready: false, modelId: '', modelName: '', languages: [], canSetLanguage: false, notice: this.notice, operation: this.operation };
     const model = this.definition(this.activeId);

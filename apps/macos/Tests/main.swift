@@ -1724,6 +1724,7 @@ do {
 }
 
 contextPreferencesTests()
+meetingTests()
 
 server.stop()
 print("")

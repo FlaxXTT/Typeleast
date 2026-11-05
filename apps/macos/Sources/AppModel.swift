@@ -7,13 +7,14 @@ import Combine
 enum AppPhase { case idle, recording, thinking }
 
 enum HubPage: String, CaseIterable, Identifiable {
-    case home, history, settings
+    case home, history, meetings, settings
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: return L10n.text("首页")
         case .history: return L10n.text("历史")
+        case .meetings: return L10n.text("会议")
         case .settings: return L10n.text("设置")
         }
     }
@@ -22,6 +23,7 @@ enum HubPage: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house"
         case .history: return "clock.arrow.circlepath"
+        case .meetings: return "person.2"
         case .settings: return "gearshape"
         }
     }
@@ -88,6 +90,7 @@ final class AppModel: ObservableObject {
     @Published private var settingsRevision = 0
 
     let settings = Settings.shared
+    let meeting = MeetingController()
     private var observers: [NSObjectProtocol] = []
 
     init() {

@@ -89,6 +89,7 @@ export async function startService(options = {}) {
     async close() {
       if (closed) return;
       closed = true;
+      service.meetings.cancel();
       await withdrawRuntime({ stateDir, pid: process.pid });
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(() => resolve()));

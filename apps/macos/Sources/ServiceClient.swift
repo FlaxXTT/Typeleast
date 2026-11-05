@@ -744,6 +744,16 @@ final class ServiceClient {
         }
     }
 
+    /// One request of the meeting job (see Meeting.swift).
+    func sendMeeting<T>(path: String, body: Data?, headers: [String: String], timeout: TimeInterval, decode: (Data) throws -> T) throws -> T {
+        try withPortRetry { try withTokenRetry { token in
+            let req = try makeRequest(path: "/api/voice-polish" + path, method: body == nil ? "GET" : "POST", token: token, headers: headers, body: body, timeout: timeout)
+            let (data, response) = try performSync(req, timeout: timeout)
+            guard (200..<300).contains(response.statusCode) else { throw httpError(response, data) }
+            return try decode(data)
+        } }
+    }
+
     func speechModelsSync() throws -> SpeechModelCatalog {
         try withPortRetry { try withTokenRetry { token in
             let req = try makeRequest(path: "/api/voice-polish/models", method: "GET", token: token, timeout: healthTimeout)
@@ -764,10 +774,10 @@ final class ServiceClient {
         } }
     }
 
-    func speechModelActionSync(id: String, download: Bool = false, cancel: Bool = false, endpoint: String = "") throws {
+    func speechModelActionSync(id: String, download: Bool = false, cancel: Bool = false, endpoint: String = "", activate: Bool = true) throws {
         try withPortRetry { try withTokenRetry { token in
             let path = cancel ? "/models/download/cancel" : download ? "/models/download" : "/models/active"
-            let object: [String: Any] = ["modelId": id, "activate": true, "endpoint": endpoint]
+            let object: [String: Any] = ["modelId": id, "activate": activate, "endpoint": endpoint]
             let body = try JSONSerialization.data(withJSONObject: object)
             let req = try makeRequest(path: "/api/voice-polish" + path, method: download || cancel ? "POST" : "PUT", token: token,
                 headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)

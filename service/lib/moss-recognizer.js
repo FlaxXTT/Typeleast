@@ -4,7 +4,7 @@
  * well under a second, and nothing stays in memory between dictations.
  *
  * The engine writes `[start][S01]text[end]` for each speaker turn. Dictation uses the text;
- * the speaker and the times are kept per segment.
+ * meetings (tasks/meeting.js) use the speaker and the times kept per segment.
  *
  * @module typeleast-service/moss-recognizer
  */
@@ -137,7 +137,8 @@ export class MossRecognizer {
     return this.preparing;
   }
 
-  async transcribe(audio, language = "auto", signal) {
+  /** @param {object} [options] - maxNew: generated tokens allowed, when the caller knows better. */
+  async transcribe(audio, language = "auto", signal, options = {}) {
     if (this.phase !== "ready") {
       void this.prepare();
       throw failure("speech-not-ready", `speech model is not ready (phase: ${this.phase})`);
@@ -151,7 +152,7 @@ export class MossRecognizer {
       this.logger.warn?.("typeleast: speech check unavailable: %s", error instanceof Error ? error.message : String(error));
     }
     if (!hasSpeech) return { text: "", language, detectedLanguage: null, segments: [], speakers: [] };
-    const raw = await this.withTemporaryWav(audio, path => this.run(path, maxNewTokens(samples.length / SAMPLE_RATE), signal));
+    const raw = await this.withTemporaryWav(audio, path => this.run(path, options.maxNew ?? maxNewTokens(samples.length / SAMPLE_RATE), signal));
     const parsed = parseMossTranscript(raw);
     return { ...parsed, language, detectedLanguage: detectScriptLanguage(parsed.text) };
   }

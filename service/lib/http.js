@@ -14,6 +14,7 @@ import { authorize } from "./token.js";
 import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
+import { MAX_MEETING_BYTES } from "./tasks/meeting.js";
 
 
 export const ROUTE_PREFIX = "/api/voice-polish";
@@ -85,10 +86,12 @@ function classify(error) {
     case "audio-too-large":
       return { status: 400, code };
     case "model-busy":
+    case "model-not-installed":
     case "plugin-terms-limit":
     case "plugin-changed":
       return { status: 409, code };
     case "plugin-not-found":
+    case "meeting-not-found":
       return { status: 404, code };
     case "plugins-unavailable":
       return { status: 503, code };
@@ -325,6 +328,22 @@ export function createHandler(options) {
           variants: req.headers["x-voice-variants"] || null,
         });
         reply(res, 200, result);
+        return;
+      }
+
+      // A meeting: the WAV goes up, then the app polls. The transcript comes with the finished status.
+      if (route === "/meetings" && req.method === "POST") {
+        const language = typeof req.headers["x-voice-language"] === "string" ? req.headers["x-voice-language"] : "auto";
+        reply(res, 202, { id: service.meetings.start({ audio: await readBody(req, MAX_MEETING_BYTES), language }) });
+        return;
+      }
+      if (route === "/meetings/status" && req.method === "GET") {
+        reply(res, 200, service.meetings.status(url.searchParams.get("id")));
+        return;
+      }
+      if (route === "/meetings/cancel" && req.method === "POST") {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
+        reply(res, 200, { ok: true, cancelled: service.meetings.cancel(typeof body?.id === "string" ? body.id : "") });
         return;
       }
 

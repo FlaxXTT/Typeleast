@@ -27,6 +27,22 @@ and history carry over).
     ./Tools/demo/record-demo.sh <dir>  # the README demo GIF (synthetic voice, no microphone; see the script)
 
 
+## Meetings
+
+The Meetings page records the microphone or imports a file (anything AVFoundation opens), uploads
+it to the service as a WAV and polls one background job (`POST /meetings`, `GET /meetings/status`,
+`POST /meetings/cancel`). The job runs MOSS-Transcribe-Diarize in one pass and returns turns with
+speaker labels and times.
+
+The limit is 10 minutes (`MAX_MEETING_SECONDS`, `MeetingLimits.maxSeconds`), the longest length
+measured to finish. On an M5 Pro with made-up four-voice audio: 5 min took 47 s (RTF 0.16), 10 min
+took 271 s (RTF 0.45), and 20 min had not finished when stopped at 45 min. Longer meetings need
+windows and speaker linking across them, which do not exist yet, because labels only hold within
+one engine run. A 90-minute recording is refused.
+
+`./Tools/meeting-check.sh` runs this flow on a file through a built app's service and engine,
+without clicks and without touching the installed app.
+
 ## How it finds the local service
 
 - The service is copied into `TypeLeast.app/Contents/Resources/service`

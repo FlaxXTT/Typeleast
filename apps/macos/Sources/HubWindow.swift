@@ -62,6 +62,7 @@ struct HubRootView: View {
                 switch model.page {
                 case .home: HomePage()
                 case .history: HistoryPage()
+                case .meetings: MeetingsPage().environmentObject(model.meeting)
                 case .settings: SettingsPage()
                 }
             }
@@ -85,7 +86,7 @@ private struct Sidebar: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 22)
 
-            ForEach([HubPage.home, .history]) { page in
+            ForEach([HubPage.home, .history, .meetings]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)
             }
 

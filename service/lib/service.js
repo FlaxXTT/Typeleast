@@ -32,6 +32,7 @@ import { runTranslation } from "./tasks/translation.js";
 import { AssistantSessions } from "./tasks/assistant.js";
 import { buildProfile } from "./tasks/profile.js";
 import { ModelRecommender } from "./tasks/model-recommend.js";
+import { MeetingJobs } from "./tasks/meeting.js";
 import { timing } from "./tasks/timing.js";
 
 /** Longest transcript cleaned by the model, in characters. */
@@ -77,6 +78,7 @@ export class VoicePolishService {
     this.assistant = new AssistantSessions();
     this.recommender = new ModelRecommender({ complete: (o) => this.complete(o), redact: (text) => this.redactDetail(text), fetchImpl: this.fetchImpl });
     this.progress = new Map();
+    this.meetings = new MeetingJobs({ recognizer: () => this.recognizer.meetingRecognizer(), logger: this.logger });
   }
 
   setProgress(id, value) {
