@@ -10,6 +10,7 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 app.finishLaunching()
 let mode = CommandLine.arguments.dropFirst().first ?? "all"
+let runStarted = Date()
 
 func pump(_ s: Double) {
     let end = Date().addingTimeInterval(s)
@@ -70,8 +71,13 @@ func report(_ name: String, _ ok: Bool, _ detail: String = "") {
 func freshDoc(_ text: String, caret: Int) -> AXUIElement? {
     osa("tell application \"TextEdit\" to make new document with properties {text:\"\(text)\"}")
     osa("tell application \"TextEdit\" to activate")
-    pump(0.8)
-    guard let e = focusedElement() else { return nil }
+    // Until the new document has focus: the caret must not be set in the previous one.
+    var e = focusedElement()
+    for _ in 0..<25 where e.map(value) != text {
+        pump(0.2)
+        e = focusedElement()
+    }
+    guard let e, value(e) == text else { return nil }
     setCaret(e, caret)
     pump(0.2)
     return e
@@ -220,6 +226,186 @@ if mode == "all" || mode == "selection" {
     }
 }
 
+// Leaving while speaking and coming back: the text must reach the place of the first cursor.
+if mode.hasPrefix("switch:") {
+    // switch:<App name>:<bundle id>
+    let parts = mode.split(separator: ":").map(String.init)
+    let name = parts[1], bundle = parts[2]
+    let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["PASTECHECK_WEB"] ?? "web")
+    let isText = bundle == te
+    func frontApp(_ b: String) { osa("tell application id \"\(b)\" to activate"); pump(0.8) }
+    func open(_ file: String) {
+        let url = dir.appendingPathComponent(file).absoluteString
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/open"); p.arguments = ["-a", name, url]
+        try? p.run(); p.waitUntilExit()
+        pump(3.0)
+    }
+    func fields() -> [AXUIElement] {
+        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first?.processIdentifier else { return [] }
+        let appEl = AXUIElementCreateApplication(pid)
+        FieldContextReader.exposeContent(bundleId: bundle)
+        var found: [AXUIElement] = []
+        func walk(_ e: AXUIElement, _ depth: Int) {
+            guard depth < 30, found.count < 3 else { return }
+            let role = (attr(e, kAXRoleAttribute) as String?) ?? ""
+            if role == "AXTextArea" { found.append(e); return }
+            for c in (attr(e, kAXChildrenAttribute) as [AXUIElement]?) ?? [] { walk(c, depth + 1) }
+        }
+        for _ in 0..<8 where found.isEmpty {
+            pump(0.8)
+            let windows: [AXUIElement] = attr(appEl, kAXWindowsAttribute) ?? []
+            for win in windows where isText || ((attr(win, kAXTitleAttribute) as String?) ?? "").contains("pastecheck") { walk(win, 0) }
+        }
+        return found
+    }
+    func closeOurTabs() {
+        guard !isText else { return }
+        osa("tell application \"\(name)\" to close (every tab of every window whose URL contains \"pastecheck-\")")
+        pump(0.5)
+    }
+    /// One attempt: place the cursor, leave as `away` says, come back, deliver as the app does.
+    func attempt(_ label: String, page: String, away: (AXUIElement) -> Void) {
+        closeOurTabs()
+        let start: AXUIElement?
+        if isText { start = freshDoc("AAAABBBB", caret: 4) } else { open(page); start = fields().first }
+        guard let start else { return report(label, false, "no field") }
+        if !isText { AXUIElementSetAttributeValue(start, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(start, 4); pump(0.3) }
+        let field = FieldContextReader.capture(bundleId: bundle)
+        away(start)
+        pump(0.3)
+        var outcome: DeliveryOutcome?
+        Delivery.deliver("X", appBundleId: bundle, field: field) { outcome = $0 }
+        for _ in 0..<60 where outcome == nil { pump(0.05) }
+        let focusRole: String = focusedElement().flatMap { attr($0, kAXRoleAttribute) } ?? "none"
+        pump(0.6)
+        Delivery.cancelWaiting()
+        let now = fields().first.map(value) ?? value(start)
+        report(label, now.contains("AAAAXBBBB"), "outcome=" + String(describing: outcome) + " text=" + now.prefix(24) + " anchor=" + String(field?.range != nil) + " focus=" + focusRole)
+    }
+    let page = "pastecheck-a.html"
+    attempt("W1 \(name): to another app and back", page: page) { _ in frontApp("com.apple.finder"); pump(1.0); frontApp(bundle) }
+    attempt("W2 \(name): another app, back, cursor moved", page: page) { e in
+        frontApp("com.apple.finder"); pump(1.0); frontApp(bundle); setCaret(e, 8) }
+    if !isText {
+        attempt("W3 \(name): another tab and back", page: page) { _ in
+            open("pastecheck-c.html")
+            osa("tell application \"\(name)\" to tell front window to set \(name == "Safari" ? "current tab to tab ((count of tabs) - 1)" : "active tab index to (count of tabs) - 1")")
+            pump(1.5)
+        }
+        attempt("W4 \(name): rich text box, to another app and back", page: "pastecheck-ce.html") { _ in frontApp("com.apple.finder"); pump(1.0); frontApp(bundle) }
+        attempt("W5 \(name): rich text box, another tab and back", page: "pastecheck-ce.html") { _ in
+            open("pastecheck-c.html")
+            osa("tell application \"\(name)\" to tell front window to set \(name == "Safari" ? "current tab to tab ((count of tabs) - 1)" : "active tab index to (count of tabs) - 1")")
+            pump(1.5)
+        }
+    }
+    // The text is ready while the user is still away: it waits and goes in when they return.
+    do {
+        closeOurTabs()
+        let start: AXUIElement?
+        if isText { start = freshDoc("AAAABBBB", caret: 4) } else { open(page); start = fields().first }
+        if let start {
+            if !isText { AXUIElementSetAttributeValue(start, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(start, 4); pump(0.3) }
+            let field = FieldContextReader.capture(bundleId: bundle)
+            frontApp("com.apple.finder")
+            var waited: DeliveryWait?, outcome: DeliveryOutcome?
+            Delivery.deliver("X", appBundleId: bundle, field: field, onWaiting: { waited = $0 }) { outcome = $0 }
+            pump(1.5)
+            let heldBack = outcome == nil && waited == .app
+            frontApp(bundle)
+            for _ in 0..<80 where outcome == nil { pump(0.05) }
+            pump(0.8)
+            let now = fields().first.map(value) ?? value(start)
+            report("W7 \(name): ready while away, goes in on return", heldBack && now.contains("AAAAXBBBB"), "held=" + String(heldBack) + " outcome=" + String(describing: outcome) + " text=" + now.prefix(24))
+        }
+    }
+    // The other app has a text field of its own: it must not become the target.
+    if !isText {
+        closeOurTabs()
+        open(page)
+        if let start = fields().first {
+            AXUIElementSetAttributeValue(start, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(start, 4); pump(0.3)
+            let other = freshDoc("CCCC", caret: 4)
+            let field = FieldContextReader.capture(bundleId: bundle)
+            frontApp(bundle)
+            var outcome: DeliveryOutcome?
+            Delivery.deliver("X", appBundleId: bundle, field: field) { outcome = $0 }
+            for _ in 0..<60 where outcome == nil { pump(0.05) }
+            pump(0.6)
+            let now = fields().first.map(value) ?? value(start)
+            report("W8 \(name): switched at once to an app with its own field", now.contains("X") && (other.map(value) ?? "") == "CCCC",
+                   "outcome=" + String(describing: outcome) + " text=" + now.prefix(24) + " other=" + (other.map(value) ?? "-"))
+        }
+    }
+    // Another tab stays open: it waits instead of pasting there, then goes in on the way back.
+    if !isText {
+        closeOurTabs()
+        open(page)
+        if let start = fields().first {
+            AXUIElementSetAttributeValue(start, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(start, 4); pump(0.3)
+            let field = FieldContextReader.capture(bundleId: bundle)
+            open("pastecheck-c.html")
+            if let other = fields().first { AXUIElementSetAttributeValue(other, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(other, 4); pump(0.3) }
+            let otherBefore = focusedElement().map(value) ?? "-"
+            var outcome: DeliveryOutcome?
+            Delivery.deliver("X", appBundleId: bundle, field: field) { outcome = $0 }
+            pump(1.5)
+            let otherAfter = focusedElement().map(value) ?? "-"
+            osa("tell application \"\(name)\" to tell front window to set \(name == "Safari" ? "current tab to tab ((count of tabs) - 1)" : "active tab index to (count of tabs) - 1")")
+            pump(1.0)
+            if let again = fields().first { AXUIElementSetAttributeValue(again, kAXFocusedAttribute as CFString, kCFBooleanTrue) }
+            for _ in 0..<80 where outcome == nil { pump(0.05) }
+            pump(0.8)
+            let now = fields().first.map(value) ?? "-"
+            report("W9 \(name): other tab untouched, text arrives on the way back", !(otherAfter.hasPrefix("DDDD") && otherAfter.contains("X")) && now.contains("AAAAXBBBB"),
+                   "other=" + otherBefore + ">" + otherAfter + " outcome=" + String(describing: outcome) + " text=" + now.prefix(24))
+            Delivery.cancelWaiting()
+        }
+    }
+    // The page is rebuilt while away, as Electron apps do with their fields: same place under a new handle.
+    if !isText {
+        closeOurTabs()
+        open(page)
+        if let start = fields().first {
+            AXUIElementSetAttributeValue(start, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(start, 4); pump(0.3)
+            let field = FieldContextReader.capture(bundleId: bundle)
+            osa(name == "Safari" ? "tell application \"Safari\" to tell front window to set URL of current tab to (URL of current tab)"
+                                 : "tell application \"\(name)\" to tell front window to reload active tab")
+            pump(2.5)
+            let rebuilt = fields().first
+            if let rebuilt { AXUIElementSetAttributeValue(rebuilt, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(rebuilt, 8); pump(0.3) }
+            let dead: String? = attr(start, kAXValueAttribute)
+            var outcome: DeliveryOutcome?
+            Delivery.deliver("X", appBundleId: bundle, field: field) { outcome = $0 }
+            for _ in 0..<60 where outcome == nil { pump(0.05) }
+            pump(0.6)
+            let now = fields().first.map(value) ?? "-"
+            report("W10 \(name): rebuilt field, cursor found by the text around it", now.contains("AAAAXBBBB"),
+                   "oldHandleDead=" + String(dead == nil) + " outcome=" + String(describing: outcome) + " text=" + now.prefix(24))
+        }
+    }
+    // Switching right after the key: the field is read a moment later, by then in the other app.
+    do {
+        closeOurTabs()
+        let start: AXUIElement?
+        if isText { start = freshDoc("AAAABBBB", caret: 4) } else { open(page); start = fields().first }
+        if let start {
+            if !isText { AXUIElementSetAttributeValue(start, kAXFocusedAttribute as CFString, kCFBooleanTrue); pump(0.3); setCaret(start, 4); pump(0.3) }
+            frontApp("com.apple.finder")
+            let field = FieldContextReader.capture(bundleId: bundle)
+            pump(0.5)
+            frontApp(bundle)
+            var outcome: DeliveryOutcome?
+            Delivery.deliver("X", appBundleId: bundle, field: field) { outcome = $0 }
+            for _ in 0..<60 where outcome == nil { pump(0.05) }
+            pump(0.6)
+            let now = fields().first.map(value) ?? value(start)
+            report("W6 \(name): switched before the field was read", now.contains("X"), "outcome=" + String(describing: outcome) + " text=" + now.prefix(24))
+        }
+    }
+    closeOurTabs()
+}
+
 if mode.hasPrefix("browser:") {
     // browser:<App name>:<bundle id>
     let parts = mode.split(separator: ":").map(String.init)
@@ -304,11 +490,20 @@ if mode.hasPrefix("browser:") {
         let before = focusedElement().map(value) ?? "-"
         let restored = field.map { FieldContextReader.restoreCaret($0) } ?? .unknown
         let now = focusedElement().map(value) ?? "-"
-        report("B2 \(name): tab switched -> back to the first field, or no paste", restored == .lost || (restored == .restored && now == "AAAABBBB"),
+        report("B2 \(name): tab switched -> back to the first field, or no paste", restored == .elsewhere || restored == .gone || (restored == .restored && now == "AAAABBBB"),
                "focusBefore=" + before + " restored=" + String(describing: restored) + " focusNow=" + (focusedElement().map(value) ?? "-"))
     } else { report("B2 \(name): tab switched", false, "no text area") }
     closeOurTabs()
 }
 osa("tell application \"TextEdit\" to close every document saving no")
+pump(1.5)
+// TextEdit autosaves untitled documents to iCloud even when closed unsaved: remove the ones this run made.
+let textEditDocs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Mobile Documents/com~apple~TextEdit/Documents")
+for url in (try? FileManager.default.contentsOfDirectory(at: textEditDocs, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
+    let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+    guard modified >= runStarted, url.pathExtension == "rtf", let text = try? NSAttributedString(url: url, options: [:], documentAttributes: nil).string,
+          text.range(of: #"^\s*(Z*A+X?B+|C+X?|X?A+B+|Hello world from TypeLeast)\s*$"#, options: .regularExpression) != nil else { continue }
+    try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+}
 print("FAILURES: \(failures)")
 exit(failures == 0 ? 0 : 1)

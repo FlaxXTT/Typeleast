@@ -11,7 +11,7 @@
   <a href="#演示"><picture>  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/button-more-dark.svg">  <img src="docs/media/readme/button-more-light.svg" alt="看演示" width="127"></picture></a>
 </p>
 
-<p align="center"><sub>macOS 13+ &nbsp;·&nbsp; Windows 10 / 11 &nbsp;·&nbsp; 免费</sub></p>
+<p align="center"><sub>macOS 13+ &nbsp;·&nbsp; Windows 10 / 11（不再更新）&nbsp;·&nbsp; 免费</sub></p>
 
 <p align="center"><a href="https://typeleast.promptking.workers.dev">官网 · Website</a> &nbsp;·&nbsp; <a href="https://www.bilibili.com/video/BV1eQnH6zESN/">B 站视频 · Bilibili</a></p>
 
@@ -97,13 +97,13 @@
 
 ## 下载
 
-最新版：Mac [**v1.24.18**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.18)，Windows [**v1.24.17**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.17)
+最新版：Mac [**v1.24.18**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.18)。Windows 版不再更新，最终版 [**v1.24.17**](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.17)
 
 | 电脑 | 文件 |
 |---|---|
 | Mac · Apple 芯片 | `TypeLeast-<版本>-macOS-AppleSilicon.dmg` |
 | Mac · Intel | 不再更新。最终版：[v1.17.1](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.17.1) |
-| Windows 10 / 11（64 位） | `…-Windows-x64-Setup.exe` 或免安装的 `…-Portable.zip` |
+| Windows 10 / 11（64 位） | 不再更新。最终版：[v1.24.17](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.17) |
 
 <sub>查看芯片： →「关于本机」。安装包已含运行环境。校验值在 `SHA256SUMS.txt`。</sub>
 

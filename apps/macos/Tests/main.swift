@@ -740,6 +740,11 @@ do {
         try? FileManager.default.removeItem(at: app)
     }
     checkEq("selection: other targets are kept", SelectionTranslator.target(for: "Ship it today", preferred: "ja"), "ja")
+    checkEq("a rebuilt field: the cursor is found by the text around it", CaretAnchor.locate(before: "你好，", after: "世界", in: "前面的字你好，世界"), 7)
+    checkEq("…and in an empty field there is one place", CaretAnchor.locate(before: "", after: "", in: ""), 0)
+    checkEq("…but not in a field with other text", CaretAnchor.locate(before: "", after: "", in: "别的内容"), nil)
+    checkEq("…nor where that text is gone", CaretAnchor.locate(before: "你好，", after: "世界", in: "完全不同"), nil)
+    checkEq("…nor where it is there twice", CaretAnchor.locate(before: "你好", after: "", in: "你好你好"), nil)
     check("the first cursor still holds when text after it changed",
           CaretAnchor.stillValid(before: "你好，", selected: "", value: "你好，世界又多了几个字", location: 3, length: 0))
     check("…and when the selection then is still there",

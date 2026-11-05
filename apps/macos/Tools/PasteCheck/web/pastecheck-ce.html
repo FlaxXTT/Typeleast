@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>pastecheck CE</title>
+<div id="box" contenteditable="true" role="textbox" aria-multiline="true" style="border:1px solid #888;min-height:60px;width:420px">AAAABBBB</div>
+<script>
+const box=document.getElementById('box'); box.focus();
+const r=document.createRange(); r.setStart(box.firstChild,4); r.collapse(true);
+const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+</script>

@@ -33,7 +33,7 @@ final class ModelAdvisor {
         if ModelAdvisor.titleNamesTool(bundleId: appBundleId) {
             title = field?.context.windowTitle ?? ""
             if title.isEmpty, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == appBundleId {
-                title = FieldContextReader.windowTitle() ?? ""
+                title = FieldContextReader.windowTitle(ofApp: appBundleId) ?? ""
             }
         }
         generation += 1

@@ -108,6 +108,8 @@ final class DictationController {
         progressID = UUID()
         copiedSelection = nil
         cancelToast.finish()
+        // Text still waiting for the user to come back stays in History.
+        Delivery.cancelWaiting()
         // Contract: frontmost bundle id is captured BEFORE recording starts.
         pendingAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         pendingField = nil
@@ -438,7 +440,12 @@ final class DictationController {
 
     func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?) {
         let text = Delivery.prepare(text, appBundleId: appBundleId, field: field)
-        Delivery.deliver(text, appBundleId: appBundleId, field: field) { [weak self] outcome in
+        Delivery.deliver(text, appBundleId: appBundleId, field: field, onWaiting: { [weak self] _ in
+            guard let self else { return }
+            self.recordingBar.showResult(L10n.text("回到原来的位置后自动放入"), warning: false)
+            self.setHint(L10n.text("文字已整理好，回到开始听写的位置后会自动放入。"))
+            self.applyState()
+        }) { [weak self] outcome in
             guard let self = self else { return }
             switch outcome {
             case .pasted(let result):
@@ -447,9 +454,11 @@ final class DictationController {
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
                 self.applyState()
             case .appChanged:
-                self.notPasted(entryId, L10n.text("已切换应用"), L10n.text("整理时切换了应用，未粘贴。"))
+                self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"))
             case .fieldLost:
-                self.notPasted(entryId, L10n.text("输入框已切换"), L10n.text("整理时原来的输入框已关闭或切换，未粘贴。"))
+                self.notPasted(entryId, L10n.text("没有回到原输入框"), L10n.text("等了一会儿没有回到原来的输入框，未粘贴。"))
+            case .superseded:
+                if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
             }
         }
     }
