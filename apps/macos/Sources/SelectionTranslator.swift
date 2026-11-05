@@ -222,6 +222,12 @@ final class SelectionPanel {
                                  drag: { [weak self] in self?.drag() }, dragEnded: { [weak self] in self?.dragOffset = nil }))
     }
 
+    /// Any other draggable card in this panel; the view is given the two drag callbacks.
+    func showCard<V: View>(at point: NSPoint, _ view: (_ drag: @escaping () -> Void, _ dragEnded: @escaping () -> Void) -> V) {
+        anchor = point
+        show(view({ [weak self] in self?.drag() }, { [weak self] in self?.dragOffset = nil }))
+    }
+
     func hide() {
         panel.orderOut(nil)
     }

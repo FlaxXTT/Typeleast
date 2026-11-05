@@ -1069,7 +1069,7 @@ do {
 do {
     let suite = "typeleast.tests.activity"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "UTC")!
     let log = ActivityLog(defaults: defaults, calendar: calendar)
@@ -1095,7 +1095,62 @@ do {
     checkEq("only dates and counts are stored", stored.contains("2026-10-12") && !stored.contains("text"), true)
     reloaded.clear()
     checkEq("clearing empties it", reloaded.activeDays, 0)
-    defaults.removePersistentDomain(forName: suite)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+}
+
+func testHistoryDB(_ suite: String) -> URL {
+    URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("typeleast-test-\(getpid())-\(suite).sqlite")
+}
+func removeTestHistoryDB(_ suite: String) {
+    let path = testHistoryDB(suite).path
+    for name in [path, path + "-journal"] { try? FileManager.default.removeItem(atPath: name) }
+}
+
+// History moved from the preferences to SQLite.
+do {
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    let suite = "typeleast.tests.sqlite"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+    func entry(_ id: String, _ text: String, age: TimeInterval) -> LocalHistoryEntry {
+        LocalHistoryEntry(id: id, ts: Date().addingTimeInterval(-age), app: "com.apple.Notes", language: "zh", strength: "prompt", raw: "原话" + text, text: text,
+                          fallback: false, fallbackReason: nil, model: "m", msTotal: 5, audioPath: nil, inserted: true, seconds: 2)
+    }
+    let key = HistorySeal.key(create: true)!
+    let old = [entry("b", "第二条机密", age: 10), entry("a", "第一条机密", age: 20)]
+    defaults.set(HistorySeal.seal(try! JSONEncoder().encode(old), key: key)!, forKey: "voice.history.sealed.v1")
+    defaults.set(HistorySeal.seal(Data("做仿真的人".utf8), key: key)!, forKey: "voice.profile.sealed.v1")
+    let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
+    checkEq("the old sealed history moves to the database", store.entries.map(\.id), ["b", "a"])
+    checkEq("the old copy is gone once saved", defaults.data(forKey: "voice.history.sealed.v1"), nil)
+    checkEq("so is the old description", defaults.data(forKey: "voice.profile.sealed.v1"), nil)
+    store.keepsNothing = { false }
+    checkEq("the description moved too", store.profile, "做仿真的人")
+    store.add(entry("c", "第三条机密", age: 0))
+    store.update(id: "a") { $0.inserted = false }
+    store.remove(id: "b")
+    let again = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
+    checkEq("rows come back newest first", again.entries.map(\.id), ["c", "a"])
+    checkEq("an update is saved", again.entries.last?.inserted, false)
+    checkEq("the whole entry survives", again.entries.first?.raw, "原话第三条机密")
+    let file = String(decoding: (try? Data(contentsOf: testHistoryDB(suite))) ?? Data(), as: UTF8.self)
+    check("no words are in the file", !file.contains("机密") && !file.contains("原话") && !file.contains("仿真"))
+    check("what can be queried is", file.contains("com.apple.Notes"))
+    let mode = (try? FileManager.default.attributesOfItem(atPath: testHistoryDB(suite).path))?[.posixPermissions] as? Int
+    checkEq("only this user can read the file", mode, 0o600)
+    again.keepsNothing = { false }
+    again.clear()
+    checkEq("clearing empties the database", HistoryDatabase(url: testHistoryDB(suite))?.count, 0)
+    checkEq("and the description", again.profile, "")
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    check("a browser's or terminal's window title names the tool",
+          ModelAdvisor.titleNamesTool(bundleId: "com.google.Chrome") && ModelAdvisor.titleNamesTool(bundleId: "com.apple.Safari") && ModelAdvisor.titleNamesTool(bundleId: "com.googlecode.iterm2"))
+    check("elsewhere the title is not read", !ModelAdvisor.titleNamesTool(bundleId: "com.apple.Notes"))
+    let reply = try! JSONDecoder().decode(ModelRecommendationReply.self, from: Data(#"{"recommendation":{"app":"Claude","model":"Claude Opus 5.5","reason":"r","source":"platform.claude.com"},"notice":null}"#.utf8))
+    checkEq("the recommendation is read", reply.recommendation?.model, "Claude Opus 5.5")
 }
 
 // MARK: 27. security: sealed history, terminal paste, own signature, the one service
@@ -1104,23 +1159,25 @@ do {
     HistorySeal.reset()
     let suite = "typeleast.tests.history"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     let old = [LocalHistoryEntry(id: "a", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "明天三点开会",
                                  text: "明天三点开会。", fallback: false, fallbackReason: nil, model: nil, msTotal: nil,
                                  audioPath: nil, inserted: true, seconds: 2)]
     defaults.set(try! JSONEncoder().encode(old), forKey: "voice.history.v1")
-    let store = HistoryStore(defaults: defaults)
+    let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
     checkEq("plain history from older versions is read", store.entries.first?.text, "明天三点开会。")
     checkEq("and then removed", defaults.data(forKey: "voice.history.v1"), nil)
-    let sealed = defaults.data(forKey: "voice.history.sealed.v1") ?? Data()
-    checkEq("the sealed copy shows no words", String(decoding: sealed, as: UTF8.self).contains("开会"), false)
+    checkEq("each entry is a row in the database", HistoryDatabase(url: testHistoryDB(suite))?.count, 1)
+    let sealed = (try? Data(contentsOf: testHistoryDB(suite))) ?? Data()
+    check("the database file exists", !sealed.isEmpty)
+    checkEq("the database shows no words", String(decoding: sealed, as: UTF8.self).contains("开会"), false)
     checkEq("the key is in the Keychain, not the preferences", KeychainStore.stub?[HistorySeal.account] != nil, true)
     HistorySeal.reset()
-    checkEq("a new start reads it back", HistoryStore(defaults: defaults).entries.count, 1)
+    checkEq("a new start reads it back", HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite)).entries.count, 1)
     KeychainStore.stub = [:]
     HistorySeal.reset()
-    checkEq("without the key nothing is readable", HistoryStore(defaults: defaults).entries.count, 0)
-    defaults.removePersistentDomain(forName: suite)
+    checkEq("without the key nothing is readable", HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite)).entries.count, 0)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
 
     let wavPath = NSTemporaryDirectory() + "dsh-voice-test-" + UUID().uuidString + ".wav"
     FileManager.default.createFile(atPath: wavPath, contents: Data([1, 2, 3, 4]))
@@ -1147,40 +1204,40 @@ do {
     KeychainStore.stub = [:]; HistorySeal.reset()
     let suite = "typeleast.tests.audio-migration"
     let d = UserDefaults(suiteName: suite)!
-    d.removePersistentDomain(forName: suite)
+    d.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     let path = NSTemporaryDirectory() + "dsh-voice-upgrade-" + UUID().uuidString + ".wav"
     try! Data([7, 8, 9]).write(to: URL(fileURLWithPath: path))
     let entry = LocalHistoryEntry(id: "migration", ts: Date(), app: nil, language: "auto", strength: "prompt",
         raw: "fixture", text: "fixture", fallback: false, fallbackReason: nil, model: nil, msTotal: nil,
         audioPath: path, inserted: false)
     d.set(try! JSONEncoder().encode([entry]), forKey: "voice.history.v1")
-    let store = HistoryStore(defaults: d)
+    let store = HistoryStore(defaults: d, databaseURL: testHistoryDB(suite))
     checkEq("legacy audio path migrates", store.last?.audioPath, path + ".sealed")
     checkEq("legacy audio plaintext is removed after history save", FileManager.default.fileExists(atPath: path), false)
     checkEq("migrated audio can be retried", try? HistorySeal.readAudio(URL(fileURLWithPath: path + ".sealed")), Data([7, 8, 9]))
-    checkEq("migrated audio path survives reload", HistoryStore(defaults: d).last?.audioPath, path + ".sealed")
+    checkEq("migrated audio path survives reload", HistoryStore(defaults: d, databaseURL: testHistoryDB(suite)).last?.audioPath, path + ".sealed")
     try? FileManager.default.removeItem(atPath: path + ".sealed")
-    d.removePersistentDomain(forName: suite)
+    d.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     // An unavailable encryption key must not remove either legacy file.
     try! Data([7, 8, 9]).write(to: URL(fileURLWithPath: path))
     let original = try! JSONEncoder().encode([entry])
     d.set(original, forKey: "voice.history.v1")
     KeychainStore.stub = [HistorySeal.account: "invalid fixture key"]; HistorySeal.reset()
-    let failedMigration = HistoryStore(defaults: d)
+    let failedMigration = HistoryStore(defaults: d, databaseURL: testHistoryDB(suite))
     check("failed audio migration reports a problem", failedMigration.persistenceProblem != nil)
     checkEq("failed audio migration preserves the legacy history", d.data(forKey: "voice.history.v1"), original)
     checkEq("failed audio migration preserves the original audio", try? Data(contentsOf: URL(fileURLWithPath: path)), Data([7, 8, 9]))
     try? FileManager.default.removeItem(atPath: path)
-    d.removePersistentDomain(forName: suite)
+    d.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     KeychainStore.stub = [:]; HistorySeal.reset()
     // A damaged legacy store must remain available for recovery.
     let invalid = Data("not JSON".utf8)
     d.set(invalid, forKey: "voice.history.v1")
-    let broken = HistoryStore(defaults: d)
+    let broken = HistoryStore(defaults: d, databaseURL: testHistoryDB(suite))
     broken.save()
     checkEq("invalid legacy history is preserved", d.data(forKey: "voice.history.v1"), invalid)
     check("invalid legacy history reports failure", broken.persistenceProblem != nil)
-    d.removePersistentDomain(forName: suite)
+    d.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     KeychainStore.stub = [:]; HistorySeal.reset()
 }
 
@@ -1212,27 +1269,28 @@ do {
 do {
     let suite = "typeleast.tests.history-failures"
     let d = UserDefaults(suiteName: suite)!
-    d.removePersistentDomain(forName: suite)
+    d.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     KeychainStore.stub = [:]; HistorySeal.reset()
-    let store = HistoryStore(defaults: d)
-    store.save()
-    let saved = d.data(forKey: "voice.history.sealed.v1")
+    let store = HistoryStore(defaults: d, databaseURL: testHistoryDB(suite))
+    store.add(LocalHistoryEntry(id: "f", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "r", text: "t",
+                                fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1))
+    let saved = try? Data(contentsOf: testHistoryDB(suite))
     KeychainStore.stub = [:]; HistorySeal.reset()
-    let locked = HistoryStore(defaults: d)
+    let locked = HistoryStore(defaults: d, databaseURL: testHistoryDB(suite))
     locked.save()
-    checkEq("locked history preserves ciphertext", d.data(forKey: "voice.history.sealed.v1"), saved)
+    checkEq("locked history preserves ciphertext", try? Data(contentsOf: testHistoryDB(suite)), saved)
     checkEq("locked history never writes plaintext", d.data(forKey: "voice.history.v1"), nil)
     check("locked history exposes a storage problem", locked.persistenceProblem != nil)
     KeychainStore.stub = [HistorySeal.account: "invalid fixture key"]; HistorySeal.reset()
     checkEq("invalid stored key is never replaced", HistorySeal.key(create: true) == nil, true)
     checkEq("existing key remains intact", KeychainStore.stub?[HistorySeal.account], "invalid fixture key")
     locked.clear()
-    checkEq("explicit clear removes locked ciphertext", d.data(forKey: "voice.history.sealed.v1"), nil)
-    let empty = HistoryStore(defaults: d)
+    checkEq("explicit clear removes locked ciphertext", HistoryDatabase(url: testHistoryDB(suite))?.count, 0)
+    let empty = HistoryStore(defaults: d, databaseURL: testHistoryDB(suite))
     empty.save()
     checkEq("failed encryption never writes plaintext", d.data(forKey: "voice.history.v1"), nil)
     check("failed encryption is reported", empty.persistenceProblem != nil)
-    d.removePersistentDomain(forName: suite)
+    d.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     KeychainStore.stub = [:]; HistorySeal.reset()
     let dir = NSTemporaryDirectory() + "typeleast-instance-" + UUID().uuidString
     var first: InstanceLock? = InstanceLock(directory: dir)
@@ -1351,14 +1409,14 @@ do {
     HistorySeal.reset()
     let suite = "typeleast.tests.never"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    let store = HistoryStore(defaults: defaults)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+    let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
     store.keepsNothing = { true }
     store.add(LocalHistoryEntry(id: "n", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "r", text: "t",
                                 fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1))
     checkEq("the last entry is kept in memory for paste-last", store.last?.text, "t")
-    checkEq("nothing is written", defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("voice.history") }, [String]())
-    defaults.removePersistentDomain(forName: suite)
+    checkEq("nothing is written", HistoryDatabase(url: testHistoryDB(suite))?.count, 0)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     KeychainStore.stub = [:]
 }
 // Switching to "never" with exactly one stored entry clears the disk at once, its recording too.
@@ -1367,22 +1425,21 @@ do {
     HistorySeal.reset()
     let suite = "typeleast.tests.never-switch"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     var never = false
-    let store = HistoryStore(defaults: defaults)
+    let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
     store.keepsNothing = { never }
     let audio = NSTemporaryDirectory() + "typeleast-test-" + UUID().uuidString + ".wav.sealed"
     FileManager.default.createFile(atPath: audio, contents: Data([1, 2, 3]))
     store.add(LocalHistoryEntry(id: "one", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "r", text: "t",
                                 fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: audio, inserted: true, seconds: 1))
-    check("one entry is stored", defaults.data(forKey: "voice.history.sealed.v1") != nil)
+    checkEq("one entry is stored", HistoryDatabase(url: testHistoryDB(suite))?.count, 1)
     never = true
     store.applyRetention(.never)
-    checkEq("switching to never clears the stored entry at once",
-            defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("voice.history") }, [String]())
+    checkEq("switching to never clears the stored entry at once", HistoryDatabase(url: testHistoryDB(suite))?.count, 0)
     checkEq("and its recording", FileManager.default.fileExists(atPath: audio), false)
     checkEq("the entry stays in memory for paste-last", store.last?.text, "t")
-    defaults.removePersistentDomain(forName: suite)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
     KeychainStore.stub = [:]
 }
 
@@ -1420,7 +1477,7 @@ do {
     func fresh(_ setup: (UserDefaults) -> Void) -> Keys {
         let suite = "typeleast.tests.keys." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite) }
         setup(defaults)
         let s = Settings(defaults: defaults)
         return Keys(hotkeyMain: s.hotkeyMain, hotkeyAlt: s.hotkeyAlt, hotkeyAssistant: s.hotkeyAssistant)
@@ -1547,9 +1604,9 @@ do {
     HistorySeal.reset()
     let suite = "typeleast.tests.profile"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    defer { defaults.removePersistentDomain(forName: suite) }
-    let store = HistoryStore(defaults: defaults)
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+    defer { defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite) }
+    let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
     store.keepsNothing = { false }
     var learned = LocalHistoryEntry(id: "a", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "修复哭达", text: "修复 CUDA",
                                     fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1)
@@ -1576,10 +1633,10 @@ do {
     HistorySeal.reset()
     let suite = "typeleast.tests.audio-lifetime"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+    defer { defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite) }
     checkEq("retry audio lives five minutes", HistoryStore.audioLifetime, 300)
-    let store = HistoryStore(defaults: defaults)
+    let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
     store.keepsNothing = { false }
     func entry(_ id: String, age: TimeInterval) -> (LocalHistoryEntry, String) {
         let path = NSTemporaryDirectory() + "dsh-voice-test-" + UUID().uuidString + ".wav.sealed"
@@ -1634,7 +1691,7 @@ do {
 do {
     let suite = "typeleast.tests.ai-cleanup." + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
-    defer { defaults.removePersistentDomain(forName: suite) }
+    defer { defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite) }
     defaults.set("promptbeta", forKey: "voice.strength")
     let migrated = Settings(defaults: defaults)
     checkEq("existing users migrate to unified dictation once", migrated.strength, "prompt")

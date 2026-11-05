@@ -31,6 +31,7 @@ import { runDictation } from "./tasks/dictation.js";
 import { runTranslation } from "./tasks/translation.js";
 import { AssistantSessions } from "./tasks/assistant.js";
 import { buildProfile } from "./tasks/profile.js";
+import { ModelRecommender } from "./tasks/model-recommend.js";
 import { timing } from "./tasks/timing.js";
 
 /** Longest transcript cleaned by the model, in characters. */
@@ -74,6 +75,7 @@ export class VoicePolishService {
     this.recentFailures = [];
     /** Prompt mode's open clarifications. */
     this.assistant = new AssistantSessions();
+    this.recommender = new ModelRecommender({ complete: (o) => this.complete(o), redact: (text) => this.redactDetail(text), fetchImpl: this.fetchImpl });
     this.progress = new Map();
   }
 
@@ -361,6 +363,11 @@ export class VoicePolishService {
    */
   async buildProfile(request) {
     return buildProfile(request, (options) => this.complete(options), (text) => this.redactDetail(text));
+  }
+
+  /** Which of the current app's models suits a finished prompt (see tasks/model-recommend.js). */
+  async recommendModel(request) {
+    return this.recommender.recommend(request);
   }
 
   /** Wait for a free slot without polling. */

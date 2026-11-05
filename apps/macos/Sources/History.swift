@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-// History.swift - local (UserDefaults) history of dictations, kept for the user's
+// History.swift - local history of dictations, sealed row by row in SQLite (HistoryDatabase), kept for the user's
 // chosen retention (Forever / 1 year / 1 month / 1 week / 24 hours / Never).
 
 struct LocalHistoryEntry: Codable, Equatable, Identifiable {
@@ -150,40 +150,85 @@ enum HistorySeal {
 final class HistoryStore {
     static let shared = HistoryStore()
     static let didChange = Notification.Name("DshVoiceHistoryDidChange")
-    /// Hard cap so UserDefaults stays small whatever the retention says.
-    static let limit = 2000
+    /// Everything is held in memory while the app runs, so there still is a cap.
+    static let limit = 20000
 
-    /// Plain JSON written by older versions; read once, then replaced by the sealed copy.
+    /// Written by older versions, in the preferences; read once, then moved to the database.
     private let plainKey = "voice.history.v1"
     private let sealedKey = "voice.history.sealed.v1"
-    /// The description of the user's work learned from this history, sealed like it.
     private let profileKey = "voice.profile.sealed.v1"
+    /// The description of the user's work learned from this history, sealed like it.
+    private let profileMeta = "profile"
     private let d: UserDefaults
+    private let database: HistoryDatabase?
+    /// What the database holds now: a save writes only the rows that differ.
+    private var stored: [String: LocalHistoryEntry] = [:]
     private var locked = false
     private(set) var persistenceProblem: String?
     private(set) var entries: [LocalHistoryEntry] = []
 
-    init(defaults: UserDefaults = .standard) {
+    /// The app's database; a command-line run (tests, render tools) never opens the user's.
+    static var defaultDatabaseURL: URL {
+        let isolated = ProcessInfo.processInfo.environment["TYPELEAST_HOME"]?.isEmpty == false
+        guard isolated || Bundle.main.bundleIdentifier == "com.dsh.voice" else {
+            return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("typeleast-history-\(getpid()).sqlite")
+        }
+        return URL(fileURLWithPath: ServiceClient.stateDirectory).appendingPathComponent("history.sqlite")
+    }
+
+    init(defaults: UserDefaults = .standard, databaseURL: URL = HistoryStore.defaultDatabaseURL) {
         d = defaults
+        database = HistoryDatabase(url: databaseURL)
         load()
     }
 
     func load() {
+        stored = [:]
+        guard let database else {
+            entries = []; locked = true; persistenceProblem = "history-unavailable"; return
+        }
+        if let legacy = d.data(forKey: profileKey), database.setMeta(profileMeta, legacy) { d.removeObject(forKey: profileKey) }
+        guard let rows = database.payloads() else {
+            entries = []; locked = true; persistenceProblem = "history-unavailable"; return
+        }
+        var loaded: [LocalHistoryEntry] = []
+        if !rows.isEmpty {
+            // Without the key (a Keychain that was reset) the history cannot be read.
+            guard let key = HistorySeal.key(create: false) else {
+                entries = []; locked = true; persistenceProblem = "history-unavailable"; return
+            }
+            loaded.reserveCapacity(rows.count)
+            for row in rows {
+                guard let data = HistorySeal.open(row, key: key), let entry = try? JSONDecoder().decode(LocalHistoryEntry.self, from: data) else {
+                    entries = []; locked = true; persistenceProblem = "history-unavailable"; return
+                }
+                loaded.append(entry)
+            }
+        }
+        for entry in loaded { stored[entry.id] = entry }
+        entries = loaded; locked = false; persistenceProblem = nil
         if let sealed = d.data(forKey: sealedKey) {
-            // Without the key (a Keychain that was reset) the old history cannot be read.
             guard let key = HistorySeal.key(create: false), let data = HistorySeal.open(sealed, key: key),
                   let decoded = try? JSONDecoder().decode([LocalHistoryEntry].self, from: data) else {
                 entries = []; locked = true; persistenceProblem = "history-unavailable"; return
             }
-            entries = decoded; locked = false; persistenceProblem = nil
-            if entries.contains(where: { $0.audioPath.map(Self.ownedPlainAudio) == true }) { persist() }
+            adopt(decoded)
             return
         }
-        guard let data = d.data(forKey: plainKey) else { entries = []; return }
-        guard let decoded = try? JSONDecoder().decode([LocalHistoryEntry].self, from: data) else {
-            locked = true; persistenceProblem = "history-unavailable"; return
+        if let data = d.data(forKey: plainKey) {
+            guard let decoded = try? JSONDecoder().decode([LocalHistoryEntry].self, from: data) else {
+                locked = true; persistenceProblem = "history-unavailable"; return
+            }
+            adopt(decoded)
+            return
         }
-        entries = decoded
+        if entries.contains(where: { $0.audioPath.map(Self.ownedPlainAudio) == true }) { persist() }
+    }
+
+    /// Entries from the old preferences join the database; the old copy goes once they are saved.
+    private func adopt(_ legacy: [LocalHistoryEntry]) {
+        let known = Set(entries.map(\.id))
+        entries = (entries + legacy.filter { !known.contains($0.id) }).sorted { $0.ts > $1.ts }
         persist()
     }
 
@@ -195,7 +240,7 @@ final class HistoryStore {
     }
 
     /// Stage encrypted audio, then save its paths before removing the original audio.
-    /// Failure preserves the old preferences and recordings; no plaintext fallback.
+    /// Failure preserves the old data and recordings; no plaintext fallback.
     /// "从不保存": the last entry lives in memory only, for "paste last", and nothing is on disk.
     var keepsNothing: () -> Bool = { Settings.shared.historyRetention.seconds == 0 }
 
@@ -204,10 +249,11 @@ final class HistoryStore {
             d.removeObject(forKey: sealedKey)
             d.removeObject(forKey: plainKey)
             d.removeObject(forKey: profileKey)
-            persistenceProblem = nil
+            stored = [:]
+            persistenceProblem = database?.deleteAll() == true ? nil : "history-unavailable"
             return
         }
-        guard !locked, let key = HistorySeal.key(create: true) else {
+        guard !locked, let database, let key = HistorySeal.key(create: true) else {
             persistenceProblem = "history-unavailable"; return
         }
         var next = entries
@@ -228,13 +274,23 @@ final class HistoryStore {
             next[i].audioPath = target
             originals.append(path)
         }
-        guard let data = try? JSONEncoder().encode(next), let sealed = HistorySeal.seal(data, key: key) else {
+        var upserts: [StoredEntryRow] = []
+        for entry in next where stored[entry.id] != entry {
+            guard let data = try? JSONEncoder().encode(entry), let sealed = HistorySeal.seal(data, key: key) else {
+                persistenceProblem = "history-unavailable"; return
+            }
+            upserts.append(StoredEntryRow(id: entry.id, ts: entry.ts, app: entry.app, task: entry.task, language: entry.language,
+                                      strength: entry.strength, model: entry.model, fallback: entry.fallback, inserted: entry.inserted,
+                                      seconds: entry.seconds, msTotal: entry.msTotal, translated: entry.translated, payload: sealed))
+        }
+        let kept = Set(next.map(\.id))
+        // Saved in one transaction before the old copies and the plaintext recordings are removed.
+        guard database.apply(upserts: upserts, deletes: stored.keys.filter { !kept.contains($0) }) else {
             persistenceProblem = "history-unavailable"; return
         }
-        d.set(sealed, forKey: sealedKey)
-        // Flush the migrated paths before removing the only plaintext copy.
-        guard d.synchronize() else { persistenceProblem = "history-unavailable"; return }
+        d.removeObject(forKey: sealedKey)
         d.removeObject(forKey: plainKey)
+        stored = Dictionary(next.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         entries = next
         persistenceProblem = nil
         for path in originals {
@@ -254,7 +310,7 @@ final class HistoryStore {
 
     /// Sent with each dictation and added to the cleanup prompt. Cleared with the history.
     var profile: String {
-        guard !keepsNothing(), let sealed = d.data(forKey: profileKey), let key = HistorySeal.key(create: false),
+        guard !keepsNothing(), let sealed = database?.meta(profileMeta), let key = HistorySeal.key(create: false),
               let data = HistorySeal.open(sealed, key: key) else { return "" }
         return String(decoding: data, as: UTF8.self)
     }
@@ -262,7 +318,7 @@ final class HistoryStore {
     func setProfile(_ text: String) {
         guard !keepsNothing(), !locked, let key = HistorySeal.key(create: true),
               let sealed = HistorySeal.seal(Data(String(text.prefix(1000)).utf8), key: key) else { return }
-        d.set(sealed, forKey: profileKey)
+        database?.setMeta(profileMeta, sealed)
     }
 
     /// What the description is learned from: the corrections and intentions of the newest entries.
@@ -309,7 +365,9 @@ final class HistoryStore {
         d.removeObject(forKey: plainKey)
         d.removeObject(forKey: sealedKey)
         d.removeObject(forKey: profileKey)
-        locked = false; persistenceProblem = nil
+        stored = [:]
+        persistenceProblem = database?.deleteAll() == true ? nil : "history-unavailable"
+        locked = database == nil
         DispatchQueue.main.async { NotificationCenter.default.post(name: HistoryStore.didChange, object: nil) }
     }
 

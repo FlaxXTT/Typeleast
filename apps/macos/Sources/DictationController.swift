@@ -327,6 +327,8 @@ final class DictationController {
         }
     }
 
+    private lazy var advisor = ModelAdvisor(client: client)
+
     func finishRequest(_ outcome: Result<DictateResponse, Error>, appBundleId: String, language: String,
                        strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool,
                        llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false) {
@@ -387,6 +389,11 @@ final class DictationController {
             entry.variants = variants
             entry.task = resp.task
             HistoryStore.shared.add(entry)
+            // The end of 提示词模式: which of this app's models suits the finished prompt.
+            if strength == VoiceStrength.promptbeta.rawValue, !text.isEmpty, !resp.fallback, resp.translated == nil,
+               settings.recommendModel, let route = llm ?? settings.activeLLMRoute {
+                advisor.recommend(task: text, appBundleId: appBundleId, field: field, route: route)
+            }
             if text.isEmpty {
                 recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
                 setHint(L10n.text("没有识别到内容"), warning: true)

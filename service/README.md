@@ -62,6 +62,7 @@ npm start
 | GET | `/health` | 状态：`ok`（识别就绪）、`service`、`version`、`speech`（`phase`、下载进度）、统计 |
 | POST | `/dictate` | 请求体是 JSON 对象 `{profile?}`（字节数见 `x-voice-meta-bytes`，可为 0）加 16 kHz 单声道 16 位 WAV（44 字节头）；请求头 `x-voice-language`、`x-voice-app`、`x-voice-strength`、可选 `x-voice-context`、`x-voice-llm`（base64 JSON：`{baseURL, model, apiKey}`） |
 | POST | `/polish` | JSON `{text, strength?, llm?, profile?}`，只整理文字 |
+| POST | `/prompts/recommend-model` | JSON `{llm, appHint, windowTitle, task}`，读取当前应用厂商的官方模型页并推荐一个模型 |
 | POST | `/test-llm` | JSON `{llm}`，测试一次模型连接 |
 | POST | `/profile` | JSON `{llm, items}`：历史里的术语纠正和意图，返回 `{profile}`；只读取，不保存 |
 | POST | `/models/download` | 开始下载语音模型，进度见 `/health` |

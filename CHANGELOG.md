@@ -2,6 +2,11 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 下一版（未发布）
+
+- 提示词模式推荐模型（Mac）：提示词交付后，弹出大字卡片，推荐当前软件现有主推模型里最适合这个任务的一个。推荐只来自刚联网读取的厂商官方模型页（Claude、ChatGPT / Codex、Gemini、DeepSeek、Cursor、GitHub Copilot、Windsurf、Zed、Grok、Kimi；浏览器和终端按窗口标题判断），读不到页面就不推荐。访问厂商网站时不发送任何个人内容。设置里可关闭。
+- 历史改存 SQLite（Mac）：`history.sqlite` 每条听写一行，正文仍加密，时间、应用、模型等不含文字的列可直接查询；保存时只写变动的行，上限从 2000 条提高到 20000 条。旧历史首次启动时自动迁入。
+
 ## 未发布
 
 ## 1.24.18（2026-11-02）

@@ -262,6 +262,20 @@ struct BetaInfo: Codable, Equatable {
     var patched: Bool?
 }
 
+/// The model 提示词模式 recommends, from the current app's official page.
+struct ModelRecommendation: Codable, Equatable {
+    var app: String
+    var model: String
+    var reason: String
+    var source: String
+}
+
+struct ModelRecommendationReply: Codable, Equatable {
+    var recommendation: ModelRecommendation?
+    var notice: String?
+    var app: String?
+}
+
 /// A term the cleanup model corrected, kept in History for the description of the user's work.
 struct TermCorrection: Codable, Equatable {
     var from: String
@@ -780,6 +794,23 @@ final class ServiceClient {
 
     /// The description of the user's work, written by the model from History's corrections and
     /// intentions (newest first). The items are only read by the service to write it.
+    /// Which of the current app's models suits a finished prompt. The window title stays on this
+    /// computer: the service only uses it to tell which tool a browser or terminal is showing.
+    func recommendModelSync(task: String, appBundleId: String, windowTitle: String, llm: LLMRoute) throws -> ModelRecommendationReply {
+        try withPortRetry {
+            try withTokenRetry { token in
+                var object: [String: Any] = ["task": task, "appHint": appBundleId, "windowTitle": windowTitle]
+                if let data = try? JSONEncoder().encode(llm), let route = try? JSONSerialization.jsonObject(with: data) { object["llm"] = route }
+                let body = try JSONSerialization.data(withJSONObject: object)
+                let req = try makeRequest(path: "/api/voice-polish/prompts/recommend-model", method: "POST", token: token,
+                                          headers: ["content-type": "application/json"], body: body, timeout: 75)
+                let (data, resp) = try performSync(req, timeout: 75)
+                guard resp.statusCode == 200 else { throw httpError(resp, data) }
+                return try JSONDecoder().decode(ModelRecommendationReply.self, from: data)
+            }
+        }
+    }
+
     func profileSync(items: [[String: Any]], llm: LLMRoute) throws -> String {
         try withPortRetry {
             try withTokenRetry { token in

@@ -247,7 +247,7 @@ enum FieldContextReader {
         return range
     }
 
-    private static func windowTitle() -> String? {
+    static func windowTitle() -> String? {
         guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
         let element = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(element, 0.25)

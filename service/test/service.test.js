@@ -354,3 +354,43 @@ test("dictation language reaches recognition and invalid languages do not run re
   await assert.rejects(service.transcribeAndPolish({ audio: wavOfSilence(), language: "bad" }), { code: "invalid-language" });
   assert.equal(languages.length, 6);
 });
+
+test("the recommendation comes only from the app's official page, read from the network", async () => {
+  const page = "<html><script>ignored</script><body>Claude Opus 5.5 is our most capable model. Claude Sonnet 5.5 balances speed.</body>" + " ".repeat(300) + "x".repeat(200) + "</html>";
+  const calls = [];
+  let answer = JSON.stringify({ model: "Claude Opus 5.5", reason: "适合复杂任务" });
+  let online = true;
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), body: init.body });
+    if (String(url).includes("/chat/completions")) {
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: answer }, finish_reason: "stop" }] }) };
+    }
+    if (!online) throw new Error("offline");
+    return { ok: true, status: 200, url: String(url), text: async () => page };
+  };
+  const service = new VoicePolishService({ recognizer: fakeRecognizer(), config: { timeoutMs: 1000 }, fetchImpl });
+  const task = "重构这个模块，我的密码是 hunter2";
+
+  const none = await service.recommendModel({ llm: ROUTE, appHint: "com.apple.Notes", windowTitle: "", task });
+  assert.deepEqual(none, { recommendation: null, notice: "unsupported-app" });
+  assert.equal(calls.length, 0);
+
+  const good = await service.recommendModel({ llm: ROUTE, appHint: "com.anthropic.claudefordesktop", windowTitle: "", task });
+  assert.deepEqual(good.recommendation, { app: "Claude", model: "Claude Opus 5.5", reason: "适合复杂任务", source: "platform.claude.com" });
+  assert.equal(calls[0].url, "https://platform.claude.com/docs/en/models/overview");
+  assert.equal(calls[0].body, undefined);
+  const sent = calls.find(c => c.url.includes("/chat/completions")).body;
+  assert.match(sent, /most capable model/);
+  assert.doesNotMatch(sent, /ignored|hunter2/);
+
+  answer = JSON.stringify({ model: "Claude Opus 9", reason: "凭记忆" });
+  const invented = await service.recommendModel({ llm: ROUTE, appHint: "com.anthropic.claudefordesktop", task });
+  assert.equal(invented.recommendation, null);
+  assert.equal(invented.notice, "no-match");
+
+  online = false;
+  const titled = await service.recommendModel({ llm: ROUTE, appHint: "com.google.Chrome", windowTitle: "ChatGPT - Google Chrome", task });
+  assert.equal(titled.recommendation, null);
+  assert.equal(titled.notice, "page-unavailable");
+  assert.equal(titled.app, "ChatGPT");
+});

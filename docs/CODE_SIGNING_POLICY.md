@@ -73,6 +73,9 @@ network only in these cases:
   uploaded. Recordings are deleted after recognition, unless the user turns on keeping recordings for retries:
   they are then stored encrypted on the computer and deleted about five minutes later (when the app quits,
   after the computer wakes, or at the next launch after a crash).
+- **Model recommendation in Prompt mode (optional, macOS).** After a prompt is written, the local service reads the
+  public model page of the vendor of the app being typed into. That request carries none of the user's content. The
+  prompt and the page then go to the user's own language model provider. It can be turned off in Settings.
 - **Text cleanup (optional).** If the user enters an API key for a language model provider of their choice
   (for example DeepSeek, OpenAI, Moonshot, Zhipu, Alibaba DashScope, OpenRouter, or a local Ollama), the app sends
   that provider the recognized text and those of the user's dictionary words that the dictation mentions (spelled

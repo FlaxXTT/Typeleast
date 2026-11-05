@@ -256,6 +256,12 @@ final class Settings {
     /// What requests carry: nil while the default is in use.
     var customTranslatePrompt: String? { d.string(forKey: "voice.translatePrompt") }
 
+    /// After 提示词模式 delivers a prompt, recommend one of the current app's models.
+    var recommendModel: Bool {
+        get { bool("voice.recommendModel", default: true) }
+        set { d.set(newValue, forKey: "voice.recommendModel"); changed() }
+    }
+
     /// Selecting text with the mouse offers a 「翻译」 button; the translation shows in a bubble.
     var selectionTranslate: Bool {
         get { bool("voice.selectionTranslate", default: true) }

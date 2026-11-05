@@ -283,6 +283,12 @@ export function createHandler(options) {
         return;
       }
 
+      if (route === "/prompts/recommend-model" && req.method === "POST") {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
+        reply(res, 200, await service.recommendModel({ llm: normalizeRoute(body.llm), appHint: body.appHint, windowTitle: body.windowTitle, task: body.task, signal: controller.signal }));
+        return;
+      }
+
       if (route === "/dictate" && req.method === "POST") {
         // The body is a JSON object (x-voice-meta-bytes long, may be 0) then the WAV. The object
         // carries what cannot travel in a header, such as the learned description of the user's work.

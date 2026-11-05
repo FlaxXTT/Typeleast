@@ -83,6 +83,8 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
+            ToggleRow(title: L10n.text("提示词模式推荐模型"), detail: L10n.text("生成提示词后，联网查当前软件现有的主推模型，推荐最适合这个任务的一个。"),
+                      isOn: model.setting(\.recommendModel))
         }
     }
 
