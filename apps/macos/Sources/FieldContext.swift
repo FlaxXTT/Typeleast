@@ -34,6 +34,21 @@ struct FocusedField {
 
 /// Whether a caret position captured at dictation start still points at the same place.
 enum CaretAnchor {
+    /// Where the cursor was, found by the text around it: the offset just after `before`, where `after`
+    /// follows. Nil when that text is not there, or is there more than once. An empty field has one place.
+    static func locate(before: String, after: String, in value: String) -> Int? {
+        let ns = value as NSString
+        if before.isEmpty && after.isEmpty { return ns.length == 0 ? 0 : nil }
+        // Only the text nearest the cursor: the rest may have been edited meanwhile.
+        let near = String(before.suffix(60)), next = String(after.prefix(60))
+        let needle = near + next
+        let first = ns.range(of: needle, options: .literal)
+        guard first.location != NSNotFound else { return nil }
+        let rest = NSRange(location: first.location + 1, length: ns.length - first.location - 1)
+        guard rest.length <= 0 || ns.range(of: needle, options: .literal, range: rest).location == NSNotFound else { return nil }
+        return first.location + (near as NSString).length
+    }
+
     /// True when the text before `location` still ends with what preceded the cursor then,
     /// and the selection then is still selectable. Edits elsewhere in the field are fine;
     /// an edit before the cursor shifts the offset, so the anchor is not used.
@@ -97,15 +112,12 @@ enum FieldContextReader {
     /// nothing editable is focused, for secure fields and for blocked apps.
     static func capture(bundleId: String) -> FocusedField? {
         guard AXIsProcessTrusted(), !isBlocked(bundleId: bundleId) else { return nil }
-        let system = AXUIElementCreateSystemWide()
-        // A busy target app must never stall the hotkey path.
-        AXUIElementSetMessagingTimeout(system, 0.25)
-        var focused: AXUIElement? = copy(system, kAXFocusedUIElementAttribute)
+        var focused = focusedElement(ofApp: bundleId)
         if exposeContent(bundleId: bundleId) {
             // The first time, the app builds its tree now: wait up to a second for the field.
             for _ in 0..<10 where !isTextField(focused) {
                 usleep(100_000)
-                focused = copy(system, kAXFocusedUIElementAttribute)
+                focused = focusedElement(ofApp: bundleId)
             }
         }
         guard let element = focused else { return nil }
@@ -123,8 +135,9 @@ enum FieldContextReader {
         let ns = value as NSString
         if let range = selectedRange(element), range.location != kCFNotFound,
            range.location >= 0, range.location + range.length <= ns.length {
-            // Only a field whose text can be read again can be checked before the paste.
-            if readable != nil { anchor = range }
+            // Only a real text field whose text can be read again is worth coming back to. Electron
+            // apps (Claude, Codex) report a text-less group here, with a range that means nothing.
+            if readable != nil, textFieldRoles.contains(copy(element, kAXRoleAttribute) ?? "") { anchor = range }
             let start = max(0, range.location - beforeLimit)
             before = ns.substring(with: NSRange(location: start, length: range.location - start))
             let tail = range.location + range.length
@@ -133,7 +146,7 @@ enum FieldContextReader {
             before = ns.length > beforeLimit ? ns.substring(from: ns.length - beforeLimit) : value
         }
         let context = FieldContext(before: before, selected: String(selected.prefix(400)),
-                                   after: after, windowTitle: windowTitle() ?? "")
+                                   after: after, windowTitle: windowTitle(ofApp: bundleId) ?? "")
         return FocusedField(element: element, bundleId: bundleId, context: context, range: anchor,
                             selection: String(selected.prefix(selectionLimit)))
     }
@@ -173,8 +186,71 @@ enum FieldContextReader {
         case sameField
         /// Nothing was captured at the start (no Accessibility, no text field): paste as is.
         case unknown
-        /// The starting field is gone or cannot take focus back (closed, another tab).
-        case lost
+        /// The starting field still exists, but the user is somewhere else (another tab or window).
+        case elsewhere
+        /// The handle no longer answers, and what has focus now is not recognisably that field.
+        case gone
+    }
+
+    private static let textFieldRoles: Set<String> = [kAXTextFieldRole as String, kAXTextAreaRole as String, kAXComboBoxRole as String]
+    /// Focus on one of these is not a place to type; anything else may be an editor that reads as a group.
+    private static let notEditableRoles: Set<String> = ["AXWebArea", "AXWindow", "AXApplication", "AXList", "AXOutline", "AXTable",
+                                                        "AXButton", "AXScrollArea", "AXToolbar", "AXMenu", "AXMenuItem"]
+
+    /// What has focus in `bundleId`. The system-wide focus may already belong to another app
+    /// (the user switched right after the key), and that app's field must not become the target.
+    static func focusedElement(ofApp bundleId: String) -> AXUIElement? {
+        let system = AXUIElementCreateSystemWide()
+        // A busy target app must never stall the hotkey path.
+        AXUIElementSetMessagingTimeout(system, 0.25)
+        if let element: AXUIElement = copy(system, kAXFocusedUIElementAttribute) {
+            var pid: pid_t = 0
+            if AXUIElementGetPid(element, &pid) == .success, NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == bundleId {
+                return element
+            }
+        }
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else { return nil }
+        let target = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(target, 0.25)
+        return copy(target, kAXFocusedUIElementAttribute)
+    }
+
+    /// Whether a paste need wait no longer: the user is at the starting field. Changes nothing,
+    /// so it can be asked repeatedly while the user works elsewhere.
+    static func isBackAtField(_ field: FocusedField) -> Bool {
+        guard field.range != nil else { return true }
+        AXUIElementSetMessagingTimeout(field.element, 0.25)
+        let alive: String? = copy(field.element, kAXValueAttribute)
+        if alive != nil {
+            if focusedElement(ofApp: field.bundleId).map({ CFEqual($0, field.element) }) == true { return true }
+            return recognise(field)?.caret != nil
+        }
+        return recognise(field) != nil
+    }
+
+    /// The starting field under its new handle: its text around the cursor is still there, or
+    /// failing that it is the same window (a browser's other tab has another title). With the
+    /// caret offset, when the text around it could be found.
+    private static func recognise(_ field: FocusedField) -> (element: AXUIElement, caret: Int?)? {
+        guard let element = focusedElement(ofApp: field.bundleId) else { return nil }
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        let role: String = copy(element, kAXRoleAttribute) ?? ""
+        if notEditableRoles.contains(role) { return nil }
+        let sameWindow = field.context.windowTitle.isEmpty || field.context.windowTitle == (windowTitle(ofApp: field.bundleId) ?? "")
+        guard textFieldRoles.contains(role), let value: String = copy(element, kAXValueAttribute) else {
+            return sameWindow ? (element, nil) : nil
+        }
+        if let caret = CaretAnchor.locate(before: field.context.before, after: field.context.after, in: value) { return (element, caret) }
+        return sameWindow ? (element, nil) : nil
+    }
+
+    private static func refind(_ field: FocusedField) -> CaretRestore {
+        guard let found = recognise(field) else { return .gone }
+        guard let caret = found.caret else { return .sameField }
+        var wanted = CFRange(location: caret, length: 0)
+        guard let axRange = AXValueCreate(.cfRange, &wanted),
+              AXUIElementSetAttributeValue(found.element, kAXSelectedTextRangeAttribute as CFString, axRange) == .success else { return .sameField }
+        return .restored
     }
 
     /// Put focus and the cursor back where the dictation started, before the paste.
@@ -185,13 +261,11 @@ enum FieldContextReader {
         guard let range = field.range, AXIsProcessTrusted() else { return .unknown }
         let element = field.element
         AXUIElementSetMessagingTimeout(element, 0.25)
-        // A field that no longer answers was closed or left with its page.
-        guard let value: String = copy(element, kAXValueAttribute) else { return .lost }
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 0.25)
+        // Apps rebuild their elements (Electron whenever it is reactivated), so a field that no longer
+        // answers may well be the one that has focus now, under a new handle.
+        guard let value: String = copy(element, kAXValueAttribute) else { return refind(field) }
         func focusedHere() -> Bool {
-            let focused: AXUIElement? = copy(system, kAXFocusedUIElementAttribute)
-            return focused.map { CFEqual($0, element) } ?? false
+            focusedElement(ofApp: field.bundleId).map { CFEqual($0, element) } ?? false
         }
         if !focusedHere() {
             // The field may sit in another window of the same app: bring that window forward first.
@@ -207,7 +281,9 @@ enum FieldContextReader {
                 usleep(50_000)
                 back = focusedHere()
             }
-            guard back else { return .lost }
+            // Coming back to a tab can give the same field a second handle: the text around the
+            // cursor says so. Being merely in the same window does not: that may be another field.
+            guard back else { return recognise(field)?.caret == nil ? .elsewhere : refind(field) }
         }
         guard CaretAnchor.stillValid(before: field.context.before, selected: field.context.selected,
                                      value: value, location: range.location, length: range.length) else { return .sameField }
@@ -247,8 +323,8 @@ enum FieldContextReader {
         return range
     }
 
-    private static func windowTitle() -> String? {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+    private static func windowTitle(ofApp bundleId: String) -> String? {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else { return nil }
         let element = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(element, 0.25)
         guard let window: AXUIElement = copy(element, kAXFocusedWindowAttribute) else { return nil }
