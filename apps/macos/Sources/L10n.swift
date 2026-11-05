@@ -363,6 +363,7 @@ enum L10n {
         "这次没有合适的模型可推荐": "No suitable model to recommend this time",
         "提示词模式推荐模型": "Recommend a model in Prompt mode",
         "生成提示词后，联网查当前软件现有的主推模型，推荐最适合这个任务的一个。": "After a prompt is written, check this app's current main models online and recommend the best fit.",
+        "多语种 · 长音频 · 能分辨说话人 · 用 Mac GPU": "Multilingual · long recordings · tells speakers apart · uses the Mac GPU",
         "已复制": "Copied",
         "已安装，请重试": "Installed. Try again",
         "就绪": "Ready",

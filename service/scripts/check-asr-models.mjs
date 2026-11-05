@@ -25,7 +25,8 @@ const { values } = parseArgs({ options: {
 if (!values['models-dir'] || !values['state-dir']) throw new Error('Explicit --models-dir and --state-dir are required');
 const modelsDir = resolve(values['models-dir']), stateDir = resolve(values['state-dir']);
 await mkdir(stateDir, { recursive: true });
-const ids = values['model-id'] ? [modelFor(values['model-id']).id] : MODEL_CATALOG.map(m => m.id);
+// sherpa-onnx models only: a model with its own engine (MOSS) is not loaded through this path.
+const ids = values['model-id'] ? [modelFor(values['model-id']).id] : MODEL_CATALOG.filter(m => !m.engine).map(m => m.id);
 const sample = values['sample-file'] ? resolve(values['sample-file']) : join(stateDir, 'public-1.wav');
 const sampleSource = 'https://huggingface.co/csukuangfj2/sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25/resolve/423be1acfdc5d8aaa5a485fb6263fe4ea8570b06/test_wavs/1.wav';
 const samplesDir = values.worker ? dirname(stateDir) : stateDir;

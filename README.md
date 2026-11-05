@@ -190,6 +190,7 @@ Windows code signing via SignPath Foundation is currently pending approval.
 | **FireRedASR2 CTC** | 中文和方言，也支持英文 | 0.78 GB |
 | **Fun-ASR-Nano** | 中英混说，也支持日语 | 1.01 GB |
 | **Qwen3-ASR-0.6B** | 多语言。中文可能输出繁体。 | 0.99 GB |
+| **MOSS-Transcribe-Diarize**（仅 Mac） | 多语言、长录音、能分辨说话人；用 GPU。听写只取文字。 | 0.65 GB |
 
 <sub>大模型更慢，占用 2–3 GB 内存。来源和许可：[第三方说明](THIRD-PARTY-NOTICES.md)。</sub>
 

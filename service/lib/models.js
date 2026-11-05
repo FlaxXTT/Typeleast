@@ -218,11 +218,12 @@ export const DEFAULT_MODEL_ID = "sensevoice-small";
 export const MODEL_CATALOG = [
   { id: DEFAULT_MODEL_ID, name: "SenseVoice Small", sourceUrl: `https://huggingface.co/${SENSEVOICE_REPO}`,
     source: "https://github.com/FunAudioLLM/SenseVoice", license: "See publisher terms", files: MODEL_FILES.slice(0, 2) },
-  ...candidates,
+  // A model with its own engine is offered only where that engine ships.
+  ...candidates.filter(model => !model.platforms || model.platforms.includes(process.platform)),
 ].map(model => ({ ...model, modelBytes: model.files.reduce((sum, file) => sum + file.size, 0),
   // The v1.13.8 binding supports a FunASR config hint and a Qwen per-stream hint.
-  languages: model.id === "fireredasr2-ctc" ? ["auto"] : model.id === "fun-asr-nano" ? ["auto", "zh", "en", "ja"] : ["auto", "zh", "en", "yue", "ja", "ko"],
-  canSetLanguage: model.id !== "fireredasr2-ctc" }));
+  languages: model.id === "fireredasr2-ctc" || model.engine ? ["auto"] : model.id === "fun-asr-nano" ? ["auto", "zh", "en", "ja"] : ["auto", "zh", "en", "yue", "ja", "ko"],
+  canSetLanguage: model.id !== "fireredasr2-ctc" && !model.engine }));
 
 export function modelFor(id = DEFAULT_MODEL_ID) {
   const model = MODEL_CATALOG.find(model => model.id === id);

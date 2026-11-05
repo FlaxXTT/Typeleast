@@ -19,10 +19,10 @@ async function fixture(run, options = {}) {
 }
 
 test('model catalog has only approved fixed candidates and unique checked files', () => {
-  assert.deepEqual(MODEL_CATALOG.map(m=>m.id), ['sensevoice-small','fireredasr2-ctc','fun-asr-nano','qwen3-asr-0.6b','qwen3-asr-1.7b-fp16']);
+  assert.deepEqual(MODEL_CATALOG.map(m=>m.id), ['sensevoice-small','fireredasr2-ctc','fun-asr-nano','qwen3-asr-0.6b','qwen3-asr-1.7b-fp16',
+    ...(process.platform === 'darwin' ? ['moss-transcribe-diarize'] : [])]);
   for(const m of MODEL_CATALOG) {
-    const config=recognizerConfig('/models',m.id);
-    assert.equal(config.modelConfig.provider,'cpu');
+    if(!m.engine) assert.equal(recognizerConfig('/models',m.id).modelConfig.provider,'cpu');
     for(const f of filesForModel(m.id)) {
       assert.match(f.sha256,/^[0-9a-f]{64}$/);
       assert(f.size>0);
@@ -115,9 +115,9 @@ test('an unavailable saved candidate does not load a different model', async()=>
   assert.equal(m.activeId,'');
 }));
 
-test('only two Qwen downloads are primary and other models require explicit registration', async () => fixture(async (m, dir) => {
+test('only the Qwen and MOSS downloads are primary and other models require explicit registration', async () => fixture(async (m, dir) => {
   const catalog = await m.catalog();
-  assert.deepEqual(catalog.models.filter(v => v.category === 'primary').map(v => v.id), ['qwen3-asr-0.6b', 'qwen3-asr-1.7b-fp16']);
+  assert.deepEqual(catalog.models.filter(v => v.category === 'primary').map(v => v.id), ['qwen3-asr-0.6b', 'qwen3-asr-1.7b-fp16', ...(process.platform === 'darwin' ? ['moss-transcribe-diarize'] : [])]);
   assert(catalog.models.filter(v => v.category === 'other').every(v => !v.downloadable && !v.registered));
   await m.registerKnown('fireredasr2-ctc');
   assert.equal(JSON.parse(await readFile(join(dir, 'local-speech-models.json'), 'utf8')).builtins[0], 'fireredasr2-ctc');

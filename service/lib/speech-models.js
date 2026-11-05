@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { inspectLocalModel, LOCAL_MODEL_TEMPLATES } from './local-models.js';
 import { LocalModelProcess } from './local-recognizer.js';
+import { MossRecognizer } from './moss-recognizer.js';
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 export class SpeechModels {
@@ -16,7 +17,8 @@ export class SpeechModels {
     this.selectionPath = options.selectionPath;
     this.local = new Map(); this.registered = new Set();
     this.registryPath = join(dirname(this.selectionPath), 'local-speech-models.json');
-    this.factory = options.factory ?? (id => this.local.has(id) ? new LocalModelProcess(this.local.get(id)) : new LocalRecognizer({ ...options, modelId: id }));
+    this.factory = options.factory ?? (id => this.local.has(id) ? new LocalModelProcess(this.local.get(id))
+      : modelFor(id).engine === 'moss' ? new MossRecognizer({ ...options, modelId: id }) : new LocalRecognizer({ ...options, modelId: id }));
     this.current = this.factory(DEFAULT_MODEL_ID);
     this.activeId = DEFAULT_MODEL_ID;
     this.serial = Promise.resolve();
@@ -86,8 +88,8 @@ export class SpeechModels {
       id: model.id, name: model.name, modelBytes: model.modelBytes, sourceUrl: model.sourceUrl,
       licenseUrl: model.source, languages: model.languages, canSetLanguage: model.canSetLanguage,
       installed: (await modelStatus(this.modelsDir, filesForModel(model.id))).ready,
-      family: model.id, precision: model.precision ?? 'int8', category: model.id.startsWith('qwen3-asr-') ? 'primary' : 'other',
-      registered: this.registered.has(model.id), downloadable: model.id.startsWith('qwen3-asr-'),
+      family: model.id, precision: model.precision ?? 'int8', category: model.id.startsWith('qwen3-asr-') || model.engine ? 'primary' : 'other',
+      registered: this.registered.has(model.id), downloadable: model.id.startsWith('qwen3-asr-') || Boolean(model.engine),
     })));
     for (const [id, model] of this.local) models.push({ id, name: model.name, family: model.family, precision: 'local', category: 'other', registered: true, downloadable: false,
       installed: Array.isArray(model.inventory) && (await modelStatus(model.directory, model.inventory)).ready,

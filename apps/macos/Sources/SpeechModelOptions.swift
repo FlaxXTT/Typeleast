@@ -62,13 +62,14 @@ struct SpeechModelOptions: View {
                         .buttonStyle(SecondaryButtonStyle()).disabled(catalog.operation?.running == true || model.phase != .idle)
                 }
             }
-            if primary { Text(entry.id.contains("1.7b") ? L10n.text("多语种 · 中英混说 · 较大容量") : L10n.text("多语种 · 中英混说 · 较小体积")).font(.caption) }
+            if entry.id.hasPrefix("moss-") { Text(L10n.text("多语种 · 长音频 · 能分辨说话人 · 用 Mac GPU")).font(.caption) }
+            else if primary { Text(entry.id.contains("1.7b") ? L10n.text("多语种 · 中英混说 · 较大容量") : L10n.text("多语种 · 中英混说 · 较小体积")).font(.caption) }
             else {
                 Text(entry.id == "sensevoice-small" ? L10n.text("轻量 · 快速 · 五语种") : entry.id == "fireredasr2-ctc" ? L10n.text("中文 · 方言 · CTC") : entry.id == "fun-asr-nano" ? L10n.text("中英日 · 混说 · 口音") : L10n.text("兼容导入 · 本地识别")).font(.caption)
             }
             if entry.precision == "fp16" { Text(L10n.text("Mac 实测加载峰值约 12.5 GiB；不同环境会变化。")).font(.caption).foregroundColor(Theme.secondary) }
             HStack(spacing: 10) {
-                Text(entry.precision == "local" ? L10n.text("本地文件") : entry.precision == "fp16" ? L10n.text("FP16（前端 FP32）") : "INT8")
+                Text(entry.precision == "local" ? L10n.text("本地文件") : entry.precision == "fp16" ? L10n.text("FP16（前端 FP32）") : entry.precision == "q5" ? "Q5" : "INT8")
                 Text(String(format: "%.2f GB", locale: L10n.locale, entry.modelBytes / 1_000_000_000))
                 if entry.installed { Text(L10n.text("已下载")) }
                 if !entry.sourceUrl.isEmpty, let url = URL(string: entry.sourceUrl) { Link(L10n.text("模型来源与下载"), destination: url) }

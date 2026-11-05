@@ -85,6 +85,18 @@ fi
 mkdir -p "$APP/Contents/Resources/service"
 cp -R "$SERVICE_SRC/bin" "$SERVICE_SRC/lib" "$SERVICE_SRC/package.json" "$SERVICE_SRC/node_modules" \
   "$APP/Contents/Resources/service/"
+# The engine MOSS-Transcribe-Diarize runs on (sherpa-onnx cannot). Signed here like the app:
+# it is a child process, with the hardened runtime and no entitlements of its own.
+if MOSS_OUT="$BUILD_DIR/moss/moss-transcribe" && "$ROOT/scripts/build-moss.sh" "$MOSS_OUT"; then
+  mkdir -p "$APP/Contents/Resources/service/native"
+  cp "$MOSS_OUT" "$MOSS_OUT.LICENSE" "$APP/Contents/Resources/service/native/"
+  codesign --force --sign - --timestamp=none --options runtime "$APP/Contents/Resources/service/native/moss-transcribe"
+elif [ "${TYPELEAST_RELEASE:-}" = "1" ]; then
+  echo "moss-transcribe did not build" >&2
+  exit 1
+else
+  echo "moss   : not built (needs git and cmake); MOSS-Transcribe-Diarize will not load"
+fi
 echo "service: bundled $(du -sh "$APP/Contents/Resources/service" | cut -f1)"
 
 for localization in "$ROOT/Resources/"*.lproj; do

@@ -338,5 +338,32 @@
         "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
       }
     ]
+  },
+  {
+    "id": "moss-transcribe-diarize",
+    "name": "MOSS-Transcribe-Diarize",
+    "source": "https://github.com/OpenMOSS/MOSS-Transcribe-Diarize",
+    "sourceUrl": "https://huggingface.co/mudler/moss-transcribe.cpp-gguf",
+    "license": "Apache-2.0",
+    "engine": "moss",
+    "platforms": [
+      "darwin"
+    ],
+    "precision": "q5",
+    "files": [
+      {
+        "id": "moss-transcribe-q5_0.gguf",
+        "path": [
+          "moss-transcribe-diarize",
+          "moss-transcribe-q5_0.gguf"
+        ],
+        "repo": "mudler/moss-transcribe.cpp-gguf",
+        "revision": "54e4bbd17da3f84adf1c1bcf7791b9b9266f741e",
+        "file": "moss-transcribe-q5_0.gguf",
+        "size": 648174592,
+        "sha256": "7e9ce1de5648ed49fc5c4f5e003d61a7421a63c14074f7275dc8a8cc664ff865"
+      }
+    ],
+    "characteristics": "50+ languages; long recordings; tells speakers apart. Runs on the Mac GPU through moss-transcribe, not sherpa-onnx."
   }
 ]

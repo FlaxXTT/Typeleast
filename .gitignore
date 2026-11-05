@@ -19,3 +19,6 @@ apps/windows/dist/
 
 # Built site (site/build.sh)
 site/dist/
+
+# The moss-transcribe engine, built by apps/macos/scripts/build-moss.sh
+/service/native/
