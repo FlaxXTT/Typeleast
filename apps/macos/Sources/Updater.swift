@@ -54,9 +54,25 @@ enum Updater {
         return false
     }
 
-    /// The release's zip for this Mac's processor (names made by apps/macos/package.sh).
+    /// Reject missing or malformed requirements instead of installing an app that may not open.
+    static func supportsSystem(minimum: String?, current: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) -> Bool {
+        guard let minimum else { return false }
+        let parts = minimum.split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...3).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
+              let major = Int(parts[0]),
+              let minor = parts.count > 1 ? Int(parts[1]) : 0,
+              let patch = parts.count > 2 ? Int(parts[2]) : 0 else { return false }
+        let actual = [current.majorVersion, current.minorVersion, current.patchVersion]
+        let required = [major, minor, patch]
+        for i in 0..<3 where actual[i] != required[i] { return actual[i] > required[i] }
+        return true
+    }
+
+    /// New ARM releases use a distinct name. Older clients ask for the legacy
+    /// name and therefore cannot install a release requiring a newer macOS.
     static func assetName(version: String, arch: String) -> String {
-        "TypeLeast-" + version + "-macOS-" + (arch == "arm64" ? "AppleSilicon" : "Intel") + ".zip"
+        arch == "arm64" ? "TypeLeast-" + version + "-macOS14-AppleSilicon.zip"
+            : "TypeLeast-" + version + "-macOS-Intel.zip"
     }
 
     /// The hash recorded for `name` in a sha256sum-style file ("<hex>  <name>" or "<hex> *<name>").
@@ -284,6 +300,10 @@ enum Updater {
             let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
             guard info?["CFBundleIdentifier"] as? String == bundleID else { throw UpdateError.badBundle(L10n.text("这不是 TypeLeast")) }
             guard info?["CFBundleShortVersionString"] as? String == version else { throw UpdateError.badBundle(L10n.text("版本号不是 ") + version) }
+            let minimum = info?["LSMinimumSystemVersion"] as? String
+            guard supportsSystem(minimum: minimum) else {
+                throw UpdateError.badBundle(L10n.text("此更新不支持当前 macOS，或未声明有效的最低系统版本。"))
+            }
 
             stage?(.signing)
             // Not --deep: the bundled Node.js keeps the signature nodejs.org gave it (as in build.sh / package.sh).

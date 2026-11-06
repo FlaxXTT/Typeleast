@@ -23,6 +23,7 @@ import { copyFile, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { once } from "node:events";
 import { finished } from "node:stream/promises";
 import { join } from "node:path";
+import { MLX_MODELS } from "./mlx-models.js";
 
 const SENSEVOICE_REPO = "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17";
 
@@ -220,10 +221,11 @@ export const MODEL_CATALOG = [
     source: "https://github.com/FunAudioLLM/SenseVoice", license: "See publisher terms", files: MODEL_FILES.slice(0, 2) },
   // A model with its own engine is offered only where that engine ships.
   ...candidates.filter(model => !model.platforms || model.platforms.includes(process.platform)),
+  ...(process.platform === 'darwin' ? MLX_MODELS : []),
 ].map(model => ({ ...model, modelBytes: model.files.reduce((sum, file) => sum + file.size, 0),
   // The v1.13.8 binding supports a FunASR config hint and a Qwen per-stream hint.
-  languages: model.id === "fireredasr2-ctc" || model.engine ? ["auto"] : model.id === "fun-asr-nano" ? ["auto", "zh", "en", "ja"] : ["auto", "zh", "en", "yue", "ja", "ko"],
-  canSetLanguage: model.id !== "fireredasr2-ctc" && !model.engine }));
+  languages: model.languages ?? (model.id === "fireredasr2-ctc" || model.engine ? ["auto"] : model.id === "fun-asr-nano" ? ["auto", "zh", "en", "ja"] : ["auto", "zh", "en", "yue", "ja", "ko"]),
+  canSetLanguage: model.canSetLanguage ?? (model.id !== "fireredasr2-ctc" && !model.engine) }));
 
 export function modelFor(id = DEFAULT_MODEL_ID) {
   const model = MODEL_CATALOG.find(model => model.id === id);
@@ -231,7 +233,8 @@ export function modelFor(id = DEFAULT_MODEL_ID) {
   return model;
 }
 export function filesForModel(id = DEFAULT_MODEL_ID) {
-  return [...modelFor(id).files, MODEL_FILES.find(file => file.id === "silero-vad")];
+  const model = modelFor(id);
+  return model.engine === 'mlx' || model.engine === 'moss' ? model.files : [...model.files, MODEL_FILES.find(file => file.id === "silero-vad")];
 }
 export function recognizerConfig(modelsDir, id, { language = "auto", numThreads = 2 } = {}) {
   const model = modelFor(id);

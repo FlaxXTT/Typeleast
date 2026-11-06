@@ -9,7 +9,7 @@ import { MODEL_CATALOG, DEFAULT_MODEL_ID, filesForModel, recognizerConfig } from
 async function fixture(run, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'typeleast-model-selection-'));
   const events = [];
-  const manager = new SpeechModels({ modelsDir: dir, selectionPath: join(dir, 'selection.json'), factory: id => ({
+  const manager = new SpeechModels({ modelsDir: dir, selectionPath: join(dir, 'selection.json'), mlxOnly: false, factory: id => ({
     prepare: async () => { events.push('load:'+id); return options.fail === id ? 'error' : 'ready'; },
     snapshot: () => ({ phase:'ready', ready:true }),
     transcribe: async () => { events.push('decode:'+id); await options.decode?.(); return { text:id }; },
@@ -20,7 +20,7 @@ async function fixture(run, options = {}) {
 
 test('model catalog has only approved fixed candidates and unique checked files', () => {
   assert.deepEqual(MODEL_CATALOG.map(m=>m.id), ['sensevoice-small','fireredasr2-ctc','fun-asr-nano','qwen3-asr-0.6b','qwen3-asr-1.7b-fp16',
-    ...(process.platform === 'darwin' ? ['moss-transcribe-diarize'] : [])]);
+    ...(process.platform === 'darwin' ? ['moss-transcribe-diarize', 'mlx-fun-asr-nano-bf16', 'mlx-qwen3-asr-0.6b-bf16', 'mlx-qwen3-asr-1.7b-bf16'] : [])]);
   for(const m of MODEL_CATALOG) {
     if(!m.engine) assert.equal(recognizerConfig('/models',m.id).modelConfig.provider,'cpu');
     for(const f of filesForModel(m.id)) {

@@ -1,5 +1,7 @@
 # Build output (apps/macos: build.sh / test.sh / Tools/render.sh; apps/windows: dotnet)
 /apps/macos/build/
+/apps/macos/MLXWorker/.build/
+/apps/macos/MLXWorker/.swiftpm/
 apps/windows/**/bin/
 apps/windows/**/obj/
 /dist/

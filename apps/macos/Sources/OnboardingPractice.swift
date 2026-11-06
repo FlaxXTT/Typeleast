@@ -1,17 +1,37 @@
 import Foundation
 import AVFoundation
 import Combine
+import CoreAudio
 
 /// The practice passes when one real recording was recognised and cleaned up; what was said is up to the user.
 struct PracticeProgress {
-    enum Outcome: Equatable { case passed, tooShort, nothingHeard, notCleaned }
+    enum Outcome: Equatable { case passed, tooShort, nothingHeard, notCleaned, needsReview }
     private(set) var complete = false
     mutating func accept(_ response: DictateResponse, seconds: Double) -> Outcome {
+        complete = false
+        guard response.qualityReview == nil else { return .needsReview }
         guard seconds >= 0.6 else { return .tooShort }
         guard !response.raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .nothingHeard }
         guard !response.fallback, !response.insertableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .notCleaned }
         complete = true
         return .passed
+    }
+}
+
+/// Only the current practice result is displayed; these rows are never saved.
+struct PracticeResultRow: Equatable {
+    let title: String
+    let text: String
+
+    static func rows(raw: String, output: String, needsReview: Bool = false) -> [PracticeResultRow] {
+        var rows: [PracticeResultRow] = []
+        if !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            rows.append(PracticeResultRow(title: "原始识别", text: raw))
+        }
+        if !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            rows.append(PracticeResultRow(title: needsReview ? "待核对整理结果" : "整理结果", text: output))
+        }
+        return rows
     }
 }
 
@@ -21,6 +41,7 @@ final class OnboardingPracticeController: ObservableObject {
     @Published private(set) var progress = PracticeProgress()
     @Published private(set) var raw = ""
     @Published private(set) var output = ""
+    @Published private(set) var needsReview = false
     @Published private(set) var status = ""
     /// Recent microphone levels for the pill's waveform, newest last.
     @Published private(set) var levels: [Float] = []
@@ -31,6 +52,7 @@ final class OnboardingPracticeController: ObservableObject {
     private var generation = 0
     private var pendingAudio: URL?
     var acceptsShortcut = false
+    var recognitionModelID: () -> String? = { nil }
     /// The language to translate into, while the translation step is shown; nil for plain dictation.
     var translateTo: String?
     init(settings: Settings = .shared, client: ServiceClient = .shared) {
@@ -44,6 +66,18 @@ final class OnboardingPracticeController: ObservableObject {
     var sample: String {
         L10n.language == "en" ? "Send the report on Tuesday, no wait, on Thursday. Keep it under 3 pages." : "嗯，把报告周三发，不对，改成周四，不超过三页。"
     }
+
+    /// Resolve the selected input each time, just as daily dictation does.
+    /// The injectable functions allow this routing to be tested without opening a microphone.
+    static func configureInput(_ recorder: Recorder, uid: String,
+                               resolve: (String) -> AudioDeviceID? = AudioDevices.deviceID(forUID:),
+                               apply: @escaping (AudioDeviceID?, AVAudioEngine) -> Void = { id, engine in
+                                   _ = AudioInputSelector.apply(deviceID: id, to: engine)
+                               }) {
+        let deviceID = resolve(uid)
+        recorder.prepareEngine = { engine in apply(deviceID, engine) }
+    }
+
     func toggle() {
         if phase == .recording { stop(); return }
         guard phase == .idle else { return }
@@ -58,8 +92,9 @@ final class OnboardingPracticeController: ObservableObject {
         default: status = L10n.text("需要麦克风权限才能完成真实语音练习。"); return
         }
         do {
-            raw = ""; output = ""
+            raw = ""; output = ""; needsReview = false
             recorder.demoPCM = nil
+            Self.configureInput(recorder, uid: settings.inputDeviceUID)
             try recorder.start(); phase = .recording; status = ""
             levels = Array(repeating: 0, count: 18)
             let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -76,7 +111,7 @@ final class OnboardingPracticeController: ObservableObject {
             let recording = try recorder.finish()
             guard let route = settings.activeLLMRoute else { try? FileManager.default.removeItem(at: recording.url); status = L10n.text("请先配置可用的整理模型。"); phase = .idle; return }
             pendingAudio = recording.url
-            let language = settings.language, target = translateTo
+            let language = settings.recognitionLanguage(for: recognitionModelID()), target = translateTo
             let token = generation
             phase = .thinking; status = ""
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -94,18 +129,21 @@ final class OnboardingPracticeController: ObservableObject {
                     switch result {
                     case .failure(let error): self.status = L10n.text("没有完成：") + ((error as? ServiceError).map { "\($0)" } ?? error.localizedDescription)
                     case .success(let response):
-                        self.raw = response.raw; self.output = response.insertableText
+                        self.needsReview = response.qualityReview != nil
+                        self.raw = response.qualityReview?.original ?? response.raw
+                        self.output = response.qualityReview?.candidate ?? response.insertableText
                         switch self.progress.accept(response, seconds: recording.seconds) {
-                        case .passed: self.status = L10n.text("通过了。点「继续」。")
+                        case .passed: self.status = L10n.text("已完成，请检查识别和整理结果。")
                         case .tooShort: self.status = L10n.text("录音太短，请再说一次。")
                         case .nothingHeard: self.status = L10n.text("没听清，请再说一次。")
                         case .notCleaned: self.status = L10n.text("识别到了，但整理没完成。请检查整理模型和 API Key。")
+                        case .needsReview: self.status = L10n.text("数量或单位可能发生变化，请核对。")
                         }
                     }
                 }
             }
         } catch { phase = .idle; status = L10n.text("录音太短或设备异常，请重试。") }
     }
-    func cancel() { generation += 1; levelTimer?.invalidate(); levelTimer = nil; recorder.cancel(); if let pendingAudio { try? FileManager.default.removeItem(at: pendingAudio) }; pendingAudio = nil; phase = .idle; raw = ""; output = "" }
+    func cancel() { generation += 1; levelTimer?.invalidate(); levelTimer = nil; recorder.cancel(); if let pendingAudio { try? FileManager.default.removeItem(at: pendingAudio) }; pendingAudio = nil; phase = .idle; raw = ""; output = ""; needsReview = false }
     func reset() { cancel(); progress = PracticeProgress(); status = "" }
 }

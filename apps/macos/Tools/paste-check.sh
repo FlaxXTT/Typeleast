@@ -9,7 +9,7 @@ BIN="$ROOT/build/paste-check"
 mkdir -p "$ROOT/build"
 SOURCES=()
 while IFS= read -r source; do SOURCES+=("$source"); done < <(find "$ROOT/Sources" -maxdepth 1 -name '*.swift' ! -name main.swift | sort)
-/usr/bin/swiftc -swift-version 5 -target "$(uname -m)-apple-macosx13.0" \
+/usr/bin/swiftc -swift-version 5 -target "$(uname -m)-apple-macosx14.0" \
   -framework Foundation -framework Network -framework AVFoundation -framework AppKit -framework Carbon \
   -framework SwiftUI -framework CoreAudio -framework ServiceManagement \
   -o "$BIN" "${SOURCES[@]}" "$ROOT/Tools/PasteCheck/main.swift"

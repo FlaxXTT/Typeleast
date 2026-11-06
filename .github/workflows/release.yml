@@ -1,17 +1,18 @@
 name: Release
 
 # Run this by hand to build and publish:
-#   TypeLeast-<v>-macOS-AppleSilicon.dmg / .zip
-#   TypeLeast-<v>-Windows-x64-Setup.exe
-#   TypeLeast-<v>-Windows-x64-Portable.zip
+#   TypeLeast-<v>-macOS-AppleSilicon.dmg
+#   TypeLeast-<v>-macOS14-AppleSilicon.zip
 #   SHA256SUMS.txt
+# Windows and Intel releases have been discontinued; existing releases stay available.
+# The UTC annotated tag must already exist on the selected main commit.
 # Manual only. With "draft" the release stays a draft
 # (the updaters do not see it) until it is published by hand after checking the files.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to publish, e.g. v1.2.0 (created on the current commit if missing)"
+        description: "Existing UTC annotated tag on main, e.g. v1.2.0"
         required: true
       draft:
         description: "Create the release as a draft"
@@ -40,6 +41,13 @@ jobs:
           node-version: 24
       - name: Package
         run: NODE_VERSION="$NODE_BUNDLE_VERSION" apps/macos/package.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/out"
+      - name: Verify safe Mac asset names
+        run: |
+          source apps/macos/scripts/package-names.sh
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' apps/macos/Info.plist)
+          test -f "out/$(typeleast_macos_dmg_name "$version" AppleSilicon)"
+          test -f "out/$(typeleast_macos_zip_name "$version" AppleSilicon)"
+          test ! -e "out/$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
@@ -48,63 +56,80 @@ jobs:
             out/*.zip
           if-no-files-found: error
 
-  windows:
-    name: Windows x64
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Inno Setup
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
-      - name: Package
-        shell: pwsh
-        run: ./apps/windows/package.ps1 -NodeVersion $env:NODE_BUNDLE_VERSION -OutDir "$env:GITHUB_WORKSPACE\out"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-x64
-          path: |
-            out/*.exe
-            out/*.zip
-          if-no-files-found: error
-
   publish:
     name: Publish release
-    needs: [macos, windows]
+    needs: [macos]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify the existing release tag and main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use an exact vX.Y.Z tag.' >&2; exit 1; }
+          test "$GITHUB_REF" = refs/heads/main || { echo 'Run the release from main.' >&2; exit 1; }
+          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git cat-file -t "refs/tags/$TAG")" = tag || { echo 'The tag must be annotated.' >&2; exit 1; }
+          test "$(git cat-file -p "refs/tags/$TAG" | awk '/^tagger / {print $NF; exit}')" = +0000 || { echo 'The tagger time must be UTC.' >&2; exit 1; }
+          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$GITHUB_SHA" || { echo 'The tag must point to the selected main commit.' >&2; exit 1; }
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA" || { echo 'Main has moved since this workflow started.' >&2; exit 1; }
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
       - name: Checksums
-        working-directory: dist
-        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use an exact vX.Y.Z tag.' >&2; exit 1; }
+          source apps/macos/scripts/package-names.sh
+          version="${TAG#v}"
+          dmg="$(typeleast_macos_dmg_name "$version" AppleSilicon)"
+          zip="$(typeleast_macos_zip_name "$version" AppleSilicon)"
+          legacy="$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
+          cd dist
+          test -f "$dmg"
+          test -f "$zip"
+          test ! -e "$legacy"
+          sha256sum "$dmg" "$zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
           DRAFT: ${{ inputs.draft && '--draft' || '' }}
         run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use an exact vX.Y.Z tag.' >&2; exit 1; }
+          source apps/macos/scripts/package-names.sh
+          version="${TAG#v}"
+          dmg="$(typeleast_macos_dmg_name "$version" AppleSilicon)"
+          zip="$(typeleast_macos_zip_name "$version" AppleSilicon)"
+          legacy="$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA" || { echo 'Main has moved since this workflow started.' >&2; exit 1; }
           if existing_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
             # A draft can be rebuilt before its first publication. Published releases are immutable.
             if [ "$existing_draft" != true ] || [ -z "$DRAFT" ]; then
               echo "Refusing to replace a published release or publish an existing draft without review." >&2
               exit 1
             fi
-            gh release upload "$TAG" dist/* --clobber
+            existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')" || exit 1
+            if printf '%s\n' "$existing_assets" | grep -Fxq "$legacy"; then
+              echo "The existing draft contains a legacy ZIP. Refusing to publish or remove it." >&2
+              exit 1
+            fi
+            for name in "$dmg" "$zip" SHA256SUMS.txt; do
+              if printf '%s\n' "$existing_assets" | grep -Fxq "$name"; then
+                echo "The existing draft already contains $name. Refusing to overwrite it." >&2
+                exit 1
+              fi
+            done
+            gh release upload "$TAG" "dist/$dmg" "dist/$zip" dist/SHA256SUMS.txt
             gh release edit "$TAG" --draft --title "TypeLeast ${TAG#v}" \
               --notes-file .github/release-notes.md --target "$GITHUB_SHA"
           else
-            gh release create "$TAG" dist/* \
+            gh release create "$TAG" "dist/$dmg" "dist/$zip" dist/SHA256SUMS.txt --verify-tag \
               --title "TypeLeast ${TAG#v}" \
               --notes-file .github/release-notes.md \
               --target "$GITHUB_SHA" $DRAFT

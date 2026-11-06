@@ -16,6 +16,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     init(model: AppModel) {
         self.model = model
         super.init()
+        practice.recognitionModelID = { [weak self] in self?.model.speech?.modelId }
     }
 
     func show() {

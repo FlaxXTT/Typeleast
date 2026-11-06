@@ -60,16 +60,16 @@ struct SpeechModelOperation: Codable, Equatable {
     var received: Double
     var total: Double
     var error: String?
-    var running: Bool { ["downloading", "waiting", "loading"].contains(phase) }
+    var running: Bool { ["downloading", "waiting", "loading", "committing"].contains(phase) }
     var problem: String {
         switch error {
         case "checksum-mismatch": return L10n.text("文件校验失败，请重新下载。")
         case "download-failed": return L10n.text("下载失败。请检查网络或镜像后重试。")
         case "model-not-installed": return L10n.text("模型文件不完整，请重新下载。")
-        case "model-load-failed": return L10n.text("模型加载失败。请重试或换一个模型。")
+        case "model-load-failed": return L10n.text("模型加载失败，请重试。")
         case "ENOSPC": return L10n.text("磁盘空间不足。请释放空间后重试。")
         case "EACCES", "EPERM": return L10n.text("无法保存模型设置。请检查文件权限。")
-        default: return L10n.text("模型操作失败，请重试。当前模型保留。")
+        default: return L10n.text("模型操作失败，请重试。")
         }
     }
 }
@@ -268,6 +268,89 @@ struct ModelRecommendation: Codable, Equatable {
     var model: String
     var reason: String
     var source: String
+    /// Advice only. Absent or unknown values never imply a particular setting.
+    var thinking: String? = nil
+    var effort: String? = nil
+    var effortReason: String? = nil
+    var capabilitySource: String? = nil
+    var capabilityModelSource: String? = nil
+    var capabilityBasis: String? = nil
+    var capabilityVerifiedAt: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case app, model, reason, source, thinking, effort, effortReason, capabilitySource, capabilityModelSource, capabilityBasis, capabilityVerifiedAt
+    }
+
+    init(app: String, model: String, reason: String, source: String, thinking: String? = nil,
+         effort: String? = nil, effortReason: String? = nil, capabilitySource: String? = nil,
+         capabilityModelSource: String? = nil, capabilityBasis: String? = nil, capabilityVerifiedAt: String? = nil) {
+        self.app = app; self.model = model; self.reason = reason; self.source = source
+        self.thinking = thinking; self.effort = effort; self.effortReason = effortReason
+        self.capabilitySource = capabilitySource
+        self.capabilityModelSource = capabilityModelSource; self.capabilityBasis = capabilityBasis
+        self.capabilityVerifiedAt = capabilityVerifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        app = try c.decode(String.self, forKey: .app)
+        model = try c.decode(String.self, forKey: .model)
+        reason = try c.decode(String.self, forKey: .reason)
+        source = try c.decode(String.self, forKey: .source)
+        thinking = lenient(c, String.self, .thinking)
+        effort = lenient(c, String.self, .effort)
+        effortReason = lenient(c, String.self, .effortReason)
+        capabilitySource = lenient(c, String.self, .capabilitySource)
+        capabilityModelSource = lenient(c, String.self, .capabilityModelSource)
+        capabilityBasis = lenient(c, String.self, .capabilityBasis)
+        capabilityVerifiedAt = lenient(c, String.self, .capabilityVerifiedAt)
+    }
+
+    /// Link only to the reviewed official pages; never trust arbitrary response URLs.
+    private static let trustedSources: Set<String> = [
+        "https://code.claude.com/docs/en/model-config",
+        "https://help.openai.com/en/articles/20001516-managing-usage-with-gpt-6-astra-in-work-and-codex",
+        "https://developers.openai.com/api/docs/models/gpt-6-astra",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+    ]
+    private func trustedURL(_ raw: String?) -> URL? {
+        guard let raw, Self.trustedSources.contains(raw) else { return nil }
+        return URL(string: raw)
+    }
+    var capabilitySourceURL: URL? { trustedURL(capabilitySource) }
+    var capabilityModelSourceURL: URL? { trustedURL(capabilityModelSource) }
+    private var hasSourceEvidence: Bool {
+        ["live-official", "verified-reference"].contains(capabilityBasis ?? "") && capabilitySourceURL != nil
+    }
+    var capabilityDate: String? {
+        guard capabilityBasis == "verified-reference", let date = capabilityVerifiedAt,
+              date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else { return nil }
+        return date
+    }
+
+    var thinkingLabel: String {
+        guard hasSourceEvidence else { return L10n.text("以目标应用设置为准") }
+        switch thinking {
+        case "on": return L10n.text("开启思考")
+        case "off": return L10n.text("关闭思考")
+        case "adaptive": return L10n.text("自适应思考")
+        default: return L10n.text("以目标应用设置为准")
+        }
+    }
+
+    var effortLabel: String {
+        guard hasSourceEvidence else { return L10n.text("以目标应用设置为准") }
+        switch effort {
+        case "low": return L10n.text("低")
+        case "medium": return L10n.text("中")
+        case "high": return L10n.text("高")
+        default: return L10n.text("以目标应用设置为准")
+        }
+    }
+
+    var hasSupportedAdvice: Bool {
+        hasSourceEvidence && (["on", "off", "adaptive"].contains(thinking ?? "") || ["low", "medium", "high"].contains(effort ?? ""))
+    }
 }
 
 struct ModelRecommendationReply: Codable, Equatable {
@@ -299,6 +382,13 @@ struct TaskProgress: Codable {
     }
 }
 
+/// A potential change to a spoken quantity that needs an explicit choice.
+struct QualityReview: Codable, Equatable {
+    var kind: String
+    var original: String
+    var candidate: String
+}
+
 struct DictateResponse: Codable, Equatable {
     var task: String? = nil
     var requestId: String?
@@ -306,6 +396,10 @@ struct DictateResponse: Codable, Equatable {
     var raw: String = ""
     var fallback: Bool = false
     var fallbackReason: String?
+    /// A suspiciously noisy recording is held for explicit review, never pasted automatically.
+    var noiseSuspected: Bool = false
+    var noiseCandidate: String?
+    var qualityReview: QualityReview?
     var model: String?
     var provider: String?
     var ms: MSBreakdown?
@@ -320,7 +414,7 @@ struct DictateResponse: Codable, Equatable {
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case task, requestId, text, raw, fallback, fallbackReason, model, provider, ms, beta, translated, corrections, intention
+        case task, requestId, text, raw, fallback, fallbackReason, noiseSuspected, noiseCandidate, qualityReview, model, provider, ms, beta, translated, corrections, intention
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -336,6 +430,9 @@ struct DictateResponse: Codable, Equatable {
         raw = lenient(c, String.self, .raw) ?? ""
         fallback = lenient(c, Bool.self, .fallback) ?? false
         fallbackReason = lenient(c, String.self, .fallbackReason)
+        noiseSuspected = lenient(c, Bool.self, .noiseSuspected) ?? false
+        noiseCandidate = lenient(c, String.self, .noiseCandidate)
+        qualityReview = lenient(c, QualityReview.self, .qualityReview)
         model = lenient(c, String.self, .model)
         provider = lenient(c, String.self, .provider)
         ms = lenient(c, MSBreakdown.self, .ms)
@@ -348,7 +445,7 @@ struct DictateResponse: Codable, Equatable {
     /// When fallback is true the service has ALREADY substituted the raw transcript into
     /// "text". Guard anyway against a service that only flips the flag.
     var insertableText: String {
-        if betaWaiting { return "" }
+        if betaWaiting || noiseSuspected || qualityReview != nil { return "" }
         if !text.isEmpty { return text }
         return raw
     }
@@ -402,6 +499,8 @@ final class ServiceClient {
     private var generationEpoch = 0
     private var generationTasks: [UUID:URLSessionDataTask] = [:]
     private func epoch() -> Int { generationLock.lock();defer {generationLock.unlock()};return generationEpoch }
+    /// Capture before dispatching work so a cancellation cannot be missed while it is queued.
+    func generationTicket() -> Int { epoch() }
     func cancelGeneration() {
         generationLock.lock();generationEpoch += 1;let tasks = Array(generationTasks.values);generationLock.unlock()
         for task in tasks { task.cancel() }
@@ -485,7 +584,7 @@ final class ServiceClient {
         do {
             return try body()
         } catch let error as ServiceError {
-            guard case .transport = error else { throw error }
+            guard case .transport(let message) = error, message != "cancelled" else { throw error }
             let before = baseURL
             guard discoverBaseURL(), baseURL != before else { throw error }
             return try body()
@@ -655,8 +754,8 @@ final class ServiceClient {
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil) throws -> DictateResponse {
-        let generation = epoch()
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil) throws -> DictateResponse {
+        let generation = generationTicket ?? epoch()
         return try withPortRetry { try withTokenRetry { token in
             var body: [String: Any] = ["text": text, "language": language, "strength": strength, "task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation"]
             if let llm, let data = try? JSONEncoder().encode(llm), let route = try? JSONSerialization.jsonObject(with: data) { body["llm"] = route }
@@ -664,6 +763,8 @@ final class ServiceClient {
             if let translateTo { body["translateTo"] = translateTo }
             if let variants { body["variants"] = variants }
             if let betaSession { body["betaSession"] = betaSession }
+            if let baseline, !baseline.isEmpty { body["baseline"] = baseline }
+            if let appHint, !appHint.isEmpty { body["appHint"] = appHint }
             if let source { body["source"] = source }
             if !profile.isEmpty { body["profile"] = profile }
             if let translatePrompt, !translatePrompt.isEmpty { body["translatePrompt"] = translatePrompt }

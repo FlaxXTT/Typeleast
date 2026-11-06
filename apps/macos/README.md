@@ -10,11 +10,15 @@ and history carry over).
 
 ## Requirements
 
-- macOS 13 or later on Apple silicon. Intel Macs are no longer built; the last
+- macOS 14 or later on Apple silicon. Intel Macs are no longer built; the last
   Intel release is 1.17.1.
-- To build: Xcode command line tools (`xcode-select --install`) and Node.js 22+
+- To build: Xcode with its Metal Toolchain component and Node.js 22+
   (`npm` installs the service's dependencies; a build from source also runs the
-  service with this Node.js).
+  service with this Node.js). Install the Apple component with
+  `xcodebuild -downloadComponent MetalToolchain`. If `xcrun metal --version`
+  cannot find it, obtain the toolchain identifier from
+  `xcodebuild -showComponent MetalToolchain` and set `TOOLCHAINS` to that
+  identifier for the build command.
 
 ## Build, test, package
 
@@ -45,8 +49,9 @@ without clicks and without touching the installed app.
 
 ## How it finds the local service
 
-- The service is copied into `TypeLeast.app/Contents/Resources/service`
-  (with `node_modules`, i.e. sherpa-onnx for the target architecture).
+- The service and its non-ONNX Node dependencies are copied into
+  `TypeLeast.app/Contents/Resources/service`. The MLX speech worker and its
+  Metal resources are bundled separately under `service/native/`.
 - Node.js: a release package carries its own at `Contents/Resources/node/bin/node`.
   Otherwise the app looks for Homebrew, the nodejs.org installer, Volta, nvm, fnm,
   mise, asdf and finally the login shell's `PATH`, and uses the first Node.js 22+.

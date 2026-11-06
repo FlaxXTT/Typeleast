@@ -224,7 +224,7 @@ export function createHandler(options) {
         if (!body || Array.isArray(body) || typeof body !== "object") {
           reply(res, 400, { error: "model request must be an object", code: "invalid-model" }); return;
         }
-        const modelId = body.modelId === undefined ? "sensevoice-small" : body.modelId;
+        const modelId = body.modelId === undefined ? (service.recognizer.defaultId ?? "sensevoice-small") : body.modelId;
         // An empty mirror means huggingface.co itself, even if the service started with HF_ENDPOINT:
         // clearing the setting takes effect without a restart. No field keeps the startup default.
         const endpoint = typeof body.endpoint !== "string" ? undefined

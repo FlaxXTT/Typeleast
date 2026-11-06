@@ -25,6 +25,7 @@ import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { createDeadline } from "./llm.js";
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
+import { hasRepetitionLoop } from "./asr-review.js";
 import { TRANSLATE_LANGUAGES } from "./prompts/translate.js";
 import { applyVariants, parseVariants } from "./variants.js";
 import { runDictation } from "./tasks/dictation.js";
@@ -255,7 +256,13 @@ export class VoicePolishService {
     const target = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
     // A failed translation returns source text. Unknown languages never opt in by their script.
     const outputLanguage = target ? (result.fallback ? "auto" : target) : (request.language ?? this.config.language ?? "auto");
-    if (request.variants) result.text = await applyVariants(result.text, parseVariants(request.variants), outputLanguage);
+    if (request.variants) {
+      const variants = parseVariants(request.variants);
+      result.text = await applyVariants(result.text, variants, outputLanguage);
+      // The user chooses the actual final draft, including the configured
+      // Chinese writing variant, rather than a version transformed later.
+      if (result.qualityReview) result.qualityReview.candidate = await applyVariants(result.qualityReview.candidate, variants, outputLanguage);
+    }
     result.suggestions = [];
     return result;
   }
@@ -293,6 +300,21 @@ export class VoicePolishService {
       }
       this.setProgress(request.requestId,{stage:"recognizing",completed:0,total:0});
       const spoken = await this.transcribe(audio, language, request.signal);
+      const reviewReason = spoken.noiseSuspected && spoken.text.trim() ? 'suspected-noise'
+        : hasRepetitionLoop(spoken.text) ? 'recognition-repetition' : null;
+      if (reviewReason) {
+        // Older clients may insert `raw` when `text` is empty. Keep both empty
+        // so only a client that supports explicit review can use the candidate.
+        const result = { requestId: request.requestId, task: request.task, text: '', raw: '',
+          fallback: true, fallbackReason: reviewReason, noiseSuspected: true,
+          noiseCandidate: spoken.text, suggestions: [],
+          ms: { transcribe: Math.round(spoken.ms), polish: 0, total: Date.now() - started } };
+        this.setProgress(request.requestId,{stage:"complete",completed:1,total:1});
+        this.stats.dictations += 1;
+        this.stats.fallback += 1;
+        this.stats.lastMs = result.ms.total;
+        return result;
+      }
       const polished = await this.polish({
         task: request.task,
         requestId: request.requestId,
@@ -328,6 +350,7 @@ export class VoicePolishService {
         },
         ...(polished.corrections ? { corrections: polished.corrections } : {}),
         ...(polished.intention ? { intention: polished.intention } : {}),
+        ...(polished.qualityReview ? { qualityReview: polished.qualityReview } : {}),
         ...(polished.beta ? { beta: polished.beta } : {}),
         ...(polished.translated ? { translated: polished.translated } : {}),
       };
@@ -353,7 +376,12 @@ export class VoicePolishService {
       deadline.signal.throwIfAborted();
       const spoken = await this.recognizer.transcribe(audio, language, deadline.signal);
       deadline.signal.throwIfAborted();
-      return { text: String(spoken.text ?? "").trim(), language: language !== "auto" ? language : (spoken.detectedLanguage ?? spoken.language ?? "auto"), ms: Date.now() - started };
+      // Some recognizers cannot honor an older saved language hint. Use the
+      // language actually sent to the recognizer, not the stale request, when
+      // deciding whether language-specific output conversion is safe.
+      const effectiveLanguage = spoken.language ?? language;
+      return { text: String(spoken.text ?? "").trim(), language: effectiveLanguage !== "auto" ? effectiveLanguage : (spoken.detectedLanguage ?? "auto"),
+        noiseSuspected: spoken.noiseSuspected === true, ms: Date.now() - started };
     } finally { deadline.dispose(); }
   }
 

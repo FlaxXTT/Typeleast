@@ -130,3 +130,27 @@ test("recognizer metadata reaches the output-language gate without another model
     assert.equal(result.text, expected);
   }
 });
+
+test("dictation conversion uses detected language or an explicit supported hint, and leaves unknown language unchanged", async () => {
+  const wav = Buffer.alloc(44 + 3200);
+  wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(3200, 40);
+  const cases = [
+    { input: "auto", effective: "auto", detected: "zh", text: "软件开发", expected: "軟體開發" },
+    { input: "auto", effective: "auto", detected: "ja", text: "企画書", expected: "企画書" },
+    { input: "auto", effective: "auto", detected: null, text: "软件开发", expected: "软件开发" },
+    { input: "zh", effective: "zh", detected: null, text: "软件开发", expected: "軟體開發" },
+    { input: "ja", effective: "ja", detected: null, text: "企画書", expected: "企画書" },
+    { input: "zh", effective: "auto", detected: null, text: "企画書", expected: "企画書" },
+    { input: "zh", effective: "zh", detected: null, text: "会社の設定", expected: "会社の設定" },
+    { input: "en", effective: "en", detected: null, text: "Please send it", expected: "Please send it" },
+  ];
+  for (const entry of cases) {
+    const service = makeService();
+    service.recognizer.transcribe = async () => ({ text: entry.text, language: entry.effective, detectedLanguage: entry.detected });
+    const result = await service.transcribeAndPolish({ audio: wav, language: entry.input, variants: "zh=tw" });
+    assert.equal(result.text, entry.expected, JSON.stringify(entry));
+  }
+});

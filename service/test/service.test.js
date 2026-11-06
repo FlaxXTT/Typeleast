@@ -63,6 +63,14 @@ function wavOfSilence(seconds = 0.2) {
   return buffer;
 }
 
+test('language conversion uses the recognizer\'s effective language, not an unsupported saved hint', async () => {
+  const recognizer = { transcribe: async () => ({ text: '会社の設定', language: 'auto', detectedLanguage: null }) };
+  const service = makeService({ recognizer });
+  const result = await service.transcribe(Buffer.alloc(0), 'zh');
+  assert.equal(result.language, 'auto');
+  assert.equal(result.text, '会社の設定');
+});
+
 test("a clean transcript is polished with the user's own route", async () => {
   const model = fakeModel("Send the report on Wednesday.");
   const service = makeService({ model });

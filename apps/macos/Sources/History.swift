@@ -28,6 +28,9 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var intention: String? = nil
     var variants: String? = nil
     var task: String? = nil
+    /// An undecided quantity check is sealed with the existing history payload.
+    /// It is never returned by displayText or paste-last until the user chooses.
+    var qualityReview: QualityReview? = nil
 
     var title: String {
         let t = text.isEmpty ? raw : text

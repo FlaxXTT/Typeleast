@@ -11,7 +11,7 @@
   <a href="#演示"><picture>  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/button-more-dark.svg">  <img src="docs/media/readme/button-more-light.svg" alt="看演示" width="127"></picture></a>
 </p>
 
-<p align="center"><sub>macOS 13+ &nbsp;·&nbsp; Windows 10 / 11（不再更新）&nbsp;·&nbsp; 免费</sub></p>
+<p align="center"><sub>macOS 14+ &nbsp;·&nbsp; Windows 10 / 11（不再更新）&nbsp;·&nbsp; 免费</sub></p>
 
 <p align="center"><a href="https://typeleast.promptking.workers.dev">官网 · Website</a> &nbsp;·&nbsp; <a href="https://www.bilibili.com/video/BV1eQnH6zESN/">B 站视频 · Bilibili</a></p>
 
@@ -39,7 +39,7 @@
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/features-dark.svg">
-  <img src="docs/media/readme/features-light.svg" alt="功能：自然整理；音频不出电脑；写到任何输入框；AI 整理；四个本机识别模型；你的 Key。" width="880">
+  <img src="docs/media/readme/features-light.svg" alt="功能：整理语音；音频不出电脑；写到任何输入框；本机识别；你的 Key。" width="880">
 </picture>
 </p>
 
@@ -112,18 +112,22 @@
 
 | | macOS | Windows |
 |---|---|---|
-| 系统 | macOS 13+ | Windows 11，或 Windows 10 1809+（64 位） |
-| 磁盘 | 应用约 450 MB，模型另计 | 同左 |
-| 网络 | 首次自行选择模型：0.6B INT8 约 0.99 GB；1.7B FP16 约 4.73 GB。之后识别不联网。 | 同左 |
+| 系统 | macOS 14+ | Windows 11，或 Windows 10 1809+（64 位） |
+| 磁盘 | 应用与识别模型分别占用空间；模型大小见下表。 | 应用与模型分别占用空间。 |
+| 网络 | 首次选择并下载 MLX 识别模型；之后识别不联网。 | 首次选择并下载旧版 ONNX 模型；之后识别不联网。 |
 | 权限 | 麦克风、辅助功能 | 麦克风 |
 | 整理模型 | 首次使用须配置可用的 OpenAI 兼容整理模型 | 同左 |
 
-1.7B FP16 在 Mac 上实测加载峰值约 12.5 GiB；不同环境会变化。更新不会自动下载或切换模型。
+Fun-ASR 和两款 Qwen MLX 模型已在一台 Apple 芯片 Mac 上用公开或合成语音加载与识别；测试不足以代表全部语言、环境或其他芯片。模型占用的内存随型号、输入和设备变化，较大的模型需要更多内存。更新不会自动下载或切换模型。
 
 </details>
 
 <details>
 <summary><b>macOS 安装</b></summary>
+
+**从 1.24.19 或更早版本升级：**首次升级到本版需要手动下载 Mac 安装包。旧版可能提示有更新，但自动下载会失败；手动安装后，后续版本可通过新版的更新功能安装。macOS 13 用户请继续使用 [1.24.19](https://github.com/FlaxXTT/Typeleast/releases/tag/v1.24.19)。
+
+升级时，将新 App 放到原 TypeLeast 所在的应用程序文件夹并选择替换，避免留下两个副本。不要删除应用数据：设置和历史仍使用原来的位置；系统可能要求再次确认钥匙串、麦克风或辅助功能权限。原有 ONNX 识别模型不能直接用于 MLX，需要按需下载 MLX 模型；旧权重不会自动删除。
 
 1. 打开 `.dmg`，把 **TypeLeast** 拖进「应用程序」。
 2. 系统拦截时：打开「系统设置 → 隐私与安全性」，点 **「仍要打开」**。或在「终端」运行：
@@ -134,7 +138,7 @@
 
 3. 在新手引导中打开设置，配置整理模型和 API Key，下载并加载识别模型，允许麦克风和辅助功能。
 4. 「系统设置 → 键盘 → 按下 🌐 键时」设为「无操作」。
-5. 完成三组真实语音练习后进入主界面。仅新用户强制，旧用户可重新学习。
+5. 新手引导提供听写和翻译练习，也可按需跳过。
 
 </details>
 
@@ -186,13 +190,13 @@ Windows code signing via SignPath Foundation is currently pending approval.
 
 | 模型 | 适合 | 大小 |
 |---|---|---|
-| **SenseVoice Small**（默认） | 中、英、粤、日、韩。小而快。 | 0.24 GB |
-| **FireRedASR2 CTC** | 中文和方言，也支持英文 | 0.78 GB |
-| **Fun-ASR-Nano** | 中英混说，也支持日语 | 1.01 GB |
-| **Qwen3-ASR-0.6B** | 多语言。中文可能输出繁体。 | 0.99 GB |
-| **MOSS-Transcribe-Diarize**（仅 Mac） | 多语言、长录音、能分辨说话人；用 GPU。听写只取文字。 | 0.65 GB |
+| **Fun-ASR-Nano MLX BF16**（Mac） | 本机 GPU 识别，适合中英混说；也支持日语。 | 约 1.68 GB |
+| **Qwen3-ASR-0.6B MLX BF16**（Mac） | 多语种、中英混说、较小体积。 | 约 1.58 GB |
+| **Qwen3-ASR-1.7B MLX BF16**（Mac） | 多语种、中英混说、较大容量。 | 约 4.09 GB |
+| **MOSS-Transcribe-Diarize**（Mac 会议） | 长录音、说话人区分；需要单独下载。 | 约 0.65 GB |
+| **SenseVoice、FireRedASR2、Fun-ASR-Nano、Qwen3-ASR**（旧版 Windows） | Windows 现有 ONNX 模型。 | 因模型而异 |
 
-<sub>大模型更慢，占用 2–3 GB 内存。来源和许可：[第三方说明](THIRD-PARTY-NOTICES.md)。</sub>
+<sub>Mac 原有 ONNX 权重不能直接用于 MLX；旧文件不会自动删除。Qwen 自动识别为中文时可转换繁体。Fun-ASR 不返回可靠的语言检测结果：要转换普通听写，请在听写语言中明确选择中文；听写日语时选日语，避免纯汉字日文被误转。来源和许可：[第三方说明](THIRD-PARTY-NOTICES.md)。</sub>
 
 </details>
 
@@ -240,7 +244,7 @@ Windows code signing via SignPath Foundation is currently pending approval.
 
 **本地服务未就绪**：「设置 → 本地服务」→「重新启动」。源码构建需要 Node.js 22+。
 
-**模型下载失败**：使用镜像 `https://hf-mirror.com`（点「用镜像重试」）。或手动下载以下文件，放进模型文件夹：
+**模型下载失败**：使用镜像 `https://hf-mirror.com`（点「用镜像重试」）。Mac 需要在应用内下载 MLX 模型，不可用旧版 ONNX 文件代替。旧版 Windows 可手动下载以下文件，放进模型文件夹：
 
 | 文件 | 位置 | 大小（字节） |
 |---|---|---|

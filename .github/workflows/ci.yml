@@ -39,15 +39,17 @@ jobs:
         with:
           node-version: 24
       - run: apps/macos/test.sh
+      - run: bash apps/macos/Tests/package-names.sh
       - run: apps/macos/build.sh --no-install
 
-  speech-models:
+  speech-models-onnx:
     name: Real ASR models (${{ matrix.os }})
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS now runs the MLX engine; these remain supported by the ONNX adapter.
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -63,10 +65,27 @@ jobs:
           path: ${{ runner.temp }}/typeleast-asr-models
           key: asr-v1-${{ runner.os }}-${{ hashFiles('service/lib/asr-catalog.json', 'service/lib/models.js') }}
       - name: Download, verify, load and recognize with each model in order
-        # Standard Mac ARM runners have 7 GB RAM. Explicitly report the large FP16
-        # model as skipped there; its Mac evidence comes from isolated local tests.
-        # Windows/Linux still load every model. No skips without this explicit flag.
+        # Both ONNX platforms still load every model. The memory skip policy is
+        # platform-specific and does not exempt these platforms from a failure.
         run: node scripts/check-asr-models.mjs --download --allow-resource-skip --models-dir "${{ runner.temp }}/typeleast-asr-models" --state-dir "${{ runner.temp }}/typeleast-asr-state"
+
+  speech-models-mlx:
+    name: MLX worker tests and build (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Swift and Metal tools
+        run: |
+          swift --version
+          xcodebuild -version
+          xcrun --find metal
+      - name: Test worker decoding, segmentation, language and noise handling
+        run: swift test --package-path apps/macos/MLXWorker --configuration release --disable-automatic-resolution
+      - name: Explain model test coverage
+        run: |
+          echo 'This job tests and builds the MLX worker; it does not download weights or run real model inference.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Real Fun-ASR and Qwen model loading and short recognition were tested separately on an Apple Silicon Mac; the cloud runner result does not replace that evidence.' >> "$GITHUB_STEP_SUMMARY"
 
   windows:
     name: Windows app (tests and build)
@@ -112,37 +131,17 @@ jobs:
         with:
           node-version: 24
       - run: apps/macos/package.sh arm64 "$GITHUB_WORKSPACE/out"
+      - name: Verify safe Mac asset names
+        run: |
+          source apps/macos/scripts/package-names.sh
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' apps/macos/Info.plist)
+          test -f "out/$(typeleast_macos_dmg_name "$version" AppleSilicon)"
+          test -f "out/$(typeleast_macos_zip_name "$version" AppleSilicon)"
+          test ! -e "out/$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
       - uses: actions/upload-artifact@v4
         with:
           name: release-check-macos
           path: |
             out/*.dmg
-            out/*.zip
-          if-no-files-found: error
-
-  release-package-windows:
-    name: Release package (Windows)
-    if: startsWith(github.ref, 'refs/heads/release/')
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Inno Setup
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
-      - name: Package
-        shell: pwsh
-        run: ./apps/windows/package.ps1 -OutDir "$env:GITHUB_WORKSPACE\out"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-check-windows
-          path: |
-            out/*.exe
             out/*.zip
           if-no-files-found: error

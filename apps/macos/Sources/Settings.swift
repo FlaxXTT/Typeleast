@@ -222,6 +222,25 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.language"); changed() }
     }
 
+    // Fun-ASR previously showed automatic detection even when an older model's
+    // language hint was stored. Its explicit hint must therefore be a new choice,
+    // not a silent migration of that hidden value.
+    var funRecognitionLanguage: String {
+        get {
+            let value = d.string(forKey: "voice.funRecognitionLanguage") ?? "auto"
+            return ["auto", "zh", "en", "ja"].contains(value) ? value : "auto"
+        }
+        set {
+            d.set(["auto", "zh", "en", "ja"].contains(newValue) ? newValue : "auto", forKey: "voice.funRecognitionLanguage")
+            changed()
+        }
+    }
+
+    func recognitionLanguage(for modelId: String?) -> String {
+        guard let modelId, !modelId.isEmpty else { return "auto" }
+        return modelId == "mlx-fun-asr-nano-bf16" ? funRecognitionLanguage : language
+    }
+
     var translateTarget: String {
         get { (TranslateLanguage(rawValue: d.string(forKey: "voice.translateTarget") ?? "") ?? .en).rawValue }
         set { d.set(newValue, forKey: "voice.translateTarget"); changed() }

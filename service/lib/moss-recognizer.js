@@ -93,7 +93,9 @@ export class MossRecognizer {
     this.definition = modelFor(this.modelId);
     this.logger = options.logger ?? { info: () => {}, warn: () => {} };
     this.binary = options.binary ?? MOSS_ENGINE;
-    this.loadSherpa = options.loadSherpa ?? (() => createRequire(import.meta.url)("sherpa-onnx-node"));
+    // The Mac build no longer bundles ONNX. containsSpeech uses its local
+    // energy-based silence guard when no VAD backend is available.
+    this.loadSherpa = options.loadSherpa ?? (() => process.platform === 'darwin' ? null : createRequire(import.meta.url)("sherpa-onnx-node"));
     this.status = options.status ?? (() => modelStatus(this.modelsDir, filesForModel(this.modelId)));
     this.phase = "loading";
     this.error = null;

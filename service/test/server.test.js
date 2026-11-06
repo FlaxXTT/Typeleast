@@ -100,6 +100,23 @@ test("the service listens on loopback, publishes its port, and serves the contra
   });
 });
 
+test("a stale Chinese hint does not convert Japanese when the recognizer uses auto", async () => {
+  await withDir(async dir => {
+    const autoRecognizer = { prepare: async () => 'ready', snapshot: () => ({ ready: true, phase: 'ready' }),
+      transcribe: async () => ({ text: '会社の設定を変更', language: 'auto', detectedLanguage: null }) };
+    const handle = await startService({ stateDir: dir, modelsDir: join(dir, 'models'), logger: quiet, recognizer: autoRecognizer });
+    try {
+      const token = (await readFile(join(dir, 'api-token'), 'utf8')).trim();
+      const response = await raw(handle.port, { method: 'POST', path: '/api/voice-polish/dictate', body: wav(0.5),
+        headers: { host: `127.0.0.1:${handle.port}`, authorization: `Bearer ${token}`, 'content-type': 'audio/wav',
+          'x-voice-language': 'zh', 'x-voice-variants': 'zh=tw' } });
+      assert.equal(response.status, 200);
+      assert.match(response.json.text, /会社/);
+      assert.doesNotMatch(response.json.text, /會社/);
+    } finally { await handle.close(); }
+  });
+});
+
 test("the command prints a ready line and exits when its parent does", async () => {
   await withDir(async (dir) => {
     // A stand-in "app" process whose pid the service watches.

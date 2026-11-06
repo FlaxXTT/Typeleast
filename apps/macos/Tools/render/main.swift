@@ -88,6 +88,54 @@ func snapshot(_ view: NSView, size: NSSize, name: String, dark: Bool) {
     print("wrote " + path)
 }
 
+if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_ADVICE_ONLY"] == "1" {
+    for language in ["zh-Hans", "en"] {
+        L10n.language = language
+        for dark in [false, true] {
+            for available in [true, false] {
+                let recommendation = ModelRecommendation(app: "Claude Code", model: "Claude Opus 5.5",
+                    reason: language == "en" ? "Suitable for multi-step tasks with several constraints." : "适合多步骤且包含多个条件的任务。",
+                    source: "platform.claude.com", thinking: available ? "adaptive" : nil,
+                    effort: available ? "high" : nil,
+                    effortReason: available ? (language == "en" ? "The task includes complex constraints and needs careful analysis." : "任务包含复杂条件，需要更充分的分析。") : nil,
+                    capabilitySource: available ? "https://code.claude.com/docs/en/model-config" : nil,
+                    capabilityBasis: available ? "verified-reference" : nil,
+                    capabilityVerifiedAt: available ? "2026-11-06" : nil)
+                let view = NSHostingView(rootView: ModelRecommendationCard(state: .done(recommendation), close: {}, drag: {}, dragEnded: {})
+                    .environment(\.colorScheme, dark ? .dark : .light))
+                snapshot(view, size: view.fittingSize, name: "recommendation-" + language + (available ? "-supported" : "-unknown"), dark: dark)
+            }
+        }
+    }
+    exit(0)
+}
+
+if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_QUANTITY_ONLY"] == "1" {
+    for language in ["zh-Hans", "en"] {
+        L10n.language = language
+        for dark in [false, true] {
+            let review = QualityReview(kind: "quantity", original: "把报告周三发，不对，改成周四，不超过三页。", candidate: "把报告周四发，不超过三月。")
+            let view = NSHostingView(rootView: QuantityReviewView(review: review, original: {}, candidate: {}, dismiss: {})
+                .environment(\.colorScheme, dark ? .dark : .light))
+            snapshot(view, size: NSSize(width: 520, height: 370), name: "quantity-review-" + language, dark: dark)
+        }
+    }
+    exit(0)
+}
+
+if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_NOISE_ONLY"] == "1" {
+    for language in ["zh-Hans", "en"] {
+        L10n.language = language
+        for dark in [false, true] {
+            let view = NSHostingView(rootView: NoiseReviewView(
+                candidate: "示例 Example 123，内容仅用于测试。", repeated: false, use: {}, dismiss: {})
+                .environment(\.colorScheme, dark ? .dark : .light))
+            snapshot(view, size: NSSize(width: 440, height: 260), name: "noise-review-" + language, dark: dark)
+        }
+    }
+    exit(0)
+}
+
 if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODES_ONLY"] == "1" {
     for language in ["zh-Hans", "en"] {
         L10n.language = language
@@ -110,6 +158,17 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODES_ONLY"] == "1" {
 }
 
 if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODELS_ONLY"] == "1" {
+    model.speechCatalog = SpeechModelCatalog(activeModelId: "mlx-fun-asr-nano-bf16", models: [
+        SpeechModelOption(id: "mlx-fun-asr-nano-bf16", name: "Fun-ASR-Nano (MLX BF16)", modelBytes: 1_675_618_453,
+            sourceUrl: "https://huggingface.co/", licenseUrl: "https://huggingface.co/", canSetLanguage: true, installed: true,
+            family: nil, precision: "bf16", category: "primary", registered: nil, downloadable: true),
+        SpeechModelOption(id: "mlx-qwen3-asr-0.6b-bf16", name: "Qwen3-ASR-0.6B (MLX BF16)", modelBytes: 1_580_865_560,
+            sourceUrl: "https://huggingface.co/", licenseUrl: "https://huggingface.co/", canSetLanguage: true, installed: false,
+            family: nil, precision: "bf16", category: "primary", registered: nil, downloadable: true),
+        SpeechModelOption(id: "mlx-qwen3-asr-1.7b-bf16", name: "Qwen3-ASR-1.7B (MLX BF16)", modelBytes: 4_092_137_479,
+            sourceUrl: "https://huggingface.co/", licenseUrl: "https://huggingface.co/", canSetLanguage: true, installed: false,
+            family: nil, precision: "bf16", category: "primary", registered: nil, downloadable: true),
+    ], operation: nil, notice: nil)
     func modelPanel(dark: Bool = false) -> NSView {
         NSHostingView(rootView: SpeechModelOptions().environmentObject(model)
             .frame(width: 502, alignment: .topLeading).padding(24)
@@ -121,10 +180,10 @@ if ProcessInfo.processInfo.environment["TYPELEAST_RENDER_MODELS_ONLY"] == "1" {
         snapshot(modelPanel(dark: dark),
                  size: NSSize(width: 550, height: 960), name: "speech-models", dark: dark)
     }
-    model.speechCatalog?.operation = SpeechModelOperation(modelId: "fireredasr2-ctc", phase: "downloading", received: 320_000_000, total: 775_940_592, error: nil)
+    model.speechCatalog?.operation = SpeechModelOperation(modelId: "mlx-qwen3-asr-1.7b-bf16", phase: "downloading", received: 320_000_000, total: 4_092_137_479, error: nil)
     snapshot(modelPanel(),
              size: NSSize(width: 550, height: 960), name: "speech-model-progress", dark: false)
-    model.speechCatalog?.operation = SpeechModelOperation(modelId: "fireredasr2-ctc", phase: "error", received: 320_000_000, total: 775_940_592, error: "download-failed")
+    model.speechCatalog?.operation = SpeechModelOperation(modelId: "mlx-qwen3-asr-1.7b-bf16", phase: "error", received: 320_000_000, total: 4_092_137_479, error: "download-failed")
     snapshot(modelPanel(),
              size: NSSize(width: 550, height: 960), name: "speech-model-error", dark: false)
     exit(0)

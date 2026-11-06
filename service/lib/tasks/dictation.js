@@ -18,6 +18,7 @@ import { failureDetail, failureReason, ModelCallError } from "../llm.js";
 import { parsePolishOutput } from "../parse-output.js";
 import { buildUserMessage, systemPromptFor } from "../prompt.js";
 import { normalizePunctuation } from "../punctuation.js";
+import { hasQuantityUnitConflict } from "../quantity-review.js";
 import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
@@ -59,6 +60,13 @@ export async function runDictation(ctx) {
       const tidyOnly = tidy(rawText);
       return await ctx.fail({ ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",
         ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
+    }
+    if (hasQuantityUnitConflict(rawText, candidate, request.language)) {
+      // Older clients fall back to `raw` when `text` is empty. Keep both empty:
+      // neither version is delivered before the user has reviewed the change.
+      return await ctx.fail({ ...base, raw: "", text: "", fallback: true,
+        reason: "quantity-conflict", qualityReview: { kind: "quantity", original: rawText, candidate },
+        ms: timing(started, 0), attempts: result.attempts });
     }
     return await ctx.done({
       ...base,

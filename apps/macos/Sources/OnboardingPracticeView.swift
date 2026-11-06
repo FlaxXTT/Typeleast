@@ -19,13 +19,13 @@ struct OnboardingPracticeView: View {
             PracticePill(practice: practice).padding(.top, 4)
             if !practice.status.isEmpty {
                 Text(practice.status).font(.system(size: 13, weight: .medium))
-                    .foregroundColor(practice.complete ? Theme.success : Theme.secondary)
+                    .foregroundColor(practice.needsReview ? Theme.warning : (practice.complete ? Theme.success : Theme.secondary))
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             }
-            if !practice.output.isEmpty {
+            ForEach(Array(PracticeResultRow.rows(raw: practice.raw, output: practice.output, needsReview: practice.needsReview).enumerated()), id: \.offset) { _, row in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text("整理结果")).font(.caption).foregroundColor(Theme.secondary)
-                    Text(practice.output).font(.system(size: 14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(L10n.text(row.title)).font(.caption).foregroundColor(Theme.secondary)
+                    Text(row.text).font(.system(size: 14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)

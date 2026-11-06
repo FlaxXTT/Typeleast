@@ -50,6 +50,9 @@ final class DictationController {
     /// A recording cancelled a moment ago, kept until 撤销 sends it on or the toast goes away.
     private var heldRecording: (url: URL, seconds: Double, app: String, field: FocusedField?, language: String, keep: Bool, translateTo: String?)?
     private let cancelToast = LearnedToast()
+    private let noiseReview = NoiseReviewPanel()
+    private let quantityReview = QuantityReviewPanel()
+    private var pendingReviewedRequest: ReviewedRequest?
     private var pendingTranslate: String?
 
     private var tickTimer: Timer?
@@ -182,7 +185,7 @@ final class DictationController {
         OutputMuter.shared.restore()
         let app = pendingAppBundleId
         let field = pendingField
-        let language = settings.language
+        let language = settings.recognitionLanguage(for: model.speech?.modelId)
         let strength = pendingAssistant ? "promptbeta" : "prompt"
         // A new 提示词模式 conversation starts from the selected text, revised by what was said.
         let baseline = !pendingAssistant || betaPending != nil ? nil : Self.hasText(field?.selection) ? field?.selection : copiedSelection
@@ -227,7 +230,7 @@ final class DictationController {
             stopTick()
             // A dictation can be taken back for a few seconds; an assistant answer cannot.
             if !pendingAssistant, let r = try? recorder.finish() {
-                heldRecording = (r.url, r.seconds, pendingAppBundleId, pendingField, settings.language,
+                heldRecording = (r.url, r.seconds, pendingAppBundleId, pendingField, settings.recognitionLanguage(for: model.speech?.modelId),
                                  settings.keepAudio24h && settings.historyRetention.seconds != 0, pendingTranslate)
                 cancelToast.show(message: L10n.text("转录已取消"),
                                  undo: { [weak self] in self?.resumeHeldRecording() },
@@ -254,6 +257,10 @@ final class DictationController {
             phase = .idle
             if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("已取消"));applyState();updateIdleBar()
+            if let pending = pendingReviewedRequest {
+                pendingReviewedRequest = nil
+                presentReviewedCandidate(pending)
+            }
         case .idle:
             break
         }
@@ -324,8 +331,144 @@ final class DictationController {
             DispatchQueue.main.async {
                 guard self.progressID == progressID else { return }
                 self.finishRequest(outcome, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
-                                   audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants)
+                                   audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants,
+                                   betaSession: betaSession, betaInfo: previousBeta?.info, translateTo: translateTo, baseline: baseline,
+                                   reviewContext: context, reviewProfile: profile, reviewTranslatePrompt: ownPrompt)
             }
+        }
+    }
+
+    enum ReviewContinuation: Equatable { case ready, busy, sessionChanged }
+
+    private struct ReviewedRequest {
+        let text: String
+        let repeated: Bool
+        let appBundleId: String
+        let language: String
+        let strength: String
+        let field: FocusedField?
+        let insert: Bool
+        let llm: LLMRoute?
+        let variants: String?
+        let betaSession: String?
+        let betaInfo: BetaInfo?
+        let translateTo: String?
+        let baseline: String?
+        let context: Data?
+        let profile: String
+        let translatePrompt: String?
+    }
+
+    /// A non-modal panel can outlive a recording or an assistant round. Never let
+    /// its action interrupt a newer task or submit an old answer to a later round.
+    static func reviewContinuation(phase: AppPhase, strength: String, translateTo: String?,
+                                   originalSession: String?, originalInfo: BetaInfo?,
+                                   currentSession: String?, currentInfo: BetaInfo?) -> ReviewContinuation {
+        guard phase == .idle else { return .busy }
+        if strength == VoiceStrength.promptbeta.rawValue && translateTo == nil {
+            guard originalSession == currentSession, originalInfo == currentInfo else { return .sessionChanged }
+        }
+        return .ready
+    }
+
+    /// Each history row owns its own recording. A retry's sealed recording is
+    /// copied without decryption; a storage failure must not delete the source.
+    static func retainAudioForHistory(_ path: String, canPersist: Bool) -> String? {
+        let sealed = path.hasSuffix(".sealed")
+        guard canPersist else {
+            if !sealed { try? FileManager.default.removeItem(atPath: path) }
+            return nil
+        }
+        if !sealed {
+            guard let result = HistorySeal.sealFile(atPath: path) else {
+                try? FileManager.default.removeItem(atPath: path)
+                return nil
+            }
+            return result
+        }
+        let folder = URL(fileURLWithPath: path).deletingLastPathComponent()
+        let target = folder.appendingPathComponent("dsh-voice-retry-\(UUID().uuidString).wav.sealed")
+        var copied = false
+        do {
+            try FileManager.default.copyItem(atPath: path, toPath: target.path)
+            copied = true
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
+            return target.path
+        } catch {
+            if copied { try? FileManager.default.removeItem(at: target) }
+            return nil
+        }
+    }
+
+    private func presentReviewedCandidate(_ request: ReviewedRequest) {
+        noiseReview.show(candidate: request.text, repeated: request.repeated) { [weak self] _ in
+            guard let self else { return false }
+            switch Self.reviewContinuation(phase: self.phase, strength: request.strength, translateTo: request.translateTo,
+                                           originalSession: request.betaSession, originalInfo: request.betaInfo,
+                                           currentSession: self.beta.pending?.sessionId, currentInfo: self.beta.pending?.info) {
+            case .busy:
+                self.setHint(L10n.text("请先完成或取消当前操作。"), warning: true)
+                self.applyState()
+                return false
+            case .sessionChanged:
+                self.setHint(L10n.text("原提示词会话已结束，识别原文仍在此窗口。"), warning: true)
+                self.applyState()
+                return false
+            case .ready:
+                self.continueReviewedText(request)
+                return true
+            }
+        }
+    }
+
+    /// A confirmed ASR candidate is processed as the original task, never
+    /// inserted before cleanup or substituted for a pending assistant answer.
+    private func continueReviewedText(_ request: ReviewedRequest) {
+        phase = .thinking
+        registerEscape()
+        recordingBar.showThinking(detail: "")
+        idleBar.hide()
+        if request.betaSession != nil { beta.setBusy(L10n.text("正在更新…")) }
+        setHint(nil)
+        applyState()
+        pendingReviewedRequest = request
+        let generation = UUID(); progressID = generation
+        let requestTicket = client.generationTicket()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let outcome = Result {
+                try self.client.polishSync(text: request.text, language: request.language, strength: request.strength, llm: request.llm,
+                                           translateTo: request.translateTo, variants: request.variants, profile: request.profile,
+                                           fieldContext: request.context, betaSession: request.betaSession, translatePrompt: request.translatePrompt,
+                                           baseline: request.baseline, appHint: request.appBundleId, generationTicket: requestTicket)
+            }
+            DispatchQueue.main.async {
+                guard self.progressID == generation else { return }
+                self.pendingReviewedRequest = nil
+                if Self.reviewNeedsRetry(outcome) {
+                    self.unregisterEscape()
+                    self.phase = .idle
+                    if request.betaSession != nil, self.beta.pending?.sessionId == request.betaSession { self.beta.setBusy(nil) }
+                    self.recordingBar.showResult(L10n.text("处理未完成，请重试或忽略。"), warning: true)
+                    self.setHint(L10n.text("处理未完成，请重试或忽略。"), warning: true)
+                    self.presentReviewedCandidate(request)
+                    self.applyState()
+                    self.updateIdleBar()
+                    return
+                }
+                self.finishRequest(outcome, appBundleId: request.appBundleId, language: request.language, strength: request.strength,
+                                   audioPath: nil, seconds: nil, field: request.field, insert: request.insert,
+                                   llm: request.llm, variants: request.variants, betaSession: request.betaSession, translateTo: request.translateTo)
+            }
+        }
+    }
+
+    static func reviewNeedsRetry(_ outcome: Result<DictateResponse, Error>) -> Bool {
+        switch outcome {
+        case .failure: return true
+        case .success(let response):
+            if response.qualityReview != nil { return false }
+            return response.fallback || (!response.betaWaiting && response.insertableText.isEmpty)
         }
     }
 
@@ -333,7 +476,9 @@ final class DictationController {
 
     func finishRequest(_ outcome: Result<DictateResponse, Error>, appBundleId: String, language: String,
                        strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool,
-                       llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false) {
+                       llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false,
+                       betaSession: String? = nil, betaInfo: BetaInfo? = nil, translateTo: String? = nil, baseline: String? = nil,
+                       reviewContext: Data? = nil, reviewProfile: String = "", reviewTranslatePrompt: String? = nil) {
         unregisterEscape()
         // A failed request or Beta question does not retain an untracked raw recording.
         defer {
@@ -351,6 +496,74 @@ final class DictationController {
         case .success(let resp):
             serviceUp = true
             model.serviceProblem = ""
+            if let review = resp.qualityReview {
+                // The pending history row has no text: neither the transcript nor
+                // the model draft can be pasted through “paste last” before review.
+                let keptAudio = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
+                var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
+                                              language: language, strength: strength, raw: "", text: "",
+                                              fallback: true, fallbackReason: "quantity-conflict", model: resp.model,
+                                              msTotal: resp.ms?.total, audioPath: keptAudio, inserted: false, seconds: seconds)
+                entry.task = resp.task
+                entry.variants = variants
+                entry.qualityReview = review
+                HistoryStore.shared.add(entry)
+                recordingBar.showResult(L10n.text("数量或单位待核对"), warning: true)
+                setHint(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"), warning: true)
+                quantityReview.show(review: review) { [weak self] choice in
+                    guard let self else { return false }
+                    guard self.phase == .idle else {
+                        self.setHint(L10n.text("请先完成或取消当前操作。"), warning: true)
+                        self.applyState()
+                        return false
+                    }
+                    let original = choice == .original
+                    let selected = original ? review.original : review.candidate
+                    HistoryStore.shared.update(id: entry.id) {
+                        $0.raw = review.original; $0.text = selected
+                        $0.fallback = original; $0.fallbackReason = original ? "quantity-conflict" : nil
+                        $0.qualityReview = nil
+                    }
+                    if insert {
+                        let counts = DictationStats.countWords(selected)
+                        ActivityLog.shared.record(words: counts.cjk + counts.latin)
+                        self.insertText(selected, fallback: original, entryId: entry.id, appBundleId: appBundleId, field: field)
+                    } else {
+                        Inserter.shared.setString(selected)
+                        self.recordingBar.showResult(selected, warning: original)
+                        self.setHint(L10n.text("重试完成，结果已复制"))
+                        self.applyState()
+                    }
+                    return true
+                }
+                applyState()
+                return
+            }
+            if resp.noiseSuspected {
+                let candidate = resp.noiseCandidate ?? ""
+                let repeated = resp.fallbackReason == "recognition-repetition"
+                if betaSession != nil, beta.pending?.sessionId == betaSession { beta.setBusy(nil) }
+                // Respect the same encrypted history and recording-retention settings
+                // as ordinary dictation. The result is explicitly marked uninserted.
+                let retainedAudio = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
+                var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
+                                              language: language, strength: strength, raw: candidate, text: candidate,
+                                              fallback: true, fallbackReason: resp.fallbackReason, model: resp.model,
+                                              msTotal: resp.ms?.total, audioPath: retainedAudio, inserted: false,
+                                              seconds: seconds)
+                entry.task = resp.task
+                entry.variants = variants
+                entry.translated = translateTo
+                HistoryStore.shared.add(entry)
+                recordingBar.showResult(L10n.text("识别结果待查看，未自动输入"), warning: true)
+                setHint(L10n.text("请查看识别原文，或忽略后重新说。"), warning: true)
+                presentReviewedCandidate(ReviewedRequest(text: candidate, repeated: repeated, appBundleId: appBundleId,
+                    language: language, strength: strength, field: field, insert: insert, llm: llm, variants: variants,
+                    betaSession: betaSession, betaInfo: betaInfo, translateTo: translateTo, baseline: baseline,
+                    context: reviewContext, profile: reviewProfile, translatePrompt: reviewTranslatePrompt))
+                applyState()
+                return
+            }
             if let sessionId = resp.beta?.sessionId, let info = resp.beta {
                 beta.accept(info: info, sessionId: sessionId, llm: llm, language: language,
                             variants: variants, appBundleId: appBundleId, field: field, copyResult: copyResult)
@@ -370,14 +583,7 @@ final class DictationController {
             }
             let text = resp.insertableText
             // A kept recording is sealed before its path goes into the history.
-            let audioPath = audioPath.flatMap { path -> String? in
-                guard HistoryStore.shared.persistenceProblem == nil, let sealed = HistorySeal.sealFile(atPath: path) else {
-                    // This is the recording created by this request; do not retain plaintext on failure.
-                    try? FileManager.default.removeItem(atPath: path)
-                    return nil
-                }
-                return sealed
-            }
+            let audioPath = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
             var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                           language: language, strength: strength,
                                           raw: resp.raw, text: text, fallback: resp.fallback,

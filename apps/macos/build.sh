@@ -22,7 +22,7 @@ APP="$STAGE_DIR/TypeLeast.app"
 SWIFTC="/usr/bin/swiftc"
 # TYPELEAST_ARCH=x86_64 cross-builds for Intel (development only: Intel is no longer released).
 ARCH="${TYPELEAST_ARCH:-$(uname -m)}"
-TARGET="$ARCH-apple-macosx13.0"
+TARGET="$ARCH-apple-macosx14.0"
 BIN_NAME="TypeLeast"
 SERVICE_SRC="$(cd "$ROOT/../../service" && pwd)"
 LEGACY_DEST="$HOME/Applications/dsh-voice.app"
@@ -73,8 +73,9 @@ echo "hooks  : $([ ${#DEV_FLAG[@]} -gt 0 ] && echo 'self-check and demo (develop
   -o "$APP/Contents/MacOS/$BIN_NAME" \
   "${SOURCES[@]}"
 
-# The local service and its dependencies (sherpa-onnx for this Mac's architecture).
-if [ ! -d "$SERVICE_SRC/node_modules/sherpa-onnx-node" ]; then
+# Install the shared service dependencies if needed. The Windows ONNX adapter
+# is excluded from the Mac bundle after copying.
+if [ ! -d "$SERVICE_SRC/node_modules/opencc-js" ]; then
   if ! command -v npm >/dev/null 2>&1; then
     echo "npm not found: install Node.js 22+ (https://nodejs.org) and run this again" >&2
     exit 1
@@ -85,6 +86,20 @@ fi
 mkdir -p "$APP/Contents/Resources/service"
 cp -R "$SERVICE_SRC/bin" "$SERVICE_SRC/lib" "$SERVICE_SRC/package.json" "$SERVICE_SRC/node_modules" \
   "$APP/Contents/Resources/service/"
+rm -rf "$APP/Contents/Resources/service/node_modules/sherpa-onnx-node" \
+  "$APP/Contents/Resources/service/node_modules/"sherpa-onnx-darwin-*
+# MLX is the Mac speech engine. Ship the worker and its matching shaders
+# together; a missing worker is a build failure rather than a silent fallback.
+MLX_OUT="$BUILD_DIR/mlx/mlx-asr"
+bash "$ROOT/scripts/build-mlx.sh" "$MLX_OUT"
+mkdir -p "$APP/Contents/Resources/service/native"
+cp "$MLX_OUT" "$(dirname "$MLX_OUT")/mlx.metallib" "$APP/Contents/Resources/service/native/"
+cp -R "$(dirname "$MLX_OUT")/mlx-licenses" "$APP/Contents/Resources/service/native/"
+# SwiftPM resource lookup differs between a CLI and an executable in an app.
+# Include the small bundles in both locations; the Metal library itself is not duplicated.
+cp -R "$(dirname "$MLX_OUT")/mlx-bundles/." "$APP/Contents/Resources/"
+cp -R "$(dirname "$MLX_OUT")/mlx-bundles/." "$APP/Contents/Resources/service/native/"
+codesign --force --sign - --timestamp=none --options runtime "$APP/Contents/Resources/service/native/mlx-asr"
 # The engine MOSS-Transcribe-Diarize runs on (sherpa-onnx cannot). Signed here like the app:
 # it is a child process, with the hardened runtime and no entitlements of its own.
 if MOSS_OUT="$BUILD_DIR/moss/moss-transcribe" && "$ROOT/scripts/build-moss.sh" "$MOSS_OUT"; then
@@ -112,8 +127,9 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then cp "$ROOT/Resources/AppIcon.icns"
 # Sign with a fixed local certificate when there is one (see make-signing-cert.sh):
 # the signature then stays the same across rebuilds, so macOS keeps the Keychain
 # "Always Allow" and the Accessibility permission. Otherwise ad-hoc (no identity, no network).
+# TYPELEAST_SIGN_IDENTITY=- selects ad-hoc signing without looking up a certificate.
 SIGN_IDENTITY="${TYPELEAST_SIGN_IDENTITY:-TypeLeast Local Signing}"
-if security find-certificate -c "$SIGN_IDENTITY" >/dev/null 2>&1; then
+if [ "$SIGN_IDENTITY" != "-" ] && security find-certificate -c "$SIGN_IDENTITY" >/dev/null 2>&1; then
   codesign --force --sign "$SIGN_IDENTITY" --timestamp=none --options runtime --entitlements "$ROOT/TypeLeast.entitlements" "$APP"
   echo "signed : $SIGN_IDENTITY"
 else

@@ -182,6 +182,7 @@ let server = try StubServer { req in
     }
     if req.path == "/api/voice-polish/models" { return .json(modelCatalogJSON) }
     if req.path.hasPrefix("/api/voice-polish/models/") { return .json("{\"ok\":true,\"phase\":\"accepted\"}", status: 202) }
+    if req.path == "/api/voice-polish/polish" { return .json(dictateJSON) }
     if req.path.hasPrefix("/api/voice-polish/dictate") {
         if state.mode == "slow-generation" { Thread.sleep(forTimeInterval:1) }
         if state.mode == "dictateError" {
@@ -707,6 +708,13 @@ do {
     checkEq("mirrors-first ends with GitHub", UpdateSources.list(for: official, mode: "mirror").last?.1, "GitHub")
     checkEq("GitHub only means one source", UpdateSources.list(for: official, mode: "github").count, 1)
     checkEq("other addresses are never sent to a mirror", UpdateSources.list(for: URL(string: "https://example.com/x.zip")!, mode: "mirror").count, 1)
+    let futureName = Updater.assetName(version: "1.25.0", arch: "arm64")
+    let future = URL(string: "https://github.com/FlaxXTT/Typeleast/releases/download/v1.25.0/" + futureName)!
+    for mode in UpdateSources.modes {
+        check("every \(mode) update source uses the macOS 14 archive", UpdateSources.list(for: future, mode: mode).allSatisfy {
+            $0.0.absoluteString.hasSuffix("/" + futureName) && !$0.0.absoluteString.hasSuffix("/TypeLeast-1.25.0-macOS-AppleSilicon.zip")
+        })
+    }
 }
 
 // MARK: 16. rich list pasting and pill sizing
@@ -930,12 +938,27 @@ do {
     check("the same version is not newer", !Updater.isNewer("1.3.0", than: "1.3.0"))
     check("1.3 equals 1.3.0", !Updater.isNewer("1.3", than: "1.3.0") && !Updater.isNewer("1.3.0", than: "1.3"))
     check("an older version is not offered", !Updater.isNewer("1.2.0", than: "1.3.0"))
-    checkEq("Apple silicon downloads the AppleSilicon zip", Updater.assetName(version: "1.4.0", arch: "arm64"), "TypeLeast-1.4.0-macOS-AppleSilicon.zip")
+    let testMacOS = OperatingSystemVersion(majorVersion: 13, minorVersion: 6, patchVersion: 1)
+    check("a newer system requirement blocks an update", !Updater.supportsSystem(minimum: "14.0", current: testMacOS))
+    check("a supported system requirement allows an update", Updater.supportsSystem(minimum: "13.6.1", current: testMacOS))
+    check("missing or invalid system requirements block an update", !Updater.supportsSystem(minimum: nil, current: testMacOS) && !Updater.supportsSystem(minimum: "13.bad", current: testMacOS))
+    checkEq("Apple silicon downloads the macOS 14 ZIP", Updater.assetName(version: "1.25.0", arch: "arm64"), "TypeLeast-1.25.0-macOS14-AppleSilicon.zip")
+    check("future releases also differ from every old updater ZIP name", ["1.25.0", "2.0.0", "9.99.123"].allSatisfy {
+        Updater.assetName(version: $0, arch: "arm64") != "TypeLeast-\($0)-macOS-AppleSilicon.zip"
+    })
+    let namesScript = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("scripts/package-names.sh").path
+    for version in ["1.25.0", "2.0.0", "9.99.123"] {
+        let packaged = Updater.run("/bin/bash", ["-c", "source \"$1\"; typeleast_macos_zip_name \"$2\" AppleSilicon", "test", namesScript, version])
+        check("package and updater agree on the archive for \(version)", packaged.status == 0 &&
+              packaged.out.trimmingCharacters(in: .whitespacesAndNewlines) == Updater.assetName(version: version, arch: "arm64"))
+    }
     checkEq("Intel downloads the Intel zip", Updater.assetName(version: "1.4.0", arch: "x86_64"), "TypeLeast-1.4.0-macOS-Intel.zip")
     checkEq("Intel Macs get no new versions", Updater.intelDiscontinued(arch: "x86_64"), true)
     checkEq("Apple silicon keeps updating", Updater.intelDiscontinued(arch: "arm64"), false)
-    let sums = "AAAA1111  TypeLeast-1.4.0-macOS-AppleSilicon.dmg\nbbbb2222  TypeLeast-1.4.0-macOS-AppleSilicon.zip\ncccc3333 *TypeLeast-1.4.0-macOS-Intel.zip\n"
-    checkEq("the zip's hash is found", Updater.checksum(for: "TypeLeast-1.4.0-macOS-AppleSilicon.zip", in: sums), "bbbb2222")
+    let sums = "AAAA1111  TypeLeast-1.4.0-macOS-AppleSilicon.dmg\nbbbb2222  TypeLeast-1.4.0-macOS14-AppleSilicon.zip\ncccc3333 *TypeLeast-1.4.0-macOS-Intel.zip\n"
+    checkEq("the current zip's manifest entry is found", Updater.checksum(for: "TypeLeast-1.4.0-macOS14-AppleSilicon.zip", in: sums), "bbbb2222")
+    checkEq("the legacy name cannot be accepted from any mirror", Updater.checksum(for: "TypeLeast-1.4.0-macOS-AppleSilicon.zip", in: sums), nil)
     checkEq("binary-mode lines work too", Updater.checksum(for: "TypeLeast-1.4.0-macOS-Intel.zip", in: sums), "cccc3333")
     checkEq("a missing file has no hash", Updater.checksum(for: "other.zip", in: sums), nil)
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("typeleast-sha-" + UUID().uuidString)
@@ -1156,6 +1179,25 @@ do {
     check("elsewhere the title is not read", !ModelAdvisor.titleNamesTool(bundleId: "com.apple.Notes"))
     let reply = try! JSONDecoder().decode(ModelRecommendationReply.self, from: Data(#"{"recommendation":{"app":"Claude","model":"Claude Opus 5.5","reason":"r","source":"platform.claude.com"},"notice":null}"#.utf8))
     checkEq("the recommendation is read", reply.recommendation?.model, "Claude Opus 5.5")
+    checkEq("an older service has no thinking advice", reply.recommendation?.thinking, nil)
+    checkEq("an older service has no effort advice", reply.recommendation?.effort, nil)
+    check("an older recommendation never invents an effort", reply.recommendation?.hasSupportedAdvice == false)
+    let updated = try! JSONDecoder().decode(ModelRecommendationReply.self, from: Data(#"{"recommendation":{"app":"Claude","model":"Claude Opus","reason":"r","source":"platform.claude.com","thinking":"adaptive","effort":"high","effortReason":"多步骤任务","capabilitySource":"https://code.claude.com/docs/en/model-config","capabilityModelSource":"https://developers.openai.com/api/docs/models/gpt-6.1-sol","capabilityBasis":"verified-reference","capabilityVerifiedAt":"2026-11-06"}}"#.utf8))
+    checkEq("the recommendation keeps the thinking setting", updated.recommendation?.thinking, "adaptive")
+    checkEq("the recommendation keeps the effort setting", updated.recommendation?.effort, "high")
+    checkEq("the recommendation keeps its product source", updated.recommendation?.capabilitySourceURL?.host, "code.claude.com")
+    checkEq("the recommendation keeps its model source", updated.recommendation?.capabilityModelSourceURL?.host, "developers.openai.com")
+    checkEq("cached source keeps its verification date", updated.recommendation?.capabilityDate, "2026-11-06")
+    let unknown = try! JSONDecoder().decode(ModelRecommendation.self, from: Data(#"{"app":"Example","model":"Model","reason":"r","source":"example.com","thinking":"auto-run","effort":"ultra","effortReason":"ignored","capabilitySource":"http://example.com"}"#.utf8))
+    check("unknown recommendation values do not become advice", !unknown.hasSupportedAdvice)
+    checkEq("an insecure source is not presented", unknown.capabilitySourceURL, nil)
+    let unsupportedEvidence = try! JSONDecoder().decode(ModelRecommendation.self, from: Data(#"{"app":"Example","model":"Model","reason":"r","source":"example.com","effort":"high","capabilitySource":"https://example.com/","capabilityBasis":"verified-reference"}"#.utf8))
+    check("an unreviewed source cannot authorize advice", !unsupportedEvidence.hasSupportedAdvice)
+    let missingBasis = try! JSONDecoder().decode(ModelRecommendation.self, from: Data(#"{"app":"Claude","model":"Model","reason":"r","source":"example.com","effort":"high","capabilitySource":"https://code.claude.com/docs/en/model-config"}"#.utf8))
+    check("an unspecified source basis cannot authorize advice", !missingBasis.hasSupportedAdvice)
+    let malformed = try! JSONDecoder().decode(ModelRecommendation.self, from: Data(#"{"app":"Example","model":"Model","reason":"r","source":"example.com","thinking":3,"effort":[],"effortReason":true}"#.utf8))
+    checkEq("bad optional advice does not hide the model", malformed.model, "Model")
+    check("bad optional advice is ignored", !malformed.hasSupportedAdvice && malformed.effortReason == nil)
 }
 
 // MARK: 27. security: sealed history, terminal paste, own signature, the one service
@@ -1312,10 +1354,95 @@ do {
     let waiting = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"","raw":"latest answer","fallback":false,"beta":{"sessionId":"s","questions":[],"confirmed":["confirmed"],"round":3,"ready":true,"notice":"beta-validation"}}"#.utf8))
     check("ready clarification still waits for the user's Generate", waiting.betaWaiting)
     checkEq("ready clarification inserts nothing", waiting.insertableText, "")
+    let heldNoise = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"incorrect","raw":"incorrect","noiseSuspected":true,"noiseCandidate":"candidate","fallback":true}"#.utf8))
+    check("noise is marked for review", heldNoise.noiseSuspected)
+    checkEq("noise never inserts text or raw", heldNoise.insertableText, "")
+    checkEq("noise candidate is preserved for review", heldNoise.noiseCandidate, "candidate")
     checkEq("round metadata decodes", waiting.beta?.round, 3)
     checkEq("confirmed metadata decodes", waiting.beta?.confirmed, ["confirmed"])
     checkEq("notice metadata decodes", waiting.beta?.notice, "beta-validation")
 } catch { check("new Beta/config decoding", false) }
+
+// A review must not interrupt another task or submit a stale assistant answer.
+do {
+    var round = BetaInfo(); round.sessionId = "fictional-session"; round.round = 1
+    var later = round; later.round = 2
+    func decision(_ phase: AppPhase, _ strength: String, _ target: String?, _ original: String?, _ info: BetaInfo?, _ current: String?, _ currentInfo: BetaInfo?) -> DictationController.ReviewContinuation {
+        DictationController.reviewContinuation(phase: phase, strength: strength, translateTo: target,
+            originalSession: original, originalInfo: info, currentSession: current, currentInfo: currentInfo)
+    }
+    checkEq("review waits while another recording is active", decision(.recording, "prompt", nil, nil, nil, nil, nil), .busy)
+    checkEq("review waits while another request is active", decision(.thinking, "prompt", nil, nil, nil, nil, nil), .busy)
+    checkEq("review continues the same assistant round", decision(.idle, "promptbeta", nil, "fictional-session", round, "fictional-session", round), .ready)
+    checkEq("review rejects an assistant round that advanced", decision(.idle, "promptbeta", nil, "fictional-session", round, "fictional-session", later), .sessionChanged)
+    checkEq("review rejects an ended assistant", decision(.idle, "promptbeta", nil, "fictional-session", round, nil, nil), .sessionChanged)
+    checkEq("first assistant review cannot replace a later session", decision(.idle, "promptbeta", nil, nil, nil, "fictional-session", round), .sessionChanged)
+    checkEq("translation review is independent of a waiting assistant", decision(.idle, "prompt", "en", nil, nil, "fictional-session", round), .ready)
+    let fallback = DictateResponse(text: "原文", raw: "原文", fallback: true)
+    let finished = DictateResponse(text: "整理结果", raw: "原文", fallback: false)
+    let waiting = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"","raw":"answer","beta":{"sessionId":"fictional-session"}}"#.utf8))
+    check("reviewed fallback must return to review", DictationController.reviewNeedsRetry(.success(fallback)))
+    check("reviewed empty result must return to review", DictationController.reviewNeedsRetry(.success(DictateResponse())))
+    check("reviewed service error must return to review", DictationController.reviewNeedsRetry(.failure(ServiceError.transport("fictional failure"))))
+    check("reviewed finished result can continue", !DictationController.reviewNeedsRetry(.success(finished)))
+    check("reviewed assistant question can continue", !DictationController.reviewNeedsRetry(.success(waiting)))
+    let quantity = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"","raw":"","fallback":true,"qualityReview":{"kind":"quantity","original":"不超过三页","candidate":"不超过三月"}}"#.utf8))
+    checkEq("quantity review keeps the original", quantity.qualityReview?.original, "不超过三页")
+    checkEq("quantity review keeps the candidate", quantity.qualityReview?.candidate, "不超过三月")
+    checkEq("quantity review cannot insert either text before selection", quantity.insertableText, "")
+    check("a reviewed noise candidate can proceed to quantity review", !DictationController.reviewNeedsRetry(.success(quantity)))
+} catch { check("review behavior decoding", false, String(describing: error)) }
+
+// A new history entry gets its own sealed recording; failure never deletes the prior recording.
+do {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("typeleast-review-audio-" + UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let original = directory.appendingPathComponent("fixture.wav.sealed")
+    let bytes = Data([8, 7, 6, 5])
+    try bytes.write(to: original)
+    checkEq("unavailable history does not retain retry audio", DictationController.retainAudioForHistory(original.path, canPersist: false), nil)
+    checkEq("unavailable history leaves the old sealed recording intact", try? Data(contentsOf: original), bytes)
+    let copied = DictationController.retainAudioForHistory(original.path, canPersist: true)
+    check("a retry gets a different sealed path", copied != nil && copied != original.path)
+    checkEq("a retry copy keeps sealed bytes unchanged", copied.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }, bytes)
+    if let copied { try FileManager.default.removeItem(atPath: copied) }
+    checkEq("deleting the new entry's audio leaves the prior recording intact", try? Data(contentsOf: original), bytes)
+} catch { check("review retry audio is isolated", false, String(describing: error)) }
+
+// The real local HTTP request preserves each reviewed task and its original context.
+do {
+    let context = Data(#"{"before":"fictional context","after":""}"#.utf8)
+    _ = try client.polishSync(text: "虚构候选", language: "zh", strength: "promptbeta", llm: nil,
+                              translateTo: nil, variants: "zh=tw", profile: "fictional profile",
+                              fieldContext: context, betaSession: "fictional-session", baseline: "fictional draft", appHint: "example.editor")
+    let betaBody = (try? JSONSerialization.jsonObject(with: state.lastRequest?.body ?? Data())) as? [String: Any] ?? [:]
+    checkEq("reviewed assistant keeps its task", betaBody["task"] as? String, "assistant")
+    checkEq("reviewed assistant keeps its session", betaBody["betaSession"] as? String, "fictional-session")
+    checkEq("reviewed assistant keeps its initial draft", betaBody["baseline"] as? String, "fictional draft")
+    checkEq("reviewed assistant keeps the source app", betaBody["appHint"] as? String, "example.editor")
+    checkEq("reviewed assistant keeps its context", (betaBody["fieldContext"] as? [String: String])?["before"], "fictional context")
+    _ = try client.polishSync(text: "虚构候选", language: "zh", strength: "prompt", llm: nil,
+                              translateTo: "en", variants: nil)
+    let translationBody = (try? JSONSerialization.jsonObject(with: state.lastRequest?.body ?? Data())) as? [String: Any] ?? [:]
+    checkEq("reviewed translation keeps its task", translationBody["task"] as? String, "translation")
+    checkEq("reviewed translation keeps its target", translationBody["translateTo"] as? String, "en")
+    _ = try client.polishSync(text: "虚构候选", language: "zh", strength: "prompt", llm: nil,
+                              translateTo: nil, variants: nil)
+    let dictationBody = (try? JSONSerialization.jsonObject(with: state.lastRequest?.body ?? Data())) as? [String: Any] ?? [:]
+    checkEq("reviewed dictation keeps its task", dictationBody["task"] as? String, "dictation")
+    let ticket = client.generationTicket()
+    client.cancelGeneration()
+    let requestsBeforeCancelledReview = state.requestCount
+    do {
+        _ = try client.polishSync(text: "取消后的虚构候选", language: "zh", strength: "prompt", llm: nil,
+                                  translateTo: nil, variants: nil, generationTicket: ticket)
+        check("review cancelled before dispatch is rejected", false)
+    } catch {
+        check("review cancelled before dispatch is rejected", true)
+        checkEq("cancelled review does not send a request", state.requestCount, requestsBeforeCancelledReview)
+    }
+} catch { check("reviewed task request encoding", false, String(describing: error)) }
 
 // MARK: 28. the service proves it is ours before anything is sent to it
 checkEq("HMAC proof matches the service's (RFC 4231 case 2 key)",
@@ -1726,6 +1853,24 @@ do {
         check("cancelled generation cannot return an insertable response",false)
     } catch { check("generation cancellation returns before the late provider",Date().timeIntervalSince(began)<0.9) }
     state.mode = "ok"
+}
+
+// An older model's stored hint must not silently turn into a new Fun-ASR declaration.
+do {
+    let suite = "typeleast.tests.fun-language." + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set("zh", forKey: "voice.language")
+    let settings = Settings(defaults: defaults)
+    checkEq("Fun defaults to auto instead of inheriting a hidden older hint", settings.recognitionLanguage(for: "mlx-fun-asr-nano-bf16"), "auto")
+    checkEq("unknown speech model never inherits a hidden language hint", settings.recognitionLanguage(for: nil), "auto")
+    checkEq("another model keeps the older language setting", settings.recognitionLanguage(for: "mlx-qwen3-asr-0.6b-bf16"), "zh")
+    settings.funRecognitionLanguage = "zh"
+    checkEq("an explicit Fun Chinese choice is applied", settings.recognitionLanguage(for: "mlx-fun-asr-nano-bf16"), "zh")
+    checkEq("the explicit Fun choice persists", Settings(defaults: defaults).funRecognitionLanguage, "zh")
+    settings.funRecognitionLanguage = "ko"
+    checkEq("unsupported Fun choices fall back to auto", settings.funRecognitionLanguage, "auto")
+    checkEq("changing the Fun choice does not replace the older setting", settings.language, "zh")
 }
 
 contextPreferencesTests()

@@ -130,9 +130,40 @@ struct ModelRecommendationCard: View {
                     .lineLimit(2).minimumScaleFactor(0.6)
                     .fixedSize(horizontal: false, vertical: true)
                 if !recommendation.reason.isEmpty {
-                    Text(recommendation.reason).font(.system(size: 19)).lineSpacing(3)
+                    Text(recommendation.reason).font(.system(size: 19)).lineSpacing(3).lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                VStack(alignment: .leading, spacing: 8) {
+                    adviceRow(L10n.text("思考模式"), recommendation.thinkingLabel)
+                    adviceRow(L10n.text("推理强度"), recommendation.effortLabel)
+                    if recommendation.hasSupportedAdvice, let reason = recommendation.effortReason, !reason.isEmpty {
+                        Text(String(reason.prefix(160))).font(.system(size: 13)).foregroundColor(.secondary)
+                            .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if recommendation.hasSupportedAdvice, let source = recommendation.capabilitySourceURL {
+                        Link(L10n.text("产品设置参考：{0}", source.host ?? ""), destination: source)
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    if recommendation.hasSupportedAdvice, let source = recommendation.capabilityModelSourceURL {
+                        Link(L10n.text("模型能力参考：{0}", source.host ?? ""), destination: source)
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    if recommendation.hasSupportedAdvice, recommendation.capabilityBasis == "verified-reference" {
+                        Text(recommendation.capabilityDate.map { L10n.text("产品设置依据 {0} 查阅的资料。", $0) } ?? L10n.text("产品设置依据此前查阅的资料。"))
+                            .font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    } else if recommendation.hasSupportedAdvice, recommendation.capabilityBasis == "live-official" {
+                        Text(L10n.text("产品设置依据本次查阅的资料。"))
+                            .font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(L10n.text("仅供参考，具体模型和设置以目标应用及账户权限为准。"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.05)))
                 Text(L10n.text("来自 {0}", recommendation.source)).font(.system(size: 12)).foregroundColor(.secondary)
             case .failed(let message):
                 Text(message).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
@@ -145,6 +176,15 @@ struct ModelRecommendationCard: View {
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
         .padding(4)
+    }
+
+    private func adviceRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title).foregroundColor(.secondary)
+            Spacer(minLength: 8)
+            Text(value).fontWeight(.semibold).multilineTextAlignment(.trailing)
+        }
+        .font(.system(size: 14))
     }
 
     private var heading: String {

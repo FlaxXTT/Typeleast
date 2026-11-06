@@ -90,6 +90,9 @@ export async function startService(options = {}) {
       if (closed) return;
       closed = true;
       service.meetings.cancel();
+      // Kill a persistent speech worker immediately, including when an HTTP
+      // request is still waiting for recognition. Do not wait for its queue.
+      try { await recognizer.release?.(); } catch { /* Continue closing the server. */ }
       await withdrawRuntime({ stateDir, pid: process.pid });
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(() => resolve()));

@@ -396,7 +396,7 @@ struct HistoryRow: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
                 if entry.displayText.isEmpty || compact {
-                    Text(entry.displayText.isEmpty ? L10n.text("（没有识别到内容）") : entry.displayText)
+                    Text(entry.displayText.isEmpty ? (entry.fallbackReason == "quantity-conflict" ? L10n.text("数量或单位待核对") : L10n.text("（没有识别到内容）")) : entry.displayText)
                         .font(.system(size: 13.5))
                         .foregroundColor(Theme.ink)
                         .lineLimit(expanded ? nil : (compact ? 2 : 4))
@@ -404,6 +404,7 @@ struct HistoryRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .clipped()
+                        .onTapGesture { if entry.qualityReview != nil { expanded.toggle() } }
                 } else {
                     SelectableText(text: entry.displayText, font: .systemFont(ofSize: 13.5), color: NSColor(Theme.ink),
                                    maxLines: expanded ? 0 : 4,
@@ -419,11 +420,22 @@ struct HistoryRow: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if expanded, let review = entry.qualityReview {
+                    Text(L10n.text("原始识别") + "：" + review.original)
+                        .font(.system(size: 12)).foregroundColor(Theme.secondary).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(L10n.text("待核对整理结果") + "：" + review.candidate)
+                        .font(.system(size: 12)).foregroundColor(Theme.secondary).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
                     if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "提示词模式" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
                     else if let mode { Badge(text: mode.label, tint: modeTint).fixedSize() }
-                    if entry.fallback { Badge(text: L10n.text("已用原文"), tint: Theme.warning).fixedSize() }
+                    if entry.fallback {
+                        let held = ["suspected-noise", "recognition-repetition", "quantity-conflict"].contains(entry.fallbackReason ?? "") && !entry.inserted
+                        Badge(text: held ? L10n.text("未自动输入") : L10n.text("已用原文"), tint: Theme.warning).fixedSize()
+                    }
                     if copied { Badge(text: L10n.text("已复制"), tint: Theme.success).fixedSize() }
                 }
             }
