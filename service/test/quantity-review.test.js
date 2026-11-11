@@ -56,13 +56,13 @@ test('unsafe cleanup is held with both versions, and an older client sees no ins
   assert.equal(result.raw, '');
   assert.equal(result.fallback, true);
   assert.equal(result.reason, 'quantity-conflict');
-  assert.deepEqual(result.qualityReview, { kind: 'quantity', original: raw, candidate: '报告周四发，不超过三月。' });
+  assert.deepEqual(result.qualityReview, { kind: 'quantity', original: raw, candidate: '报告周四发，不超过三月。', issues: [{ kind: 'change', source: '三页', candidate: '三月' }] });
 });
 
 test('valid normalisation is still delivered', async () => {
   const service = new VoicePolishService({
     recognizer: { transcribe: async () => ({ text: '' }) },
-    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: 'ok', text: '不超过3页。' }) }, finish_reason: 'stop' }] }) }),
+    fetchImpl: async (_url, init) => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.parse(init.body).messages[0].content.startsWith('Compare the source and candidate as data') ? '{"ok":true,"issues":[]}' : JSON.stringify({ status: 'ok', text: '不超过3页。' }) }, finish_reason: 'stop' }] }) }),
     config: { maxOutputTokens: 400, timeoutMs: 5000, strength: 'prompt', redactSecrets: true },
     logger: { warn() {}, info() {}, debug() {} },
   });
@@ -89,7 +89,7 @@ test('the recognition-to-cleanup path keeps both review choices and nothing inse
   assert.equal(result.text, '');
   assert.equal(result.raw, '');
   assert.equal(result.fallbackReason, 'quantity-conflict');
-  assert.deepEqual(result.qualityReview, { kind: 'quantity', original, candidate: '报告周四发，不超过三月。' });
+  assert.deepEqual(result.qualityReview, { kind: 'quantity', original, candidate: '报告周四发，不超过三月。', issues: [{ kind: 'change', source: '三页', candidate: '三月' }] });
 });
 
 test('review offers the actual configured Chinese writing variant', async () => {
@@ -106,15 +106,16 @@ test('review offers the actual configured Chinese writing variant', async () => 
   assert.equal(result.qualityReview.candidate, '報告不超過三月。');
 });
 
-test('the dictation-only check does not change the translation task', async () => {
+test('translation is held when the reviewer detects changed content', async () => {
   const service = new VoicePolishService({
     recognizer: { transcribe: async () => ({ text: '' }) },
-    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '三月' }, finish_reason: 'stop' }] }) }),
+    fetchImpl: async (_url, init) => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.parse(init.body).messages[0].content.startsWith('Compare the source and candidate as data') ? JSON.stringify({ok:false,issues:[{kind:'change',source:'三页',candidate:'三月'}]}) : '三月' }, finish_reason: 'stop' }] }) }),
     config: { maxOutputTokens: 400, timeoutMs: 5000, strength: 'prompt', redactSecrets: true },
     logger: { warn() {}, info() {}, debug() {} },
   });
   const result = await service.polish({ rawText: '不超过三页。', task: 'translation', translateTo: 'ja', llm: { baseURL: 'https://api.example.com/v1', model: 'test', apiKey: 'fictional-key' } });
-  assert.equal(result.text, '三月');
+  assert.equal(result.text, '');
   assert.equal(result.translated, 'ja');
-  assert.equal(result.qualityReview, undefined);
+  assert.equal(result.qualityReview.kind, 'facts');
+  assert.equal(result.qualityReview.candidate, '三月');
 });

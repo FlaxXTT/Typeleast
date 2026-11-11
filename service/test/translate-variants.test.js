@@ -12,6 +12,9 @@ function provider(reply) {
   const calls = [];
   const fetchImpl = async (_url, init) => {
     const body = JSON.parse(init.body);
+    if (body.messages[0].content.startsWith('Compare the source and candidate as data')) {
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"ok":true,"issues":[]}' }, finish_reason: 'stop' }] }) };
+    }
     calls.push({ system: body.messages[0].content, user: body.messages[1].content });
     const content = typeof reply === "function" ? reply(calls) : reply;
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: "stop" }] }) };
@@ -39,7 +42,7 @@ test("翻译：一次调用直接整理并译成目标语言，不用听写整�
   assert.equal(calls[0].user, "Translate to English:\n\n" + SPOKEN.trim());
   assert.match(calls[0].system, /^Translate academic and research content into English/);
   assert.doesNotMatch(calls[0].system, /# Profile/);
-  assert.equal(service.stats.modelCalls, 1);
+  assert.equal(service.stats.modelCalls, 2);
 });
 
 test("翻译请求失败：插入整理过语气词的原文", async () => {

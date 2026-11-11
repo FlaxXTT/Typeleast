@@ -15,6 +15,9 @@ function fakeModel(answer, options = {}) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     const body = JSON.parse(init.body);
+    if (body.messages[0].content.startsWith('Compare the source and candidate as data')) {
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"ok":true,"issues":[]}' }, finish_reason: 'stop' }] }) };
+    }
     calls.push({ url, body, headers: init.headers });
     if (options.hang) {
       await new Promise((resolve) => init.signal.addEventListener("abort", resolve, { once: true }));
@@ -262,7 +265,7 @@ test("a successful polish records no failure detail", async () => {
   const result = await service.polish({ rawText: RAW, strength: "prompt", llm: ROUTE });
   assert.equal(result.fallback, false);
   assert.equal(result.detail ?? null, null);
-  assert.equal(service.snapshot().stats.modelCalls, 1);
+  assert.equal(service.snapshot().stats.modelCalls, 2);
   assert.equal(service.snapshot().stats.modelFallbacks, 0);
   assert.deepEqual(service.snapshot().recentFailures, []);
 });

@@ -9,7 +9,11 @@ function fixture(replies) {
     config: { maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt', redactSecrets: true, dictionary: [] },
     logger: { info() {}, warn() {}, debug() {} },
     fetchImpl: async (_, request) => {
-      calls.push(JSON.parse(request.body));
+      const body = JSON.parse(request.body);
+      if (body.messages[0].content.startsWith('Compare the source and candidate as data')) {
+        return { ok: true, json: async () => ({ choices: [{ message: { content: '{"ok":true,"issues":[]}' }, finish_reason: 'stop' }] }) };
+      }
+      calls.push(body);
       const text = replies.shift();
       return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: 'ok', text, reason: 'fictional test' }) }, finish_reason: 'stop' }] }) };
     },

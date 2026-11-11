@@ -73,7 +73,7 @@ test('Mac catalog rejects ONNX, preserves old selection and still offers meeting
   assert.equal(manager.snapshot().notice, 'saved-model-unavailable');
   assert.equal(await readFile(selectionPath, 'utf8'), original);
   const catalog = await manager.catalog();
-  assert.deepEqual(catalog.models.map(model => model.id).sort(), [MLX_DEFAULT_MODEL_ID, MEETING_MODEL_ID, 'mlx-qwen3-asr-0.6b-bf16', 'mlx-qwen3-asr-1.7b-bf16'].sort());
+  assert.deepEqual(catalog.models.map(model => model.id).sort(), [MLX_DEFAULT_MODEL_ID, MEETING_MODEL_ID, 'mlx-qwen3-asr-1.7b-8bit', 'mlx-qwen3-asr-0.6b-bf16', 'mlx-qwen3-asr-1.7b-bf16'].sort());
   assert.deepEqual(catalog.templates, []);
   assert.throws(() => manager.start('qwen3-asr-0.6b', { download: false }), { code: 'invalid-model' });
   assert.throws(() => manager.start(MEETING_MODEL_ID, { download: false }), { code: 'invalid-model' });

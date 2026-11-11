@@ -20,7 +20,7 @@ async function fixture(run, options = {}) {
 
 test('model catalog has only approved fixed candidates and unique checked files', () => {
   assert.deepEqual(MODEL_CATALOG.map(m=>m.id), ['sensevoice-small','fireredasr2-ctc','fun-asr-nano','qwen3-asr-0.6b','qwen3-asr-1.7b-fp16',
-    ...(process.platform === 'darwin' ? ['moss-transcribe-diarize', 'mlx-fun-asr-nano-bf16', 'mlx-qwen3-asr-0.6b-bf16', 'mlx-qwen3-asr-1.7b-bf16'] : [])]);
+    ...(process.platform === 'darwin' ? ['moss-transcribe-diarize', 'mlx-fun-asr-nano-bf16', 'mlx-qwen3-asr-1.7b-8bit', 'mlx-qwen3-asr-0.6b-bf16', 'mlx-qwen3-asr-1.7b-bf16'] : [])]);
   for(const m of MODEL_CATALOG) {
     if(!m.engine) assert.equal(recognizerConfig('/models',m.id).modelConfig.provider,'cpu');
     for(const f of filesForModel(m.id)) {

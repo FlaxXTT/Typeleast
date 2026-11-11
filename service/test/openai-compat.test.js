@@ -10,7 +10,9 @@ function fakeFetch(handler) {
   const calls = [];
   const impl = async (url, init) => {
     assert.equal(init.redirect, "error", "private text must not follow redirects");
-    calls.push({ url, init, body: JSON.parse(init.body) });
+    const body = JSON.parse(init.body);
+    if (body.messages[0].content.startsWith('Compare the source and candidate as data')) return ok('{"ok":true,"issues":[]}');
+    calls.push({ url, init, body });
     return handler(calls.length);
   };
   impl.calls = calls;
