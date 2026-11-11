@@ -21,8 +21,6 @@ test('legacy strengths share parameters and long output has a bounded growing bu
 test('one clock owns the operation and a shared retry cannot be spent twice',()=>{
  let now=0;const task=new CleanupTask(undefined,{now:()=>now,totalMs:60000});try{assert.equal(task.remainingMs(),60000);assert.equal(task.retry(),true);assert.equal(task.retry(),true);assert.equal(task.retry(),true);assert.equal(task.retry(),false);now=60000;assert.throws(()=>task.assertTime());}finally{task.dispose();}
 });
-test('risk review includes long text, suspicious compression and omitted condition cues',()=>{
-});
 test('a truncated model result is held with no insertable text',async()=>{
  const s=service(async()=>reply('半截','length'));const r=await s.polish({rawText:'这是完整口述。',strength:'prompt',llm:route});assert.notEqual(r.text, '', 'a result is inserted, never held');assert.equal(r.clarification, undefined);assert.equal(r.reason,'model-max-tokens');assert.equal(r.raw,'这是完整口述。');
 });
@@ -56,4 +54,14 @@ test('HTTP disconnection aborts the in-flight polish request',async()=>{
  const req=Readable.from([Buffer.from(JSON.stringify({text:'fixture',strength:'prompt'}))]);Object.assign(req,{method:'POST',url:'/api/voice-polish/polish',headers:{host:'127.0.0.1',authorization:'Bearer fixture-token'}});
  const res=new EventEmitter();Object.assign(res,{writeHead(){},end(){},writableEnded:false});
  const running=handler(req,res);await entered;res.emit('close');await running;assert.equal(captured.aborted,true);
+});
+
+test('configured cleanup limits and temperature are the actual request values', async () => {
+ const calls=[];
+ const s=new VoicePolishService({recognizer:{snapshot:()=>({ready:true})},config:{redactSecrets:true,temperature:0.65,maxOutputTokens:256},fetchImpl:async(_url, init)=>{calls.push(JSON.parse(init.body));return reply('Send the report.');}});
+ await s.polish({rawText:'Please send the report.',llm:route});
+ assert.equal(calls[0].temperature,0.65);
+ assert.equal(calls[0].max_tokens,256);
+ assert.equal(s.snapshot().temperature,calls[0].temperature);
+ assert.equal(s.snapshot().maxOutputTokens,calls[0].max_tokens);
 });

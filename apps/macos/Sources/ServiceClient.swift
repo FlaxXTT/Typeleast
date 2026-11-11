@@ -87,9 +87,19 @@ struct SpeechModelOption: Codable, Identifiable {
     var registered: Bool?
     var downloadable: Bool?
 }
+struct SpeechStorageItem: Codable, Identifiable {
+    var id: String
+    var name: String
+    var bytes: Double
+    var partialBytes: Double
+    var active: Bool
+    var legacy: Bool
+}
+
 struct SpeechModelCatalog: Codable {
     var activeModelId: String
     var models: [SpeechModelOption]
+    var storage: [SpeechStorageItem]?
     var operation: SpeechModelOperation?
     var notice: String?
 }
@@ -370,23 +380,36 @@ struct TaskProgress: Codable {
     var stage: String
     var completed: Int
     var total: Int
+    var sourceCharacters: Int?
+    var sourceWords: Int?
     var label: String {
         switch stage {
         case "recognizing": return L10n.text("正在识别…")
         case "preparing": return L10n.text("正在理解全文…")
         case "generating": return total > 1 ? L10n.text("正在整理 {0}/{1}",completed,total) : L10n.text("正在整理…")
         case "checking": return L10n.text("正在检查完整性…")
-        case "translating": return L10n.text("正在翻译…")
+        case "translating":
+            if let characters = sourceCharacters, let words = sourceWords {
+                return L10n.text("正在翻译…") + "  " + L10n.text("原文：{0} 字符 · {1} 词", characters, words)
+            }
+            return L10n.text("正在翻译…")
         default: return L10n.text("正在处理…")
         }
     }
 }
 
 /// A potential change to a spoken quantity that needs an explicit choice.
+struct QualityReviewIssue: Codable, Equatable {
+    var kind: String
+    var source: String
+    var candidate: String
+}
+
 struct QualityReview: Codable, Equatable {
     var kind: String
     var original: String
     var candidate: String
+    var issues: [QualityReviewIssue]? = nil
 }
 
 struct DictateResponse: Codable, Equatable {
@@ -396,6 +419,8 @@ struct DictateResponse: Codable, Equatable {
     var raw: String = ""
     var fallback: Bool = false
     var fallbackReason: String?
+    var offerFailover: Bool = false
+    var switchedProvider: Bool = false
     /// A suspiciously noisy recording is held for explicit review, never pasted automatically.
     var noiseSuspected: Bool = false
     var noiseCandidate: String?
@@ -414,7 +439,7 @@ struct DictateResponse: Codable, Equatable {
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case task, requestId, text, raw, fallback, fallbackReason, noiseSuspected, noiseCandidate, qualityReview, model, provider, ms, beta, translated, corrections, intention
+        case task, requestId, text, raw, fallback, fallbackReason, offerFailover, switchedProvider, noiseSuspected, noiseCandidate, qualityReview, model, provider, ms, beta, translated, corrections, intention
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -430,6 +455,8 @@ struct DictateResponse: Codable, Equatable {
         raw = lenient(c, String.self, .raw) ?? ""
         fallback = lenient(c, Bool.self, .fallback) ?? false
         fallbackReason = lenient(c, String.self, .fallbackReason)
+        offerFailover = lenient(c, Bool.self, .offerFailover) ?? false
+        switchedProvider = lenient(c, Bool.self, .switchedProvider) ?? false
         noiseSuspected = lenient(c, Bool.self, .noiseSuspected) ?? false
         noiseCandidate = lenient(c, String.self, .noiseCandidate)
         qualityReview = lenient(c, QualityReview.self, .qualityReview)
@@ -466,7 +493,21 @@ struct ApiErrorBody: Codable, Equatable {
 // MARK: - Client
 
 final class ServiceClient {
-    static let shared = ServiceClient()
+    static let shared: ServiceClient = {
+        let client = ServiceClient(managedChild: true)
+        client.secureTransport = true
+        client.profileFilter = { candidate in
+            guard !candidate.isEmpty else { return "" }
+            let current = { HistoryStore.shared.profileForDispatch(candidate) }
+            return Thread.isMainThread ? current() : DispatchQueue.main.sync(execute: current)
+        }
+        return client
+    }()
+
+    init(managedChild: Bool = false) { self.managedChild = managedChild }
+    /// Revalidate saved review/failover copies when a new request is dispatched.
+    var secureTransport = false
+    var profileFilter: (String) -> String = { $0 }
 
     /// The service's state folder: ~/Library/Application Support/TypeLeast
     /// (TYPELEAST_HOME overrides it, as it does for the service).
@@ -481,10 +522,16 @@ final class ServiceClient {
     ///
     /// The service binds an **OS-assigned port that changes on every start**. The
     /// app learns it from the service's ready line (ServiceManager calls `usePort`),
-    /// and otherwise from the runtime file below; `healthSync()` re-reads the file
-    /// once if a request fails. Until a port is known this points at port 1,
+    /// Standalone developer clients may use the runtime file. Managed app clients
+    /// never accept a replacement endpoint from that file. Until a port is known this points at port 1,
     /// where nothing listens.
-    var baseURL: URL = URL(string: "http://127.0.0.1:1")!
+    var baseURL: URL {
+        get { proofLock.withLock { endpointURL } }
+        set { proofLock.withLock { endpointURL = newValue; verifiedBase = nil; endpointEpoch += 1 } }
+    }
+    private var endpointURL = URL(string: "http://127.0.0.1:1")!
+    private var endpointEpoch = 0
+    private var managedChild = false
 
     /// Descriptor published by the service: `{ port, pid, version, startedAt }`.
     var runtimePath: String = (ServiceClient.stateDirectory as NSString).appendingPathComponent("runtime.json")
@@ -552,16 +599,25 @@ final class ServiceClient {
     /// @returns true when a port was published and applied.
     @discardableResult
     func discoverBaseURL() -> Bool {
-        guard let port = publishedPort() else { return false }
-        usePort(port)
-        return true
+        // A writable runtime file is discovery for standalone developer clients only.
+        // Production endpoints come exclusively from the current child's private pipe.
+        proofLock.withLock {
+            guard !managedChild, let port = publishedPort() else { return false }
+            lastDiscoveredPort = port
+            endpointURL = URL(string: "http://127.0.0.1:" + String(port))!
+            verifiedBase = nil; endpointEpoch += 1
+            return true
+        }
     }
 
     /// Point `baseURL` at a port the service reported (its ready line).
     func usePort(_ port: Int) {
         guard port > 0, port < 65_536 else { return }
-        lastDiscoveredPort = port
-        baseURL = URL(string: "http://127.0.0.1:" + String(port))!
+        proofLock.withLock {
+            lastDiscoveredPort = port
+            endpointURL = URL(string: "http://127.0.0.1:" + String(port))!
+            verifiedBase = nil; endpointEpoch += 1
+        }
     }
 
     /// The service this app started has stopped: point nowhere and forget that its port
@@ -570,7 +626,8 @@ final class ServiceClient {
     func invalidatePort() {
         proofLock.withLock {
             verifiedBase = nil
-            baseURL = URL(string: "http://127.0.0.1:1")!
+            endpointURL = URL(string: "http://127.0.0.1:1")!
+            endpointEpoch += 1
         }
     }
 
@@ -595,8 +652,13 @@ final class ServiceClient {
 
     private func makeRequest(path: String, method: String, token: String,
                              headers: [String: String] = [:], body: Data? = nil,
-                             timeout: TimeInterval) throws -> URLRequest {
-        guard let url = URL(string: baseURL.absoluteString + path) else {
+                             timeout: TimeInterval, proofEndpoint: URL? = nil) throws -> URLRequest {
+        let base = try proofLock.withLock { () throws -> URL in
+            if let proofEndpoint { return proofEndpoint }
+            if managedChild && (proofKeyValue == nil || (!secureTransport && verifiedBase != endpointURL)) { throw ServiceError.untrusted }
+            return endpointURL
+        }
+        guard let url = URL(string: base.absoluteString + path) else {
             throw ServiceError.transport("bad url " + baseURL.absoluteString + path)
         }
         var req = URLRequest(url: url)
@@ -613,9 +675,31 @@ final class ServiceClient {
 
     @discardableResult
     private func performSync(_ request: URLRequest, timeout: TimeInterval, generation: Int? = nil) throws -> (Data, HTTPURLResponse) {
+        let identity = proofLock.withLock { (proofKeyValue, endpointEpoch) }
+        let requestID = UUID().uuidString
+        var wire = request
+        var channelKey: SymmetricKey?
+        if secureTransport {
+            guard let secret = identity.0, let bytes = Data(hexString: secret), bytes.count == 32,
+                  let url = request.url else { throw ServiceError.untrusted }
+            let key = SymmetricKey(data: bytes); channelKey = key
+            let headers = Dictionary(uniqueKeysWithValues: (request.allHTTPHeaderFields ?? [:]).map { ($0.key.lowercased(), $0.value) })
+            let payload: [String: Any] = ["method": request.httpMethod ?? "GET", "path": url.path + (url.query.map { "?" + $0 } ?? ""),
+                                          "headers": headers, "body": (request.httpBody ?? Data()).base64EncodedString()]
+            let encoded = try JSONSerialization.data(withJSONObject: payload)
+            let sealed = try AES.GCM.seal(encoded, using: key, authenticating: Data("typeleast-v1:request:\(requestID)".utf8))
+            guard let combined = sealed.combined else { throw ServiceError.untrusted }
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+            components.path = "/secure"; components.query = nil
+            guard let secureURL = components.url else { throw ServiceError.untrusted }
+            wire = URLRequest(url: secureURL); wire.httpMethod = "POST"; wire.timeoutInterval = timeout
+            wire.setValue(requestID, forHTTPHeaderField: "x-typeleast-request")
+            wire.setValue("application/octet-stream", forHTTPHeaderField: "content-type")
+            wire.httpBody = combined
+        }
         let sem = DispatchSemaphore(value: 0)
         let box = Box()
-        let task = session.dataTask(with: request) { d, r, e in
+        let task = session.dataTask(with: wire) { d, r, e in
             box.data = d
             box.response = r as? HTTPURLResponse
             box.error = e
@@ -635,6 +719,19 @@ final class ServiceClient {
         }
         if let e = box.error { throw ServiceError.transport(e.localizedDescription) }
         guard let r = box.response else { throw ServiceError.transport("no response") }
+        if let key = channelKey {
+            do {
+                guard r.statusCode == 200, let data = box.data,
+                      proofLock.withLock({ endpointEpoch == identity.1 && proofKeyValue == identity.0 }) else { throw ServiceError.untrusted }
+                let clear = try AES.GCM.open(AES.GCM.SealedBox(combined: data), using: key,
+                                            authenticating: Data("typeleast-v1:response:\(requestID)".utf8))
+                guard let object = try JSONSerialization.jsonObject(with: clear) as? [String: Any],
+                      let status = object["status"] as? Int, (100...599).contains(status),
+                      let encoded = object["body"] as? String, let body = Data(base64Encoded: encoded),
+                      let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil) else { throw ServiceError.untrusted }
+                return (body, response)
+            } catch { throw ServiceError.untrusted }
+        }
         return (box.data ?? Data(), r)
     }
 
@@ -662,7 +759,10 @@ final class ServiceClient {
     /// (tests, a service run by hand): then nothing is checked.
     var proofKey: String? {
         get { proofLock.withLock { proofKeyValue } }
-        set { proofLock.withLock { proofKeyValue = newValue; verifiedBase = nil } }
+        set { proofLock.withLock {
+            proofKeyValue = newValue; verifiedBase = nil; endpointEpoch += 1
+            if newValue != nil { managedChild = true }
+        } }
     }
     private var proofKeyValue: String?
     private var verifiedBase: URL?
@@ -678,19 +778,26 @@ final class ServiceClient {
     /// Before anything (an API key above all) goes to a port read from runtime.json, the
     /// listener there must answer a fresh challenge with the secret only our own child has.
     private func ensureVerified(token: String) throws {
-        let (key, base, verified) = proofLock.withLock { (proofKeyValue, baseURL, verifiedBase) }
-        guard let key, verified != base else { return }
+        if secureTransport {
+            guard proofLock.withLock({ proofKeyValue != nil }) else { throw ServiceError.untrusted }
+            return
+        }
+        let (key, base, epoch, managed) = proofLock.withLock { (proofKeyValue, endpointURL, endpointEpoch, managedChild) }
+        guard let key else { if managed { throw ServiceError.untrusted }; return }
         var bytes = [UInt8](repeating: 0, count: 16)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw ServiceError.untrusted }
         let challenge = bytes.map { String(format: "%02x", $0) }.joined()
         let req = try makeRequest(path: "/api/voice-polish/health", method: "GET", token: token,
-                                  headers: ["x-typeleast-challenge": challenge], timeout: healthTimeout)
+                                  headers: ["x-typeleast-challenge": challenge], timeout: healthTimeout, proofEndpoint: base)
         let (data, resp) = try performSync(req, timeout: healthTimeout)
         guard resp.statusCode == 200 else { throw httpError(resp, data) }
         let answer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["proof"] as? String
         guard let answer, let expected = ServiceClient.proof(key: key, challenge: challenge),
               answer.count == expected.count, answer.lowercased() == expected else { throw ServiceError.untrusted }
-        proofLock.withLock { if baseURL == base { verifiedBase = base } }
+        try proofLock.withLock {
+            guard endpointEpoch == epoch, endpointURL == base, proofKeyValue == key else { throw ServiceError.untrusted }
+            verifiedBase = base
+        }
     }
 
     // MARK: endpoints
@@ -733,32 +840,37 @@ final class ServiceClient {
     /// dictation; the service keeps no copy.
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
-                     translateTo: String? = nil, variants: String? = nil, profile: String = "", baseline: String? = nil, translatePrompt: String? = nil,
+                     translateTo: String? = nil, variants: String? = nil, profile: String = "", baseline: String? = nil, translatePrompt: String? = nil, hasConfiguredBackups: Bool = false,
                      onProgress: ((TaskProgress) -> Void)? = nil) throws -> DictateResponse {
         let generation = epoch()
         return try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
-                                            translateTo: translateTo, variants: variants, profile: profile, baseline: baseline, translatePrompt: translatePrompt,
+                                            translateTo: translateTo, variants: variants, profile: profile, baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups,
                                             onProgress:onProgress, generation:generation) }
     }
 
     /// The body of /dictate: a JSON object (its length in x-voice-meta-bytes), then the WAV.
     /// `baseline`: 提示词模式's draft, the text that was selected when it started.
-    static func dictateBody(wav: Data, profile: String, baseline: String? = nil, translatePrompt: String? = nil) -> (body: Data, metaBytes: Int) {
-        var meta: [String: String] = [:]
+    static func dictateBody(wav: Data, profile: String, baseline: String? = nil, translatePrompt: String? = nil, hasConfiguredBackups: Bool = false) -> (body: Data, metaBytes: Int) {
+        var meta: [String: Any] = [:]
         if !profile.isEmpty { meta["profile"] = profile }
         if let baseline, !baseline.isEmpty { meta["baseline"] = baseline }
         if let translatePrompt, !translatePrompt.isEmpty { meta["translatePrompt"] = translatePrompt }
+        if hasConfiguredBackups { meta["hasConfiguredBackups"] = true }
         guard !meta.isEmpty, let json = try? JSONSerialization.data(withJSONObject: meta) else { return (wav, 0) }
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil) throws -> DictateResponse {
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false) throws -> DictateResponse {
         let generation = generationTicket ?? epoch()
         return try withPortRetry { try withTokenRetry { token in
             var body: [String: Any] = ["text": text, "language": language, "strength": strength, "task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation"]
             if let llm, let data = try? JSONEncoder().encode(llm), let route = try? JSONSerialization.jsonObject(with: data) { body["llm"] = route }
+            if !llmBackups.isEmpty, let data = try? JSONEncoder().encode(llmBackups), let routes = try? JSONSerialization.jsonObject(with: data) { body["llmBackups"] = routes }
+            if hasConfiguredBackups { body["hasConfiguredBackups"] = true }
+            if retryInitial { body["retryInitial"] = true }
+            if betaSkip { body["betaSkip"] = true }
             if let fieldContext, let context = try? JSONSerialization.jsonObject(with: fieldContext) { body["fieldContext"] = context }
             if let translateTo { body["translateTo"] = translateTo }
             if let variants { body["variants"] = variants }
@@ -766,7 +878,8 @@ final class ServiceClient {
             if let baseline, !baseline.isEmpty { body["baseline"] = baseline }
             if let appHint, !appHint.isEmpty { body["appHint"] = appHint }
             if let source { body["source"] = source }
-            if !profile.isEmpty { body["profile"] = profile }
+            let currentProfile = profileFilter(profile)
+            if !currentProfile.isEmpty { body["profile"] = currentProfile }
             if let translatePrompt, !translatePrompt.isEmpty { body["translatePrompt"] = translatePrompt }
             let req = try makeRequest(path: "/api/voice-polish/polish", method: "POST", token: token,
                                       headers: ["content-type": "application/json"], body: JSONSerialization.data(withJSONObject: body), timeout: dictateTimeout)
@@ -779,14 +892,16 @@ final class ServiceClient {
     /// Prompt Beta: write the prompt now (skip), with `answer` (chosen but not yet sent), or forget
     /// the questions (cancel).
     func betaSync(sessionId: String, skip: Bool, appBundleId: String, llm: LLMRoute?,
-                  variants: String? = nil, answer: String? = nil) throws -> DictateResponse {
-        let generation = epoch()
+                  variants: String? = nil, answer: String? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, generationTicket: Int? = nil) throws -> DictateResponse {
+        let generation = generationTicket ?? epoch()
         return try withPortRetry { try withTokenRetry { token in
             var headers = ["content-type": "application/json", "x-voice-app": appBundleId]
             if let variants { headers["x-voice-variants"] = variants }
             if let route = ServiceClient.encodeRouteHeader(llm) { headers["x-voice-llm"] = route }
-            var fields = ["sessionId": sessionId]
+            var fields: [String: Any] = ["sessionId": sessionId]
             if skip, let answer, !answer.isEmpty { fields["answer"] = answer }
+            if hasConfiguredBackups { fields["hasConfiguredBackups"] = true }
+            if !llmBackups.isEmpty, let data = try? JSONEncoder().encode(llmBackups), let routes = try? JSONSerialization.jsonObject(with: data) { fields["llmBackups"] = routes }
             let body = try JSONSerialization.data(withJSONObject: fields)
             let path = "/api/voice-polish/assistant/" + (skip ? "finish" : "cancel")
             let req = try makeRequest(path: path, method: "POST", token: token, headers: headers, body: body,
@@ -801,7 +916,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
         try withTokenRetry { token in
             let requestID = UUID().uuidString
             var headers: [String: String] = [
@@ -823,7 +938,7 @@ final class ServiceClient {
             if let variants { headers["x-voice-variants"] = variants }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
-            let payload = ServiceClient.dictateBody(wav: wav, profile: profile, baseline: baseline, translatePrompt: translatePrompt)
+            let payload = ServiceClient.dictateBody(wav: wav, profile: profileFilter(profile), baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups)
             headers["x-voice-meta-bytes"] = String(payload.metaBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)

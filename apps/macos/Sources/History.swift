@@ -162,6 +162,28 @@ final class HistoryStore {
     private let profileKey = "voice.profile.sealed.v1"
     /// The description of the user's work learned from this history, sealed like it.
     private let profileMeta = "profile"
+    private struct ProfileSource: Codable, Equatable {
+        let id: String
+        let corrections: [TermCorrection]
+        let intention: String
+    }
+    private struct ProfileRecord: Codable {
+        let text: String
+        let sources: [ProfileSource]
+    }
+    private(set) var profileGeneration = UUID()
+    private var profileInvalidated = false
+    private var profileSources: [ProfileSource] {
+        entries.filter { !($0.corrections ?? []).isEmpty || !($0.intention ?? "").isEmpty }.prefix(100).map {
+            ProfileSource(id: $0.id, corrections: $0.corrections ?? [], intention: $0.intention ?? "")
+        }
+    }
+    private func invalidateProfile() {
+        profileGeneration = UUID()
+        profileInvalidated = true
+        d.removeObject(forKey: profileKey)
+        if database?.setMeta(profileMeta, Data()) != true { persistenceProblem = "history-unavailable" }
+    }
     private let d: UserDefaults
     private let database: HistoryDatabase?
     /// What the database holds now: a save writes only the rows that differ.
@@ -186,6 +208,7 @@ final class HistoryStore {
     }
 
     func load() {
+        profileGeneration = UUID()
         stored = [:]
         guard let database else {
             entries = []; locked = true; persistenceProblem = "history-unavailable"; return
@@ -249,6 +272,7 @@ final class HistoryStore {
 
     private func persist() {
         if keepsNothing() {
+            invalidateProfile()
             d.removeObject(forKey: sealedKey)
             d.removeObject(forKey: plainKey)
             d.removeObject(forKey: profileKey)
@@ -288,7 +312,7 @@ final class HistoryStore {
         }
         let kept = Set(next.map(\.id))
         // Saved in one transaction before the old copies and the plaintext recordings are removed.
-        guard database.apply(upserts: upserts, deletes: stored.keys.filter { !kept.contains($0) }) else {
+        guard database.apply(upserts: upserts, deletes: stored.keys.filter { !kept.contains($0) }, clearProfile: profileInvalidated) else {
             persistenceProblem = "history-unavailable"; return
         }
         d.removeObject(forKey: sealedKey)
@@ -311,22 +335,46 @@ final class HistoryStore {
 
     var stats: DictationStats { DictationStats.compute(entries) }
 
-    /// Sent with each dictation and added to the cleanup prompt. Cleared with the history.
-    var profile: String {
-        guard !keepsNothing(), let sealed = database?.meta(profileMeta), let key = HistorySeal.key(create: false),
-              let data = HistorySeal.open(sealed, key: key) else { return "" }
-        return String(decoding: data, as: UTF8.self)
+    var profileRetention: () -> HistoryRetention = { Settings.shared.historyRetention }
+
+    func profileForDispatch(_ captured: String) -> String {
+        guard !captured.isEmpty else { return "" }
+        let current = profile
+        return current == captured ? current : ""
     }
 
-    func setProfile(_ text: String) {
-        guard !keepsNothing(), !locked, let key = HistorySeal.key(create: true),
-              let sealed = HistorySeal.seal(Data(String(text.prefix(1000)).utf8), key: key) else { return }
-        database?.setMeta(profileMeta, sealed)
+    /// Derived information is usable only while all of its actual sources still exist.
+    /// Older profiles without provenance are discarded; history itself is preserved.
+    var profile: String {
+        applyRetention(profileRetention())
+        guard !keepsNothing(), !locked, !profileInvalidated,
+              let sealed = database?.meta(profileMeta), !sealed.isEmpty,
+              let key = HistorySeal.key(create: false), let data = HistorySeal.open(sealed, key: key) else { return "" }
+        guard let record = try? JSONDecoder().decode(ProfileRecord.self, from: data),
+              !record.sources.isEmpty,
+              record.sources.allSatisfy({ profileSources.contains($0) }) else {
+            invalidateProfile()
+            return ""
+        }
+        return record.text
+    }
+
+    @discardableResult
+    func setProfile(_ text: String, generation: UUID) -> Bool {
+        applyRetention(profileRetention())
+        let sources = profileSources
+        guard generation == profileGeneration, !sources.isEmpty, !keepsNothing(), !locked,
+              let key = HistorySeal.key(create: true),
+              let data = try? JSONEncoder().encode(ProfileRecord(text: String(text.prefix(1000)), sources: sources)),
+              let sealed = HistorySeal.seal(data, key: key), database?.setMeta(profileMeta, sealed) == true else { return false }
+        profileInvalidated = false
+        return true
     }
 
     /// What the description is learned from: the corrections and intentions of the newest entries.
     var learningItems: [[String: Any]] {
-        entries.lazy.filter { !($0.corrections ?? []).isEmpty || !($0.intention ?? "").isEmpty }.prefix(100).map { entry in
+        applyRetention(profileRetention())
+        return entries.lazy.filter { !($0.corrections ?? []).isEmpty || !($0.intention ?? "").isEmpty }.prefix(100).map { entry in
             var item: [String: Any] = [:]
             if let corrections = entry.corrections, !corrections.isEmpty {
                 item["corrections"] = corrections.map { ["from": $0.from, "to": $0.to] }
@@ -342,6 +390,7 @@ final class HistoryStore {
         entries.insert(e, at: 0)
         applyRetention(Settings.shared.historyRetention, saving: false)
         if entries.count > HistoryStore.limit {
+            invalidateProfile()
             for dropped in entries[HistoryStore.limit...] { removeAudio(dropped) }
             entries.removeLast(entries.count - HistoryStore.limit)
         }
@@ -352,17 +401,20 @@ final class HistoryStore {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         var e = entries[idx]
         mutate(&e)
+        if e.corrections != entries[idx].corrections || e.intention != entries[idx].intention { invalidateProfile() }
         entries[idx] = e
         save()
     }
 
     func remove(id: String) {
+        invalidateProfile()
         if let e = entries.first(where: { $0.id == id }) { removeAudio(e) }
         entries.removeAll { $0.id == id }
         save()
     }
 
     func clear() {
+        invalidateProfile()
         for e in entries { removeAudio(e) }
         entries.removeAll()
         d.removeObject(forKey: plainKey)
@@ -389,6 +441,7 @@ final class HistoryStore {
             for dropped in entries where dropped.ts < cutoff { removeAudio(dropped) }
             entries.removeAll { $0.ts < cutoff }
         }
+        if entries.count != before || window == 0 { invalidateProfile() }
         // "Never" also clears what is already stored, even when no entry was dropped.
         if saving, entries.count != before || window == 0 { save() }
     }

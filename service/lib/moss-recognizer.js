@@ -178,6 +178,7 @@ export class MossRecognizer {
 
   run(wavPath, maxNew, signal) {
     return new Promise((resolve, reject) => {
+      signal?.throwIfAborted();
       // GGML_METAL_NO_RESIDENCY: with residency sets, ggml aborts on its way out and leaves a crash report.
       const child = spawn(this.binary, ["transcribe", this.modelPath, wavPath, "--max-new", String(maxNew)], {
         env: { PATH: "/usr/bin:/bin", TMPDIR: tmpdir(), GGML_METAL_NO_RESIDENCY: "1", MTD_THREADS: "4" },

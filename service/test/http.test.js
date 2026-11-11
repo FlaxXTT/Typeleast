@@ -84,7 +84,7 @@ test("/health keeps the fields the native client decodes and adds failure detail
   assert.equal(before.json.pid, process.pid);
   assert.deepEqual(before.json.stats, { dictations: 0, polished: 0, fallback: 0, lastError: null, lastMs: null, modelCalls: 0, modelFallbacks: 0, jsonFallback: 0, jsonRecovered: 0 });
   assert.equal(before.json.promptSource, "typeleast");
-  assert.equal(before.json.temperature, 0.8);
+  assert.equal(before.json.temperature, 0.3);
   assert.deepEqual(before.json.recentFailures, []);
 
   await service.polish({ rawText: "um so we should send the report on wednesday", strength: "prompt", appHint: "com.apple.mail", llm: ROUTE });

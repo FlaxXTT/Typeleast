@@ -34,23 +34,30 @@ function quantities(text) {
     const digits = chineseDigit.get(match[1]) ?? match[1];
     // Do not collapse identifiers with leading zeroes into another value.
     if (/^0\d/u.test(digits)) continue;
-    result.push({ value: digits, unit: units.get(unit) });
+    result.push({ value: digits, unit: units.get(unit), text: match[0] });
   }
   return result;
 }
 
 /** Return true only when a unique source quantity changes to another unit. */
-export function hasQuantityUnitConflict(raw, candidate, language = 'auto') {
+export function quantityUnitConflict(raw, candidate, language = 'auto') {
   const original = String(raw ?? '');
   const output = String(candidate ?? '');
-  if (language && !['auto', 'zh', 'yue'].includes(language)) return false;
+  if (language && !['auto', 'zh', 'yue'].includes(language)) return null;
   // Avoid applying Chinese unit conventions to mixed Japanese or Korean text.
-  if (!/\p{Script=Han}/u.test(original) || /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(original)) return false;
+  if (!/\p{Script=Han}/u.test(original) || /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(original)) return null;
   const before = quantities(original);
   const after = quantities(output);
-  return before.some((quantity) => {
+  for (const quantity of before) {
     const sourceMatches = before.filter((item) => item.value === quantity.value);
     const outputMatches = after.filter((item) => item.value === quantity.value);
-    return sourceMatches.length === 1 && outputMatches.length === 1 && outputMatches[0].unit !== quantity.unit;
-  });
+    if (sourceMatches.length === 1 && outputMatches.length === 1 && outputMatches[0].unit !== quantity.unit) {
+      return { kind: 'change', source: original.includes(quantity.text) ? quantity.text : '', candidate: output.includes(outputMatches[0].text) ? outputMatches[0].text : '' };
+    }
+  }
+  return null;
+}
+
+export function hasQuantityUnitConflict(raw, candidate, language = 'auto') {
+  return quantityUnitConflict(raw, candidate, language) !== null;
 }

@@ -103,6 +103,17 @@ enum MeetingAudio {
     }
 }
 
+/// A preview can finish after the user cancels or starts another meeting.
+private final class MeetingPreviewToken {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var finishing = false
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    func requestFinish() { lock.lock(); finishing = true; lock.unlock() }
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    var shouldStop: Bool { lock.lock(); defer { lock.unlock() }; return cancelled || finishing }
+}
+
 /// What the Meetings page shows. The one meeting flow: audio in, job, transcript out.
 final class MeetingController: ObservableObject {
     enum Stage: Equatable { case idle, recording, converting, transcribing, done, failed }
@@ -113,6 +124,9 @@ final class MeetingController: ObservableObject {
     @Published private(set) var elapsed: Double = 0
     @Published private(set) var level: Float = 0
     @Published private(set) var result: MeetingResult?
+    /// Provisional text has no speaker identity: chunk-local speaker IDs cannot be joined.
+    @Published private(set) var liveTranscript = ""
+    @Published private(set) var liveWarning = false
     @Published private(set) var modelInstalled: Bool?
     @Published private(set) var download: SpeechModelOperation?
 
@@ -123,9 +137,19 @@ final class MeetingController: ObservableObject {
     private var audio: Data?
     private var jobID: String?
     private var generation = 0
+    private var liveQueue = MeetingLiveQueue()
+    private let liveChunkBytes: Int
+    private var liveToken: MeetingPreviewToken?
+    private var finalToken: MeetingPreviewToken?
+    private var liveJobID: String?
+    private var finalAfterPreview: Data?
     var pollInterval: TimeInterval = 2
 
-    init(client: ServiceClient = .shared) { self.client = client }
+    init(client: ServiceClient = .shared, liveChunkBytes: Int = 320_000) {
+        self.client = client
+        self.liveChunkBytes = liveChunkBytes
+        self.liveQueue = MeetingLiveQueue(chunkBytes: liveChunkBytes)
+    }
 
     var busy: Bool { [.recording, .converting, .transcribing].contains(stage) }
     var canRetry: Bool { stage == .failed && audio != nil }
@@ -175,10 +199,12 @@ final class MeetingController: ObservableObject {
         do { try recorder.start() } catch { fail(String(describing: error)); return }
         reset()
         stage = .recording
+        liveToken = MeetingPreviewToken()
         meter = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.seconds = self.recorder.elapsed
             self.level = self.recorder.level()
+            self.updateLivePreview()
         }
     }
 
@@ -187,10 +213,26 @@ final class MeetingController: ObservableObject {
         meter?.invalidate(); meter = nil
         do {
             let file = try recorder.finish()
+            defer { recorder.cancel() }
             defer { try? FileManager.default.removeItem(at: file.url) }
             let wav = try Data(contentsOf: file.url)
-            send(wav)
-        } catch { fail(String(describing: error)) }
+            if liveQueue.isProcessing {
+                // Finish the current small preview first; MOSS accepts only one job at a time.
+                // Unprocessed preview audio remains in the complete recording below.
+                audio = wav
+                finalAfterPreview = wav
+                stage = .transcribing
+                elapsed = 0
+                liveToken?.requestFinish()
+                // A slow preview should not delay the final whole-meeting transcript.
+                if let id = liveJobID {
+                    DispatchQueue.global(qos: .utility).async { [client] in try? client.meetingCancelSync(id: id) }
+                }
+            } else {
+                liveToken?.cancel()
+                send(wav)
+            }
+        } catch { recorder.cancel(); fail(String(describing: error)) }
     }
 
     // MARK: import
@@ -222,20 +264,101 @@ final class MeetingController: ObservableObject {
 
     func cancel() {
         generation += 1
+        liveToken?.cancel()
+        finalToken?.cancel()
+        liveToken = nil
+        finalToken = nil
+        liveQueue.cancel()
+        finalAfterPreview = nil
         meter?.invalidate(); meter = nil
         if stage == .recording { recorder.cancel() }
         let id = jobID
+        let previewID = liveJobID
         jobID = nil
+        liveJobID = nil
         audio = nil
+        liveTranscript = ""
+        liveWarning = false
         stage = .idle
         message = ""
         if let id { DispatchQueue.global(qos: .utility).async { [client] in try? client.meetingCancelSync(id: id) } }
+        if let previewID { DispatchQueue.global(qos: .utility).async { [client] in try? client.meetingCancelSync(id: previewID) } }
+    }
+
+    /// One local MOSS job at a time, while the microphone continues to capture audio.
+    /// The completed whole recording is always analysed again to assign speaker labels.
+    private func updateLivePreview() {
+        guard stage == .recording, let token = liveToken, !token.isCancelled,
+              let range = liveQueue.offer(availableBytes: recorder.byteCount) else { return }
+        let snapshot = recorder.pcmSnapshot(fromByteOffset: range.startByte, endByteOffset: range.endByte)
+        guard snapshot.nextByteOffset == range.endByte else {
+            liveWarning = true
+            liveQueue.complete()
+            return
+        }
+        let wav = Wav.wrap(pcm: snapshot.pcm)
+        let run = generation
+        let requestID = UUID().uuidString.lowercased()
+        liveJobID = requestID
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, client] in
+            var preview: MeetingResult?
+            var failed = false
+            do {
+                guard !token.shouldStop else { throw CancellationError() }
+                let started = try client.meetingStartSync(wav: wav, timeout: 3, requestID: requestID)
+                guard started == requestID else {
+                    try? client.meetingCancelSync(id: started)
+                    throw ServiceError.decoding("meeting request id")
+                }
+                var misses = 0
+                while !token.shouldStop {
+                    Thread.sleep(forTimeInterval: self?.pollInterval ?? 2)
+                    if token.shouldStop { break }
+                    do {
+                        let status = try client.meetingStatusSync(id: started, timeout: 3)
+                        misses = 0
+                        if status.phase == "done" { preview = status.result; break }
+                        if status.phase == "failed" || status.phase == "cancelled" { failed = true; break }
+                    } catch {
+                        misses += 1
+                        if error.meetingJobIsGone || misses >= 3 { failed = true; break }
+                    }
+                }
+            } catch { failed = true }
+            // The service can cancel this client-chosen ID even if the start response was lost.
+            try? client.meetingCancelSync(id: requestID)
+            DispatchQueue.main.async {
+                guard let self, self.generation == run, !token.isCancelled else { return }
+                self.liveJobID = nil
+                if (failed || preview?.truncated == true) && self.finalAfterPreview == nil { self.liveWarning = true }
+                if let preview {
+                    let text = preview.segments.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        if !self.liveTranscript.isEmpty { self.liveTranscript += "\n" }
+                        self.liveTranscript += text
+                    }
+                }
+                self.liveQueue.complete()
+                if let final = self.finalAfterPreview {
+                    self.finalAfterPreview = nil
+                    token.cancel()
+                    self.send(final)
+                } else {
+                    self.updateLivePreview()
+                }
+            }
+        }
     }
 
     func send(_ wav: Data) {
         audio = wav
         generation += 1
         let run = generation
+        finalToken?.cancel()
+        let token = MeetingPreviewToken()
+        finalToken = token
+        let requestID = UUID().uuidString.lowercased()
+        jobID = requestID
         seconds = Double(max(0, wav.count - 44)) / Double(Recorder.bytesPerSecond)
         elapsed = 0
         message = ""
@@ -244,19 +367,30 @@ final class MeetingController: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
-                let id = try self.client.meetingStartSync(wav: wav)
-                DispatchQueue.main.async { if self.generation == run { self.jobID = id } }
-                self.poll(id: id, run: run)
+                guard !token.isCancelled else { throw CancellationError() }
+                let id = try self.client.meetingStartSync(wav: wav, requestID: requestID)
+                guard id == requestID else { try? self.client.meetingCancelSync(id: id); throw ServiceError.decoding("meeting request id") }
+                if token.isCancelled { try? self.client.meetingCancelSync(id: id); return }
+                self.poll(id: id, run: run, token: token)
+                if token.isCancelled { try? self.client.meetingCancelSync(id: id) }
             } catch {
+                try? self.client.meetingCancelSync(id: requestID)
                 DispatchQueue.main.async { if self.generation == run { self.fail(Self.explain(error)) } }
             }
         }
     }
 
-    private func poll(id: String, run: Int) {
+    private func poll(id: String, run: Int, token: MeetingPreviewToken) {
         var misses = 0
-        while generation == run {
+        let deadline = ProcessInfo.processInfo.systemUptime + 21 * 60
+        while !token.isCancelled {
+            if ProcessInfo.processInfo.systemUptime >= deadline {
+                try? client.meetingCancelSync(id: id)
+                DispatchQueue.main.async { if self.generation == run { self.fail(Self.explain(code: "meeting-timeout")) } }
+                return
+            }
             Thread.sleep(forTimeInterval: pollInterval)
+            if token.isCancelled { break }
             do {
                 let status = try client.meetingStatusSync(id: id)
                 misses = 0
@@ -290,6 +424,15 @@ final class MeetingController: ObservableObject {
 
     private func reset() {
         generation += 1
+        liveToken?.cancel()
+        finalToken?.cancel()
+        liveToken = nil
+        finalToken = nil
+        liveQueue = MeetingLiveQueue(chunkBytes: liveChunkBytes)
+        liveJobID = nil
+        finalAfterPreview = nil
+        liveTranscript = ""
+        liveWarning = false
         result = nil
         audio = nil
         message = ""
@@ -305,6 +448,7 @@ final class MeetingController: ObservableObject {
     static func explain(code: String?) -> String {
         switch code {
         case "model-not-installed": return L10n.text("还没有下载 MOSS 模型。")
+        case "meeting-timeout": return L10n.text("会议转写超时，处理已停止。可以重试或缩短录音。")
         case "meeting-unavailable": return L10n.text("MOSS 引擎启动失败。")
         case "busy": return L10n.text("另一场会议正在转写。")
         default: return L10n.text("转写失败。可以重试。")
@@ -328,16 +472,18 @@ extension ServiceClient {
     /// Long enough to hand the largest recording to the service on this computer.
     private static let meetingUploadTimeout: TimeInterval = 120
 
-    func meetingStartSync(wav: Data, language: String = "auto") throws -> String {
-        try sendMeeting(path: "/meetings", body: wav, headers: ["content-type": "audio/wav", "x-voice-language": language], timeout: Self.meetingUploadTimeout) { data in
+    func meetingStartSync(wav: Data, language: String = "auto", timeout: TimeInterval? = nil, requestID: String? = nil) throws -> String {
+        var headers = ["content-type": "audio/wav", "x-voice-language": language]
+        if let requestID { headers["x-meeting-request-id"] = requestID }
+        return try sendMeeting(path: "/meetings", body: wav, headers: headers, timeout: timeout ?? Self.meetingUploadTimeout) { data in
             guard let id = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["id"] as? String else { throw ServiceError.decoding("meeting id") }
             return id
         }
     }
 
-    func meetingStatusSync(id: String) throws -> MeetingStatus {
+    func meetingStatusSync(id: String, timeout: TimeInterval = 10) throws -> MeetingStatus {
         let query = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-"))) ?? ""
-        return try sendMeeting(path: "/meetings/status?id=" + query, body: nil, headers: [:], timeout: 10) { data in
+        return try sendMeeting(path: "/meetings/status?id=" + query, body: nil, headers: [:], timeout: timeout) { data in
             do { return try JSONDecoder().decode(MeetingStatus.self, from: data) }
             catch { throw ServiceError.decoding(String(describing: error)) }
         }

@@ -14,5 +14,5 @@ export class CleanupTask {
 export function cleanupParameters(text,strength,config={}) {
   const chars=Array.from(text),cjk=chars.filter(c=>/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(c)).length;
   const estimated=Math.ceil(cjk*1.5+(chars.length-cjk)/3);
-  return {maxTokens:Math.min(8192,Math.max(1800,Math.ceil(estimated*1.5+256))),temperature:0.3,timeoutMs:Math.min(config.timeoutMs??300000,300000,Math.max(30000,chars.length*40))};
+  return {maxTokens:Math.min(config.maxOutputTokens??8192,8192,Math.max(1800,Math.ceil(estimated*1.5+256))),temperature:config.temperature??0.3,timeoutMs:Math.min(config.timeoutMs??300000,300000,Math.max(30000,chars.length*40))};
 }

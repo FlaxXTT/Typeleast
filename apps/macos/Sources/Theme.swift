@@ -45,6 +45,27 @@ enum Theme {
                        dynamic(hex(0x9BAEF3), hex(0x4A63C9)), dynamic(hex(0x4468EC), hex(0x6E8BF5))]
 }
 
+/// A reusable hover motion for controls that use the system's native style.
+struct HoverInteraction: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        let active = hovering && isEnabled
+        content
+            .scaleEffect(active && !reduceMotion ? 1.06 : 1)
+            .offset(y: active && !reduceMotion ? -2 : 0)
+            .shadow(color: Color.black.opacity(active && !reduceMotion ? 0.15 : 0), radius: 6, x: 0, y: 3)
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.48), value: active)
+            .onHover { hovering = $0 }
+    }
+}
+
+extension View {
+    func hoverInteraction() -> some View { modifier(HoverInteraction()) }
+}
+
 /// A rounded, softly filled container.
 struct Card<Content: View>: View {
     var padding: CGFloat = 18
@@ -61,27 +82,40 @@ struct Card<Content: View>: View {
 /// Black pill (white in dark mode): the one primary action on a page.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(Theme.inkInverse)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Capsule().fill(Theme.ink.opacity(configuration.isPressed ? 0.8 : 1)))
-            .contentShape(Capsule())
+        HoverPill(configuration: configuration, primary: true)
     }
 }
 
 /// Quiet outlined pill for secondary actions.
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
+        HoverPill(configuration: configuration, primary: false)
+    }
+}
+
+/// The labels move within their original layout area; disabled controls stay still.
+private struct HoverPill: View {
+    let configuration: ButtonStyleConfiguration
+    let primary: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    var body: some View {
+        let active = hovering && isEnabled
         configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(Theme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(Capsule().fill(configuration.isPressed ? Theme.cardHover : Theme.card))
-            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+            .font(.system(size: 13, weight: primary ? .semibold : .medium))
+            .foregroundColor(primary ? Theme.inkInverse : Theme.ink)
+            .padding(.horizontal, primary ? 16 : 14)
+            .padding(.vertical, primary ? 8 : 7)
+            .background(Capsule().fill(primary ? Theme.ink.opacity(configuration.isPressed ? 0.8 : 1) : (configuration.isPressed || active ? Theme.cardHover : Theme.card)))
+            .overlay(Capsule().stroke(primary ? Color.clear : Theme.border, lineWidth: 1))
+            .shadow(color: Color.black.opacity(active && !reduceMotion ? 0.18 : 0), radius: 7, x: 0, y: 4)
+            .scaleEffect(active && !reduceMotion ? 1.1 : 1)
+            .offset(y: active && !reduceMotion ? -3 : 0)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.48), value: active)
             .contentShape(Capsule())
+            .onHover { hovering = $0 }
     }
 }
 
@@ -91,6 +125,8 @@ struct IconButton: View {
     let help: String
     var role: ButtonRole? = nil
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     var body: some View {
@@ -98,8 +134,12 @@ struct IconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(role == .destructive && hovering ? .red : Theme.secondary)
+                .rotationEffect(.degrees(hovering && isEnabled && !reduceMotion ? (symbol == "arrow.clockwise" ? 120 : symbol == "trash" ? -18 : 14) : 0))
+                .scaleEffect(hovering && isEnabled && !reduceMotion ? 1.35 : 1)
+                .offset(y: hovering && isEnabled && !reduceMotion ? -2 : 0)
+                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.43), value: hovering)
                 .frame(width: 26, height: 26)
-                .background(RoundedRectangle(cornerRadius: 7).fill(hovering ? Theme.selection : Color.clear))
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.selection : Color.clear))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -143,9 +183,33 @@ struct ChipPicker<Value: Hashable>: View {
                         .padding(.vertical, 6)
                         .background(Capsule().fill(selected ? Theme.selection : Color.clear))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HoverChipStyle())
             }
         }
+    }
+}
+
+private struct HoverChipStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HoverChipLabel(configuration: configuration)
+    }
+}
+
+private struct HoverChipLabel: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    var body: some View {
+        let active = hovering && isEnabled
+        configuration.label
+            .background(Capsule().fill(active ? Theme.selection.opacity(0.6) : Color.clear))
+            .scaleEffect(active && !reduceMotion ? 1.12 : 1)
+            .offset(y: active && !reduceMotion ? -2 : 0)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.45), value: active)
+            .contentShape(Capsule())
+            .onHover { hovering = $0 }
     }
 }
 
@@ -168,10 +232,16 @@ struct Badge: View {
 struct SearchField: View {
     @Binding var text: String
     var placeholder = L10n.text("搜索")
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundColor(Theme.tertiary)
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12)).foregroundColor(Theme.tertiary)
+                .rotationEffect(.degrees(hovering && !reduceMotion ? -25 : 0))
+                .scaleEffect(hovering && !reduceMotion ? 1.3 : 1)
+                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.45), value: hovering)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
@@ -185,6 +255,7 @@ struct SearchField: View {
         .padding(.vertical, 7)
         .frame(width: 220)
         .background(Capsule().fill(Theme.card))
+        .onHover { hovering = $0 }
     }
 }
 
@@ -198,7 +269,7 @@ struct LevelBars: View {
             ForEach(0..<count, id: \.self) { index in
                 let threshold = Float(index + 1) / Float(count)
                 let lit = level * 1.15 >= threshold
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(lit ? Theme.accent : Theme.border)
                     .frame(width: 5, height: 8 + CGFloat(index % 4) * 3)
             }
@@ -211,7 +282,12 @@ struct LevelBars: View {
 /// the sidebar and onboarding; drawn in code so no image asset is needed.
 enum AppMark {
     static func image(size: CGFloat) -> NSImage {
-        NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+        if let url = Bundle.main.url(forResource: "BrandIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            image.size = NSSize(width: size, height: size)
+            return image
+        }
+        return NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let inset = rect.width * 0.08
             let box = rect.insetBy(dx: inset, dy: inset)
             // A white tile with a hairline edge, so it still reads on white backgrounds.

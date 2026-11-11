@@ -28,6 +28,7 @@ const { values } = parseArgs({
     port: { type: "string" },
     "parent-pid": { type: "string" },
     "auth-stdin": { type: "boolean" },
+    "secure-transport": { type: "boolean" },
   },
   allowPositionals: false,
 });
@@ -61,6 +62,7 @@ try {
     modelsDir: values["models-dir"],
     port,
     proofKey,
+    secureTransport: values["secure-transport"] === true,
     logger: stderrLogger,
   });
 } catch (error) {

@@ -199,6 +199,8 @@ private struct SetupRow: View {
 
 private struct RecentCard: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hoveringAll = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -206,10 +208,18 @@ private struct RecentCard: View {
                 Text(L10n.text("最近")).font(.system(size: 14, weight: .semibold))
                 Spacer()
                 if !model.history.isEmpty {
-                    Button(L10n.text("查看全部")) { model.page = .history }
+                    Button { model.page = .history } label: {
+                        HStack(spacing: 4) {
+                            Text(L10n.text("查看全部"))
+                            Image(systemName: "arrow.right")
+                                .offset(x: hoveringAll && !reduceMotion ? 4 : 0)
+                        }
+                    }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundColor(Theme.secondary)
+                        .foregroundColor(hoveringAll ? Theme.accent : Theme.secondary)
+                        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.55), value: hoveringAll)
+                        .onHover { hoveringAll = $0 }
                 }
             }
             if model.history.isEmpty {
@@ -367,6 +377,7 @@ struct HistoryPage: View {
 
 struct HistoryRow: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let entry: LocalHistoryEntry
     let compact: Bool
     @State private var hovering = false
@@ -391,7 +402,8 @@ struct HistoryRow: View {
         HStack(alignment: .top, spacing: 14) {
             Text(Formatters.time.string(from: entry.ts))
                 .font(.system(size: 12, design: .rounded))
-                .foregroundColor(Theme.tertiary)
+                .foregroundColor(hovering ? Theme.accent : Theme.tertiary)
+                .scaleEffect(hovering && !reduceMotion ? 1.12 : 1, anchor: .leading)
                 .frame(width: 38, alignment: .leading)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
@@ -452,6 +464,7 @@ struct HistoryRow: View {
                     }
                 }
                 .opacity(hovering || copied ? 1 : 0)
+                .offset(x: hovering || copied || reduceMotion ? 0 : 10)
                 .allowsHitTesting(hovering || copied)
                 .accessibilityHidden(!hovering && !copied)
         }
@@ -459,6 +472,14 @@ struct HistoryRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
+        .overlay(alignment: .leading) {
+            Capsule(style: .continuous)
+                .fill(Theme.accent)
+                .frame(width: 3, height: hovering ? 32 : 0)
+                .opacity(hovering ? 0.85 : 0)
+                .allowsHitTesting(false)
+        }
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.62), value: hovering)
         .onHover { hovering = $0 }
         .onTapGesture { if !compact { expanded.toggle() } else { model.page = .history } }
     }

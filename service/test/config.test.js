@@ -12,7 +12,7 @@ test("an empty configuration is valid and returns the documented key set", () =>
     "dictionary", "language", "maxAudioBytes", "maxDurationSeconds",
     "maxOutputTokens", "numThreads", "redactSecrets", "strength", "temperature", "timeoutMs",
   ]);
-  assert.equal(result.value.temperature, 0.8, "keeps the existing sampling temperature default");
+  assert.equal(result.value.temperature, 0.3, "matches the actual cleanup default");
   assert.equal(result.value.strength, "prompt");
   assert.equal(result.value.redactSecrets, true);
   assert.equal(result.value.numThreads, 2);
@@ -47,7 +47,7 @@ test("bad values are reported and keep their defaults, never fatal", () => {
     [{ timeoutMs: "4500" }, /non-negative integer/, ["timeoutMs", 300000]],
     [{ timeoutMs: 100 }, /at least 1000/, ["timeoutMs", 300000]],
     [{ maxAudioBytes: 10 }, /WAV header size/, ["maxAudioBytes", 25165824]],
-    [{ maxOutputTokens: 0 }, /at least 1/, ["maxOutputTokens", 800]],
+    [{ maxOutputTokens: 0 }, /at least 1/, ["maxOutputTokens", 8192]],
     [{ numThreads: 64 }, /between 1 and 16/, ["numThreads", 2]],
   ];
   for (const [input, message, kept] of cases) {

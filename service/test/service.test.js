@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
-import { UTTERANCE_RULES } from "../lib/utterance-rules.js";
 import { CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
 import { readdirSync } from "node:fs";
 

@@ -31,10 +31,10 @@ export const CONFIG_FILE = "config.json";
 
 /** Field declarations: default, kind and help. */
 const FIELDS = {
-  maxOutputTokens: { kind: "integer", default: 800, help: "Upper bound for the polished text." },
+  maxOutputTokens: { kind: "integer", default: 8192, help: "Upper bound for the polished text." },
   timeoutMs: { kind: "integer", default: 300000, help: "Maximum per-call cleanup time; actual time scales with input within the shared 300-second budget." },
   strength: { kind: "enum", default: "prompt", values: STRENGTHS, help: "prompt (自然整理) uses the general cleanup prompt. conservative and maximal are legacy validation levels. concise (AI 整理) keeps the intent and constraints in fewer words. Retired off reads as prompt; retired promptbrief and promptify read as concise. promptbeta (提示词 Beta) clarifies information over multiple rounds." },
-  temperature: { kind: "number", default: 0.8, help: "Sampling temperature. Keeps the existing default; set 0 for the most literal output." },
+  temperature: { kind: "number", default: 0.3, help: "Sampling temperature for dictation cleanup; set 0 for the most literal output." },
   language: { kind: "enum", default: "auto", values: LANGUAGES, help: "Recognition language (SenseVoice). auto detects it per dictation." },
   numThreads: { kind: "integer", default: 2, help: "CPU threads for local recognition." },
   maxAudioBytes: { kind: "integer", default: 24 * 1024 * 1024, help: "Largest accepted WAV body." },

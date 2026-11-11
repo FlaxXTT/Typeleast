@@ -74,7 +74,7 @@ struct NoiseReviewView: View {
 
 /// The response stays out of the paste path until the user chooses a version.
 final class QuantityReviewPanel {
-    enum Choice { case original, candidate }
+    enum Choice { case original; case candidate(String) }
     private var panels: [UUID: NSPanel] = [:]
 
     func show(review: QualityReview, choose: @escaping (Choice) -> Bool) {
@@ -97,7 +97,7 @@ final class QuantityReviewPanel {
         panel.contentView = NoiseReviewHostingView(rootView: QuantityReviewView(
             review: review,
             original: { if choose(.original) { dismiss() } },
-            candidate: { if choose(.candidate) { dismiss() } },
+            candidate: { text in if choose(.candidate(text)) { dismiss() } },
             dismiss: dismiss))
         panels[id] = panel
         let point = NSEvent.mouseLocation
@@ -113,29 +113,124 @@ final class QuantityReviewPanel {
 struct QuantityReviewView: View {
     let review: QualityReview
     let original: () -> Void
-    let candidate: () -> Void
+    let candidate: (String) -> Void
     let dismiss: () -> Void
+    @State private var editedCandidate: String
+
+    init(review: QualityReview, original: @escaping () -> Void,
+         candidate: @escaping (String) -> Void, dismiss: @escaping () -> Void) {
+        self.review = review
+        self.original = original
+        self.candidate = candidate
+        self.dismiss = dismiss
+        _editedCandidate = State(initialValue: review.candidate)
+    }
+
+    private func highlighted(_ value: String, quotes: [String]) -> Text {
+        var marked = AttributedString(value)
+        for quote in Set(quotes.filter { !$0.isEmpty }) {
+            var search = marked.startIndex..<marked.endIndex
+            while let range = marked[search].range(of: quote) {
+                marked[range].backgroundColor = Color.orange.opacity(0.30)
+                marked[range].underlineStyle = .single
+                guard range.upperBound < marked.endIndex else { break }
+                search = range.upperBound..<marked.endIndex
+            }
+        }
+        return Text(marked)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.text("数量或单位可能发生变化")).font(.headline).foregroundColor(Theme.ink)
+            Text(review.kind == "quantity" ? L10n.text("数量或单位可能发生变化") : L10n.text("整理结果需要核对")).font(.headline).foregroundColor(Theme.ink)
             Text(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"))
                 .font(.subheadline).foregroundColor(Theme.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(L10n.text("原始识别")).font(.caption).foregroundColor(Theme.secondary)
-                    Text(review.original).textSelection(.enabled).foregroundColor(Theme.ink)
-                    Text(L10n.text("整理结果")).font(.caption).foregroundColor(Theme.secondary)
-                    Text(review.candidate).textSelection(.enabled).foregroundColor(Theme.ink)
+                    highlighted(review.original, quotes: (review.issues ?? []).map(\.source)).textSelection(.enabled).foregroundColor(Theme.ink)
+                    Text(L10n.text("整理结果（可编辑）")).font(.caption).foregroundColor(Theme.secondary)
+                    ReviewTextEditor(text: $editedCandidate, quotes: (review.issues ?? []).map(\.candidate))
+                        .frame(minHeight: 110, maxHeight: 180)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: .infinity)
             HStack {
                 Button(L10n.text("暂不使用"), action: dismiss).buttonStyle(SecondaryButtonStyle())
                 Spacer()
                 Button(L10n.text("使用识别原文"), action: original).buttonStyle(SecondaryButtonStyle())
-                Button(L10n.text("使用整理结果"), action: candidate).buttonStyle(PrimaryButtonStyle())
+                Button(L10n.text("使用整理结果")) { candidate(editedCandidate) }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(editedCandidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(20).frame(width: 520, height: 370).background(Theme.window)
+    }
+}
+
+/// Editable text with visual marks for review evidence. Edits remain plain text.
+private struct ReviewTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    let quotes: [String]
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        let view = NSTextView()
+        view.isEditable = true
+        view.isSelectable = true
+        view.isRichText = false
+        view.allowsUndo = true
+        view.drawsBackground = false
+        view.font = .systemFont(ofSize: NSFont.systemFontSize)
+        view.textColor = .labelColor
+        view.textContainerInset = NSSize(width: 6, height: 6)
+        view.isVerticallyResizable = true
+        view.textContainer?.widthTracksTextView = true
+        view.delegate = context.coordinator
+        view.string = text
+        scroll.documentView = view
+        context.coordinator.mark(view)
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let view = scroll.documentView as? NSTextView, view.string != text, !view.hasMarkedText() else { return }
+        view.string = text
+        context.coordinator.mark(view)
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: ReviewTextEditor
+        init(_ parent: ReviewTextEditor) { self.parent = parent }
+        func textDidChange(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            parent.text = view.string
+            if !view.hasMarkedText() { mark(view) }
+        }
+        func mark(_ view: NSTextView) {
+            guard let storage = view.textStorage else { return }
+            let entire = NSRange(location: 0, length: storage.length)
+            storage.beginEditing()
+            storage.removeAttribute(.backgroundColor, range: entire)
+            storage.removeAttribute(.underlineStyle, range: entire)
+            let content = storage.string as NSString
+            for quote in Set(parent.quotes.filter { !$0.isEmpty }) {
+                var cursor = 0
+                while cursor < content.length {
+                    let match = content.range(of: quote, options: [], range: NSRange(location: cursor, length: content.length - cursor))
+                    guard match.location != NSNotFound else { break }
+                    storage.addAttribute(.backgroundColor, value: NSColor.systemOrange.withAlphaComponent(0.30), range: match)
+                    storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match)
+                    cursor = NSMaxRange(match)
+                }
+            }
+            storage.endEditing()
+        }
     }
 }

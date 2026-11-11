@@ -76,24 +76,18 @@ network only in these cases:
 - **Model recommendation in Prompt mode (optional, macOS).** After a prompt is written, the local service reads the
   public model page of the vendor of the app being typed into. That request carries none of the user's content. The
   prompt and the page then go to the user's own language model provider. It can be turned off in Settings.
-- **Text cleanup (optional).** If the user enters an API key for a language model provider of their choice
-  (for example DeepSeek, OpenAI, Moonshot, Zhipu, Alibaba DashScope, OpenRouter, or a local Ollama), the app sends
-  that provider the recognized text and those of the user's dictionary words that the dictation mentions (spelled
-  the same or sounding alike); unrelated dictionary words are not sent. Sound matching reduces what is sent but can
-  misjudge. Personal exclusions filter vocabulary and aliases from all sources. Entries marked 不发给模型 are
-  not sent as vocabulary references; local replacements require individual approval and current-input validation.
-  Only relevant, confirmed and enabled wording examples are sent with natural or AI cleanup. They guide expression,
-  not the facts of the current dictation. A selected style affects wording only. Long or suspiciously incomplete
-  results may be reviewed once by the same provider, using the redacted current source and candidate. This can add
-  one model call; temporary failures may use one shared retry. There is no centralized collection or automatic model training.
-  When the user turns on 参考输入框里的内容
-  (off by default), also the text near the cursor and the window title. Values that look like keys or passwords
-  are removed first. The provider's own privacy policy applies to that data. Without an API key, nothing is sent.
-  获取列表 (list the provider's models) asks the same provider for its model list.
+- **Text cleanup (optional).** The recognized text goes to the provider configured by the user. When backup
+  providers are enabled, a failed request can be sent to one of those providers. The current Mac client can also
+  send the user's selected text, explicitly enabled cursor context and a short profile derived from history.
+  At startup, corrections and intentions from up to 100 recent history entries are sent to the configured model
+  to build that profile. It is encrypted locally and limited to 1,000 characters. Deleting or expiring its source
+  records invalidates it; a delayed model response cannot restore a profile from an earlier history generation.
+  Profiles saved by old versions without source provenance are not reused. Already-sent data cannot be withdrawn
+  from the provider by deleting local history. The provider's privacy policy applies.
+  Cursor context is off by default. Pattern-based secret redaction reduces exposure but cannot identify every secret.
+  There is no centralized collection or automatic model training. Model-list requests go to the configured provider.
 - **Speech model download.** When the user downloads a speech model, the files are fetched from Hugging Face
   (`huggingface.co`) or the mirror the user selects (`hf-mirror.com`).
-- **Dictionary packs.** The bundled terminology pack is data only; the terms a dictation mentions are sent with that
-  cleanup request to the user's chosen provider, as described above. The app reads no plugin catalog.
 - **Update checks.** The app reads the public release list from the GitHub API (`api.github.com`) and downloads
   update files from `github.com`. When that download is slow or stalls, it falls back to public GitHub download
   mirrors (`ghfast.top`, `gh-proxy.com`, `gh-proxy.org`, `gh.llkk.cc`; 设置 → 更新下载源 can turn this off). The
@@ -102,15 +96,21 @@ network only in these cases:
   `TypeLeast/<version>` user agent). The Windows installed version installs updates automatically
   unless this is turned off in 设置 → 服务与更新.
 
-Learning corrections reads the field the dictation was pasted into for up to two minutes when enabled.
-It records no keystrokes and creates only a pending, in-memory wording example. The user must confirm it before
-it is saved or becomes eligible for a later relevant request. No mode automatically adds dictionary entries.
-Personal vocabulary, examples, exclusions and replacement approvals are encrypted locally; unreadable data is
-retained and cannot be overwritten. Source records follow encrypted history retention. Retry without personalization
-sends the saved transcript to the selected cleanup provider again, without preferences, packs or new cursor context.
-The local service listens only on `127.0.0.1`. API keys are stored in Windows Credential Manager (macOS: Keychain)
-and are never written to logs. Settings, history and logs stay on the computer, in `%APPDATA%\TypeLeast\` and
-`%LOCALAPPDATA%\TypeLeast\` on Windows.
+The current Mac cleanup service does not use the retired dictionary or automatic vocabulary replacement pipeline.
+Its history-derived profile is a separate feature described above. Speech audio remains local. The local service
+listens on `127.0.0.1`; the Mac app uses the port reported through its managed child's private startup pipe, never
+an endpoint substituted in `runtime.json`. API keys are stored in the macOS Keychain (Windows: Credential Manager).
+
+## macOS local signing and updates
+
+Local signing is not a publisher signature or Apple notarization. Newly created local identities do not grant
+permanent access to the generic `codesign` tool. Allow a single signing operation when prompted. This code change
+cannot remove an earlier Always Allow grant from an existing Keychain. Publisher-controlled Developer ID signing
+is required to remove the local-signing authority risk. This change does not modify existing certificates.
+
+Before installation, the verified replacement requests Keychain access without deleting or rewriting original
+items. A refused or failed request stops the update and preserves the installed app. System consent may be required;
+password-free updates are not guaranteed.
 
 ## System changes, installation and uninstallation
 

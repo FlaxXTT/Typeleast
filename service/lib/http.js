@@ -81,20 +81,17 @@ function classify(error) {
     case "invalid-language":
     case "invalid-prompt":
     case "invalid-task":
+    case "invalid-meeting-id":
       return { status: 400, code };
     case "invalid-audio":
     case "audio-too-large":
       return { status: 400, code };
     case "model-busy":
     case "model-not-installed":
-    case "plugin-terms-limit":
-    case "plugin-changed":
+    case "meeting-cancelled":
       return { status: 409, code };
-    case "plugin-not-found":
     case "meeting-not-found":
       return { status: 404, code };
-    case "plugins-unavailable":
-      return { status: 503, code };
     case "beta-expired":
       return { status: 410, code };
     case "busy":
@@ -155,7 +152,7 @@ export function createHandler(options) {
           speech: state.speech,
           strength: state.strength,
           task: state.task,
-          dictionarySize: state.dictionarySize,
+          maxOutputTokens: state.maxOutputTokens,
           pending: state.pending,
           queue: state.queue,
           pid: process.pid,
@@ -206,6 +203,14 @@ export function createHandler(options) {
         reply(res, 200, await service.recognizer.catalog());
         return;
       }
+      if (route === '/models/storage/delete' && req.method === 'POST') {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString('utf8') || '{}');
+        if (typeof body.modelId !== 'string' || typeof body.partialOnly !== 'boolean')
+          throw Object.assign(new Error('invalid storage request'), { code: 'invalid-model' });
+        await service.recognizer.clearModelStorage(body.modelId, body.partialOnly);
+        reply(res, 200, { ok: true });
+        return;
+      }
       if (['/models/local/inspect', '/models/local/register', '/models/local/remove', '/models/register-known'].includes(route) && req.method === 'POST') {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString('utf8') || '{}');
         if (route === '/models/local/inspect') reply(res, 200, await service.recognizer.inspectLocal(body));
@@ -245,6 +250,8 @@ export function createHandler(options) {
         const result = await service.polish({
           rawText: body.text,
           betaSession: typeof body.betaSession === "string" ? body.betaSession : null,
+          betaSkip: body.betaSkip === true,
+          retryInitial: body.retryInitial === true,
           task: body.task,
           source: body.source === 'selection' ? 'selection' : null,
           baseline: typeof body.baseline === "string" ? body.baseline : null,
@@ -256,6 +263,8 @@ export function createHandler(options) {
           strength: body.strength,
           fieldContext: normalizeFieldContext(body.fieldContext),
           llm: normalizeRoute(body.llm),
+          llmBackups: body.llmBackups,
+          hasConfiguredBackups: body.hasConfiguredBackups === true,
           translateTo: typeof body.translateTo === "string" ? body.translateTo : null,
           variants: body.variants ?? null,
           signal: controller.signal,
@@ -271,10 +280,14 @@ export function createHandler(options) {
           fallbackReason: result.reason ?? undefined,
           model: result.model,
           provider: result.provider,
+          ...(result.switchedProvider ? { switchedProvider: true } : {}),
+          ...(result.offerFailover ? { offerFailover: true } : {}),
           ms: result.ms,
           ...(result.translated ? { translated: result.translated } : {}),
           ...(result.corrections ? { corrections: result.corrections } : {}),
           ...(result.intention ? { intention: result.intention } : {}),
+          ...(result.qualityReview ? { qualityReview: result.qualityReview } : {}),
+          ...(result.beta ? { beta: result.beta } : {}),
         });
         return;
       }
@@ -323,7 +336,10 @@ export function createHandler(options) {
           strength: req.headers["x-voice-strength"] ?? undefined,
           fieldContext: parseFieldContext(req.headers["x-voice-context"]),
           llm: parseRouteHeader(req.headers["x-voice-llm"]),
+          llmBackups: meta.llmBackups,
+          hasConfiguredBackups: meta.hasConfiguredBackups === true,
           betaSession: req.headers["x-voice-beta-session"] || null,
+          retryInitial: meta.retryInitial === true,
           translateTo: req.headers["x-voice-translate"] || null,
           variants: req.headers["x-voice-variants"] || null,
         });
@@ -334,7 +350,8 @@ export function createHandler(options) {
       // A meeting: the WAV goes up, then the app polls. The transcript comes with the finished status.
       if (route === "/meetings" && req.method === "POST") {
         const language = typeof req.headers["x-voice-language"] === "string" ? req.headers["x-voice-language"] : "auto";
-        reply(res, 202, { id: service.meetings.start({ audio: await readBody(req, MAX_MEETING_BYTES), language }) });
+        const requestId = req.headers["x-meeting-request-id"];
+        reply(res, 202, { id: service.meetings.start({ audio: await readBody(req, MAX_MEETING_BYTES), language, requestId }) });
         return;
       }
       if (route === "/meetings/status" && req.method === "GET") {
@@ -361,6 +378,8 @@ export function createHandler(options) {
           appHint: req.headers["x-voice-app"] ?? null,
           strength: "promptbeta",
           llm: parseRouteHeader(req.headers["x-voice-llm"]),
+          llmBackups: body.llmBackups,
+          hasConfiguredBackups: body.hasConfiguredBackups === true,
           betaSession: sessionId,
           betaSkip: true,
           variants: req.headers["x-voice-variants"] || null,
@@ -369,6 +388,8 @@ export function createHandler(options) {
         reply(res, 200, {
           requestId: null, task:"assistant", text: result.text, raw: result.raw, fallback: result.fallback,
           fallbackReason: result.reason ?? undefined, model: result.model, provider: result.provider,
+          ...(result.switchedProvider ? { switchedProvider: true } : {}),
+          ...(result.offerFailover ? { offerFailover: true } : {}),
           suggestions: result.suggestions ?? [],
           strength: "promptbeta", ms: result.ms, ...(result.beta ? { beta: result.beta } : {}),
         });

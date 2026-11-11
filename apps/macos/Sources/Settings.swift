@@ -143,6 +143,15 @@ final class Settings {
             defaults.set(true,forKey:"voice.unifiedDictation.v1")
         }
         migratePromptKey()
+        removeDuplicateDictationFn()
+    }
+
+    private func removeDuplicateDictationFn() {
+        let main = hotkeyMain
+        let alternate = hotkeyAlt
+        if main.enabled && main.isFn && alternate.enabled && alternate.isFn {
+            encodeBinding("hk.alt.v2", .unset)
+        }
     }
 
     /// Once: ⌥Space leaves dictation's second slot and becomes 提示词模式's key, unless another

@@ -134,3 +134,14 @@ test('failed local registration keeps the current recognizer and creates no sele
   assert.equal(m.local.size, 0);
   assert.equal(m.activeId, DEFAULT_MODEL_ID);
 }));
+
+test('local registration waits outside the recognition queue', async()=>fixture(async m=>{
+ let release;
+ m.beforeActivate=()=>new Promise(resolve=>{release=resolve;});
+ m.registerLocal({name:'Fixture',family:'unsupported'});
+ const recognition=m.transcribe(Buffer.alloc(0),'auto');
+ const result=await Promise.race([recognition,new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error('recognition blocked by registration')),1000);t.unref();})]);
+ assert.equal(result.text,DEFAULT_MODEL_ID);
+ release();await m.job;
+ assert.equal(m.operation.phase,'error');
+}));

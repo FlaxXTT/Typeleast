@@ -22,6 +22,7 @@ import { taskFor } from "./dictation-task.js";
 import { redactSecrets } from "./context.js";
 import { promptVersionFor } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
+import { modelCompletion, modelRoutes } from "./model-failover.js";
 import { createDeadline } from "./llm.js";
 import { tidy } from "./tidy.js";
 import { validateWav } from "./wav.js";
@@ -86,11 +87,14 @@ export class VoicePolishService {
     if (typeof id !== 'string' || !/^[A-Za-z0-9-]{1,80}$/.test(id)) return;
     for (const [key, item] of this.progress) if (Date.now() - item.updated > 600000) this.progress.delete(key);
     if (!this.progress.has(id) && this.progress.size >= 20) return;
-    this.progress.set(id, {stage:value.stage,completed:value.completed,total:value.total,updated:Date.now()});
+    const previous = this.progress.get(id);
+    this.progress.set(id, {stage:value.stage,completed:value.completed,total:value.total,
+      sourceCharacters:value.sourceCharacters ?? previous?.sourceCharacters,
+      sourceWords:value.sourceWords ?? previous?.sourceWords, updated:Date.now()});
   }
   taskProgress(id) {
     const item = this.progress.get(id);
-    return item && Date.now() - item.updated < 600000 ? {stage:item.stage,completed:item.completed,total:item.total} : {stage:'waiting',completed:0,total:0};
+    return item && Date.now() - item.updated < 600000 ? {stage:item.stage,completed:item.completed,total:item.total,sourceCharacters:item.sourceCharacters,sourceWords:item.sourceWords} : {stage:'waiting',completed:0,total:0};
   }
 
   get strength() {
@@ -110,7 +114,8 @@ export class VoicePolishService {
       provider: this.lastRoute.provider,
       model: this.lastRoute.model,
       promptSource: "typeleast",
-      temperature: this.config.temperature ?? 0.8,
+      temperature: this.config.temperature ?? 0.3,
+      maxOutputTokens: Math.min(this.config.maxOutputTokens ?? 8192, 8192),
       strength: this.strength,
       task: "dictation",
       speech,
@@ -176,7 +181,9 @@ export class VoicePolishService {
     base.model = custom.model;
     this.lastRoute = { provider: base.provider, model: base.model };
 
-    const ctx = this.taskContext({ request, base, route: custom, started, rawText });
+    const routes = modelRoutes(custom, request.llmBackups);
+    const deferred = request.hasConfiguredBackups === true;
+    const ctx = this.taskContext({ request, base, route: custom, routes, deferred, started, rawText });
     // 翻译模式 has its own hotkey and prompt: one call cleans up and translates.
     const translateTo = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
     if (translateTo) return await runTranslation(ctx, translateTo);
@@ -188,14 +195,30 @@ export class VoicePolishService {
    * What a task module receives: the request, the route, and the service's hooks for model
    * calls, redaction, progress and finishing (see tasks/dictation.js).
    */
-  taskContext({ request, base, route, started, rawText }) {
+  taskContext({ request, base, route, routes = [route], deferred = false, started, rawText }) {
+    let successfulRoute = route;
+    const invoke = modelCompletion({ routes, hasDeferredBackups: deferred, rawText,
+      complete: (options) => this.complete(options),
+      onSuccess: (used, switched) => {
+        successfulRoute = used;
+        base.provider = routeLabel(used);
+        base.model = used.model;
+        if (switched) base.switchedProvider = true;
+        this.lastRoute = { provider: base.provider, model: base.model };
+      },
+    });
     return {
       request, base, route, started, rawText,
       config: this.config,
       logger: this.logger,
       stats: this.stats,
-      complete: (options) => this.complete({ route, ...options }),
-      redact: (text) => this.redactDetail(text),
+      complete: invoke,
+      reviewComplete: (options) => this.complete({ ...options, route: successfulRoute }),
+      redact: (text) => {
+        let output = this.redactDetail(text);
+        for (const item of routes) if (item.apiKey) output = output.split(item.apiKey).join("[redacted-key]");
+        return output;
+      },
       progress: (stage) => this.setProgress(request.requestId, { stage, completed: 0, total: 1 }),
       done: (result) => this.recordAndReturn(request, result),
       fail: (result) => this.recordFallback(request, result),
@@ -261,7 +284,15 @@ export class VoicePolishService {
       result.text = await applyVariants(result.text, variants, outputLanguage);
       // The user chooses the actual final draft, including the configured
       // Chinese writing variant, rather than a version transformed later.
-      if (result.qualityReview) result.qualityReview.candidate = await applyVariants(result.qualityReview.candidate, variants, outputLanguage);
+      if (result.qualityReview) {
+        result.qualityReview.candidate = await applyVariants(result.qualityReview.candidate, variants, outputLanguage);
+        if (Array.isArray(result.qualityReview.issues)) {
+          for (const issue of result.qualityReview.issues) {
+            const converted = await applyVariants(issue.candidate, variants, outputLanguage);
+            issue.candidate = converted && result.qualityReview.candidate.includes(converted) ? converted : "";
+          }
+        }
+      }
     }
     result.suggestions = [];
     return result;
@@ -315,6 +346,11 @@ export class VoicePolishService {
         this.stats.lastMs = result.ms.total;
         return result;
       }
+      if (request.translateTo && spoken.text) {
+        const characters = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(spoken.text)].length;
+        const words = [...new Intl.Segmenter(undefined, { granularity: 'word' }).segment(spoken.text)].filter(part => part.isWordLike).length;
+        this.setProgress(request.requestId, { stage: 'translating', completed: 0, total: 1, sourceCharacters: characters, sourceWords: words });
+      }
       const polished = await this.polish({
         task: request.task,
         requestId: request.requestId,
@@ -324,8 +360,11 @@ export class VoicePolishService {
         strength: request.strength,
         fieldContext: request.fieldContext ?? null,
         llm: request.llm ?? null,
+        llmBackups: request.llmBackups,
+        hasConfiguredBackups: request.hasConfiguredBackups === true,
         signal: request.signal,
         betaSession: request.betaSession ?? null,
+        retryInitial: request.retryInitial === true,
         baseline: request.baseline ?? null,
         translatePrompt: request.translatePrompt ?? "",
         translateTo: request.translateTo ?? null,
@@ -342,6 +381,8 @@ export class VoicePolishService {
         suggestions: [],
         model: polished.model,
         provider: polished.provider,
+        ...(polished.switchedProvider ? { switchedProvider: true } : {}),
+        ...(polished.offerFailover ? { offerFailover: true } : {}),
         strength: request.strength ?? this.strength,
         ms: {
           transcribe: Math.round(spoken.ms),

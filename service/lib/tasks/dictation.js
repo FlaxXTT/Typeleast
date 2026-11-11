@@ -18,11 +18,12 @@ import { failureDetail, failureReason, ModelCallError } from "../llm.js";
 import { parsePolishOutput } from "../parse-output.js";
 import { buildUserMessage, systemPromptFor } from "../prompt.js";
 import { normalizePunctuation } from "../punctuation.js";
-import { hasQuantityUnitConflict } from "../quantity-review.js";
+import { quantityUnitConflict } from "../quantity-review.js";
 import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
 import { timing } from "./timing.js";
+import { reviewFacts } from "../fact-review.js";
 
 /** Clean up one transcript; on any failure the tidied transcript is inserted instead. */
 export async function runDictation(ctx) {
@@ -61,12 +62,17 @@ export async function runDictation(ctx) {
       return await ctx.fail({ ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",
         ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
     }
-    if (hasQuantityUnitConflict(rawText, candidate, request.language)) {
+    const quantityIssue = quantityUnitConflict(rawText, candidate, request.language);
+    if (quantityIssue) {
       // Older clients fall back to `raw` when `text` is empty. Keep both empty:
       // neither version is delivered before the user has reviewed the change.
       return await ctx.fail({ ...base, raw: "", text: "", fallback: true,
-        reason: "quantity-conflict", qualityReview: { kind: "quantity", original: rawText, candidate },
+        reason: "quantity-conflict", qualityReview: { kind: "quantity", original: rawText, candidate, issues: [quantityIssue] },
         ms: timing(started, 0), attempts: result.attempts });
+    }
+    if (!await reviewFacts(ctx, task, rawText, candidate)) {
+      return await ctx.fail({ ...base, raw: "", text: "", fallback: true, reason: "fact-review",
+        qualityReview: { kind: "facts", original: rawText, candidate, issues: ctx.reviewEvidence ?? [] }, ms: timing(started, 0), attempts: result.attempts });
     }
     return await ctx.done({
       ...base,
@@ -95,6 +101,7 @@ export async function runDictation(ctx) {
       text: tidyOnly.text,
       fallback: true,
       reason,
+      ...(error?.offerFailover === true ? { offerFailover: true } : {}),
       detail,
       ms: timing(started, 0),
       attempts: error instanceof ModelCallError ? error.attempts : undefined,

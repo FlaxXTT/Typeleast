@@ -84,9 +84,10 @@ struct LearnedToastView: View {
             Button(action: undo) {
                 Text(L10n.text("撤销")).font(.system(size: 13, weight: .medium)).foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(Capsule().fill(Color.white.opacity(0.16)))
+                    .background(Capsule(style: .continuous).fill(Color.white.opacity(0.16)))
             }
             .buttonStyle(.plain)
+            .hoverInteraction()
         }
         .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(white: 0.1)))

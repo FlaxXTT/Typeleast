@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import QuartzCore
 
 // ActivityCard.swift - the Home insights: four figures (字数, 节省时间, 速度, 口述时间), then
 // active days and streaks above a heatmap (one square per day, a column per week), on a
@@ -90,7 +91,7 @@ struct ShareButton: NSViewRepresentable {
     let items: [Any]
 
     func makeNSView(context: Context) -> NSButton {
-        let button = NSButton(title: " " + L10n.text("分享"), image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil) ?? NSImage(),
+        let button = HoverShareButton(title: " " + L10n.text("分享"), image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil) ?? NSImage(),
                               target: context.coordinator, action: #selector(Coordinator.share(_:)))
         button.imagePosition = .imageLeading
         button.bezelStyle = .rounded
@@ -108,6 +109,41 @@ struct ShareButton: NSViewRepresentable {
         @objc func share(_ sender: NSButton) {
             NSSharingServicePicker(items: items).show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         }
+    }
+}
+
+private final class HoverShareButton: NSButton {
+    private var hoverTracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(tracking)
+        hoverTracking = tracking
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) { setHovered(true) }
+    override func mouseExited(with event: NSEvent) { setHovered(false) }
+
+    private func setHovered(_ hovering: Bool) {
+        contentTintColor = hovering ? .controlAccentColor : nil
+        wantsLayer = true
+        guard let layer else { return }
+        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let target: CGFloat = hovering && !reduced ? 1.16 : 1
+        let previous = (layer.presentation()?.value(forKeyPath: "transform.scale") as? NSNumber)?.doubleValue ?? (hovering ? 1 : 1.16)
+        layer.setAffineTransform(CGAffineTransform(scaleX: target, y: target))
+        layer.removeAnimation(forKey: "hoverScale")
+        guard !reduced else { return }
+        let bounce = CASpringAnimation(keyPath: "transform.scale")
+        bounce.fromValue = previous
+        bounce.toValue = target
+        bounce.damping = 11
+        bounce.stiffness = 240
+        bounce.mass = 0.8
+        bounce.duration = min(0.55, bounce.settlingDuration)
+        layer.add(bounce, forKey: "hoverScale")
     }
 }
 

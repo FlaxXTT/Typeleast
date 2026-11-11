@@ -11,6 +11,7 @@ import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
 import { timing } from "./timing.js";
+import { reviewFacts } from "../fact-review.js";
 
 export async function runTranslation(ctx, target) {
   const { request, base, started, rawText, config } = ctx;
@@ -30,9 +31,12 @@ export async function runTranslation(ctx, target) {
     const translated = parts.filter(Boolean).join("\n");
     task.assertTime();
     if (!translated) return ctx.fail({ ...base, text: tidy(rawText).text, fallback: true, reason: "empty-output", ms: timing(started, 0), translated: target });
+    if (!await reviewFacts(ctx, task, rawText, translated)) return ctx.fail({ ...base, raw: "", text: "", fallback: true,
+      reason: "fact-review", qualityReview: { kind: "facts", original: rawText, candidate: translated, issues: ctx.reviewEvidence ?? [] }, translated: target, ms: timing(started, 0), attempts });
     return ctx.done({ ...base, text: translated, translated: target, ms: timing(started, 0), attempts });
   } catch (error) {
     const reason = request.signal?.aborted ? "cancelled" : task.deadline.timedOut() ? "model-timeout" : failureReason(error);
-    return ctx.fail({ ...base, text: tidy(rawText).text, fallback: true, reason, ms: timing(started, 0), translated: target });
+    return ctx.fail({ ...base, text: tidy(rawText).text, fallback: true, reason,
+      ...(error?.offerFailover === true ? { offerFailover: true } : {}), ms: timing(started, 0), translated: target });
   } finally { task.dispose(); }
 }

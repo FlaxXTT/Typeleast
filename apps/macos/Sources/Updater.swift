@@ -8,7 +8,7 @@ import CryptoKit
 // Signing" certificate (made on the first update if there is none) before it replaces the
 // installed copy. Same certificate + same bundle id = same designated requirement, so macOS
 // keeps the microphone and Accessibility permissions; Keychain items are handed over
-// (KeychainHandoff), so an update asks for no password.
+// (KeychainHandoff) requests access without deleting existing credentials. macOS may ask for consent.
 
 enum UpdateError: LocalizedError {
     case unreachable
@@ -17,6 +17,7 @@ enum UpdateError: LocalizedError {
     case noSigningCertificate
     case sign(String)
     case requirementChanged
+    case keychainHandoff
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +26,7 @@ enum UpdateError: LocalizedError {
         case .badBundle(let detail): return L10n.text("更新文件错误：") + detail
         case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书。更新已停止。")
         case .sign(let detail): return L10n.text("本机证书签名失败：") + detail
+        case .keychainHandoff: return L10n.text("新版本未获得钥匙串访问权限，更新已停止。原应用与凭据均已保留。")
         case .requirementChanged: return L10n.text("新版本签名不同，安装会丢失权限。更新已取消。")
         }
     }
@@ -229,7 +231,7 @@ enum Updater {
     /// The same certificate make-signing-cert.sh makes: self-signed, code signing only, valid
     /// ten years, private key only in this Mac's login keychain. Made once, on the first update.
     static func ensureSigningIdentity() throws {
-        if hasSigningIdentity() { return }
+        if hasSigningIdentity() { try SigningAccess.tighten(name: signingIdentity); return }
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-cert-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: work) }
@@ -254,7 +256,7 @@ enum Updater {
         guard run("/usr/bin/openssl", ["pkcs12", "-export", "-name", signingIdentity, "-inkey", key.path, "-in", cert.path,
                                        "-out", p12.path, "-passout", "pass:" + pass]).status == 0 else { throw UpdateError.noSigningCertificate }
         let keychain = NSHomeDirectory() + "/Library/Keychains/login.keychain-db"
-        guard run("/usr/bin/security", ["import", p12.path, "-k", keychain, "-P", pass, "-T", "/usr/bin/codesign"]).status == 0,
+        guard run("/usr/bin/security", ["import", p12.path, "-k", keychain, "-P", pass, "-T", ""]).status == 0,
               hasSigningIdentity() else { throw UpdateError.noSigningCertificate }
     }
 
@@ -324,6 +326,15 @@ enum Updater {
         } catch {
             try? FileManager.default.removeItem(at: work)
             throw error
+        }
+    }
+
+    /// A denied handoff keeps the installed app and removes only this prepared update.
+    static func authorizePreparedUpdate(app: URL, work: URL, cdhash: String?,
+                                        transfer: (URL, String) -> Bool = { KeychainHandoff.transfer(toExecutable: $0, cdhash: $1) }) throws {
+        guard let cdhash, transfer(app.appendingPathComponent("Contents/MacOS/TypeLeast"), cdhash) else {
+            try? FileManager.default.removeItem(at: work)
+            throw UpdateError.keychainHandoff
         }
     }
 

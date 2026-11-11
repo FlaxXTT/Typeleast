@@ -46,6 +46,7 @@ protocol AppActions: AnyObject {
     func openKeyboardSettings()
     func openMicrophoneSettings()
     func restartService()
+    func clearSpeechModelStorage(id: String, partialOnly: Bool)
     func manageSpeechModel(id: String, download: Bool, cancel: Bool)
     func downloadModels()
     func chooseNode()

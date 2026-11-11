@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 // RecordingBar.swift - the on-screen recording indicator (the "pill").
 //
@@ -175,7 +176,20 @@ final class PillPanel: NSPanel {
 /// The pill's × and ✓ buttons. They take the first click without activating the app or
 /// taking key status.
 final class CancelButton: NSButton {
+    var onHover: ((Bool) -> Void)?
+    private var hoverTracking: NSTrackingArea?
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(tracking)
+        hoverTracking = tracking
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
 /// Draws the capsule in its three looks (a small dark capsule, a live
@@ -202,6 +216,10 @@ final class PillView: NSView {
     private var bars: [Float] = []
     private var spinnerPhase: CGFloat = 0
     private var pulse: CGFloat = 0
+    private var cancelHover = false
+    private var stopHover = false
+    private var cancelHoverAmount: CGFloat = 0
+    private var stopHoverAmount: CGFloat = 0
 
     static let height: CGFloat = 34
     /// Diameter of the cancel (left) and finish (right) buttons.
@@ -234,6 +252,14 @@ final class PillView: NSView {
         bars = Array(repeating: 0, count: LevelHistory.defaultCapacity)
         configure(cancelButton, glyph: "", tip: L10n.text("取消听写（Esc）"), action: #selector(cancelPressed))
         configure(stopButton, glyph: "", tip: L10n.text("结束并整理"), action: #selector(stopPressed))
+        cancelButton.onHover = { [weak self] hovering in
+            self?.cancelHover = hovering
+            self?.needsDisplay = true
+        }
+        stopButton.onHover = { [weak self] hovering in
+            self?.stopHover = hovering
+            self?.needsDisplay = true
+        }
         addSubview(cancelButton)
         addSubview(stopButton)
     }
@@ -282,6 +308,10 @@ final class PillView: NSView {
     private func phaseChanged() {
         spinnerPhase = 0
         pulse = 0
+        cancelHover = false
+        stopHover = false
+        cancelHoverAmount = 0
+        stopHoverAmount = 0
         if model.phase == .recording {
             bars = Array(repeating: 0, count: model.history.capacity)
         }
@@ -294,6 +324,15 @@ final class PillView: NSView {
     /// follow the live level. Bars take their sample heights as-is: easing each slot
     /// towards its neighbour's value would smear the peaks the user needs to see.
     func advance() {
+        let cancelTarget: CGFloat = cancelHover ? 1 : 0
+        let stopTarget: CGFloat = stopHover ? 1 : 0
+        if reduceMotion {
+            cancelHoverAmount = cancelTarget
+            stopHoverAmount = stopTarget
+        } else {
+            cancelHoverAmount += (cancelTarget - cancelHoverAmount) * 0.38
+            stopHoverAmount += (stopTarget - stopHoverAmount) * 0.38
+        }
         if !reduceMotion {
             spinnerPhase += 0.18
             if spinnerPhase > 2 * .pi { spinnerPhase -= 2 * .pi }
@@ -308,12 +347,14 @@ final class PillView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
-        let capsule = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let capsule = RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .path(in: bounds.insetBy(dx: 0.5, dy: 0.5)).cgPath
         NSColor(calibratedWhite: 0.09, alpha: 0.92).setFill()
-        capsule.fill()
         NSColor(calibratedWhite: 1.0, alpha: 0.12).setStroke()
-        capsule.lineWidth = 1
-        capsule.stroke()
+        context.setLineWidth(1)
+        context.addPath(capsule)
+        context.drawPath(using: .fillStroke)
 
         switch model.phase {
         case .hidden:
@@ -329,11 +370,19 @@ final class PillView: NSView {
 
     // MARK: state looks
 
+    private func fillBadge(in rect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        context.addPath(shape.path(in: rect).cgPath)
+        context.fillPath()
+    }
+
     private func drawRecording() {
         drawCancel()
         // finish: a white disc with a dark check mark
         NSColor.white.setFill()
-        NSBezierPath(ovalIn: stopRect).fill()
+        let stopExpansion = reduceMotion ? 0 : stopHoverAmount * 1.8
+        NSBezierPath(ovalIn: stopRect.insetBy(dx: -stopExpansion, dy: -stopExpansion)).fill()
         let c = NSPoint(x: stopRect.midX, y: stopRect.midY)
         let check = NSBezierPath()
         check.move(to: NSPoint(x: c.x - 5.5, y: c.y + 0.2))
@@ -358,7 +407,7 @@ final class PillView: NSView {
             let badgeWidth = PillView.badgeWidth(model.badge)
             let rect = NSRect(x: waveRight - badgeWidth, y: bounds.midY - 8, width: badgeWidth, height: 16)
             NSColor.systemBlue.withAlphaComponent(0.85).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+            fillBadge(in: rect)
             let font = NSFont.systemFont(ofSize: 10, weight: .bold)
             let textWidth = ceil((model.badge as NSString).size(withAttributes: [.font: font]).width)
             drawText(model.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
@@ -389,7 +438,7 @@ final class PillView: NSView {
             let badgeWidth = PillView.badgeWidth(model.badge)
             let rect = NSRect(x: 82, y: bounds.midY - 8, width: badgeWidth, height: 16)
             NSColor.systemBlue.withAlphaComponent(0.85).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+            fillBadge(in: rect)
             let font = NSFont.systemFont(ofSize: 10, weight: .bold)
             let textWidth = ceil((model.badge as NSString).size(withAttributes: [.font: font]).width)
             drawText(model.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
@@ -437,12 +486,17 @@ final class PillView: NSView {
 
     /// A grey disc with a white ×.
     private func drawCancel() {
-        NSColor.white.withAlphaComponent(0.22).setFill()
-        NSBezierPath(ovalIn: cancelRect).fill()
+        NSColor.white.withAlphaComponent(0.22 + cancelHoverAmount * 0.3).setFill()
+        let expansion = reduceMotion ? 0 : cancelHoverAmount * 1.8
+        NSBezierPath(ovalIn: cancelRect.insetBy(dx: -expansion, dy: -expansion)).fill()
         let c = NSPoint(x: cancelRect.midX, y: cancelRect.midY), r: CGFloat = 4.6
+        let angle = reduceMotion ? 0 : cancelHoverAmount * .pi / 10
+        func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            NSPoint(x: c.x + x * cos(angle) - y * sin(angle), y: c.y + x * sin(angle) + y * cos(angle))
+        }
         let cross = NSBezierPath()
-        cross.move(to: NSPoint(x: c.x - r, y: c.y - r)); cross.line(to: NSPoint(x: c.x + r, y: c.y + r))
-        cross.move(to: NSPoint(x: c.x - r, y: c.y + r)); cross.line(to: NSPoint(x: c.x + r, y: c.y - r))
+        cross.move(to: point(-r, -r)); cross.line(to: point(r, r))
+        cross.move(to: point(-r, r)); cross.line(to: point(r, -r))
         cross.lineWidth = 2
         cross.lineCapStyle = .round
         NSColor.white.setStroke()

@@ -56,7 +56,7 @@ private struct PracticePill: View {
                     .help(L10n.text("取消"))
                 HStack(spacing: 3) {
                     ForEach(Array(practice.levels.enumerated()), id: \.offset) { _, level in
-                        Capsule().fill(Color.white)
+                        Capsule(style: .continuous).fill(Color.white)
                             .frame(width: 2.4, height: max(3, CGFloat(level) * 22))
                     }
                 }
@@ -77,10 +77,11 @@ private struct PracticePill: View {
             }
         }
         .padding(4)
-        .background(Capsule().fill(Color(white: 0.09)))
-        .overlay(Capsule().stroke(Color.white.opacity(0.12)))
-        .contentShape(Capsule())
+        .background(Capsule(style: .continuous).fill(Color(white: 0.09)))
+        .overlay(Capsule(style: .continuous).stroke(Color.white.opacity(0.12)))
+        .contentShape(Capsule(style: .continuous))
         .onTapGesture { if practice.phase == .idle { practice.toggle() } }
+        .hoverInteraction()
         .animation(.easeInOut(duration: 0.18), value: practice.phase)
     }
 
@@ -93,5 +94,6 @@ private struct PracticePill: View {
                 .background(Circle().fill(filled ? Color.white : Color.white.opacity(0.22)))
         }
         .buttonStyle(.plain)
+        .hoverInteraction()
     }
 }

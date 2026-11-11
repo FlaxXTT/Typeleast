@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 // IdleBar.swift - the resting voice bar ("Show voice bar on desktop").
 //
@@ -37,12 +38,14 @@ private final class IdleBarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous)
+            .path(in: rect).cgPath
         NSColor(calibratedWhite: 0.07, alpha: hovering ? 0.92 : 0.55).setFill()
-        path.fill()
         NSColor(calibratedWhite: 1, alpha: hovering ? 0.14 : 0.18).setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        context.setLineWidth(1)
+        context.addPath(path)
+        context.drawPath(using: .fillStroke)
         guard hovering else {
             // three faint dots, the resting mark
             for i in -1...1 {

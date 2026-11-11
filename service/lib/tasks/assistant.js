@@ -70,10 +70,14 @@ export class AssistantSessions {
     const pending = notice => ({ ...base, text: "", raw: rawText,
       beta: { sessionId: id, questions: session.questions, confirmed: session.confirmed, goals: session.goals ?? [],
         round: session.turns.length + 1, ready: session.ready, ...(notice ? { notice } : {}) }, ms: timing(started, 0) });
-    if (request.betaSession && !skip && !hasContent(rawText)) return pending("empty-transcript");
+    // A failed first turn already created a session. Retry that same turn without
+    // adding it a second time as a follow-up answer.
+    const retryInitial = request.retryInitial === true && Boolean(request.betaSession)
+      && session.turns.length === 0 && session.questions.length === 0 && !session.spec;
+    if (request.betaSession && !skip && !hasContent(rawText) && !retryInitial) return pending("empty-transcript");
     const turns = [...session.turns];
     // 生成 may carry answers chosen in the panel but not sent yet.
-    if (request.betaSession && (!skip || hasContent(rawText))) turns.push({ questions: [...session.questions], answer: rawText });
+    if (request.betaSession && !retryInitial && (!skip || hasContent(rawText))) turns.push({ questions: [...session.questions], answer: rawText });
     const source = [session.baseline ?? "", session.request, ...turns.map(t => t.answer)].join("\n");
     if (source.length > BETA_LIMITS.inputChars) return pending("beta-input-limit");
     session.busy = true;
@@ -113,7 +117,9 @@ export class AssistantSessions {
       // Never insert a partial draft or lose accepted answers after a failed round.
       if (request.signal?.aborted || this.map.get(id) !== session) throw error;
       const notice = error.code === "beta-validation" ? "beta-validation" : error instanceof ModelCallError ? failureReason(error) : "output-format";
-      return pending(notice);
+      const result = pending(notice);
+      if (error?.offerFailover === true) result.offerFailover = true;
+      return result;
     } finally {
       session.busy = false;
     }

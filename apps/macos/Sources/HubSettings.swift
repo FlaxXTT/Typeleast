@@ -23,7 +23,7 @@ struct SettingsPage: View {
                         model.settingsCategory = index
                     }
                 }
-            }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.card))
+            }.padding(3).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.card))
             .padding(.horizontal, 36).padding(.bottom, 16)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -169,7 +169,7 @@ struct SettingsPage: View {
                             model.setting(\.appearance, then: { model.actions?.applyGeneralSettings() }).wrappedValue = preference
                         }
                     }
-                }.padding(3).background(RoundedRectangle(cornerRadius: 9).fill(Theme.window))
+                }.padding(3).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.window))
                     .frame(width: 220)
             }
             ToggleRow(title: L10n.text("开机启动"), detail: loginDetail,
@@ -321,11 +321,11 @@ struct SettingRow<Trailing: View>: View {
             HStack(alignment: .center, spacing: 16) {
                 labels.frame(minWidth: 140, alignment: .leading)
                 Spacer(minLength: 12)
-                trailing.fixedSize()
+                trailing.fixedSize().hoverInteraction()
             }
             VStack(alignment: .leading, spacing: 10) {
                 labels
-                trailing
+                trailing.hoverInteraction()
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -351,7 +351,7 @@ struct StateSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-            Capsule()
+            Capsule(style: .continuous)
                 .fill(configuration.isOn ? Self.onColor : Self.offColor)
                 .frame(width: 36, height: 20)
             Circle()
@@ -361,7 +361,7 @@ struct StateSwitchStyle: ToggleStyle {
                 .padding(2)
         }
         .frame(width: 36, height: 20)
-        .contentShape(Capsule())
+        .contentShape(Capsule(style: .continuous))
         .onTapGesture {
             withAnimation(.easeOut(duration: 0.15)) { configuration.isOn.toggle() }
         }
@@ -389,7 +389,7 @@ private struct NoteRow: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.window.opacity(0.7)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.window.opacity(0.7)))
     }
 }
 
@@ -467,9 +467,10 @@ struct HotkeyField: View {
                     }
                 }
                 .padding(3)
-                .background(RoundedRectangle(cornerRadius: 9).stroke(recording ? Theme.accent : Color.clear, lineWidth: 1.5))
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(recording ? Theme.accent : Color.clear, lineWidth: 1.5))
             }
             .buttonStyle(.plain)
+            .hoverInteraction()
             .help(L10n.text("Esc 取消，Delete 清除。"))
             if let problem = model.hotkeyProblems[slot.name], !recording {
                 Text(problem).font(.system(size: 11.5)).foregroundColor(Theme.warning)
@@ -521,6 +522,16 @@ struct HotkeyField: View {
     }
 
     private func save(_ value: HotKeyBinding) {
+        if value.enabled && value.isFn {
+            if slot == .alt && model.settings.hotkeyMain.enabled && model.settings.hotkeyMain.isFn {
+                NSSound.beep()
+                stop()
+                return
+            }
+            if slot == .main && model.settings.hotkeyAlt.enabled && model.settings.hotkeyAlt.isFn {
+                model.settings.hotkeyAlt = .unset
+            }
+        }
         model.settings[keyPath: slot.keyPath] = value
         model.actions?.registerHotKeys()
         model.objectWillChange.send()
@@ -598,6 +609,7 @@ struct ModelSection: View {
                             .disabled(busy)
                     }
                 }
+                ToggleRow(title: L10n.text("服务故障时自动切换"), detail: L10n.text("当前服务不可用时，自动尝试已保存的备用 Key，不弹出密码框。本次文字会发给备用服务商；系统拒绝静默访问的 Key 会被跳过。"), isOn: model.setting(\.automaticProviderFallback))
                 HStack(spacing: 10) {
                     Button(busy ? L10n.text("测试中…") : L10n.text("测试连接")) { test() }
                         .buttonStyle(PrimaryButtonStyle())
@@ -761,7 +773,7 @@ struct TranslatePromptEditor: View {
             TextEditor(text: $draft)
                 .font(.system(size: 12))
                 .frame(height: 150)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color.primary.opacity(0.12)))
                 .onChange(of: draft) { _ in saved = false }
             HStack {
                 Button(L10n.text("恢复默认")) {

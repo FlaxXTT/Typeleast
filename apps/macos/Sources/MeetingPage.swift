@@ -10,11 +10,18 @@ struct MeetingsPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("会议"), subtitle: L10n.text("录音或导入，得到分说话人的文字。"))
+            PageHeader(title: L10n.text("会议"), subtitle: L10n.text("录音时查看实时文字，结束后按说话人整理。"))
             VStack(alignment: .leading, spacing: 14) {
                 if meeting.modelInstalled == false { MeetingModelCard() }
                 MeetingControls()
-                if let result = meeting.result { MeetingTranscriptView(result: result) } else { Spacer() }
+                if let result = meeting.result {
+                    MeetingTranscriptView(result: result)
+                } else if meeting.stage == .recording ||
+                            ([.transcribing, .failed].contains(meeting.stage) && (!meeting.liveTranscript.isEmpty || meeting.liveWarning)) {
+                    MeetingLiveTranscriptView()
+                } else {
+                    Spacer()
+                }
             }
             .padding(.horizontal, 36)
             .padding(.bottom, 24)
@@ -23,9 +30,50 @@ struct MeetingsPage: View {
     }
 }
 
+private struct MeetingLiveTranscriptView: View {
+    @EnvironmentObject var meeting: MeetingController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.text("实时文字"))
+                .font(.system(size: 13, weight: .medium))
+            Text(L10n.text("这是临时结果，结束录音后会替换为按说话人整理的完整记录。"))
+                .font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if meeting.liveWarning {
+                Text(L10n.text("部分实时文字未能转写，结束后仍会尝试完整转写。"))
+                    .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if meeting.liveTranscript.isEmpty {
+                Text(L10n.text("等待实时文字…"))
+                    .font(.system(size: 13)).foregroundColor(Theme.secondary)
+                Spacer()
+            } else {
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(meeting.liveTranscript)
+                                .font(.system(size: 13.5)).textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 4)
+                            Color.clear.frame(height: 1).id("meeting-live-end")
+                        }
+                    }
+                    .onChange(of: meeting.liveTranscript) { _, _ in
+                        scroll.scrollTo("meeting-live-end", anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct MeetingModelCard: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var meeting: MeetingController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
 
     var body: some View {
         Card(padding: 14) {
@@ -40,12 +88,21 @@ private struct MeetingModelCard: View {
                 }
             }
         }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                .stroke(Theme.accent.opacity(hovering ? 0.7 : 0), lineWidth: hovering ? 2 : 0)
+                .allowsHitTesting(false)
+        }
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.6), value: hovering)
+        .onHover { hovering = $0 }
     }
 }
 
 private struct MeetingControls: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var meeting: MeetingController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
 
     private var limit: Int { MeetingLimits.maxSeconds / 60 }
 
@@ -87,6 +144,13 @@ private struct MeetingControls: View {
                     .font(.system(size: 11.5)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                .stroke(Theme.accent.opacity(hovering ? 0.55 : 0), lineWidth: hovering ? 2 : 0)
+                .allowsHitTesting(false)
+        }
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.6), value: hovering)
+        .onHover { hovering = $0 }
     }
 
     private func chooseFile() {

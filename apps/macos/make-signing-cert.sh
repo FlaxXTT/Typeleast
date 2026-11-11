@@ -31,6 +31,6 @@ EOF
 PASS="$(/usr/bin/openssl rand -hex 16)"
 /usr/bin/openssl pkcs12 -export -name "$NAME" -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
   -out "$WORK/id.p12" -passout "pass:$PASS" 2>/dev/null
-security import "$WORK/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" -P "$PASS" -T /usr/bin/codesign
+security import "$WORK/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" -P "$PASS" -T ""
 echo "created: $NAME"
-echo "The first build asks once for the login password so codesign can use the key: choose Always Allow."
+echo "Signing may ask for authorization. Allow this operation only; do not choose Always Allow."

@@ -67,6 +67,19 @@ final class Recorder {
         return pcm.count
     }
 
+    /// Copies a bounded slice of audio without stopping the engine. Offsets are bytes into
+    /// 16-bit PCM and are rounded down to a sample boundary. Offsets beyond the captured end
+    /// are clamped so the caller cannot skip audio that has not been captured yet.
+    func pcmSnapshot(fromByteOffset offset: Int, endByteOffset limit: Int? = nil) -> (pcm: Data, nextByteOffset: Int) {
+        lock.lock(); defer { lock.unlock() }
+        let availableEnd = pcm.count - pcm.count % 2
+        let boundedOffset = min(max(0, offset), availableEnd)
+        let start = boundedOffset - boundedOffset % 2
+        let boundedEnd = min(max(0, limit ?? availableEnd), availableEnd)
+        let end = max(start, boundedEnd - boundedEnd % 2)
+        return (pcm.subdata(in: start..<end), end)
+    }
+
     // MARK: live level
 
     /// Smoothed loudness of the most recent capture buffers, 0...1 (see loudness(rms:)).

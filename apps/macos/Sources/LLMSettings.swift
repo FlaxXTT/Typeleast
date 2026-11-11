@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 // LLMSettings.swift - which model cleans up dictations, and the user's own API key.
 //
@@ -84,6 +85,33 @@ enum KeychainStore {
         return text
     }
 
+    /// A fallback may use only a key already read in this process; never open Keychain here.
+    static func cached(account: String) -> String? {
+        if let stub = stub { return stub[account] }
+        return lock.withLock { cache[account] ?? nil }
+    }
+
+    /// Access already-authorized items without showing a system authentication prompt.
+    static func readSilently(account: String) -> String? {
+        if let value = cached(account: account) { return value }
+        if stub != nil { return nil }
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data, let value = String(data: data, encoding: .utf8) else { return nil }
+        lock.withLock { cache[account] = .some(value) }
+        return value
+    }
+
     /// Whether an item exists, from its attributes only: never opens a password dialog.
     static func exists(account: String) -> Bool {
         if let stub = stub { return stub[account] != nil }
@@ -100,8 +128,9 @@ enum KeychainStore {
     }
 
     /// The accounts this app keeps (attributes only, no dialog).
-    static func accounts() -> [String] {
-        if let stub = stub { return stub.keys.sorted() }
+    static var stubAccountError = false
+    static func accounts() -> [String]? {
+        if let stub = stub { return stubAccountError ? nil : stub.keys.sorted() }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -109,9 +138,12 @@ enum KeychainStore {
             kSecMatchLimit as String: kSecMatchLimitAll,
         ]
         var items: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess,
-              let list = items as? [[String: Any]] else { return [] }
-        return Array(Set(list.compactMap { $0[kSecAttrAccount as String] as? String })).sorted()
+        let status = SecItemCopyMatching(query as CFDictionary, &items)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess, let list = items as? [[String: Any]] else { return nil }
+        let accounts = list.compactMap { $0[kSecAttrAccount as String] as? String }
+        guard accounts.count == list.count else { return nil }
+        return Array(Set(accounts)).sorted()
     }
 
     /// Test seam: accounts the stub refuses to create, like a locked Keychain.
@@ -138,6 +170,7 @@ enum KeychainStore {
     @discardableResult
     static func write(_ value: String, account: String) -> Bool {
         if stub != nil {
+            guard !stubRefuses.contains(account) else { return false }
             stub?[account] = value.isEmpty ? nil : value
             return true
         }
@@ -146,13 +179,16 @@ enum KeychainStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(base as CFDictionary)
-        lock.withLock { cache[account] = .some(nil) }
-        guard !value.isEmpty else { return true }
-        var item = base
-        item[kSecValueData as String] = Data(value.utf8)
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        lastStatus = SecItemAdd(item as CFDictionary, nil)
+        if value.isEmpty {
+            lastStatus = SecItemDelete(base as CFDictionary)
+            guard lastStatus == errSecSuccess || lastStatus == errSecItemNotFound else { return false }
+            lock.withLock { cache[account] = .some(nil) }
+            return true
+        }
+        // Update in place: a refused/failed save must leave the working key intact.
+        let changes = [kSecValueData as String: Data(value.utf8)]
+        lastStatus = SecItemUpdate(base as CFDictionary, changes as CFDictionary)
+        if lastStatus == errSecItemNotFound { return create(value, account: account) }
         if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value) } }
         return lastStatus == errSecSuccess
     }
@@ -172,15 +208,11 @@ enum KeychainStore {
 
 }
 
-/// In-app updates without password dialogs. macOS lets only the build that created a
-/// Keychain item (identified by its code hash when, as here, there is no Apple team ID)
-/// read it without asking; every update is a new build. So the running copy, which can
-/// read its items, hands them straight to the next one: just before it quits, it starts the
-/// new copy's own executable with --receive-keychain-handoff, checks by code hash that the
-/// process is the code it has just verified and signed, deletes its items and writes them
-/// to that process's standard input; the new copy creates them again as its own. Nothing
-/// is written to disk, where any program of this user could read it. If anything fails,
-/// the items are put back as they were, and the new copy asks once.
+/// The verified replacement requests access to existing Keychain items before the
+/// running app exits. New senders pass account names only and never remove the items.
+/// macOS can request consent for the replacement; refusal stops installation.
+/// The receiver also accepts the older value-bearing protocol so upgrades from old
+/// versions can recover items already removed by their sender, without overwriting any.
 ///
 /// Versions up to 1.17.2 handed the items over in an owner-only file instead. That file is
 /// still restored once at launch, and it is kept, not wiped, while any item in it could not
@@ -217,17 +249,13 @@ enum KeychainHandoff {
         return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
     }
 
-    /// Hand every item to the new copy's `executable`, whose code hash was taken when it was
-    /// signed. Returns true when the new copy now owns them all.
+    /// Ask the verified replacement to authorize access to existing items. Never delete
+    /// an item to change its owner: a failed receiver must not destroy the history key.
     @discardableResult
     static func transfer(toExecutable executable: URL, cdhash: String) -> Bool {
-        var values: [String: String] = [:]
-        for account in KeychainStore.accounts() {
-            guard let value = KeychainStore.read(account: account) else { return false }
-            values[account] = value
-        }
-        guard !values.isEmpty else { return true }
-        guard let data = try? JSONEncoder().encode(values) else { return false }
+        guard let accounts = KeychainStore.accounts() else { return false }
+        guard !accounts.isEmpty else { return true }
+        guard let data = try? JSONEncoder().encode(accounts) else { return false }
         let child = Process()
         child.executableURL = executable
         child.arguments = [receiveFlag]
@@ -236,43 +264,42 @@ enum KeychainHandoff {
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice
         do { try child.run() } catch { return false }
-        // Only the code that was downloaded, verified and signed gets the keys, not anything
-        // put in its place since.
         guard process(child.processIdentifier, hasCDHash: cdhash) else {
-            child.terminate()
-            child.waitUntilExit()
-            DiagnosticsLog.write("keychain.handoff.fail", ["code": "identity"])
+            child.terminate(); child.waitUntilExit()
             return false
         }
-        for account in values.keys { KeychainStore.remove(account: account) }
-        try? input.fileHandleForWriting.write(contentsOf: data)
-        try? input.fileHandleForWriting.close()
-        let deadline = Date().addingTimeInterval(20)
+        do {
+            try input.fileHandleForWriting.write(contentsOf: data)
+            try input.fileHandleForWriting.close()
+        } catch {
+            child.terminate(); child.waitUntilExit()
+            return false
+        }
+        let deadline = Date().addingTimeInterval(120)
         while child.isRunning && Date() < deadline { usleep(20_000) }
         if child.isRunning { child.terminate(); child.waitUntilExit() }
-        let received = child.terminationReason == .exit && child.terminationStatus == 0
-        // Whatever the new copy did not take is put back as this copy's own (create never replaces).
-        var lost = 0
-        for (account, value) in values where !KeychainStore.exists(account: account) {
-            if !KeychainStore.create(value, account: account) { lost += 1 }
-        }
-        if !received || lost > 0 { DiagnosticsLog.write("keychain.handoff.fail", ["code": received ? "restore" : "transfer", "status": String(lost)]) }
-        return received && lost == 0
+        return child.terminationReason == .exit && child.terminationStatus == 0
     }
 
-    // MARK: the new copy
-
-    /// `TypeLeast --receive-keychain-handoff`, started by the copy being replaced: create the
-    /// items written to standard input as this build's own. Exit status 0 when all exist.
-    static func receive() -> Int32 {
-        let data = FileHandle.standardInput.readDataToEndOfFile()
-        guard data.count <= 1 << 20, let values = try? JSONDecoder().decode([String: String].self, from: data) else { return 2 }
-        var failed = 0
-        for (account, value) in values where !value.isEmpty {
-            if KeychainStore.exists(account: account) { continue }
-            if !KeychainStore.create(value, account: account) { failed += 1 }
+    /// New senders pass account names. Legacy senders already removed their items:
+    /// restore only missing ones with add-only writes, never replace existing values.
+    static func receive(data: Data = FileHandle.standardInput.readDataToEndOfFile()) -> Int32 {
+        guard data.count <= 1 << 20 else { return 2 }
+        if let accounts = try? JSONDecoder().decode([String].self, from: data) {
+            guard accounts.count <= 128 else { return 2 }
+            for account in accounts {
+                guard KeychainStore.read(account: account) != nil else { return 1 }
+            }
+            return 0
         }
-        return failed == 0 ? 0 : 1
+        guard let legacy = try? JSONDecoder().decode([String: String].self, from: data),
+              legacy.count <= 128 else { return 2 }
+        var failed = false
+        for (account, value) in legacy where !value.isEmpty {
+            if KeychainStore.exists(account: account) { continue }
+            if !KeychainStore.create(value, account: account) { failed = true }
+        }
+        return failed ? 1 : 0
     }
 
     /// Whether an old hand-over file still holds `account` (it could not be recreated yet).
@@ -314,6 +341,12 @@ enum KeychainHandoff {
 }
 
 extension Settings {
+    /// Allow configured providers to handle a dictation if the active provider is unavailable.
+    var automaticProviderFallback: Bool {
+        get { (UserDefaults.standard.object(forKey: "llm.automaticProviderFallback") as? Bool) ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "llm.automaticProviderFallback"); notifyChanged() }
+    }
+
     var llmPresetID: String {
         get { UserDefaults.standard.string(forKey: "llm.preset") ?? "deepseek" }
         set { UserDefaults.standard.set(newValue, forKey: "llm.preset"); notifyChanged() }
@@ -350,6 +383,34 @@ extension Settings {
         let key = llmAPIKey
         guard !llmModel.isEmpty, LLMPreset.isAllowedBaseURL(llmBaseURL), !(preset.needsKey && key.isEmpty) else { return nil }
         return LLMRoute(baseURL: llmBaseURL, model: llmModel, apiKey: key)
+    }
+
+    /// Saved keys are used if macOS permits access without an authentication prompt.
+    var hasConfiguredBackupProviders: Bool {
+        guard automaticProviderFallback else { return false }
+        return !backupPresets(excludingSelected: true).isEmpty
+    }
+
+    private func backupPresets(excludingSelected: Bool) -> [LLMPreset] {
+        guard automaticProviderFallback else { return [] }
+        let selected = llmPresetID
+        return LLMPreset.all.filter { preset in
+            guard (!excludingSelected || preset.id != selected), preset.needsKey,
+                  let model = UserDefaults.standard.string(forKey: "llm.model." + preset.id)?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty else { return false }
+            let base = (UserDefaults.standard.string(forKey: "llm.baseURL." + preset.id) ?? preset.baseURL).trimmingCharacters(in: .whitespacesAndNewlines)
+            return LLMPreset.isAllowedBaseURL(base) && !(KeychainStore.readSilently(account: preset.id) ?? "").isEmpty
+        }
+    }
+
+    /// No authentication prompt is allowed while selecting backup routes.
+    func backupLLMRoutes(excluding current: LLMRoute?) -> [LLMRoute] {
+        backupPresets(excludingSelected: false).compactMap { preset in
+            guard let model = UserDefaults.standard.string(forKey: "llm.model." + preset.id)?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty,
+                  (UserDefaults.standard.string(forKey: "llm.baseURL." + preset.id) ?? preset.baseURL).trimmingCharacters(in: .whitespacesAndNewlines) != current?.baseURL || model != current?.model else { return nil }
+            let base = (UserDefaults.standard.string(forKey: "llm.baseURL." + preset.id) ?? preset.baseURL).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let key = KeychainStore.readSilently(account: preset.id), !key.isEmpty else { return nil }
+            return LLMRoute(baseURL: base, model: model, apiKey: key)
+        }
     }
 
     func notifyChanged() {

@@ -29,6 +29,7 @@ final class SelectionTranslator {
     private var hideTimer: Timer?
     private var offerToken = 0
     private var runToken = 0
+    private var sourceCount: String?
 
     func start() {
         guard monitors.isEmpty else { return }
@@ -149,6 +150,7 @@ final class SelectionTranslator {
             self.hideOffer()
             self.runToken += 1
             let run = self.runToken
+            self.sourceCount = nil
             self.showBubble(.loading, at: point)
             read { [weak self] text in
                 guard let self, self.runToken == run else { return }
@@ -165,10 +167,19 @@ final class SelectionTranslator {
     }
 
     private func showBubble(_ state: SelectionBubble, at point: NSPoint) {
-        bubble.showBubble(state, at: point) { [weak self] in self?.closeBubble() }
+        bubble.showBubble(state, sourceCount: sourceCount, at: point) { [weak self] in self?.closeBubble() }
+    }
+
+    /// Count the text actually sent for translation, without persisting it.
+    static func sourceCountLabel(_ text: String) -> String {
+        var words = 0
+        text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { _, _, _, _ in words += 1 }
+        return L10n.text("原文：{0} 字符 · {1} 词", text.count, words)
     }
 
     private func run(_ text: String, token: Int, at point: NSPoint) {
+        sourceCount = Self.sourceCountLabel(text)
+        showBubble(.loading, at: point)
         guard let translate else { return showBubble(.failed(L10n.text("请先配置可用的整理模型。")), at: point) }
         translate(text, SelectionTranslator.target(for: text, preferred: preferredTarget())) { [weak self] result in
             guard let self, self.runToken == token else { return }
@@ -216,9 +227,9 @@ final class SelectionPanel {
         show(SelectionDotView(action: action))
     }
 
-    func showBubble(_ state: SelectionBubble, at point: NSPoint, close: @escaping () -> Void) {
+    func showBubble(_ state: SelectionBubble, sourceCount: String?, at point: NSPoint, close: @escaping () -> Void) {
         anchor = point
-        show(SelectionBubbleView(state: state, close: close,
+        show(SelectionBubbleView(state: state, sourceCount: sourceCount, close: close,
                                  drag: { [weak self] in self?.drag() }, dragEnded: { [weak self] in self?.dragOffset = nil }))
     }
 
@@ -283,6 +294,7 @@ struct SelectionDotView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .hoverInteraction()
         .help(L10n.text("翻译"))
     }
 }
@@ -290,6 +302,7 @@ struct SelectionDotView: View {
 /// The translation: drag it anywhere; it stays until its × is clicked.
 struct SelectionBubbleView: View {
     let state: SelectionBubble
+    let sourceCount: String?
     let close: () -> Void
     let drag: () -> Void
     let dragEnded: () -> Void
@@ -298,12 +311,16 @@ struct SelectionBubbleView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                if let sourceCount {
+                    Text(sourceCount).font(.system(size: 11)).foregroundColor(.secondary)
+                }
                 Spacer()
                 Button(action: close) {
                     Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary).frame(width: 18, height: 18).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .hoverInteraction()
                 .help(L10n.text("关闭"))
             }
             switch state {
@@ -324,6 +341,7 @@ struct SelectionBubbleView: View {
                         Inserter.shared.setString(text)
                         copied = true
                     }
+                    .hoverInteraction()
                 }
                 .controlSize(.small)
             case .failed(let message):
@@ -335,8 +353,8 @@ struct SelectionBubbleView: View {
         }
         .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 14)
         .frame(width: 360, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .windowBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.1)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(nsColor: .windowBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.primary.opacity(0.1)))
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
         .padding(4)

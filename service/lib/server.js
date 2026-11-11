@@ -20,6 +20,8 @@ import { defaultModelsDir, defaultStateDir } from "./paths.js";
 import { publishRuntime, withdrawRuntime } from "./runtime.js";
 import { VoicePolishService } from "./service.js";
 import { ensureToken } from "./token.js";
+import { secureHandler } from "./secure-channel.js";
+import { MAX_MEETING_BYTES } from "./tasks/meeting.js";
 
 export const VERSION = "0.2.0";
 
@@ -60,7 +62,8 @@ export async function startService(options = {}) {
   };
   const token = await ensureToken(join(stateDir, "api-token"));
 
-  const handler = createHandler({ service, logger, currentToken: async () => token, proofKey: options.proofKey ?? null });
+  const plainHandler = createHandler({ service, logger, currentToken: async () => token, proofKey: options.proofKey ?? null });
+  const handler = options.secureTransport ? secureHandler(plainHandler, options.proofKey, 2 * MAX_MEETING_BYTES + 1024 * 1024) : plainHandler;
   const server = createServer((req, res) => {
     void handler(req, res);
   });

@@ -36,7 +36,7 @@ for (const scenario of ["timeout", "length", "format", "auth", "network"]) {
     if (expected[scenario]) assert.equal(result.reason, expected[scenario]);
     else assert.ok(result.reason && result.uncertain, "an unverified result is inserted but marked");
     assert.equal(budgets[0], 64);
-    assert.equal(budgets[1], 1800);
+    assert.equal(budgets[1], 800, "explicit configured output cap is honored");
     assert.ok(Number.isFinite(result.ms.total));
   });
 }

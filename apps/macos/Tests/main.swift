@@ -8,6 +8,13 @@ KeychainStore.stub = [:]
 L10n.language = "zh-Hans"
 setbuf(stdout, nil)
 
+// Isolated signed fixture used by the integrity regression below. No app startup.
+if CommandLine.arguments.contains("--integrity-probe") {
+    print(SelfIntegrity.problem() == nil ? "ready" : "invalid")
+    _ = readLine()
+    exit(SelfIntegrity.problem() == nil ? 0 : 1)
+}
+
 // main.swift (Tests) - unit/acceptance proofs for ServiceClient against the local service's contract.
 
 var passed = 0
@@ -1154,7 +1161,7 @@ do {
     checkEq("the old copy is gone once saved", defaults.data(forKey: "voice.history.sealed.v1"), nil)
     checkEq("so is the old description", defaults.data(forKey: "voice.profile.sealed.v1"), nil)
     store.keepsNothing = { false }
-    checkEq("the description moved too", store.profile, "做仿真的人")
+    checkEq("legacy description without source provenance is not reused", store.profile, "")
     store.add(entry("c", "第三条机密", age: 0))
     store.update(id: "a") { $0.inserted = false }
     store.remove(id: "b")
@@ -1296,7 +1303,7 @@ do {
     let resource = contents.appendingPathComponent("Resources/fixture.txt")
     try! FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
     try! FileManager.default.createDirectory(at: resource.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try! FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: executable)
+    try! FileManager.default.copyItem(at: URL(fileURLWithPath: CommandLine.arguments[0]), to: executable)
     let plist: [String: Any] = ["CFBundleIdentifier": "test.typeleast.integrity", "CFBundleExecutable": "Fixture", "CFBundlePackageType": "APPL"]
     try! PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
     try! Data("original fixture".utf8).write(to: resource)
@@ -1309,6 +1316,29 @@ do {
     checkEq("intact signed resources pass", SelfIntegrity.problem(bundleURL: root), nil)
     try! Data("changed fixture".utf8).write(to: resource)
     check("modified signed resources are rejected", SelfIntegrity.problem(bundleURL: root) != nil)
+    func signFixture() {
+        let sign = Process(); sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        sign.arguments = ["--force", "--sign", "-", "--timestamp=none", "--options", "runtime", root.path]
+        sign.standardError = FileHandle.nullDevice
+        try! sign.run(); sign.waitUntilExit()
+        checkEq("fixture re-sign succeeds", sign.terminationStatus, 0)
+    }
+    for variant in ["unchanged", "modified", "resigned"] {
+        try! Data("original fixture".utf8).write(to: resource)
+        signFixture()
+        let probe = Process(), input = Pipe(), output = Pipe()
+        probe.executableURL = executable; probe.arguments = ["--integrity-probe"]
+        probe.standardInput = input; probe.standardOutput = output; probe.standardError = FileHandle.nullDevice
+        try! probe.run()
+        let first = String(decoding: output.fileHandleForReading.availableData, as: UTF8.self)
+        checkEq("running fixture initially validates: " + variant, first.trimmingCharacters(in: .whitespacesAndNewlines), "ready")
+        if variant != "unchanged" { try! Data("modified during GUI lifetime".utf8).write(to: resource) }
+        if variant == "resigned" { signFixture() }
+        try? input.fileHandleForWriting.write(contentsOf: Data("continue\n".utf8))
+        try? input.fileHandleForWriting.close()
+        probe.waitUntilExit()
+        checkEq("running identity check after " + variant, probe.terminationStatus == 0, variant == "unchanged")
+    }
     try? FileManager.default.removeItem(at: root)
 }
 
@@ -1486,6 +1516,80 @@ do {
         checkEq("after the service exits, its old port is checked again", e, .untrusted)
     }
     checkEq("and the key never reached the new listener", state.lastRequest?.header("x-voice-llm"), "")
+}
+
+// A managed client never follows a modified runtime file, even after its child exits.
+do {
+    let owned = ServiceClient(managedChild: true)
+    owned.tokenOverride = "fixture-token"
+    let requestsBeforeStartup = state.requestCount
+    do { _ = try owned.healthSync(); check("failed initial startup stays untrusted", false) }
+    catch let error as ServiceError { checkEq("failed initial startup stays untrusted", error, .untrusted) }
+    checkEq("failed initial startup sends no requests", state.requestCount, requestsBeforeStartup)
+    let runtime = NSTemporaryDirectory() + "typeleast-test-runtime-" + UUID().uuidString
+    defer { try? FileManager.default.removeItem(atPath: runtime) }
+    try Data("{\"port\":12345}".utf8).write(to: URL(fileURLWithPath: runtime))
+    owned.runtimePath = runtime
+    checkEq("first startup cannot discover a rogue endpoint", owned.discoverBaseURL(), false)
+    owned.proofKey = String(repeating: "cd", count: 32)
+    owned.usePort(Int(server.port))
+    checkEq("managed client refuses file discovery", owned.discoverBaseURL(), false)
+    checkEq("forged file cannot replace pipe endpoint", owned.baseURL.port, Int(server.port))
+    owned.invalidatePort()
+    owned.proofKey = nil
+    checkEq("stopped managed child cannot downgrade to file trust", owned.discoverBaseURL(), false)
+    checkEq("stopped endpoint stays closed", owned.baseURL.port, 1)
+    owned.proofKey = String(repeating: "cd", count: 32)
+    owned.usePort(Int(server.port))
+    owned.tokenOverride = "fixture-token"
+    state.proofKey = String(repeating: "cd", count: 32)
+    check("new child endpoint can authenticate", (try? owned.healthSync()) != nil)
+    state.proofKey = nil
+    do { _ = try owned.healthSync(); check("identity is checked on every request", false) }
+    catch let error as ServiceError { checkEq("identity is checked on every request", error, .untrusted) }
+}
+
+do {
+    KeychainStore.stub = ["fixture": "fake-value", "history-encryption-key": "fake-history"]
+    let before = KeychainStore.stub
+    checkEq("replacement reads existing items without replacing them", KeychainHandoff.receive(data: Data("[\"fixture\",\"history-encryption-key\"]".utf8)), 0)
+    checkEq("successful handoff preserves every original", KeychainStore.stub, before)
+    checkEq("missing credentials refuse handoff", KeychainHandoff.receive(data: Data("[\"missing\"]".utf8)), 1)
+    checkEq("failed handoff preserves every original", KeychainStore.stub, before)
+    checkEq("legacy value-bearing handoff remains compatible", KeychainHandoff.receive(data: Data("{\"fixture\":\"replacement\"}".utf8)), 0)
+    checkEq("legacy handoff cannot replace existing credentials", KeychainStore.stub, before)
+    checkEq("malformed handoff is rejected", KeychainHandoff.receive(data: Data("{\"fixture\":42}".utf8)), 2)
+    checkEq("invalid payload leaves credentials unchanged", KeychainStore.stub, before)
+    checkEq("legacy sender's removed key is recovered", KeychainHandoff.receive(data: Data("{\"legacy-missing\":\"fake-recovered-value\"}".utf8)), 0)
+    checkEq("recovered legacy value is preserved", KeychainStore.stub?["legacy-missing"], "fake-recovered-value")
+    KeychainStore.stubRefuses = ["legacy-refused"]
+    checkEq("legacy recovery failure is reported", KeychainHandoff.receive(data: Data("{\"legacy-refused\":\"fake-value\"}".utf8)), 1)
+    checkEq("legacy recovery failure preserves existing key", KeychainStore.stub?["fixture"], "fake-value")
+    KeychainStore.stubRefuses = []
+    KeychainStore.stub = before
+    KeychainStore.stubRefuses = ["fixture"]
+    check("refused key save reports failure", !KeychainStore.write("replacement", account: "fixture"))
+    check("refused key deletion reports failure", !KeychainStore.write("", account: "fixture"))
+    checkEq("failed key edits preserve originals", KeychainStore.stub, before)
+    KeychainStore.stubRefuses = []
+    check("authorized key update succeeds", KeychainStore.write("replacement", account: "fixture"))
+    checkEq("authorized key update preserves other accounts", KeychainStore.stub?["history-encryption-key"], "fake-history")
+    check("authorized key deletion succeeds", KeychainStore.write("", account: "fixture"))
+    checkEq("authorized key deletion removes the item", KeychainStore.stub?["fixture"], nil)
+    KeychainStore.stub = before
+    KeychainStore.stubAccountError = true
+    checkEq("enumeration error is not an empty Keychain", KeychainStore.accounts(), nil)
+    check("enumeration error refuses handoff before spawning", !KeychainHandoff.transfer(toExecutable: URL(fileURLWithPath: "/no-such-test-executable"), cdhash: "fake"))
+    KeychainStore.stubAccountError = false
+    let work = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("typeleast-update-denied-" + UUID().uuidString)
+    try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+    try Data("fixture archive".utf8).write(to: work.appendingPathComponent("download.zip"))
+    do {
+        try Updater.authorizePreparedUpdate(app: work.appendingPathComponent("Test.app"), work: work, cdhash: "fixture", transfer: { _, _ in false })
+        check("denied handoff stops installation", false)
+    } catch { check("denied handoff stops installation", true) }
+    check("denied handoff removes only its prepared update", !FileManager.default.fileExists(atPath: work.path))
+    checkEq("denied update leaves original Keychain intact", KeychainStore.stub, before)
 }
 
 // MARK: 29. Keychain: read once, never on a redraw, and handed over across an update
@@ -1740,6 +1844,7 @@ do {
     defer { defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite) }
     let store = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
     store.keepsNothing = { false }
+    store.profileRetention = { .forever }
     var learned = LocalHistoryEntry(id: "a", ts: Date(), app: "x", language: "zh", strength: "prompt", raw: "修复哭达", text: "修复 CUDA",
                                     fallback: false, fallbackReason: nil, model: nil, msTotal: nil, audioPath: nil, inserted: true, seconds: 1)
     learned.corrections = [TermCorrection(from: "哭达", to: "CUDA", reason: "显存")]
@@ -1750,14 +1855,62 @@ do {
     checkEq("only entries with something learned are sent", store.learningItems.count, 1)
     checkEq("…as corrections and intention, never the text", store.learningItems.first?.keys.sorted(), ["corrections", "intention"])
     checkEq("no description before the first launch writes one", store.profile, "")
-    store.setProfile("做 CUDA 开发")
+    store.setProfile("做 CUDA 开发", generation: store.profileGeneration)
     checkEq("the description is kept, sealed", store.profile, "做 CUDA 开发")
     check("…not as plain text", !(defaults.dictionaryRepresentation().values.contains { ($0 as? String)?.contains("CUDA") == true }))
-    store.setProfile(String(repeating: "字", count: 1200))
+    store.setProfile(String(repeating: "字", count: 1200), generation: store.profileGeneration)
     checkEq("the description is capped at 1000 characters", store.profile.count, 1000)
     store.clear()
     checkEq("clearing History clears the description", store.profile, "")
+    let clearedTicket = store.profileGeneration
+    store.add(learned)
+    let ticket = store.profileGeneration
+    check("profile generation succeeds", store.setProfile("fixture", generation: ticket))
+    let reopened = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
+    reopened.keepsNothing = { false }
+    checkEq("profile with matching sources survives restart", reopened.profile, "fixture")
+    store.remove(id: learned.id)
+    checkEq("single deletion clears derived content", store.profile, "")
+    let retry = ServiceClient()
+    retry.baseURL = server.baseURL; retry.tokenOverride = "fixture-token"
+    retry.profileFilter = { store.profileForDispatch($0) }
+    state.mode = "health"
+    _ = try retry.polishSync(text: "fictional retry", language: "en", strength: "prompt", llm: nil, translateTo: nil, variants: nil, profile: "fixture")
+    let sent = try JSONSerialization.jsonObject(with: state.lastRequest!.body) as! [String: Any]
+    checkEq("saved review and failover profile is omitted after deletion", sent["profile"] as? String, nil)
+    check("late response cannot restore deleted data", !store.setProfile("stale", generation: ticket))
+    store.add(learned)
+    check("re-adding sources cannot revive an old callback", !store.setProfile("stale", generation: ticket))
+    check("callback from before source deletion stays rejected", !store.setProfile("stale", generation: clearedTicket))
+    check("new request can write a fresh profile", store.setProfile("new", generation: store.profileGeneration))
+    let beforeEdit = store.profileGeneration
+    store.update(id: learned.id) { $0.intention = "a different task" }
+    checkEq("editing a source invalidates its profile", store.profile, "")
+    check("late response after edit is refused", !store.setProfile("stale", generation: beforeEdit))
+    let beforeClear = store.profileGeneration
+    store.clear()
+    store.add(learned)
+    check("clear during model call cannot resurrect profile", !store.setProfile("stale", generation: beforeClear))
+    store.update(id: learned.id) { $0.ts = Date(timeIntervalSince1970: 0) }
+    _ = store.setProfile("old", generation: store.profileGeneration)
+    let beforeExpiry = store.profileGeneration
+    store.applyRetention(.day)
+    checkEq("retention clears expired derived content", store.profile, "")
+    check("retention invalidates pending results", !store.setProfile("old", generation: beforeExpiry))
+    store.add(learned)
+    let beforeNever = store.profileGeneration
+    store.applyRetention(.never)
+    check("never-save invalidates pending results", !store.setProfile("old", generation: beforeNever))
+    store.clear(); store.add(learned)
+    store.update(id: learned.id) { $0.ts = Date(timeIntervalSince1970: 0) }
+    _ = store.setProfile("expired while running", generation: store.profileGeneration)
+    let beforeRead = store.profileGeneration
+    store.profileRetention = { .day }
+    checkEq("read itself enforces retention without a new recording", store.profile, "")
+    checkEq("expired sources are not sent to profile generation", store.learningItems.count, 0)
+    check("late response after passive expiry stays rejected", !store.setProfile("expired", generation: beforeRead))
 }
+
 
 // MARK: retry recordings are deleted after five minutes
 do {

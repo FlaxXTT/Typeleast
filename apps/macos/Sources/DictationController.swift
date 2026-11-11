@@ -301,6 +301,7 @@ final class DictationController {
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let previousBeta = betaSession == nil ? nil : betaPending
         let llm = previousBeta?.llm ?? settings.activeLLMRoute
+        let canFailOver = llm != nil && settings.hasConfiguredBackupProviders
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
         let profile = HistoryStore.shared.profile
@@ -319,7 +320,7 @@ final class DictationController {
                                                               fieldContext: context, llm: llm,
                                                               betaSession: betaSession,
                                                               translateTo: translateTo, variants: variants,
-                                                              profile: profile, baseline: baseline, translatePrompt: ownPrompt,
+                                                              profile: profile, baseline: baseline, translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver,
                                                               onProgress: { [weak self] progress in DispatchQueue.main.async {
                                                                   guard let self, self.phase == .thinking, self.progressID == progressID else { return }
                                                                   self.recordingBar.showThinking(detail:progress.label)
@@ -330,10 +331,57 @@ final class DictationController {
             if deleteWhenDone { try? FileManager.default.removeItem(at: audioURL) }
             DispatchQueue.main.async {
                 guard self.progressID == progressID else { return }
-                self.finishRequest(outcome, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
-                                   audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: llm, variants: variants,
+                self.withBackupIfNeeded(outcome, generation: progressID, language: effectiveLanguage, strength: strength,
+                                        translateTo: translateTo, variants: variants, profile: profile, context: context,
+                                        baseline: baseline, appBundleId: appBundleId, translatePrompt: ownPrompt,
+                                        currentRoute: llm, betaSession: betaSession) { resolved, usedRoute in
+                self.finishRequest(resolved, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
+                                   audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: usedRoute ?? llm, variants: variants,
                                    betaSession: betaSession, betaInfo: previousBeta?.info, translateTo: translateTo, baseline: baseline,
                                    reviewContext: context, reviewProfile: profile, reviewTranslatePrompt: ownPrompt)
+                }
+            }
+        }
+    }
+
+    /// The first route was unavailable. Only now read the previously configured backup keys.
+    private func withBackupIfNeeded(_ outcome: Result<DictateResponse, Error>, generation: UUID,
+                                    language: String, strength: String, translateTo: String?, variants: String?,
+                                    profile: String, context: Data?, baseline: String?, appBundleId: String,
+                                    translatePrompt: String?, currentRoute: LLMRoute?, betaSession: String? = nil,
+                                    source: String? = nil, originalText: String? = nil, betaSkip: Bool = false,
+                                    completion: @escaping (Result<DictateResponse, Error>, LLMRoute?) -> Void) {
+        guard case .success(let response) = outcome, response.offerFailover else { completion(outcome, nil); return }
+        let isAssistant = strength == VoiceStrength.promptbeta.rawValue
+        let retrySession = isAssistant ? (response.beta?.sessionId ?? betaSession) : nil
+        let text = originalText ?? response.raw
+        guard isAssistant ? retrySession != nil : !text.isEmpty else { completion(outcome, nil); return }
+        let routes = settings.backupLLMRoutes(excluding: currentRoute)
+        guard progressID == generation else { return }
+        guard let first = routes.first else { completion(outcome, nil); return }
+        recordingBar.showThinking(detail: L10n.text("正在切换备用模型…"))
+        let ticket = client.generationTicket()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let retried = Result {
+                var answer = try self.client.polishSync(text: text, language: language, strength: strength, llm: first,
+                    translateTo: translateTo, variants: variants, profile: profile, fieldContext: context,
+                    betaSession: retrySession, source: source, translatePrompt: translatePrompt, baseline: baseline, appHint: appBundleId,
+                    generationTicket: ticket, llmBackups: Array(routes.dropFirst()), retryInitial: isAssistant && betaSession == nil, betaSkip: betaSkip)
+                if !answer.fallback && answer.beta?.notice == nil { answer.switchedProvider = true }
+                return answer
+            }
+            DispatchQueue.main.async {
+                guard self.progressID == generation else { return }
+                let selected: LLMRoute?
+                if case .success(let answer) = retried, answer.switchedProvider {
+                    selected = routes.first { route in
+                        guard route.model == answer.model, let url = URL(string: route.baseURL), let host = url.host else { return false }
+                        let authority = host + (url.port.map { ":\($0)" } ?? "")
+                        return answer.provider == "custom:" + authority
+                    } ?? first
+                } else { selected = nil }
+                completion(retried, selected)
             }
         }
     }
@@ -434,18 +482,23 @@ final class DictationController {
         pendingReviewedRequest = request
         let generation = UUID(); progressID = generation
         let requestTicket = client.generationTicket()
+        let canFailOver = request.llm != nil && settings.hasConfiguredBackupProviders
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result {
                 try self.client.polishSync(text: request.text, language: request.language, strength: request.strength, llm: request.llm,
                                            translateTo: request.translateTo, variants: request.variants, profile: request.profile,
                                            fieldContext: request.context, betaSession: request.betaSession, translatePrompt: request.translatePrompt,
-                                           baseline: request.baseline, appHint: request.appBundleId, generationTicket: requestTicket)
+                                           baseline: request.baseline, appHint: request.appBundleId, generationTicket: requestTicket, hasConfiguredBackups: canFailOver)
             }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
+                self.withBackupIfNeeded(outcome, generation: generation, language: request.language, strength: request.strength,
+                    translateTo: request.translateTo, variants: request.variants, profile: request.profile, context: request.context,
+                    baseline: request.baseline, appBundleId: request.appBundleId, translatePrompt: request.translatePrompt,
+                    currentRoute: request.llm, betaSession: request.betaSession, originalText: request.text) { resolved, usedRoute in
                 self.pendingReviewedRequest = nil
-                if Self.reviewNeedsRetry(outcome) {
+                if Self.reviewNeedsRetry(resolved) {
                     self.unregisterEscape()
                     self.phase = .idle
                     if request.betaSession != nil, self.beta.pending?.sessionId == request.betaSession { self.beta.setBusy(nil) }
@@ -456,9 +509,10 @@ final class DictationController {
                     self.updateIdleBar()
                     return
                 }
-                self.finishRequest(outcome, appBundleId: request.appBundleId, language: request.language, strength: request.strength,
+                self.finishRequest(resolved, appBundleId: request.appBundleId, language: request.language, strength: request.strength,
                                    audioPath: nil, seconds: nil, field: request.field, insert: request.insert,
-                                   llm: request.llm, variants: request.variants, betaSession: request.betaSession, translateTo: request.translateTo)
+                                   llm: usedRoute ?? request.llm, variants: request.variants, betaSession: request.betaSession, translateTo: request.translateTo)
+                }
             }
         }
     }
@@ -502,13 +556,13 @@ final class DictationController {
                 let keptAudio = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
                 var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                               language: language, strength: strength, raw: "", text: "",
-                                              fallback: true, fallbackReason: "quantity-conflict", model: resp.model,
+                                              fallback: true, fallbackReason: resp.fallbackReason ?? "fact-review", model: resp.model,
                                               msTotal: resp.ms?.total, audioPath: keptAudio, inserted: false, seconds: seconds)
                 entry.task = resp.task
                 entry.variants = variants
                 entry.qualityReview = review
                 HistoryStore.shared.add(entry)
-                recordingBar.showResult(L10n.text("数量或单位待核对"), warning: true)
+                recordingBar.showResult(L10n.text("整理结果需要核对"), warning: true)
                 setHint(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"), warning: true)
                 quantityReview.show(review: review) { [weak self] choice in
                     guard let self else { return false }
@@ -517,11 +571,15 @@ final class DictationController {
                         self.applyState()
                         return false
                     }
-                    let original = choice == .original
-                    let selected = original ? review.original : review.candidate
+                    let original: Bool
+                    let selected: String
+                    switch choice {
+                    case .original: original = true; selected = review.original
+                    case .candidate(let edited): original = false; selected = edited
+                    }
                     HistoryStore.shared.update(id: entry.id) {
                         $0.raw = review.original; $0.text = selected
-                        $0.fallback = original; $0.fallbackReason = original ? "quantity-conflict" : nil
+                        $0.fallback = original; $0.fallbackReason = original ? (resp.fallbackReason ?? "fact-review") : nil
                         $0.qualityReview = nil
                     }
                     if insert {
@@ -757,14 +815,20 @@ final class DictationController {
         applyState()
         let strength = VoiceStrength.promptbeta.rawValue
         let generation = UUID(); progressID = generation
+        let canFailOver = route != nil && settings.hasConfiguredBackupProviders
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.polishSync(text: text, language: language, strength: strength, llm: route, translateTo: nil, variants: variants,
-                                                              betaSession: session, source: source) }
+                                                              betaSession: session, source: source, hasConfiguredBackups: canFailOver) }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
-                self.finishRequest(outcome, appBundleId: appBundleId, language: language, strength: strength, audioPath: nil, seconds: nil,
-                                   field: nil, insert: false, llm: route, variants: variants, copyResult: copyResult)
+                self.withBackupIfNeeded(outcome, generation: generation, language: language, strength: strength,
+                    translateTo: nil, variants: variants, profile: "", context: nil, baseline: nil,
+                    appBundleId: appBundleId, translatePrompt: nil, currentRoute: route, betaSession: session,
+                    source: source, originalText: text) { resolved, usedRoute in
+                    self.finishRequest(resolved, appBundleId: appBundleId, language: language, strength: strength, audioPath: nil, seconds: nil,
+                                       field: nil, insert: false, llm: usedRoute ?? route, variants: variants, copyResult: copyResult)
+                }
             }
         }
     }
@@ -785,16 +849,22 @@ final class DictationController {
         let language = pending.language
         let variants = pending.variants
         let generation = UUID(); progressID = generation
+        let canFailOver = llm != nil && settings.hasConfiguredBackupProviders
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.betaSync(sessionId: pending.sessionId, skip: true,
                                                             appBundleId: pending.appBundleId, llm: llm,
-                                                            variants: variants, answer: answer) }
+                                                            variants: variants, answer: answer, hasConfiguredBackups: canFailOver) }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
-                self.finishRequest(outcome, appBundleId: pending.appBundleId, language: language,
+                self.withBackupIfNeeded(outcome, generation: generation, language: language, strength: VoiceStrength.promptbeta.rawValue,
+                    translateTo: nil, variants: variants, profile: "", context: nil, baseline: nil,
+                    appBundleId: pending.appBundleId, translatePrompt: nil, currentRoute: llm, betaSession: pending.sessionId,
+                    originalText: answer ?? "", betaSkip: true) { resolved, usedRoute in
+                self.finishRequest(resolved, appBundleId: pending.appBundleId, language: language,
                                    strength: VoiceStrength.promptbeta.rawValue, audioPath: nil, seconds: nil,
-                                   field: pending.field, insert: true, llm: llm, variants: variants)
+                                   field: pending.field, insert: true, llm: usedRoute ?? llm, variants: variants)
+                }
             }
         }
     }
@@ -819,20 +889,25 @@ final class DictationController {
         phase = .thinking
         registerEscape()
         idleBar.hide()
-        recordingBar.showThinking(detail: L10n.text("正在翻译…"))
+        recordingBar.showThinking(detail: L10n.text("正在翻译…") + "  " + SelectionTranslator.sourceCountLabel(field.selection))
         applyState()
         let text = field.selection, language = settings.language, variants = settings.variantsHeader
         let profile = HistoryStore.shared.profile
         let generation = UUID(); progressID = generation
         let ownPrompt = settings.customTranslatePrompt
+        let canFailOver = settings.hasConfiguredBackupProviders
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result { try self.client.polishSync(text: text, language: language, strength: "prompt", llm: route,
-                                                              translateTo: target, variants: variants, profile: profile, translatePrompt: ownPrompt) }
+                                                              translateTo: target, variants: variants, profile: profile, translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver) }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
-                self.finishRequest(outcome, appBundleId: field.bundleId, language: language, strength: "prompt", audioPath: nil,
-                                   seconds: nil, field: field, insert: true, llm: route, variants: variants)
+                self.withBackupIfNeeded(outcome, generation: generation, language: language, strength: "prompt",
+                    translateTo: target, variants: variants, profile: profile, context: nil, baseline: nil,
+                    appBundleId: field.bundleId, translatePrompt: ownPrompt, currentRoute: route, originalText: text) { resolved, usedRoute in
+                    self.finishRequest(resolved, appBundleId: field.bundleId, language: language, strength: "prompt", audioPath: nil,
+                                       seconds: nil, field: field, insert: true, llm: usedRoute ?? route, variants: variants)
+                }
             }
         }
     }

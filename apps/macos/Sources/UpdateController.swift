@@ -77,7 +77,7 @@ final class UpdateController {
         var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新后 TypeLeast 重启，权限和 Key 保留。")
         if !summary.isEmpty { detail = L10n.text("更新内容") + "\n" + summary + "\n\n" + detail }
         if !Updater.hasSigningIdentity() {
-            detail += "\n\n" + L10n.text("首次更新要输入一次登录密码，请选「始终允许」。之后可能要重新允许麦克风和辅助功能。")
+            detail += "\n\n" + L10n.text("签名或钥匙串访问可能需要系统授权。请仅允许本次操作，不要选择「始终允许」。")
         }
         alert.informativeText = detail
         alert.addButton(withTitle: L10n.text("立即更新"))
@@ -98,12 +98,11 @@ final class UpdateController {
             DispatchQueue.main.async { self?.progress.update(stage) }
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { try Updater.prepare(version: version, stage: report) }
-            // Hand the Keychain items straight to the new copy, so updating asks for no password.
-            // Without a code hash to check it against, nothing is handed over and the new copy asks once.
-            if case .success(let ready) = result, let cdhash = ready.cdhash {
+            let result = Result {
+                let ready = try Updater.prepare(version: version, stage: report)
                 report(.handingOver)
-                KeychainHandoff.transfer(toExecutable: ready.app.appendingPathComponent("Contents/MacOS/TypeLeast"), cdhash: cdhash)
+                try Updater.authorizePreparedUpdate(app: ready.app, work: ready.work, cdhash: ready.cdhash)
+                return ready
             }
             DispatchQueue.main.async {
                 guard let self else { return }

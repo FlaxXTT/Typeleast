@@ -71,15 +71,22 @@ export function parseRouteHeader(header) {
  * @param {string} host - the route's host.
  * @returns {object} extra body fields.
  */
-export function noThinkingFields(host) {
+export function noThinkingFields(host, model = "") {
   const name = String(host ?? "").toLowerCase();
-  if (name === "api.deepseek.com" || name.endsWith(".deepseek.com")) return { thinking: { type: "disabled" } };
+  if (isDeepSeekHost(name)) return { thinking: { type: "disabled" } };
+  // These official GLM models require thinking and reject disabled mode.
+  if (name === "open.bigmodel.cn" && String(model).toLowerCase().startsWith("glm-5.3-flash")) return {};
   if (name === "open.bigmodel.cn" || name.endsWith(".bigmodel.cn")) return { thinking: { type: "disabled" } };
   if (name.endsWith("dashscope.aliyuncs.com")) return { enable_thinking: false };
   return {};
 }
 
-/** Hosts that rejected the thinking switch once; it is not sent to them again. */
+function isDeepSeekHost(host) {
+  const name = String(host ?? "").toLowerCase();
+  return name === "api.deepseek.com" || name.endsWith(".deepseek.com");
+}
+
+/** Provider/model combinations that accepted a request only without the thinking switch. */
 const thinkingSwitchRejected = new Set();
 
 /** Inspect only a bounded structured error code; never retain provider response text. */
@@ -114,12 +121,19 @@ export function routeLabel(route) {
  */
 export async function completeOpenAI(options) {
   const { route, system, user, maxTokens, temperature, timeoutMs, signal, retryBudget, fetchImpl = globalThis.fetch } = options;
+  const maxTransportAttempts = options.maxTransportAttempts === 1 ? 1 : 2;
   const started = Date.now();
   let lastError;
-  let extra = thinkingSwitchRejected.has(route.host) ? {} : noThinkingFields(route.host);
+  const modelName = String(route.model ?? "").toLowerCase();
+  const openAIQuick = route.host === "api.openai.com" && ["gpt-6-luna", "gpt-6.1-terra"].includes(modelName);
+  const kimiK3 = route.host === "api.moonshot.cn" && /^kimi-k3(?:[.-]|$)/u.test(modelName);
+  const thinkingKey = `${route.host}\u0000${route.model}`;
+  // DeepSeek explicitly supports this switch; dropping it enables thinking by default.
+  let extra = !isDeepSeekHost(route.host) && thinkingSwitchRejected.has(thinkingKey) ? {} : noThinkingFields(route.host, route.model);
+  let triedWithoutThinkingSwitch = false;
   let budget = maxTokens;
   let widened = false;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= maxTransportAttempts; attempt += 1) {
     retryBudget?.assertTime();
     const deadline = createDeadline(signal, Math.min(timeoutMs, retryBudget?.remainingMs() ?? timeoutMs));
     try {
@@ -136,8 +150,9 @@ export async function completeOpenAI(options) {
             { role: "system", content: system },
             { role: "user", content: user },
           ],
-          ...(budget === undefined ? {} : { max_tokens: budget }),
-          ...(temperature === undefined ? {} : { temperature }),
+          ...(budget === undefined ? {} : openAIQuick ? { max_completion_tokens: budget } : { max_tokens: budget }),
+          ...(temperature === undefined || kimiK3 ? {} : { temperature }),
+          ...(openAIQuick ? { reasoning_effort: "none" } : kimiK3 ? { reasoning_effort: "low" } : {}),
           ...extra,
           stream: false,
         }),
@@ -147,11 +162,11 @@ export async function completeOpenAI(options) {
         if (await contextLimit(response)) throw new ModelCallError('error','provider context limit exceeded',{code:'CONTEXT_LIMIT'});
         // The body may echo request details; only the status is kept.
         await response.body?.cancel?.().catch?.(() => {});
-        // A provider that does not know the thinking switch may answer 400:
-        // retry once without it, and do not send it to that host again.
-        if (response.status === 400 && Object.keys(extra).length > 0) {
+        // Some compatible providers reject the switch. DeepSeek documents it,
+        // so an unrelated 400 must never silently enable its thinking mode.
+        if (response.status === 400 && Object.keys(extra).length > 0 && !isDeepSeekHost(route.host)) {
           if (retryBudget && !retryBudget.retry()) throw new ModelCallError("error", "provider rejected parameters", {code:"HTTP_400"});
-          thinkingSwitchRejected.add(route.host);
+          triedWithoutThinkingSwitch = true;
           extra = {};
           attempt -= 1;
           continue;
@@ -180,12 +195,13 @@ export async function completeOpenAI(options) {
       if (choice?.finish_reason === "tool_calls") {
         throw new ModelCallError("tool-calls", "model unexpectedly requested a tool", { attempts: attempt, elapsedMs: Date.now() - started });
       }
+      if (triedWithoutThinkingSwitch) thinkingSwitchRejected.add(thinkingKey);
       return { text, attempts: attempt, usage: body?.usage };
     } catch (error) {
       if (signal?.aborted) {
         throw new ModelCallError("cancelled", "caller cancelled", { attempts: attempt, elapsedMs: Date.now() - started, cause: error });
       }
-      if (deadline.timedOut() && retryBudget && attempt === 1 && retryBudget.retry()) continue;
+      if (deadline.timedOut() && retryBudget && attempt < maxTransportAttempts && retryBudget.retry()) continue;
       if (deadline.timedOut()) {
         throw new ModelCallError("timeout", `no answer from ${route.host} within ${timeoutMs} ms`, { attempts: attempt, elapsedMs: Date.now() - started });
       }
@@ -199,7 +215,7 @@ export async function completeOpenAI(options) {
       lastError = failure;
       const status = Number(String(failure.code ?? "").replace("HTTP_", ""));
       const retryable = failure.kind === "error" && (failure.code === "NETWORK" || status === 429 || status >= 500);
-      if (attempt === 1 && retryable && (!retryBudget || retryBudget.retry())) {
+      if (attempt < maxTransportAttempts && retryable && (!retryBudget || retryBudget.retry())) {
         await new Promise((resolve) => setTimeout(resolve, 400));
         continue;
       }

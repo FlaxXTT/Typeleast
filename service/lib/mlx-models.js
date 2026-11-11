@@ -71,5 +71,136 @@ export const MLX_QWEN_MODELS = [
     ]),
 ];
 
+// User-installed candidate: 8-bit recognition on this Mac has not yet been tested.
+const qwen8Files = [
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/chat_template.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "chat_template.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "chat_template.json",
+    "size": 1161,
+    "sha256": "75a8cfca24f00de72d796fbfed6858fc9614ef3dabd8696684cc3bc03a9c58ff"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/config.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "config.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "config.json",
+    "size": 7188,
+    "sha256": "1b76b3b6c655fc54595da025f7a96474ad9fa86363303fbdd61a7d8483ccfaf7"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/generation_config.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "generation_config.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "generation_config.json",
+    "size": 142,
+    "sha256": "1da527824d81e07118facff437e03f2e24a23311e3bdeb2368973fe77e5f275c"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/merges.txt",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "merges.txt"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/model.safetensors",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "model.safetensors"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "model.safetensors",
+    "size": 2463307541,
+    "sha256": "bf304b009cc7eca79283056f787b44c952d24ac22cec787b39732bba3c23c13c"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/model.safetensors.index.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "model.safetensors.index.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "model.safetensors.index.json",
+    "size": 78968,
+    "sha256": "0a5d0ec11188602242ff81a9969883d0fdeb98cd5d85cd1413089d897c201af5"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/preprocessor_config.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "preprocessor_config.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "preprocessor_config.json",
+    "size": 330,
+    "sha256": "45e120a4eda2c20c5d7f2ea9354e63536bf35e27aa573fb7cdf78017b378770d"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/tokenizer_config.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "tokenizer_config.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "tokenizer_config.json",
+    "size": 12487,
+    "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/vocab.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "vocab.json"
+    ],
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "revision": "a8379a2e2f9e313c9292cdf1af4055ab56d50d55",
+    "file": "vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+  },
+  {
+    "id": "mlx-qwen3-asr-1.7b-8bit/tokenizer.json",
+    "path": [
+      "mlx-qwen3-asr-1.7b-8bit",
+      "tokenizer.json"
+    ],
+    "repo": "Qwen/Qwen3-ASR-1.7B-hf",
+    "revision": "bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+    "file": "tokenizer.json",
+    "size": 11429653,
+    "sha256": "fe1fad59be22a41ee293363fcf95fdedbc7c93f3b49270b1d2e18bd1399a7a05"
+  }
+];
+MLX_MODELS.push({
+  id: 'mlx-qwen3-asr-1.7b-8bit', name: 'Qwen3-ASR-1.7B (MLX 8-bit)',
+  sourceUrl: 'https://huggingface.co/mlx-community/Qwen3-ASR-1.7B-8bit',
+  source: 'https://github.com/QwenLM/Qwen3-ASR', license: 'Apache-2.0',
+  engine: 'mlx', precision: '8-bit', languages: ['auto', 'zh', 'en', 'ja', 'ko', 'yue'], canSetLanguage: true,
+  modelBytes: qwen8Files.reduce((total, file) => total + file.size, 0), files: qwen8Files,
+});
+
 // Both models passed isolated load and multilingual recognition with the worker.
 MLX_MODELS.push(...MLX_QWEN_MODELS);

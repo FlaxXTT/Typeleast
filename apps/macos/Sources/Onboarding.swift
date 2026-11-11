@@ -90,7 +90,7 @@ struct OnboardingView: View {
     private var progress: some View {
         HStack(spacing: 6) {
             ForEach(OnboardingStep.allCases, id: \.rawValue) { s in
-                Capsule()
+                Capsule(style: .continuous)
                     .fill(s.rawValue <= step.rawValue ? Theme.ink : Theme.border)
                     .frame(width: s == step ? 22 : 8, height: 6)
             }

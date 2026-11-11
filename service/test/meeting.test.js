@@ -133,3 +133,25 @@ test("the HTTP routes upload, report and cancel", async () => {
   assert.equal((await call("GET", `/meetings/status?id=${started.body.id}`)).status, 404);
   assert.equal(MAX_MEETING_BYTES, 44 + MAX_MEETING_SECONDS * 32000);
 });
+
+
+test('meeting deadline fails a stuck preparation and late completion cannot overwrite it', async () => {
+ let finish;
+ const jobs=new MeetingJobs({processingTimeoutMs:20,recognizer:()=>new Promise(resolve=>{finish=resolve;})});
+ const id=jobs.start({audio:wav()});
+ assert.equal((await settled(jobs,id)).code,'meeting-timeout');
+ finish({transcribe:async()=>({text:'late',segments:[]})});
+ await new Promise(r=>setImmediate(r));
+ assert.equal(jobs.status(id).phase,'failed');
+ assert.equal(jobs.status(id).result,undefined);
+});
+
+test('meeting deadline aborts the active recognizer and allows another job', async () => {
+ let aborted=false;
+ const jobs=new MeetingJobs({processingTimeoutMs:20,recognizer:async()=>({transcribe:(_a,_l,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{aborted=true;reject(signal.reason);},{once:true}))})});
+ const id=jobs.start({audio:wav()});
+ assert.equal((await settled(jobs,id)).code,'meeting-timeout');
+ assert.equal(aborted,true);
+ jobs.recognizer=async()=>({transcribe:async()=>({text:'next',segments:[]})});
+ assert.equal((await settled(jobs,jobs.start({audio:wav()}))).phase,'done');
+});

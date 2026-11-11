@@ -103,8 +103,9 @@ final class HistoryDatabase {
     }
 
     /// Write and remove rows, all or nothing.
-    func apply(upserts: [StoredEntryRow], deletes: [String]) -> Bool {
+    func apply(upserts: [StoredEntryRow], deletes: [String], clearProfile: Bool = false) -> Bool {
         guard run("BEGIN IMMEDIATE") else { return false }
+        if clearProfile, !execute("DELETE FROM meta WHERE key = 'profile'") { _ = run("ROLLBACK"); return false }
         for id in deletes {
             guard execute("DELETE FROM entries WHERE id = ?", bind: { self.text($0, 1, id) }) else { _ = run("ROLLBACK"); return false }
         }
@@ -149,6 +150,8 @@ final class HistoryDatabase {
 
     /// Every row and the stored description.
     func deleteAll() -> Bool {
-        run("BEGIN IMMEDIATE") && run("DELETE FROM entries") && run("DELETE FROM meta") && run("COMMIT")
+        guard run("BEGIN IMMEDIATE") else { return false }
+        guard run("DELETE FROM entries"), run("DELETE FROM meta"), run("COMMIT") else { _ = run("ROLLBACK"); return false }
+        return true
     }
 }

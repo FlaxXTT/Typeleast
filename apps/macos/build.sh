@@ -121,6 +121,9 @@ cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/../../LICENSE" "$APP/Contents/Resources/LICENSE"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"; fi
+for artwork in BrandIcon.png BrandWordmark.png; do
+  if [ -f "$ROOT/Resources/$artwork" ]; then cp "$ROOT/Resources/$artwork" "$APP/Contents/Resources/$artwork"; fi
+done
 
 # Enable Hardened Runtime to restrict library injection and debugger attachment.
 # This process holds microphone, Accessibility and Keychain permissions.

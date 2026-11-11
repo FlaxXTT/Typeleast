@@ -10,6 +10,14 @@ import Security
 enum SelfIntegrity {
     /// nil when the bundle's signature (and every sealed file) is intact; otherwise why not.
     static func problem(bundleURL: URL = Bundle.main.bundleURL) -> String? {
+        // A valid replacement signature is insufficient. The on-disk code must still
+        // match the code identity held by the OS for this running process.
+        if bundleURL.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL {
+            var running: SecCode?
+            guard SecCodeCopySelf([], &running) == errSecSuccess, let running else { return "running identity unavailable" }
+            // Dynamic validation accepts different flags from the static resource check below.
+            guard SecCodeCheckValidity(running, [], nil) == errSecSuccess else { return "running identity changed" }
+        }
         var code: SecStaticCode?
         let created = SecStaticCodeCreateWithPath(bundleURL as CFURL, SecCSFlags(), &code)
         guard created == errSecSuccess, let code else { return "unreadable signature (\(created))" }

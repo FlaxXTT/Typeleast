@@ -530,13 +530,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func refreshProfileOnce() {
         guard !profileRefreshed, let route = settings.activeLLMRoute else { return }
         let items = HistoryStore.shared.learningItems
+        let generation = HistoryStore.shared.profileGeneration
         guard !items.isEmpty else { return }
         profileRefreshed = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             do {
                 let profile = try self.client.profileSync(items: items, llm: route)
-                DispatchQueue.main.async { if !profile.isEmpty { HistoryStore.shared.setProfile(profile) } }
+                DispatchQueue.main.async { if !profile.isEmpty { HistoryStore.shared.setProfile(profile, generation: generation) } }
             } catch {
                 DiagnosticsLog.write("profile.fail", ["error": (error as? ServiceError)?.description ?? error.localizedDescription])
             }

@@ -144,8 +144,6 @@ final class ServiceManager {
     private var stopping = false
     private var restartAttempts = 0
     private var stdoutBuffer = ""
-    private var integrityChecked = false
-    private var integrityProblem: String?
 
     // MARK: lifecycle
 
@@ -181,15 +179,12 @@ final class ServiceManager {
 
     private func startLocked() {
         stopping = false
-        if case .running = state, process != nil { return }
+        if process != nil { return }
 
-        // Once per launch: a bundle whose sealed files changed does not get to run code.
-        if !integrityChecked {
-            integrityChecked = true
-            integrityProblem = SelfIntegrity.problem()
-            if integrityProblem != nil { DiagnosticsLog.write("integrity.fail", ["code": "signature"]) }
-        }
-        if integrityProblem != nil {
+        // Disk resources can change while the GUI stays open. Check every child launch,
+        // including automatic and manual restarts, against this running app's identity.
+        if SelfIntegrity.problem() != nil {
+            DiagnosticsLog.write("integrity.fail", ["code": "signature"])
             state = .failed(L10n.text("TypeLeast 文件被改动，本地服务未启动。请重新安装。"))
             return
         }
@@ -215,7 +210,7 @@ final class ServiceManager {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: node.path)
-        p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid()), "--auth-stdin"]
+        p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid()), "--auth-stdin", "--secure-transport"]
         p.currentDirectoryURL = URL(fileURLWithPath: dir)
         var env = ServiceLocator.serviceEnvironment(ProcessInfo.processInfo.environment)
         if let mirror = modelMirror, !mirror.isEmpty { env["HF_ENDPOINT"] = mirror }
@@ -236,10 +231,13 @@ final class ServiceManager {
         let secretHex = secret.map { String(format: "%02x", $0) }.joined()
         client.proofKey = secretHex
         stdoutBuffer = ""
-        out.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        out.fileHandleForReading.readabilityHandler = { [weak self, weak p] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            self?.queue.async { self?.consumeStdout(data) }
+            self?.queue.async {
+                guard let self, let p, self.process === p else { return }
+                self.consumeStdout(data)
+            }
         }
         err.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
@@ -285,7 +283,7 @@ final class ServiceManager {
     }
 
     private func handleExit(_ proc: Process) {
-        guard proc === process || process == nil else { return }
+        guard proc === process else { return }
         process = nil
         // Until the next service is up, nothing that answers on the old port is trusted.
         ServiceClient.shared.invalidatePort()

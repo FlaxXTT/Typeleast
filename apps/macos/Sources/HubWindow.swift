@@ -79,8 +79,8 @@ private struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
-                AppMarkView(size: 26)
-                Text("TypeLeast").font(.custom("Snell Roundhand", size: 21))
+                AppMarkView(size: 26).accessibilityHidden(true)
+                Text("TypeLeast").font(.system(size: 21, weight: .semibold))
             }
             .padding(.top, 44)
             .padding(.horizontal, 18)
@@ -106,8 +106,29 @@ private struct Sidebar: View {
 
 private struct SidebarItem: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let page: HubPage
     @State private var hovering = false
+
+    @ViewBuilder private var icon: some View {
+        if page == .meetings {
+            ZStack {
+                Image(systemName: "person")
+                    .rotationEffect(.degrees(hovering && !reduceMotion ? 22 : 0))
+                    .offset(x: hovering && !reduceMotion ? -1 : -5, y: hovering && !reduceMotion ? -2 : 0)
+                Image(systemName: "person")
+                    .rotationEffect(.degrees(hovering && !reduceMotion ? -22 : 0))
+                    .offset(x: hovering && !reduceMotion ? 1 : 5, y: hovering && !reduceMotion ? -2 : 0)
+            }
+            .font(.system(size: 10.5, weight: model.page == page ? .semibold : .regular))
+        } else {
+            Image(systemName: page.symbol)
+                .font(.system(size: 14, weight: model.page == page ? .semibold : .regular))
+                .rotationEffect(.degrees(hovering && !reduceMotion ? (page == .settings ? 100 : page == .history ? -70 : -14) : 0))
+                .scaleEffect(hovering && !reduceMotion ? 1.3 : 1)
+                .offset(y: hovering && !reduceMotion ? -2 : 0)
+        }
+    }
 
     var body: some View {
         let selected = model.page == page
@@ -115,10 +136,12 @@ private struct SidebarItem: View {
             model.page = page
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: page.symbol)
-                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
-                    .frame(width: 18)
+                icon
+                    .frame(width: 18, height: 18)
+                    .animation(reduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.34), value: hovering)
                 Text(page.title).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                    .offset(x: hovering && !reduceMotion ? 4 : 0)
+                    .animation(reduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.48), value: hovering)
                 Spacer()
             }
             .foregroundColor(selected ? Theme.ink : Theme.secondary)
@@ -162,16 +185,18 @@ private struct ServiceBadge: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundColor(Theme.ink)
+                    .hoverInteraction()
             } else if !model.serviceUp && !model.modelsDownloading {
                 Button(L10n.text("重启")) { model.actions?.restartService() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundColor(Theme.ink)
+                    .hoverInteraction()
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.card))
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.card))
     }
 }
 
@@ -214,7 +239,7 @@ struct SidebarModes: View {
             Button { model.actions?.startAssistant() } label: {
                 Label(L10n.text("提示词模式"), systemImage:"text.bubble")
                     .font(.system(size:13,weight:.medium)).padding(10)
-            }.buttonStyle(.plain)
+            }.buttonStyle(.plain).hoverInteraction()
         }
         .disabled(model.phase != .idle)
         .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
@@ -234,9 +259,9 @@ struct FlexibleSegment: View {
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 34)
                 .padding(.horizontal, 4)
-                .background(RoundedRectangle(cornerRadius: 7).fill(selected ? Theme.selection : Color.clear))
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? Theme.selection : Color.clear))
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain)
+        }.buttonStyle(.plain).hoverInteraction()
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

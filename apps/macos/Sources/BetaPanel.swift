@@ -164,6 +164,7 @@ struct BetaQuestionsView: View {
                                         ForEach(options, id: \.self) { option in
                                             Button(option) { model.chosen[question] = model.chosen[question] == option ? nil : option }
                                                 .buttonStyle(ChoiceChipStyle(selected: model.chosen[question] == option))
+                                                .hoverInteraction()
                                                 .disabled(model.busy != nil)
                                         }
                                     }
@@ -221,8 +222,8 @@ private struct ChoiceChipStyle: ButtonStyle {
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(selected ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule().fill(selected ? Theme.ink : Theme.card))
-            .overlay(Capsule().stroke(Theme.border))
+            .background(Capsule(style: .continuous).fill(selected ? Theme.ink : Theme.card))
+            .overlay(Capsule(style: .continuous).stroke(Theme.border))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
