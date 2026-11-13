@@ -284,18 +284,77 @@ struct SelectionDotView: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Circle().fill(Color(red: 1, green: 250.0/255, blue: 252.0/255))
-                .overlay(Circle().fill(Color(red: 252.0/255, green: 179.0/255, blue: 181.0/255))
-                    .padding(2))
+        Button(action: action) { TranslationOrb() }
+            .buttonStyle(TranslationDotPressStyle())
+            .help(L10n.text("翻译"))
+    }
+}
+
+private struct TranslationDotPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.78 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.4), value: configuration.isPressed)
+    }
+}
+
+private struct TranslationOrb: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+    @State private var pointer = CGSize.zero
+    @State private var entrance = 0
+    private let shell = Color(red: 1, green: 250.0 / 255, blue: 252.0 / 255)
+    private let core = Color(red: 252.0 / 255, green: 179.0 / 255, blue: 181.0 / 255)
+
+    var body: some View {
+        let motionReduced = reduceMotion
+        ZStack {
+            Circle().fill(core.opacity(hovering ? 0.22 : 0)).frame(width: 27, height: 27).blur(radius: 3)
+            Circle().trim(from: 0.08, to: 0.78)
+                .stroke(AngularGradient(colors: [core.opacity(0), shell, core], center: .center), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .frame(width: 23, height: 23)
+                .keyframeAnimator(initialValue: CGFloat(-130), trigger: entrance) { view, angle in
+                    view.rotationEffect(.degrees(motionReduced ? 0 : angle))
+                } keyframes: { _ in
+                    MoveKeyframe(CGFloat(-130)); CubicKeyframe(CGFloat(260), duration: 0.7)
+                }
+                .opacity(hovering ? 1 : 0)
+                .scaleEffect(hovering && !reduceMotion ? 1 : 0.6)
+            Circle().fill(.ultraThinMaterial)
+                .overlay {
+                    Circle().fill(LinearGradient(colors: [.white.opacity(0.94), shell.opacity(0.78), shell.opacity(0.60)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+                .overlay {
+                    Circle().strokeBorder(LinearGradient(colors: [.white, shell.opacity(0.80), Color.black.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.65)
+                }
                 .frame(width: 14, height: 14)
-                .shadow(color: .black.opacity(0.25), radius: 2)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+                .shadow(color: .black.opacity(0.16), radius: 2.5, y: 1)
+            Circle().fill(RadialGradient(colors: [Color(red: 1, green: 0.85, blue: 0.86), core, Color(red: 0.94, green: 0.55, blue: 0.59)], center: .topLeading, startRadius: 0, endRadius: 12))
+                .overlay { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 0.45) }
+                .overlay(alignment: .topLeading) {
+                    Ellipse().fill(.white.opacity(0.40)).frame(width: 5, height: 2.5).blur(radius: 0.35).rotationEffect(.degrees(-30)).offset(x: 1.5, y: 1.5)
+                }
+                .frame(width: 10, height: 10)
+                .offset(x: hovering && !reduceMotion ? pointer.width * 2 : 0, y: hovering && !reduceMotion ? pointer.height * 2 : 0)
+                .scaleEffect(hovering && !reduceMotion ? 1.12 : 1)
+            Circle().fill(shell).frame(width: 3, height: 3)
+                .offset(x: hovering ? 10 : 2, y: hovering ? -9 : -2)
+                .opacity(hovering && !reduceMotion ? 0.95 : 0)
         }
-        .buttonStyle(.plain)
-        .hoverInteraction()
-        .help(L10n.text("翻译"))
+        .frame(width: 36, height: 36)
+        .contentShape(Circle())
+        .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.52), value: hovering)
+        .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.75), value: pointer)
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location):
+                if !hovering { entrance += 1 }
+                hovering = true
+                pointer = CGSize(width: max(-1, min(1, (location.x - 18) / 18)), height: max(-1, min(1, (location.y - 18) / 18)))
+            case .ended: hovering = false; pointer = .zero
+            }
+        }
     }
 }
 

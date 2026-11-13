@@ -110,24 +110,10 @@ private struct SidebarItem: View {
     let page: HubPage
     @State private var hovering = false
 
-    @ViewBuilder private var icon: some View {
-        if page == .meetings {
-            ZStack {
-                Image(systemName: "person")
-                    .rotationEffect(.degrees(hovering && !reduceMotion ? 22 : 0))
-                    .offset(x: hovering && !reduceMotion ? -1 : -5, y: hovering && !reduceMotion ? -2 : 0)
-                Image(systemName: "person")
-                    .rotationEffect(.degrees(hovering && !reduceMotion ? -22 : 0))
-                    .offset(x: hovering && !reduceMotion ? 1 : 5, y: hovering && !reduceMotion ? -2 : 0)
-            }
-            .font(.system(size: 10.5, weight: model.page == page ? .semibold : .regular))
-        } else {
-            Image(systemName: page.symbol)
-                .font(.system(size: 14, weight: model.page == page ? .semibold : .regular))
-                .rotationEffect(.degrees(hovering && !reduceMotion ? (page == .settings ? 100 : page == .history ? -70 : -14) : 0))
-                .scaleEffect(hovering && !reduceMotion ? 1.3 : 1)
-                .offset(y: hovering && !reduceMotion ? -2 : 0)
-        }
+    @State private var motionTrigger = 0
+
+    private var icon: some View {
+        SidebarMotionIcon(page: page, selected: model.page == page, hovering: hovering, trigger: motionTrigger)
     }
 
     var body: some View {
@@ -152,7 +138,11 @@ private struct SidebarItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .modifier(ControlMotion(cornerRadius: 9, scale: 1.015, travel: 1.2))
+        .onHover { value in
+            if value && !hovering { motionTrigger += 1 }
+            hovering = value
+        }
     }
 }
 

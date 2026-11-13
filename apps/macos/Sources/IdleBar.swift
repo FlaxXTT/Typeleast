@@ -11,58 +11,136 @@ import SwiftUI
 private final class IdleBarView: NSView {
     var onClick: (() -> Void)?
     var hint = L10n.text("按 fn 听写")
-    private(set) var hovering = false {
-        didSet { needsDisplay = true }
-    }
+    private(set) var hovering = false
+    private var expansion: CGFloat = 0
     private var tracking: NSTrackingArea?
+    private var animationTimer: Timer?
+    private var delayedExit: DispatchWorkItem?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var acceptsFirstResponder: Bool { false }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let t = tracking { removeTrackingArea(t) }
-        let t = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
-        addTrackingArea(t)
-        tracking = t
+    deinit {
+        animationTimer?.invalidate()
+        delayedExit?.cancel()
     }
 
-    override func mouseEntered(with event: NSEvent) { setHover(true) }
-    override func mouseExited(with event: NSEvent) { setHover(false) }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        delayedExit?.cancel()
+        delayedExit = nil
+        setHover(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        delayedExit?.cancel()
+        // Updating the panel size also updates tracking areas. Ignore an exit
+        // caused by that geometry change while the mouse is still on the bar.
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.delayedExit = nil
+            guard self.window?.frame.insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation) != true else { return }
+            self.setHover(false)
+        }
+        delayedExit = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
+    }
+
     override func mouseDown(with event: NSEvent) { onClick?() }
 
+    func reset() {
+        animationTimer?.invalidate()
+        animationTimer = nil
+        delayedExit?.cancel()
+        delayedExit = nil
+        hovering = false
+        updateExpansion(0)
+    }
+
+    private func updateExpansion(_ value: CGFloat) {
+        expansion = min(1, max(0, value))
+        (window as? IdleBarPanel)?.setExpansion(expansion)
+        needsDisplay = true
+    }
+
     private func setHover(_ value: Bool) {
+        guard hovering != value else { return }
         hovering = value
-        (window as? IdleBarPanel)?.resize(expanded: value)
+        animationTimer?.invalidate()
+        animationTimer = nil
+        let target: CGFloat = value ? 1 : 0
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            updateExpansion(target)
+            return
+        }
+        let initial = expansion
+        let began = ProcessInfo.processInfo.systemUptime
+        let duration = 0.28 * max(0.45, Double(abs(target - initial)))
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                self.updateExpansion(target)
+                timer.invalidate()
+                self.animationTimer = nil
+                return
+            }
+            let t = min(1, (ProcessInfo.processInfo.systemUptime - began) / duration)
+            let eased = 1 - pow(1 - t, 3)
+            self.updateExpansion(initial + (target - initial) * CGFloat(eased))
+            if t >= 1 {
+                timer.invalidate()
+                self.animationTimer = nil
+            }
+        }
+        animationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous)
-            .path(in: rect).cgPath
-        NSColor(calibratedWhite: 0.07, alpha: hovering ? 0.92 : 0.55).setFill()
-        NSColor(calibratedWhite: 1, alpha: hovering ? 0.14 : 0.18).setStroke()
+        let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous).path(in: rect).cgPath
+        NSColor(calibratedWhite: 0.07, alpha: 0.55 + expansion * 0.37).setFill()
+        NSColor(calibratedWhite: 1, alpha: 0.18 + expansion * 0.08).setStroke()
         context.setLineWidth(1)
         context.addPath(path)
         context.drawPath(using: .fillStroke)
-        guard hovering else {
-            // three faint dots, the resting mark
-            for i in -1...1 {
-                let r: CGFloat = 1.6
-                let x = bounds.midX + CGFloat(i) * 6
-                NSColor.white.withAlphaComponent(0.7).setFill()
-                NSBezierPath(ovalIn: NSRect(x: x - r, y: bounds.midY - r, width: r * 2, height: r * 2)).fill()
-            }
-            return
+
+        // The resting dots become a small waveform as the capsule unfolds.
+        // Stagger the heights without leaving an animation running while idle.
+        let symbolX = bounds.midX + (28 - bounds.midX) * expansion
+        let heights: [CGFloat] = [8, 15, 11]
+        for i in 0..<3 {
+            let delay = CGFloat(i) * 0.10
+            let progress = min(1, max(0, (expansion - delay) / (1 - delay)))
+            let height = 3.2 + (heights[i] - 3.2) * progress
+            let x = symbolX + CGFloat(i - 1) * 6
+            NSColor.white.withAlphaComponent(0.70 + expansion * 0.20).setFill()
+            let bar = NSRect(x: x - 1.6, y: bounds.midY - height / 2, width: 3.2, height: height)
+            NSBezierPath(roundedRect: bar, xRadius: 1.6, yRadius: 1.6).fill()
         }
+        let labelOpacity = min(1, max(0, (expansion - 0.35) / 0.65))
+        guard labelOpacity > 0 else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.9),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.9 * labelOpacity),
+            .paragraphStyle: paragraph,
         ]
         let text = hint as NSString
         let size = text.size(withAttributes: attributes)
-        text.draw(at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2), withAttributes: attributes)
+        let labelX = 48 + (1 - labelOpacity) * 5
+        text.draw(in: NSRect(x: labelX, y: bounds.midY - size.height / 2,
+                             width: max(0, bounds.width - labelX - 10), height: size.height),
+                  withAttributes: attributes)
     }
 }
 
@@ -73,11 +151,15 @@ final class IdleBarPanel: NSPanel {
     static let restingSize = NSSize(width: 46, height: 12)
     static let expandedSize = NSSize(width: 150, height: 28)
 
-    func resize(expanded: Bool) {
-        let size = expanded ? IdleBarPanel.expandedSize : IdleBarPanel.restingSize
+    func resize(expanded: Bool) { setExpansion(expanded ? 1 : 0) }
+
+    func setExpansion(_ progress: CGFloat) {
+        let compact = Self.restingSize, expanded = Self.expandedSize
+        let size = NSSize(width: compact.width + (expanded.width - compact.width) * progress,
+                          height: compact.height + (expanded.height - compact.height) * progress)
         let centreX = frame.midX
         let bottom = frame.minY
-        setFrame(NSRect(x: (centreX - size.width / 2).rounded(), y: bottom, width: size.width, height: size.height),
+        setFrame(NSRect(x: centreX - size.width / 2, y: bottom, width: size.width, height: size.height),
                  display: true, animate: false)
     }
 }
@@ -100,6 +182,7 @@ final class IdleBar {
 
     func hide() {
         panel?.orderOut(nil)
+        view?.reset()
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }

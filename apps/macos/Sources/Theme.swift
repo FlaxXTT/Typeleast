@@ -45,20 +45,10 @@ enum Theme {
                        dynamic(hex(0x9BAEF3), hex(0x4A63C9)), dynamic(hex(0x4468EC), hex(0x6E8BF5))]
 }
 
-/// A reusable hover motion for controls that use the system's native style.
+/// Common pointer and press feedback for native-style controls.
 struct HoverInteraction: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
-
     func body(content: Content) -> some View {
-        let active = hovering && isEnabled
-        content
-            .scaleEffect(active && !reduceMotion ? 1.06 : 1)
-            .offset(y: active && !reduceMotion ? -2 : 0)
-            .shadow(color: Color.black.opacity(active && !reduceMotion ? 0.15 : 0), radius: 6, x: 0, y: 3)
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.48), value: active)
-            .onHover { hovering = $0 }
+        content.modifier(ControlMotion())
     }
 }
 
@@ -110,10 +100,7 @@ private struct HoverPill: View {
             .padding(.vertical, primary ? 8 : 7)
             .background(Capsule().fill(primary ? Theme.ink.opacity(configuration.isPressed ? 0.8 : 1) : (configuration.isPressed || active ? Theme.cardHover : Theme.card)))
             .overlay(Capsule().stroke(primary ? Color.clear : Theme.border, lineWidth: 1))
-            .shadow(color: Color.black.opacity(active && !reduceMotion ? 0.18 : 0), radius: 7, x: 0, y: 4)
-            .scaleEffect(active && !reduceMotion ? 1.1 : 1)
-            .offset(y: active && !reduceMotion ? -3 : 0)
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.48), value: active)
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100, primary: primary, scale: 1.055, travel: 3))
             .contentShape(Capsule())
             .onHover { hovering = $0 }
     }
@@ -141,7 +128,7 @@ struct IconButton: View {
                 .frame(width: 26, height: 26)
                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.selection : Color.clear))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MotionIconButtonStyle())
         .help(help)
         .onHover { hovering = $0 }
     }
@@ -205,9 +192,7 @@ private struct HoverChipLabel: View {
         let active = hovering && isEnabled
         configuration.label
             .background(Capsule().fill(active ? Theme.selection.opacity(0.6) : Color.clear))
-            .scaleEffect(active && !reduceMotion ? 1.12 : 1)
-            .offset(y: active && !reduceMotion ? -2 : 0)
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.45), value: active)
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100, scale: 1.07, travel: 2))
             .contentShape(Capsule())
             .onHover { hovering = $0 }
     }
