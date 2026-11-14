@@ -516,7 +516,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         s.pasteLastSummary = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
         s.hasLast = HistoryStore.shared.last != nil
         menuController.apply(s)
-        model.accessibilityTrusted = s.accessibilityTrusted
+        if model.accessibilityTrusted != s.accessibilityTrusted {
+            model.accessibilityTrusted = s.accessibilityTrusted
+        }
     }
 
     func setHint(_ text: String?, warning: Bool = false) {

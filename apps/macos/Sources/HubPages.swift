@@ -199,7 +199,6 @@ private struct SetupRow: View {
 
 private struct RecentCard: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hoveringAll = false
 
     var body: some View {
@@ -212,13 +211,11 @@ private struct RecentCard: View {
                         HStack(spacing: 4) {
                             Text(L10n.text("查看全部"))
                             Image(systemName: "arrow.right")
-                                .offset(x: hoveringAll && !reduceMotion ? 4 : 0)
                         }
                     }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundColor(hoveringAll ? Theme.accent : Theme.secondary)
-                        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.55), value: hoveringAll)
                         .onHover { hoveringAll = $0 }
                 }
             }
@@ -293,22 +290,26 @@ struct HistoryPage: View {
     }
 
     private struct DayGroup: Identifiable {
-        let id: String
+        let id: Date
+        let title: String
         let entries: [LocalHistoryEntry]
     }
 
-    private var groups: [DayGroup] {
-        var order: [String] = []
-        var map: [String: [LocalHistoryEntry]] = [:]
-        for entry in filtered {
-            let key = Formatters.dayTitle(entry.ts)
+    private func groupedEntries(_ entries: [LocalHistoryEntry]) -> [DayGroup] {
+        let calendar = Calendar.current
+        var order: [Date] = []
+        var map: [Date: [LocalHistoryEntry]] = [:]
+        for entry in entries {
+            let key = calendar.startOfDay(for: entry.ts)
             if map[key] == nil { order.append(key) }
             map[key, default: []].append(entry)
         }
-        return order.map { DayGroup(id: $0, entries: map[$0] ?? []) }
+        return order.map { DayGroup(id: $0, title: Formatters.dayTitle($0), entries: map[$0] ?? []) }
     }
 
     var body: some View {
+        let visibleEntries = filtered
+        let dayGroups = groupedEntries(visibleEntries)
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: L10n.text("历史"), subtitle: "") {
                 HStack(spacing: 10) {
@@ -338,7 +339,7 @@ struct HistoryPage: View {
             .padding(.horizontal, 36)
             .padding(.bottom, 12)
 
-            if filtered.isEmpty {
+            if visibleEntries.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
                     Text(query.isEmpty ? L10n.text("没有听写记录") : L10n.text("没有匹配的记录")).foregroundColor(Theme.secondary)
@@ -346,18 +347,29 @@ struct HistoryPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        ForEach(groups) { group in
-                            let entries = group.entries
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(group.id).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
-                                VStack(spacing: 0) {
-                                    ForEach(entries) { entry in
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(dayGroups) { group in
+                            Section {
+                                ForEach(group.entries) { entry in
+                                    let first = entry.id == group.entries.first?.id
+                                    let last = entry.id == group.entries.last?.id
+                                    let card = UnevenRoundedRectangle(
+                                        topLeadingRadius: first ? Theme.radius : 0,
+                                        bottomLeadingRadius: last ? Theme.radius : 0,
+                                        bottomTrailingRadius: last ? Theme.radius : 0,
+                                        topTrailingRadius: first ? Theme.radius : 0, style: .continuous)
+                                    VStack(spacing: 0) {
                                         HistoryRow(entry: entry, compact: false)
-                                        if entry.id != entries.last?.id { Divider().padding(.leading, 66) }
+                                        if !last { Divider().padding(.leading, 66) }
                                     }
+                                    .background(card.fill(Theme.card))
+                                    .clipShape(card)
                                 }
-                                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+                            } header: {
+                                Text(group.title)
+                                    .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
+                                    .padding(.top, group.id == dayGroups.first?.id ? 0 : 18)
+                                    .padding(.bottom, 8)
                             }
                         }
                     }
@@ -377,7 +389,6 @@ struct HistoryPage: View {
 
 struct HistoryRow: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let entry: LocalHistoryEntry
     let compact: Bool
     @State private var hovering = false
@@ -403,7 +414,6 @@ struct HistoryRow: View {
             Text(Formatters.time.string(from: entry.ts))
                 .font(.system(size: 12, design: .rounded))
                 .foregroundColor(hovering ? Theme.accent : Theme.tertiary)
-                .scaleEffect(hovering && !reduceMotion ? 1.12 : 1, anchor: .leading)
                 .frame(width: 38, alignment: .leading)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
@@ -464,7 +474,6 @@ struct HistoryRow: View {
                     }
                 }
                 .opacity(hovering || copied ? 1 : 0)
-                .offset(x: hovering || copied || reduceMotion ? 0 : 10)
                 .allowsHitTesting(hovering || copied)
                 .accessibilityHidden(!hovering && !copied)
         }
@@ -472,14 +481,6 @@ struct HistoryRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
-        .overlay(alignment: .leading) {
-            Capsule(style: .continuous)
-                .fill(Theme.accent)
-                .frame(width: 3, height: hovering ? 32 : 0)
-                .opacity(hovering ? 0.85 : 0)
-                .allowsHitTesting(false)
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.62), value: hovering)
         .onHover { hovering = $0 }
         .onTapGesture { if !compact { expanded.toggle() } else { model.page = .history } }
     }

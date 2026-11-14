@@ -106,14 +106,11 @@ private struct Sidebar: View {
 
 private struct SidebarItem: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let page: HubPage
     @State private var hovering = false
 
-    @State private var motionTrigger = 0
-
     private var icon: some View {
-        SidebarMotionIcon(page: page, selected: model.page == page, hovering: hovering, trigger: motionTrigger)
+        SidebarMotionIcon(page: page, selected: model.page == page, hovering: hovering)
     }
 
     var body: some View {
@@ -124,10 +121,7 @@ private struct SidebarItem: View {
             HStack(spacing: 10) {
                 icon
                     .frame(width: 18, height: 18)
-                    .animation(reduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.34), value: hovering)
                 Text(page.title).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
-                    .offset(x: hovering && !reduceMotion ? 4 : 0)
-                    .animation(reduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.48), value: hovering)
                 Spacer()
             }
             .foregroundColor(selected ? Theme.ink : Theme.secondary)
@@ -138,11 +132,7 @@ private struct SidebarItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .modifier(ControlMotion(cornerRadius: 9, scale: 1.015, travel: 1.2))
-        .onHover { value in
-            if value && !hovering { motionTrigger += 1 }
-            hovering = value
-        }
+        .onHover { hovering = $0 }
     }
 }
 

@@ -28,13 +28,19 @@ struct SelectableText: NSViewRepresentable {
     }
 
     func updateNSView(_ view: HistoryTextView, context: Context) {
-        if view.string != text { view.string = text }
-        view.font = font
-        view.textColor = color
-        view.textContainer?.maximumNumberOfLines = maxLines
-        view.textContainer?.lineBreakMode = maxLines == 0 ? .byWordWrapping : .byTruncatingTail
+        var layoutChanged = false
+        if view.string != text { view.string = text; layoutChanged = true }
+        if view.font != font { view.font = font; layoutChanged = true }
+        if view.textColor != color { view.textColor = color }
+        if let container = view.textContainer {
+            let mode: NSLineBreakMode = maxLines == 0 ? .byWordWrapping : .byTruncatingTail
+            if container.maximumNumberOfLines != maxLines {
+                container.maximumNumberOfLines = maxLines; layoutChanged = true
+            }
+            if container.lineBreakMode != mode { container.lineBreakMode = mode; layoutChanged = true }
+        }
         view.onPlainClick = onPlainClick
-        view.invalidateIntrinsicContentSize()
+        if layoutChanged { view.invalidateMeasurement() }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: HistoryTextView, context: Context) -> CGSize? {
@@ -44,13 +50,32 @@ struct SelectableText: NSViewRepresentable {
 
 final class HistoryTextView: NSTextView {
     var onPlainClick: (() -> Void)?
+    private var cachedMeasurement: CGSize?
+
+    override var string: String {
+        didSet { if string != oldValue { cachedMeasurement = nil } }
+    }
+
+    override var font: NSFont? {
+        didSet { if font != oldValue { cachedMeasurement = nil } }
+    }
+
+    func invalidateMeasurement() {
+        cachedMeasurement = nil
+        invalidateIntrinsicContentSize()
+    }
 
     func measuredSize(width: CGFloat) -> CGSize {
         let width = max(1, width)
+        if let cachedMeasurement, cachedMeasurement.width == width { return cachedMeasurement }
         guard let container = textContainer, let layout = layoutManager else { return CGSize(width: width, height: 20) }
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        if container.containerSize.width != width {
+            container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        }
         layout.ensureLayout(for: container)
-        return CGSize(width: width, height: max(1, ceil(layout.usedRect(for: container).height)))
+        let size = CGSize(width: width, height: max(1, ceil(layout.usedRect(for: container).height)))
+        cachedMeasurement = size
+        return size
     }
 
     override func setFrameSize(_ newSize: NSSize) {

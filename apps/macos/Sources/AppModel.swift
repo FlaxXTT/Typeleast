@@ -115,8 +115,10 @@ final class AppModel: ObservableObject {
     }
 
     func refreshPermissions() {
-        accessibilityTrusted = AXIsProcessTrusted()
-        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let trusted = AXIsProcessTrusted()
+        let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+        if accessibilityTrusted != trusted { accessibilityTrusted = trusted }
+        if micStatus != microphone { micStatus = microphone }
     }
 
     /// A two-way binding onto a Settings property.

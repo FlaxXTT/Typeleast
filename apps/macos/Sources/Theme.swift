@@ -87,33 +87,26 @@ struct SecondaryButtonStyle: ButtonStyle {
 private struct HoverPill: View {
     let configuration: ButtonStyleConfiguration
     let primary: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
 
     var body: some View {
-        let active = hovering && isEnabled
         configuration.label
             .font(.system(size: 13, weight: primary ? .semibold : .medium))
             .foregroundColor(primary ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, primary ? 16 : 14)
             .padding(.vertical, primary ? 8 : 7)
-            .background(Capsule().fill(primary ? Theme.ink.opacity(configuration.isPressed ? 0.8 : 1) : (configuration.isPressed || active ? Theme.cardHover : Theme.card)))
+            .background(Capsule().fill(primary ? Theme.ink : Theme.card))
             .overlay(Capsule().stroke(primary ? Color.clear : Theme.border, lineWidth: 1))
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100, primary: primary, scale: 1.055, travel: 3))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100, primary: primary))
             .contentShape(Capsule())
-            .onHover { hovering = $0 }
     }
 }
 
-/// Icon-only button that shows on row hover.
+/// Row actions use a flat hover state and short press feedback.
 struct IconButton: View {
     let symbol: String
     let help: String
     var role: ButtonRole? = nil
     let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     var body: some View {
@@ -121,12 +114,7 @@ struct IconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(role == .destructive && hovering ? .red : Theme.secondary)
-                .rotationEffect(.degrees(hovering && isEnabled && !reduceMotion ? (symbol == "arrow.clockwise" ? 120 : symbol == "trash" ? -18 : 14) : 0))
-                .scaleEffect(hovering && isEnabled && !reduceMotion ? 1.35 : 1)
-                .offset(y: hovering && isEnabled && !reduceMotion ? -2 : 0)
-                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.43), value: hovering)
                 .frame(width: 26, height: 26)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.selection : Color.clear))
         }
         .buttonStyle(MotionIconButtonStyle())
         .help(help)
@@ -184,17 +172,11 @@ private struct HoverChipStyle: ButtonStyle {
 
 private struct HoverChipLabel: View {
     let configuration: ButtonStyleConfiguration
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
 
     var body: some View {
-        let active = hovering && isEnabled
         configuration.label
-            .background(Capsule().fill(active ? Theme.selection.opacity(0.6) : Color.clear))
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100, scale: 1.07, travel: 2))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100))
             .contentShape(Capsule())
-            .onHover { hovering = $0 }
     }
 }
 
@@ -217,16 +199,11 @@ struct Badge: View {
 struct SearchField: View {
     @Binding var text: String
     var placeholder = L10n.text("搜索")
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12)).foregroundColor(Theme.tertiary)
-                .rotationEffect(.degrees(hovering && !reduceMotion ? -25 : 0))
-                .scaleEffect(hovering && !reduceMotion ? 1.3 : 1)
-                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.45), value: hovering)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
@@ -240,7 +217,6 @@ struct SearchField: View {
         .padding(.vertical, 7)
         .frame(width: 220)
         .background(Capsule().fill(Theme.card))
-        .onHover { hovering = $0 }
     }
 }
 

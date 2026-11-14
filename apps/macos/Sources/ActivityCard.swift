@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import QuartzCore
 
 // ActivityCard.swift - the Home insights: four figures (字数, 节省时间, 速度, 口述时间), then
 // active days and streaks above a heatmap (one square per day, a column per week), on a
@@ -128,22 +127,6 @@ private final class HoverShareButton: NSButton {
 
     private func setHovered(_ hovering: Bool) {
         contentTintColor = hovering ? .controlAccentColor : nil
-        wantsLayer = true
-        guard let layer else { return }
-        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let target: CGFloat = hovering && !reduced ? 1.16 : 1
-        let previous = (layer.presentation()?.value(forKeyPath: "transform.scale") as? NSNumber)?.doubleValue ?? (hovering ? 1 : 1.16)
-        layer.setAffineTransform(CGAffineTransform(scaleX: target, y: target))
-        layer.removeAnimation(forKey: "hoverScale")
-        guard !reduced else { return }
-        let bounce = CASpringAnimation(keyPath: "transform.scale")
-        bounce.fromValue = previous
-        bounce.toValue = target
-        bounce.damping = 11
-        bounce.stiffness = 240
-        bounce.mass = 0.8
-        bounce.duration = min(0.55, bounce.settlingDuration)
-        layer.add(bounce, forKey: "hoverScale")
     }
 }
 
@@ -246,17 +229,11 @@ struct ActivityCard: View {
     private func monthLabel(weekStart: Date, calendar: Calendar) -> String? {
         let days = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: weekStart) }
         guard let startsMonth = days.first(where: { calendar.component(.day, from: $0) == 1 }) else { return nil }
-        let formatter = DateFormatter()
-        formatter.locale = L10n.locale
-        formatter.setLocalizedDateFormatFromTemplate("MMM")
-        return formatter.string(from: startsMonth)
+        return startsMonth.formatted(.dateTime.locale(L10n.locale).month(.abbreviated))
     }
 
     private func tooltip(_ date: Date, _ day: ActivityDay) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.locale
-        formatter.setLocalizedDateFormatFromTemplate("MMMd")
-        let when = formatter.string(from: date)
+        let when = date.formatted(.dateTime.locale(L10n.locale).month(.abbreviated).day())
         return day.dictations == 0
             ? when + " · " + L10n.text("没有活动")
             : when + " · " + L10n.text("{0} 次 · {1} 字", day.dictations, day.words)
