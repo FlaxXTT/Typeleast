@@ -83,7 +83,7 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
-/// The labels move within their original layout area; disabled controls stay still.
+/// Flat hover tint and a short press response, with no label movement.
 private struct HoverPill: View {
     let configuration: ButtonStyleConfiguration
     let primary: Bool
@@ -235,7 +235,6 @@ struct LevelBars: View {
                     .frame(width: 5, height: 8 + CGFloat(index % 4) * 3)
             }
         }
-        .animation(.easeOut(duration: 0.12), value: level)
     }
 }
 

@@ -33,6 +33,12 @@ enum AppNames {
 }
 
 enum Formatters {
+    private static var numberLanguage = ""
+    private static let decimal: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
     static let time: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
@@ -54,10 +60,11 @@ enum Formatters {
     }
 
     static func number(_ value: Int) -> String {
-        let f = NumberFormatter()
-        f.locale = L10n.locale
-        f.numberStyle = .decimal
-        return f.string(from: NSNumber(value: value)) ?? String(value)
+        if numberLanguage != L10n.language {
+            decimal.locale = L10n.locale
+            numberLanguage = L10n.language
+        }
+        return decimal.string(from: NSNumber(value: value)) ?? String(value)
     }
 
     static func duration(_ seconds: Double) -> (String, String) {
@@ -271,45 +278,63 @@ private struct EngineRow: View {
 
 enum HistoryFilter: Hashable { case all, polished, raw }
 
-struct HistoryPage: View {
-    @EnvironmentObject var model: AppModel
-    @State private var filter: HistoryFilter = .all
-    @State private var query = ""
-    @State private var confirmClear = false
-
-    private var filtered: [LocalHistoryEntry] {
-        model.history.filter { entry in
-            switch filter {
-            case .all: break
-            case .polished: if entry.fallback { return false }
-            case .raw: if !entry.fallback { return false }
-            }
-            guard !query.isEmpty else { return true }
-            return entry.displayText.localizedCaseInsensitiveContains(query) || entry.raw.localizedCaseInsensitiveContains(query)
-        }
-    }
-
-    private struct DayGroup: Identifiable {
+/// One cached projection survives page changes. It contains data, not live page views.
+final class HistoryListCache: ObservableObject {
+    struct DayGroup: Identifiable {
         let id: Date
         let title: String
         let entries: [LocalHistoryEntry]
     }
 
-    private func groupedEntries(_ entries: [LocalHistoryEntry]) -> [DayGroup] {
-        let calendar = Calendar.current
+    private struct Key: Equatable {
+        let owner: ObjectIdentifier
+        let revision: Int
+        let filter: HistoryFilter
+        let query: String
+        let day: Date
+        let calendar: Calendar
+        let language: String
+    }
+
+    private var key: Key?
+    private var groups: [DayGroup] = []
+
+    func invalidate(unlessOwner owner: ObjectIdentifier, revision: Int) {
+        if key?.owner == owner && key?.revision == revision { return }
+        key = nil
+        groups = []
+    }
+
+    func groupedEntries(_ entries: [LocalHistoryEntry], owner: ObjectIdentifier, revision: Int, filter: HistoryFilter,
+                        query: String, day: Date, calendar: Calendar, language: String) -> [DayGroup] {
+        let next = Key(owner: owner, revision: revision, filter: filter, query: query,
+                       day: day, calendar: calendar, language: language)
+        if key == next { return groups }
         var order: [Date] = []
         var map: [Date: [LocalHistoryEntry]] = [:]
         for entry in entries {
-            let key = calendar.startOfDay(for: entry.ts)
-            if map[key] == nil { order.append(key) }
-            map[key, default: []].append(entry)
+            if filter == .polished && entry.fallback { continue }
+            if filter == .raw && !entry.fallback { continue }
+            if !query.isEmpty && !entry.displayText.localizedCaseInsensitiveContains(query)
+                && !entry.raw.localizedCaseInsensitiveContains(query) { continue }
+            let date = calendar.startOfDay(for: entry.ts)
+            if map[date] == nil { order.append(date) }
+            map[date, default: []].append(entry)
         }
-        return order.map { DayGroup(id: $0, title: Formatters.dayTitle($0), entries: map[$0] ?? []) }
+        groups = order.map { DayGroup(id: $0, title: Formatters.dayTitle($0), entries: map[$0] ?? []) }
+        key = next
+        return groups
     }
+}
+
+struct HistoryPage: View {
+    @EnvironmentObject var model: AppModel
+    let cache: HistoryListCache
+    @State private var filter: HistoryFilter = .all
+    @State private var query = ""
+    @State private var confirmClear = false
 
     var body: some View {
-        let visibleEntries = filtered
-        let dayGroups = groupedEntries(visibleEntries)
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: L10n.text("历史"), subtitle: "") {
                 HStack(spacing: 10) {
@@ -339,7 +364,42 @@ struct HistoryPage: View {
             .padding(.horizontal, 36)
             .padding(.bottom, 12)
 
-            if visibleEntries.isEmpty {
+            HistoryResults(model: model, cache: cache, revision: model.historyRevision, filter: filter,
+                           query: query, day: Calendar.current.startOfDay(for: Date()),
+                           calendar: Calendar.current, language: L10n.language)
+                .equatable()
+        }
+        .alert(L10n.text("删除全部历史？"), isPresented: $confirmClear) {
+            Button(L10n.text("删除"), role: .destructive) { model.actions?.clearHistory() }
+            Button(L10n.text("取消"), role: .cancel) {}
+        } message: {
+            Text(L10n.text("删除全部历史和录音，无法恢复。"))
+        }
+    }
+}
+
+/// Service progress and unrelated settings must not rebuild the history list.
+private struct HistoryResults: View, Equatable {
+    let model: AppModel
+    let cache: HistoryListCache
+    let revision: Int
+    let filter: HistoryFilter
+    let query: String
+    let day: Date
+    let calendar: Calendar
+    let language: String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.model === rhs.model && lhs.cache === rhs.cache && lhs.revision == rhs.revision
+            && lhs.filter == rhs.filter && lhs.query == rhs.query && lhs.day == rhs.day
+            && lhs.calendar == rhs.calendar && lhs.language == rhs.language
+    }
+
+    var body: some View {
+        let dayGroups = cache.groupedEntries(model.history, owner: ObjectIdentifier(model), revision: revision, filter: filter,
+                                            query: query, day: day, calendar: calendar, language: language)
+        Group {
+            if dayGroups.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
                     Text(query.isEmpty ? L10n.text("没有听写记录") : L10n.text("没有匹配的记录")).foregroundColor(Theme.secondary)
@@ -358,12 +418,16 @@ struct HistoryPage: View {
                                         bottomLeadingRadius: last ? Theme.radius : 0,
                                         bottomTrailingRadius: last ? Theme.radius : 0,
                                         topTrailingRadius: first ? Theme.radius : 0, style: .continuous)
-                                    VStack(spacing: 0) {
-                                        HistoryRow(entry: entry, compact: false)
+                                    let row = VStack(spacing: 0) {
+                                        HistoryRowContent(model: model, entry: entry, compact: false)
+                                            .equatable()
                                         if !last { Divider().padding(.leading, 66) }
                                     }
-                                    .background(card.fill(Theme.card))
-                                    .clipShape(card)
+                                    if first || last {
+                                        row.background(card.fill(Theme.card)).clipShape(card)
+                                    } else {
+                                        row.background(Theme.card)
+                                    }
                                 }
                             } header: {
                                 Text(group.title)
@@ -378,12 +442,6 @@ struct HistoryPage: View {
                 }
             }
         }
-        .alert(L10n.text("删除全部历史？"), isPresented: $confirmClear) {
-            Button(L10n.text("删除"), role: .destructive) { model.actions?.clearHistory() }
-            Button(L10n.text("取消"), role: .cancel) {}
-        } message: {
-            Text(L10n.text("删除全部历史和录音，无法恢复。"))
-        }
     }
 }
 
@@ -391,14 +449,30 @@ struct HistoryRow: View {
     @EnvironmentObject var model: AppModel
     let entry: LocalHistoryEntry
     let compact: Bool
+
+    var body: some View {
+        HistoryRowContent(model: model, entry: entry, compact: compact).equatable()
+    }
+}
+
+private struct HistoryRowContent: View, Equatable {
+    // Actions read the live model only when invoked; the text does not subscribe to it.
+    let model: AppModel
+    let entry: LocalHistoryEntry
+    let compact: Bool
     @State private var hovering = false
     @State private var expanded = false
     @State private var copied = false
+    @State private var retryAvailable = false
+    @State private var checkedAudioPath: String?
 
-    private var canRetry: Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.model === rhs.model && lhs.entry == rhs.entry && lhs.compact == rhs.compact
+    }
+
+    private var retryAudioPath: String? {
         // A Prompt Beta record cannot be retried: it would start a new clarification from scratch.
-        guard entry.strength != "promptbeta", let path = entry.audioPath else { return false }
-        return FileManager.default.fileExists(atPath: path)
+        entry.strength == "promptbeta" ? nil : entry.audioPath
     }
 
     private var mode: VoiceStrength? {
@@ -467,8 +541,12 @@ struct HistoryRow: View {
                     IconButton(symbol: "doc.on.doc", help: L10n.text("复制")) { copy(raw: false) }
                     if !compact {
                         IconButton(symbol: "text.quote", help: L10n.text("复制原话")) { copy(raw: true) }
-                        if canRetry {
+                        if retryAudioPath != nil {
+                            let available = retryAvailable && checkedAudioPath == retryAudioPath
                             IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试")) { model.actions?.retryEntry(id: entry.id) }
+                                .opacity(available ? 1 : 0)
+                                .disabled(!available)
+                                .accessibilityHidden(!available)
                         }
                         IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
                     }
@@ -483,6 +561,17 @@ struct HistoryRow: View {
         .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
         .onHover { hovering = $0 }
         .onTapGesture { if !compact { expanded.toggle() } else { model.page = .history } }
+        .task(id: retryAudioPath) {
+            retryAvailable = false
+            checkedAudioPath = nil
+            guard !compact, let path = retryAudioPath else { return }
+            let available = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: path)
+            }.value
+            guard !Task.isCancelled else { return }
+            checkedAudioPath = path
+            retryAvailable = available
+        }
     }
 
     private func copy(raw: Bool) {
