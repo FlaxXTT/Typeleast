@@ -77,7 +77,7 @@ final class UpdateController {
         var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新后 TypeLeast 重启，权限和 Key 保留。")
         if !summary.isEmpty { detail = L10n.text("更新内容") + "\n" + summary + "\n\n" + detail }
         if !Updater.hasSigningIdentity() {
-            detail += "\n\n" + L10n.text("签名或钥匙串访问可能需要系统授权。请仅允许本次操作，不要选择「始终允许」。")
+            detail += "\n\n" + L10n.text("首次使用本机签名证书时，macOS 可能要求授权。")
         }
         alert.informativeText = detail
         alert.addButton(withTitle: L10n.text("立即更新"))
@@ -99,10 +99,7 @@ final class UpdateController {
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result {
-                let ready = try Updater.prepare(version: version, stage: report)
-                report(.handingOver)
-                try Updater.authorizePreparedUpdate(app: ready.app, work: ready.work, cdhash: ready.cdhash)
-                return ready
+                try Updater.prepare(version: version, stage: report)
             }
             DispatchQueue.main.async {
                 guard let self else { return }

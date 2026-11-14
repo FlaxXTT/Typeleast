@@ -3,7 +3,7 @@ import SwiftUI
 
 // UpdateProgressWindow.swift - a small window while an in-app update runs, so it never looks
 // stuck: a ring that fills with the download (percentage and MB in the middle), then turns
-// while the update is checked, signed, handed its Keys and installed, with the five steps
+// while the update is checked, signed and installed, with the four steps
 // underneath. The ring always moves; the steps say where it is.
 
 final class UpdateProgressModel: ObservableObject {
@@ -122,7 +122,7 @@ struct UpdateRing: View {
     }
 }
 
-/// 下载 · 核对 · 签名 · 交接 · 安装: done steps ticked, the current one ringed.
+/// 下载 · 核对 · 签名 · 安装: done steps ticked, the current one ringed.
 struct UpdateStepTrail: View {
     let current: Int
 

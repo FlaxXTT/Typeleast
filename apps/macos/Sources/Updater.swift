@@ -7,8 +7,8 @@ import CryptoKit
 // release's SHA256SUMS.txt, and the app is re-signed with this Mac's own "TypeLeast Local
 // Signing" certificate (made on the first update if there is none) before it replaces the
 // installed copy. Same certificate + same bundle id = same designated requirement, so macOS
-// keeps the microphone and Accessibility permissions; Keychain items are handed over
-// (KeychainHandoff) requests access without deleting existing credentials. macOS may ask for consent.
+// keeps the microphone and Accessibility permissions. Existing Keychain items stay
+// in place; preparing an update does not pre-authorize them from a temporary app.
 
 enum UpdateError: LocalizedError {
     case unreachable
@@ -17,7 +17,6 @@ enum UpdateError: LocalizedError {
     case noSigningCertificate
     case sign(String)
     case requirementChanged
-    case keychainHandoff
 
     var errorDescription: String? {
         switch self {
@@ -26,7 +25,6 @@ enum UpdateError: LocalizedError {
         case .badBundle(let detail): return L10n.text("更新文件错误：") + detail
         case .noSigningCertificate: return L10n.text("无法在这台 Mac 上生成「") + Updater.signingIdentity + L10n.text("」签名证书。更新已停止。")
         case .sign(let detail): return L10n.text("本机证书签名失败：") + detail
-        case .keychainHandoff: return L10n.text("新版本未获得钥匙串访问权限，更新已停止。原应用与凭据均已保留。")
         case .requirementChanged: return L10n.text("新版本签名不同，安装会丢失权限。更新已取消。")
         }
     }
@@ -231,7 +229,7 @@ enum Updater {
     /// The same certificate make-signing-cert.sh makes: self-signed, code signing only, valid
     /// ten years, private key only in this Mac's login keychain. Made once, on the first update.
     static func ensureSigningIdentity() throws {
-        if hasSigningIdentity() { try SigningAccess.tighten(name: signingIdentity); return }
+        if hasSigningIdentity() { return }
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-cert-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: work) }
@@ -260,10 +258,9 @@ enum Updater {
               hasSigningIdentity() else { throw UpdateError.noSigningCertificate }
     }
 
-    /// Download, verify and re-sign `version`; returns the ready app inside a fresh work folder,
-    /// and its code hash as signed (KeychainHandoff hands the Keychain items only to that code).
+    /// Download and re-sign `version`; credentials stay in the existing Keychain.
     static func prepare(version: String, current: URL = Bundle.main.bundleURL,
-                        stage: ((UpdateStage) -> Void)? = nil) throws -> (app: URL, work: URL, cdhash: String?) {
+                        stage: ((UpdateStage) -> Void)? = nil) throws -> (app: URL, work: URL) {
         stage?(.preparing)
         try ensureSigningIdentity()
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-update-" + UUID().uuidString)
@@ -322,19 +319,10 @@ enum Updater {
             if let mine, mine.contains("certificate leaf"), designatedRequirement(of: app) != mine {
                 throw UpdateError.requirementChanged
             }
-            return (app, work, KeychainHandoff.cdhash(of: app))
+            return (app, work)
         } catch {
             try? FileManager.default.removeItem(at: work)
             throw error
-        }
-    }
-
-    /// A denied handoff keeps the installed app and removes only this prepared update.
-    static func authorizePreparedUpdate(app: URL, work: URL, cdhash: String?,
-                                        transfer: (URL, String) -> Bool = { KeychainHandoff.transfer(toExecutable: $0, cdhash: $1) }) throws {
-        guard let cdhash, transfer(app.appendingPathComponent("Contents/MacOS/TypeLeast"), cdhash) else {
-            try? FileManager.default.removeItem(at: work)
-            throw UpdateError.keychainHandoff
         }
     }
 
@@ -371,7 +359,6 @@ enum UpdateStage: Equatable {
     case downloading(received: Int64, total: Int64?, source: String)
     case verifying
     case signing
-    case handingOver
     case installing
 
     var label: String {
@@ -383,13 +370,12 @@ enum UpdateStage: Equatable {
             return L10n.text("正在从 {0} 下载：{1} MB", source, mb(received))
         case .verifying: return L10n.text("正在校验文件…")
         case .signing: return L10n.text("正在用本机证书签名…")
-        case .handingOver: return L10n.text("正在转移钥匙串里的 Key…")
         case .installing: return L10n.text("正在安装，TypeLeast 会重新打开…")
         }
     }
 
     /// The steps the progress window shows, in order.
-    static let steps = ["下载", "校验", "签名", "Key", "安装"]
+    static let steps = ["下载", "校验", "签名", "安装"]
 
     /// Which of `steps` this stage is.
     var step: Int {
@@ -397,8 +383,7 @@ enum UpdateStage: Equatable {
         case .preparing, .downloading: return 0
         case .verifying: return 1
         case .signing: return 2
-        case .handingOver: return 3
-        case .installing: return 4
+        case .installing: return 3
         }
     }
 
@@ -408,7 +393,6 @@ enum UpdateStage: Equatable {
         case .preparing, .downloading: return "arrow.down"
         case .verifying: return "checkmark.shield"
         case .signing: return "signature"
-        case .handingOver: return "key"
         case .installing: return "sparkles"
         }
     }

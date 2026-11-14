@@ -273,7 +273,6 @@ for dark in [false, true] {
         ("update-download-mirror", UpdateStage.downloading(received: 33 << 20, total: 52 << 20, source: "ghfast.top")),
         ("update-verifying", UpdateStage.verifying),
         ("update-signing", UpdateStage.signing),
-        ("update-handover", UpdateStage.handingOver),
         ("update-installing", UpdateStage.installing),
     ] {
         let progress = UpdateProgressModel()

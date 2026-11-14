@@ -140,7 +140,7 @@ private struct SetupCard: View {
                          detail: "", action: L10n.text("允许")) {
                     model.actions?.requestAccessibility()
                 }
-                SetupRow(done: model.serviceState.isRunning, title: L10n.text("本地服务（需要 Node.js 22+）"),
+                SetupRow(done: model.serviceState.isRunning, title: L10n.text("本地服务"),
                          detail: model.serviceState.isRunning ? L10n.text("运行中") : model.serviceSummary,
                          action: model.serviceState.needsNode ? L10n.text("下载 Node.js") : L10n.text("重新启动")) {
                     if model.serviceState.needsNode {

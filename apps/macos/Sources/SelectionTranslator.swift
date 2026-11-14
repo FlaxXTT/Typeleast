@@ -145,7 +145,15 @@ final class SelectionTranslator {
     private func offer(at point: NSPoint, read: @escaping (@escaping (String?) -> Void) -> Void) {
         hideOffer()
         let token = offerToken
-        dot.showDot(at: point) { [weak self] in
+        dot.showDot(at: point, hoverChanged: { [weak self] hovering in
+            guard let self, self.offerToken == token else { return }
+            if hovering {
+                self.hideTimer?.invalidate()
+                self.hideTimer = nil
+            } else {
+                self.scheduleOfferDismissal(token: token)
+            }
+        }) { [weak self] in
             guard let self, self.offerToken == token else { return }
             self.hideOffer()
             self.runToken += 1
@@ -158,6 +166,11 @@ final class SelectionTranslator {
                 self.run(String(text.prefix(SelectionTranslator.limit)), token: run, at: point)
             }
         }
+        scheduleOfferDismissal(token: token)
+    }
+
+    private func scheduleOfferDismissal(token: Int) {
+        hideTimer?.invalidate()
         let timer = Timer(timeInterval: SelectionTranslator.buttonSeconds, repeats: false) { [weak self] _ in
             guard let self, self.offerToken == token else { return }
             self.hideOffer()
@@ -222,9 +235,9 @@ final class SelectionPanel {
     private var anchor = NSPoint.zero
     private var dragOffset: NSPoint?
 
-    func showDot(at point: NSPoint, action: @escaping () -> Void) {
+    func showDot(at point: NSPoint, hoverChanged: @escaping (Bool) -> Void = { _ in }, action: @escaping () -> Void) {
         anchor = point
-        show(SelectionDotView(action: action))
+        show(SelectionDotView(action: action, hoverChanged: hoverChanged))
     }
 
     func showBubble(_ state: SelectionBubble, sourceCount: String?, at point: NSPoint, close: @escaping () -> Void) {
@@ -241,6 +254,7 @@ final class SelectionPanel {
 
     func hide() {
         panel.orderOut(nil)
+        panel.contentView = nil
     }
 
     /// Follows the mouse, in screen coordinates: the view moves with the panel, so its own are useless.
@@ -279,13 +293,15 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// The small white dot offered next to a selection; the hit area is larger than the dot.
+/// An electronic sunset offered beside the selection.
 struct SelectionDotView: View {
     let action: () -> Void
+    var hoverChanged: (Bool) -> Void = { _ in }
 
     var body: some View {
-        Button(action: action) { TranslationOrb() }
+        Button(action: action) { TranslationSunset(hoverChanged: hoverChanged) }
             .buttonStyle(TranslationDotPressStyle())
+            .accessibilityLabel(L10n.text("翻译"))
             .help(L10n.text("翻译"))
     }
 }
@@ -294,67 +310,8 @@ private struct TranslationDotPressStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.78 : 1)
-            .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.4), value: configuration.isPressed)
-    }
-}
-
-private struct TranslationOrb: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-    @State private var pointer = CGSize.zero
-    @State private var entrance = 0
-    private let shell = Color(red: 1, green: 250.0 / 255, blue: 252.0 / 255)
-    private let core = Color(red: 252.0 / 255, green: 179.0 / 255, blue: 181.0 / 255)
-
-    var body: some View {
-        let motionReduced = reduceMotion
-        ZStack {
-            Circle().fill(core.opacity(hovering ? 0.22 : 0)).frame(width: 27, height: 27).blur(radius: 3)
-            Circle().trim(from: 0.08, to: 0.78)
-                .stroke(AngularGradient(colors: [core.opacity(0), shell, core], center: .center), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                .frame(width: 23, height: 23)
-                .keyframeAnimator(initialValue: CGFloat(-130), trigger: entrance) { view, angle in
-                    view.rotationEffect(.degrees(motionReduced ? 0 : angle))
-                } keyframes: { _ in
-                    MoveKeyframe(CGFloat(-130)); CubicKeyframe(CGFloat(260), duration: 0.7)
-                }
-                .opacity(hovering ? 1 : 0)
-                .scaleEffect(hovering && !reduceMotion ? 1 : 0.6)
-            Circle().fill(.ultraThinMaterial)
-                .overlay {
-                    Circle().fill(LinearGradient(colors: [.white.opacity(0.94), shell.opacity(0.78), shell.opacity(0.60)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                }
-                .overlay {
-                    Circle().strokeBorder(LinearGradient(colors: [.white, shell.opacity(0.80), Color.black.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.65)
-                }
-                .frame(width: 14, height: 14)
-                .shadow(color: .black.opacity(0.16), radius: 2.5, y: 1)
-            Circle().fill(RadialGradient(colors: [Color(red: 1, green: 0.85, blue: 0.86), core, Color(red: 0.94, green: 0.55, blue: 0.59)], center: .topLeading, startRadius: 0, endRadius: 12))
-                .overlay { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 0.45) }
-                .overlay(alignment: .topLeading) {
-                    Ellipse().fill(.white.opacity(0.40)).frame(width: 5, height: 2.5).blur(radius: 0.35).rotationEffect(.degrees(-30)).offset(x: 1.5, y: 1.5)
-                }
-                .frame(width: 10, height: 10)
-                .offset(x: hovering && !reduceMotion ? pointer.width * 2 : 0, y: hovering && !reduceMotion ? pointer.height * 2 : 0)
-                .scaleEffect(hovering && !reduceMotion ? 1.12 : 1)
-            Circle().fill(shell).frame(width: 3, height: 3)
-                .offset(x: hovering ? 10 : 2, y: hovering ? -9 : -2)
-                .opacity(hovering && !reduceMotion ? 0.95 : 0)
-        }
-        .frame(width: 36, height: 36)
-        .contentShape(Circle())
-        .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.52), value: hovering)
-        .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.75), value: pointer)
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let location):
-                if !hovering { entrance += 1 }
-                hovering = true
-                pointer = CGSize(width: max(-1, min(1, (location.x - 18) / 18)), height: max(-1, min(1, (location.y - 18) / 18)))
-            case .ended: hovering = false; pointer = .zero
-            }
-        }
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.88 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.54), value: configuration.isPressed)
     }
 }
 
@@ -385,7 +342,8 @@ struct SelectionBubbleView: View {
             switch state {
             case .loading:
                 HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
+                    TranslationSunset(working: true)
+                        .scaleEffect(0.78).frame(width: 82, height: 44)
                     Text(L10n.text("正在翻译…")).font(.system(size: 13))
                 }
             case .done(let text):

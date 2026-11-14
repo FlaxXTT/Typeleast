@@ -46,7 +46,7 @@ export class MlxRecognizer {
         signal?.throwIfAborted();
         this.phase = 'loading';
         const child = this.spawn(this.binary, ['serve', '--model-dir', join(this.modelsDir, this.modelId)], {
-          stdio: ['pipe', 'pipe', 'ignore'], env: { PATH: '/usr/bin:/bin', TMPDIR: '/tmp' },
+          stdio: ['pipe', 'pipe', 'ignore'], env: { PATH: '/usr/bin:/bin', TMPDIR: '/tmp', LLVM_PROFILE_FILE: '/dev/null' },
         });
         this.child = child;
         child.stdin.on('error', () => { if (child === this.child) this.stop(); });

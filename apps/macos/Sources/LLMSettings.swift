@@ -208,15 +208,9 @@ enum KeychainStore {
 
 }
 
-/// The verified replacement requests access to existing Keychain items before the
-/// running app exits. New senders pass account names only and never remove the items.
-/// macOS can request consent for the replacement; refusal stops installation.
-/// The receiver also accepts the older value-bearing protocol so upgrades from old
-/// versions can recover items already removed by their sender, without overwriting any.
-///
-/// Versions up to 1.17.2 handed the items over in an owner-only file instead. That file is
-/// still restored once at launch, and it is kept, not wiped, while any item in it could not
-/// be recreated: it is then the only copy of that key (the history key above all).
+/// Compatibility with older updaters. Account-name handoffs are acknowledged
+/// without reading Keychain items; credentials already persist across replacement.
+/// Value-bearing payloads from much older versions can still restore missing items.
 enum KeychainHandoff {
     static let receiveFlag = "--receive-keychain-handoff"
     /// Test seam: where the old hand-over file is looked for.
@@ -225,71 +219,12 @@ enum KeychainHandoff {
         fileOverride ?? URL(fileURLWithPath: ServiceClient.stateDirectory).appendingPathComponent("keychain-handoff.json")
     }
 
-    // MARK: the copy being replaced
-
-    /// The code hash (hex) of a signed app or executable: what a `cdhash H"…"` requirement names.
-    static func cdhash(of url: URL) -> String? {
-        var code: SecStaticCode?
-        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code else { return nil }
-        var info: CFDictionary?
-        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
-              let unique = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data, !unique.isEmpty else { return nil }
-        return unique.map { String(format: "%02x", $0) }.joined()
-    }
-
-    /// Whether the running process `pid` is exactly the code with this code hash.
-    static func process(_ pid: pid_t, hasCDHash cdhash: String) -> Bool {
-        guard cdhash.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil else { return false }
-        var code: SecCode?
-        guard SecCodeCopyGuestWithAttributes(nil, [kSecGuestAttributePid: pid] as CFDictionary, [], &code) == errSecSuccess,
-              let code else { return false }
-        var requirement: SecRequirement?
-        guard SecRequirementCreateWithString("cdhash H\"\(cdhash)\"" as CFString, [], &requirement) == errSecSuccess,
-              let requirement else { return false }
-        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
-    }
-
-    /// Ask the verified replacement to authorize access to existing items. Never delete
-    /// an item to change its owner: a failed receiver must not destroy the history key.
-    @discardableResult
-    static func transfer(toExecutable executable: URL, cdhash: String) -> Bool {
-        guard let accounts = KeychainStore.accounts() else { return false }
-        guard !accounts.isEmpty else { return true }
-        guard let data = try? JSONEncoder().encode(accounts) else { return false }
-        let child = Process()
-        child.executableURL = executable
-        child.arguments = [receiveFlag]
-        let input = Pipe()
-        child.standardInput = input
-        child.standardOutput = FileHandle.nullDevice
-        child.standardError = FileHandle.nullDevice
-        do { try child.run() } catch { return false }
-        guard process(child.processIdentifier, hasCDHash: cdhash) else {
-            child.terminate(); child.waitUntilExit()
-            return false
-        }
-        do {
-            try input.fileHandleForWriting.write(contentsOf: data)
-            try input.fileHandleForWriting.close()
-        } catch {
-            child.terminate(); child.waitUntilExit()
-            return false
-        }
-        let deadline = Date().addingTimeInterval(120)
-        while child.isRunning && Date() < deadline { usleep(20_000) }
-        if child.isRunning { child.terminate(); child.waitUntilExit() }
-        return child.terminationReason == .exit && child.terminationStatus == 0
-    }
-
-    /// New senders pass account names. Legacy senders already removed their items:
-    /// restore only missing ones with add-only writes, never replace existing values.
+    /// Older updaters wait for this response before replacing the app. Do not
+    /// request credential access from their temporary copy of the new app.
     static func receive(data: Data = FileHandle.standardInput.readDataToEndOfFile()) -> Int32 {
         guard data.count <= 1 << 20 else { return 2 }
         if let accounts = try? JSONDecoder().decode([String].self, from: data) {
             guard accounts.count <= 128 else { return 2 }
-            for account in accounts {
-                guard KeychainStore.read(account: account) != nil else { return 1 }
-            }
             return 0
         }
         guard let legacy = try? JSONDecoder().decode([String: String].self, from: data),

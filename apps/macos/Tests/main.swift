@@ -698,8 +698,8 @@ do {
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
     check("…nor while dictating or Prompt Beta is open", !Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: true))
     check("asking by hand always offers", Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: true, busy: true))
-    checkEq("five steps", UpdateStage.steps, ["下载", "校验", "签名", "Key", "安装"])
-    checkEq("each stage has its step", [UpdateStage.preparing, .downloading(received: 1, total: 2, source: "GitHub"), .verifying, .signing, .handingOver, .installing].map(\.step), [0, 0, 1, 2, 3, 4])
+    checkEq("four update steps", UpdateStage.steps, ["下载", "校验", "签名", "安装"])
+    checkEq("each stage has its step", [UpdateStage.preparing, .downloading(received: 1, total: 2, source: "GitHub"), .verifying, .signing, .installing].map(\.step), [0, 0, 1, 2, 3])
     checkEq("the amount under the percentage", UpdateStage.downloading(received: 33 << 20, total: 52 << 20, source: "GitHub").amount, "33.0 / 52.0 MB")
     checkEq("no amount outside the download", UpdateStage.signing.amount, nil)
 
@@ -1552,10 +1552,10 @@ do {
 do {
     KeychainStore.stub = ["fixture": "fake-value", "history-encryption-key": "fake-history"]
     let before = KeychainStore.stub
-    checkEq("replacement reads existing items without replacing them", KeychainHandoff.receive(data: Data("[\"fixture\",\"history-encryption-key\"]".utf8)), 0)
+    checkEq("older updater is acknowledged without replacing items", KeychainHandoff.receive(data: Data("[\"fixture\",\"history-encryption-key\"]".utf8)), 0)
     checkEq("successful handoff preserves every original", KeychainStore.stub, before)
-    checkEq("missing credentials refuse handoff", KeychainHandoff.receive(data: Data("[\"missing\"]".utf8)), 1)
-    checkEq("failed handoff preserves every original", KeychainStore.stub, before)
+    checkEq("missing credentials do not block an update", KeychainHandoff.receive(data: Data("[\"missing\"]".utf8)), 0)
+    checkEq("compatibility acknowledgement preserves every original", KeychainStore.stub, before)
     checkEq("legacy value-bearing handoff remains compatible", KeychainHandoff.receive(data: Data("{\"fixture\":\"replacement\"}".utf8)), 0)
     checkEq("legacy handoff cannot replace existing credentials", KeychainStore.stub, before)
     checkEq("malformed handoff is rejected", KeychainHandoff.receive(data: Data("{\"fixture\":42}".utf8)), 2)
@@ -1579,17 +1579,8 @@ do {
     KeychainStore.stub = before
     KeychainStore.stubAccountError = true
     checkEq("enumeration error is not an empty Keychain", KeychainStore.accounts(), nil)
-    check("enumeration error refuses handoff before spawning", !KeychainHandoff.transfer(toExecutable: URL(fileURLWithPath: "/no-such-test-executable"), cdhash: "fake"))
     KeychainStore.stubAccountError = false
-    let work = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("typeleast-update-denied-" + UUID().uuidString)
-    try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-    try Data("fixture archive".utf8).write(to: work.appendingPathComponent("download.zip"))
-    do {
-        try Updater.authorizePreparedUpdate(app: work.appendingPathComponent("Test.app"), work: work, cdhash: "fixture", transfer: { _, _ in false })
-        check("denied handoff stops installation", false)
-    } catch { check("denied handoff stops installation", true) }
-    check("denied handoff removes only its prepared update", !FileManager.default.fileExists(atPath: work.path))
-    checkEq("denied update leaves original Keychain intact", KeychainStore.stub, before)
+
 }
 
 // MARK: 29. Keychain: read once, never on a redraw, and handed over across an update
@@ -1597,14 +1588,6 @@ do {
     KeychainStore.stub = ["deepseek": "sk-test-0000", "history-encryption-key": "aGVsbG8="]
     checkEq("existence is known without reading", KeychainStore.exists(account: "deepseek"), true)
     checkEq("the accounts are listed", KeychainStore.accounts(), ["deepseek", "history-encryption-key"])
-
-    // The new copy is recognised by code hash before any key goes to it.
-    let me = Bundle.main.executableURL!
-    let mine = KeychainHandoff.cdhash(of: me)
-    check("a signed executable has a code hash", mine?.count == 40)
-    checkEq("this process is the code with that hash", KeychainHandoff.process(getpid(), hasCDHash: mine ?? ""), true)
-    checkEq("any other hash does not match", KeychainHandoff.process(getpid(), hasCDHash: String(repeating: "0", count: 40)), false)
-    checkEq("a malformed hash never matches", KeychainHandoff.process(getpid(), hasCDHash: "cdhash"), false)
 
     // Versions up to 1.17.2 handed the items over in a file: it is restored once, then wiped.
     let file = URL(fileURLWithPath: NSTemporaryDirectory() + "typeleast-handoff-" + UUID().uuidString + ".json")

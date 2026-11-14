@@ -103,14 +103,13 @@ an endpoint substituted in `runtime.json`. API keys are stored in the macOS Keyc
 
 ## macOS local signing and updates
 
-Local signing is not a publisher signature or Apple notarization. Newly created local identities do not grant
-permanent access to the generic `codesign` tool. Allow a single signing operation when prompted. This code change
-cannot remove an earlier Always Allow grant from an existing Keychain. Publisher-controlled Developer ID signing
-is required to remove the local-signing authority risk. This change does not modify existing certificates.
+Local signing is not a publisher signature or Apple notarization. The updater keeps the existing local signing
+identity and its access settings. It does not revoke the user's previous authorization. macOS controls consent
+when the certificate is first used or its Keychain is locked.
 
-Before installation, the verified replacement requests Keychain access without deleting or rewriting original
-items. A refused or failed request stops the update and preserves the installed app. System consent may be required;
-password-free updates are not guaranteed.
+Existing credentials stay in the Keychain when the app is replaced. The updater does not launch a temporary copy
+to request access to each credential before installation. Account-name handoffs from older updaters are acknowledged
+without reading credentials. Normal credential access still uses the system Keychain, which can require consent.
 
 ## System changes, installation and uninstallation
 
