@@ -12,6 +12,8 @@ extension EnvironmentValues {
 }
 
 struct TranslationSunset: View {
+    static let displayScale: CGFloat = 3.0 / 5.0
+    static let displaySize = CGSize(width: 128 * displayScale, height: 80 * displayScale)
     var working = false
     var hoverChanged: (Bool) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -26,7 +28,8 @@ struct TranslationSunset: View {
                                      time: max(0, context.date.timeIntervalSinceReferenceDate - enteredAt),
                                      reduceMotion: reduceMotion, pressed: pressed)
         }
-        .frame(width: 128, height: 80)
+        .scaleEffect(Self.displayScale)
+        .frame(width: Self.displaySize.width, height: Self.displaySize.height)
         .contentShape(Rectangle())
         .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.7), value: hovering)
         .onContinuousHover { phase in
@@ -37,8 +40,10 @@ struct TranslationSunset: View {
                     hovering = true
                     hoverChanged(true)
                 }
-                pointer = CGSize(width: max(-1, min(1, (location.x - 64) / 64)),
-                                 height: max(-1, min(1, (location.y - 40) / 40)))
+                let halfWidth = Self.displaySize.width / 2
+                let halfHeight = Self.displaySize.height / 2
+                pointer = CGSize(width: max(-1, min(1, (location.x - halfWidth) / halfWidth)),
+                                 height: max(-1, min(1, (location.y - halfHeight) / halfHeight)))
             case .ended:
                 hovering = false
                 pointer = .zero
@@ -53,6 +58,7 @@ struct TranslationSunset: View {
 }
 
 struct TranslationSunsetArtwork: View {
+    @Environment(\.colorScheme) private var colorScheme
     let engaged: Bool
     let working: Bool
     let pointer: CGSize
@@ -69,9 +75,11 @@ struct TranslationSunsetArtwork: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(LinearGradient(colors: [.white.opacity(engaged ? 1 : 0.94),
-                                               Color(white: engaged ? 0.94 : 0.985)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(Color(white: 0.95).opacity(engaged ? 0.18 : 0.10))
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(LinearGradient(colors: [.white, Color.black.opacity(engaged ? 0.18 : 0.07)],
@@ -96,7 +104,7 @@ struct TranslationSunsetArtwork: View {
         let sunCenter = CGPoint(x: 64 + pointerX * 6,
                                 y: 34 - (engaged ? 3 : 0) - lift + CGFloat(sway) * (working ? 2.7 : 1.5) + pointerY * 2)
         let tilt = pointerX * 15 + CGFloat(sway) * (working ? 15 : 5) + (engaged ? -8 : 0)
-        let ink = Color(white: 0.13)
+        let ink = Color(white: colorScheme == .dark ? 0.94 : 0.13)
         context.drawLayer { sun in
             sun.translateBy(x: sunCenter.x, y: sunCenter.y)
             sun.rotate(by: .degrees(Double(tilt)))

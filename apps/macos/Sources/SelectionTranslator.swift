@@ -301,7 +301,7 @@ struct SelectionDotView: View {
     var body: some View {
         Button(action: action) { TranslationSunset(hoverChanged: hoverChanged) }
             .buttonStyle(TranslationDotPressStyle())
-            .frame(width: 128, height: 80)
+            .frame(width: TranslationSunset.displaySize.width, height: TranslationSunset.displaySize.height)
             .contentShape(Rectangle())
             .accessibilityLabel(L10n.text("翻译"))
             .help(L10n.text("翻译"))
@@ -342,7 +342,6 @@ struct SelectionBubbleView: View {
             case .loading:
                 HStack(spacing: 8) {
                     TranslationSunset(working: true)
-                        .scaleEffect(0.62).frame(width: 84, height: 52)
                     Text(L10n.text("正在翻译…")).font(.system(size: 13))
                 }
             case .done(let text):
