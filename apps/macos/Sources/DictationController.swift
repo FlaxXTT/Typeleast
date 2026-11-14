@@ -204,7 +204,7 @@ final class DictationController {
             playSound(start: false)
             phase = .thinking
             recordingBar.showThinking(detail: "")
-            setHint(auto ? L10n.text("已到 {0} 秒上限，正在整理", recorder.maxSeconds) : nil)
+            setHint(auto ? L10n.text("已到 {0} 秒上限 · thinking", recorder.maxSeconds) : nil)
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,

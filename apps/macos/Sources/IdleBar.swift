@@ -20,6 +20,21 @@ private final class IdleBarView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var acceptsFirstResponder: Bool { false }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateBackingScale()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        updateBackingScale()
+    }
+
+    private func updateBackingScale() {
+        layer?.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        needsDisplay = true
+    }
+
     deinit {
         animationTimer?.invalidate()
         delayedExit?.cancel()
@@ -104,12 +119,17 @@ private final class IdleBarView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
         guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let scale = max(1, window?.backingScaleFactor ?? layer?.contentsScale ?? 2)
+        let pixel = 1 / scale
+        let rect = bounds.insetBy(dx: pixel / 2, dy: pixel / 2)
+        context.clear(bounds)
+        context.setAllowsAntialiasing(true)
+        context.setShouldAntialias(true)
         let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous).path(in: rect).cgPath
-        NSColor(calibratedWhite: 0.07, alpha: 0.55 + expansion * 0.37).setFill()
-        NSColor(calibratedWhite: 1, alpha: 0.18 + expansion * 0.08).setStroke()
-        context.setLineWidth(1)
+        NSColor(calibratedRed: 0.91, green: 0.92, blue: 0.94, alpha: 0.94 + expansion * 0.05).setFill()
+        NSColor(calibratedWhite: 0.33, alpha: 0.14 + expansion * 0.03).setStroke()
+        context.setLineWidth(pixel)
         context.addPath(path)
         context.drawPath(using: .fillStroke)
 
@@ -122,7 +142,7 @@ private final class IdleBarView: NSView {
             let progress = min(1, max(0, (expansion - delay) / (1 - delay)))
             let height = 3.2 + (heights[i] - 3.2) * progress
             let x = symbolX + CGFloat(i - 1) * 6
-            NSColor.white.withAlphaComponent(0.70 + expansion * 0.20).setFill()
+            NSColor(calibratedWhite: 0.15, alpha: 0.65 + expansion * 0.25).setFill()
             let bar = NSRect(x: x - 1.6, y: bounds.midY - height / 2, width: 3.2, height: height)
             NSBezierPath(roundedRect: bar, xRadius: 1.6, yRadius: 1.6).fill()
         }
@@ -132,7 +152,7 @@ private final class IdleBarView: NSView {
         paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.9 * labelOpacity),
+            .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 0.9 * labelOpacity),
             .paragraphStyle: paragraph,
         ]
         let text = hint as NSString
@@ -191,6 +211,7 @@ final class IdleBar {
         let rect = NSRect(origin: .zero, size: IdleBarPanel.restingSize)
         let p = IdleBarPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         let v = IdleBarView(frame: rect)
+        v.wantsLayer = true
         v.hint = hint
         v.onClick = { [weak self] in self?.onClick?() }
         p.contentView = v

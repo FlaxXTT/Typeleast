@@ -480,7 +480,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         applyState()
     }
 
-    @objc func onHistoryChanged() { applyState() }
+    @objc func onHistoryChanged() {
+        applyState()
+        if serviceUp { refreshProfileOnce() }
+    }
 
     @objc func onWake() {
         refreshHealth()
@@ -528,10 +531,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// The description of the user's work is rewritten once per launch, from History, in the background.
     private var profileRefreshed = false
     func refreshProfileOnce() {
-        guard !profileRefreshed, let route = settings.activeLLMRoute else { return }
+        guard !profileRefreshed else { return }
         let items = HistoryStore.shared.learningItems
+        guard !items.isEmpty, let route = settings.silentLLMRoute else { return }
         let generation = HistoryStore.shared.profileGeneration
-        guard !items.isEmpty else { return }
         profileRefreshed = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }

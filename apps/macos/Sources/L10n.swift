@@ -537,6 +537,8 @@ enum L10n {
         "未知应用": "Unknown app",
         "未知错误": "Unknown error",
         "未设置": "Not set",
+        "已保存，留空保持不变": "Saved; leave blank to keep it",
+        "已到 {0} 秒上限 · thinking": "Reached the {0}-second limit · thinking",
         "本地服务": "Local service",
         "本地服务反复退出：": "The local service stops again and again: ",
         "本地服务启动中…": "Local service starting…",

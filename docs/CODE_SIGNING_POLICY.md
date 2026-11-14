@@ -79,8 +79,9 @@ network only in these cases:
 - **Text cleanup (optional).** The recognized text goes to the provider configured by the user. When backup
   providers are enabled, a failed request can be sent to one of those providers. The current Mac client can also
   send the user's selected text, explicitly enabled cursor context and a short profile derived from history.
-  At startup, corrections and intentions from up to 100 recent history entries are sent to the configured model
-  to build that profile. It is encrypted locally and limited to 1,000 characters. Deleting or expiring its source
+  When history and the configured provider are available without an extra password prompt, corrections and
+  intentions from up to 100 recent history entries are sent to that provider to build the profile. Background
+  preparation waits when credentials need authorization and can resume after the user has used the app. It is encrypted locally and limited to 1,000 characters. Deleting or expiring its source
   records invalidates it; a delayed model response cannot restore a profile from an earlier history generation.
   Profiles saved by old versions without source provenance are not reused. Already-sent data cannot be withdrawn
   from the provider by deleting local history. The provider's privacy policy applies.

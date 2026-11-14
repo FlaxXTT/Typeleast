@@ -293,7 +293,7 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// An electronic sunset offered beside the selection.
+/// A pen-drawn sun with a full rectangular interaction area.
 struct SelectionDotView: View {
     let action: () -> Void
     var hoverChanged: (Bool) -> Void = { _ in }
@@ -301,17 +301,16 @@ struct SelectionDotView: View {
     var body: some View {
         Button(action: action) { TranslationSunset(hoverChanged: hoverChanged) }
             .buttonStyle(TranslationDotPressStyle())
+            .frame(width: 128, height: 80)
+            .contentShape(Rectangle())
             .accessibilityLabel(L10n.text("翻译"))
             .help(L10n.text("翻译"))
     }
 }
 
 private struct TranslationDotPressStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.88 : 1)
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.54), value: configuration.isPressed)
+        configuration.label.environment(\.translationSunPressed, configuration.isPressed)
     }
 }
 
@@ -343,7 +342,7 @@ struct SelectionBubbleView: View {
             case .loading:
                 HStack(spacing: 8) {
                     TranslationSunset(working: true)
-                        .scaleEffect(0.78).frame(width: 82, height: 44)
+                        .scaleEffect(0.62).frame(width: 84, height: 52)
                     Text(L10n.text("正在翻译…")).font(.system(size: 13))
                 }
             case .done(let text):

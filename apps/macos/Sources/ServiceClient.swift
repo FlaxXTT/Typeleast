@@ -386,7 +386,7 @@ struct TaskProgress: Codable {
         switch stage {
         case "recognizing": return L10n.text("正在识别…")
         case "preparing": return L10n.text("正在理解全文…")
-        case "generating": return total > 1 ? L10n.text("正在整理 {0}/{1}",completed,total) : L10n.text("正在整理…")
+        case "generating": return total > 1 ? "thinking \(completed)/\(total)" : "thinking"
         case "checking": return L10n.text("正在检查完整性…")
         case "translating":
             if let characters = sourceCharacters, let words = sourceWords {

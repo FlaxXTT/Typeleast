@@ -560,6 +560,7 @@ struct ModelSection: View {
 
     private var settings: Settings { model.settings }
     private var preset: LLMPreset { LLMPreset.find(settings.llmPresetID) }
+    private var normalizedKeyDraft: String { keyDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         SettingsSection(title: L10n.text("整理模型")) {
@@ -579,15 +580,17 @@ struct ModelSection: View {
                         .frame(width: 300)
                 }
                 if preset.needsKey {
-                    SettingRow(title: "API Key", detail: keySaved ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试"))) {
+                    SettingRow(title: "API Key", detail: keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试"))) {
                         HStack(spacing: 8) {
-                            SecureField("sk-…", text: $keyDraft)
+                            SecureField(keySaved ? L10n.text("已保存，留空保持不变") : "sk-…", text: $keyDraft)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 220)
-                            // An emptied field with a saved key deletes it from the Keychain.
-                            Button(keyDraft.isEmpty && keySaved ? L10n.text("删除") : L10n.text("保存")) { saveKey() }
+                            // Deletion is an explicit action; a blank draft keeps the saved key.
+                            Button(normalizedKeyDraft.isEmpty && keySaved ? L10n.text("删除") : L10n.text("保存")) {
+                                saveKey(deleting: normalizedKeyDraft.isEmpty && keySaved)
+                            }
                             .buttonStyle(SecondaryButtonStyle())
-                            .disabled(keyDraft.isEmpty && !keySaved)
+                            .disabled(normalizedKeyDraft.isEmpty && !keySaved)
                         }
                     }
                 }
@@ -613,7 +616,7 @@ struct ModelSection: View {
                 HStack(spacing: 10) {
                     Button(busy ? L10n.text("测试中…") : L10n.text("测试连接")) { test() }
                         .buttonStyle(PrimaryButtonStyle())
-                        .disabled(busy || draftRoute() == nil)
+                        .disabled(busy || !canTestRoute)
                     if !status.isEmpty {
                         Text(status).font(.system(size: 12)).foregroundColor(statusOK ? Theme.success : Theme.warning)
                             .fixedSize(horizontal: false, vertical: true)
@@ -629,19 +632,30 @@ struct ModelSection: View {
     }
 
     private func reloadForPreset() {
-        let stored = settings.llmAPIKey
-        keyDraft = stored
-        keySaved = !stored.isEmpty
+        keyDraft = ""
+        keySaved = KeychainStore.exists(account: settings.llmPresetID)
         models = []
         status = ""
         model.objectWillChange.send()
     }
 
-    /// The route as currently typed, with the key from the field (saved or not).
+    /// Rendering the page only uses saved-state metadata, never the key value.
+    private var canTestRoute: Bool {
+        LLMPreset.isAllowedBaseURL(settings.llmBaseURL) && !settings.llmModel.isEmpty
+            && (!preset.needsKey || !normalizedKeyDraft.isEmpty || keySaved)
+    }
+
+    private func keyForRequest() -> String {
+        let draft = normalizedKeyDraft
+        if !draft.isEmpty { return draft }
+        return preset.needsKey ? settings.llmAPIKey : (KeychainStore.readSilently(account: settings.llmPresetID) ?? "")
+    }
+
+    /// Read a saved key only after the user asks to use it.
     private func draftRoute() -> LLMRoute? {
         let base = settings.llmBaseURL
         guard LLMPreset.isAllowedBaseURL(base), !settings.llmModel.isEmpty else { return nil }
-        let key = keyDraft.isEmpty ? settings.llmAPIKey : keyDraft
+        let key = keyForRequest()
         if preset.needsKey && key.isEmpty { return nil }
         return LLMRoute(baseURL: base, model: settings.llmModel, apiKey: key)
     }
@@ -649,7 +663,9 @@ struct ModelSection: View {
     private func fetchModels() {
         let base = settings.llmBaseURL
         guard LLMPreset.isAllowedBaseURL(base) else { status = L10n.text("接口地址错误"); statusOK = false; return }
-        let route = LLMRoute(baseURL: base, model: "", apiKey: keyDraft.isEmpty ? settings.llmAPIKey : keyDraft)
+        let key = keyForRequest()
+        guard !preset.needsKey || !key.isEmpty else { status = L10n.text("没有 Key"); statusOK = false; return }
+        let route = LLMRoute(baseURL: base, model: "", apiKey: key)
         busy = true
         status = L10n.text("正在获取…")
         statusOK = true
@@ -679,7 +695,7 @@ struct ModelSection: View {
     private func missingParts() -> String {
         var missing: [String] = []
         if !LLMPreset.isAllowedBaseURL(settings.llmBaseURL) { missing.append(L10n.text("接口地址错误")) }
-        if preset.needsKey && settings.llmAPIKey.isEmpty {
+        if preset.needsKey && !keySaved {
             missing.append(keyDraft.isEmpty ? L10n.text("没有 Key") : L10n.text("Key 未保存，请点「保存」"))
         }
         if settings.llmModel.isEmpty { missing.append(L10n.text("没有模型")) }
@@ -688,15 +704,20 @@ struct ModelSection: View {
 
     /// Store the key; say so honestly when the Keychain refuses.
     @discardableResult
-    private func saveKey(quiet: Bool = false) -> Bool {
-        let ok = KeychainStore.write(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: settings.llmPresetID)
-        keySaved = ok && !keyDraft.isEmpty
+    private func saveKey(quiet: Bool = false, deleting: Bool = false) -> Bool {
+        let value = deleting ? "" : normalizedKeyDraft
+        guard deleting || !value.isEmpty else { return keySaved }
+        let ok = KeychainStore.write(value, account: settings.llmPresetID)
+        if ok {
+            keySaved = !deleting
+            keyDraft = ""
+        }
         if !ok {
             status = L10n.text("Key 无法存入钥匙串（错误码 ") + String(KeychainStore.lastStatus) + "）"
             statusOK = false
             DiagnosticsLog.write("keychain.write.fail", ["status": String(KeychainStore.lastStatus)])
         } else if !quiet {
-            status = keyDraft.isEmpty ? L10n.text("Key 已删除") : L10n.text("Key 已保存")
+            status = deleting ? L10n.text("Key 已删除") : L10n.text("Key 已保存")
             statusOK = true
         }
         settings.notifyChanged()
@@ -715,7 +736,7 @@ struct ModelSection: View {
                 busy = false
                 switch result {
                 case .success(let answer) where answer.ok:
-                    let saved = keyDraft.isEmpty || keyDraft == settings.llmAPIKey || saveKey(quiet: true)
+                    let saved = normalizedKeyDraft.isEmpty || normalizedKeyDraft == KeychainStore.cached(account: settings.llmPresetID) || saveKey(quiet: true)
                     let thinks = answer.code == "thinking"
                     status = L10n.text("连接成功，用时 ") + String(Int(answer.ms ?? 0)) + L10n.text(" 毫秒") + (saved ? L10n.text("，Key 已保存") : L10n.text("，但 Key 无法存入钥匙串"))
                         + (thinks ? L10n.text("。此模型先思考，整理较慢") : "")

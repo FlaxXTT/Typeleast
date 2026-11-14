@@ -115,13 +115,16 @@ enum KeychainStore {
     /// Whether an item exists, from its attributes only: never opens a password dialog.
     static func exists(account: String) -> Bool {
         if let stub = stub { return stub[account] != nil }
-        if let hit = lock.withLock({ cache[account] }) { return hit != nil }
+        if let hit = lock.withLock({ cache[account] }), hit != nil { return true }
+        let context = LAContext()
+        context.interactionNotAllowed = true
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context,
         ]
         var item: CFTypeRef?
         return SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
@@ -313,10 +316,21 @@ extension Settings {
 
     /// The route to send with a dictation, or nil when it is not complete yet
     /// (then the service inserts the tidied transcript, reason no-api-key).
-    var activeLLMRoute: LLMRoute? {
+    var activeLLMRoute: LLMRoute? { llmRoute(allowInteraction: true) }
+
+    /// Background work must not open a password dialog.
+    var silentLLMRoute: LLMRoute? { llmRoute(allowInteraction: false) }
+
+    private func llmRoute(allowInteraction: Bool) -> LLMRoute? {
         let preset = LLMPreset.find(llmPresetID)
-        let key = llmAPIKey
-        guard !llmModel.isEmpty, LLMPreset.isAllowedBaseURL(llmBaseURL), !(preset.needsKey && key.isEmpty) else { return nil }
+        guard !llmModel.isEmpty, LLMPreset.isAllowedBaseURL(llmBaseURL) else { return nil }
+        let key: String
+        if preset.needsKey && allowInteraction {
+            key = llmAPIKey
+        } else {
+            key = KeychainStore.readSilently(account: llmPresetID) ?? ""
+        }
+        guard !preset.needsKey || !key.isEmpty else { return nil }
         return LLMRoute(baseURL: llmBaseURL, model: llmModel, apiKey: key)
     }
 

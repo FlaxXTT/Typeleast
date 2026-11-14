@@ -45,16 +45,18 @@ enum RecordingBarFormat {
     }
 
     /// Height of a silent bar: silence reads as a row of dots, not an empty box.
-    static let silenceFloor: Float = 0.08
+    static let silenceFloor: Float = 0.055
     /// Expansion applied to the loudness: >1 pushes quiet speech down and keeps loud
     /// speech tall, so the two are easy to tell apart at a glance.
-    static let expansion: Float = 1.4
+    static let expansion: Float = 1.7
 
     /// Bar height 0...1 for a loudness level from Recorder.loudness(rms:) (already on
     /// a decibel scale: 0 = room noise, 1 = a raised voice).
     static func barHeight(for level: Float) -> Float {
         let value = clampLevel(level)
-        let shaped = Float(pow(Double(value), Double(expansion)))
+        // Keep the quiet baseline low and let a raised voice fill the waveform.
+        let normalized = min(1, max(0, (value - 0.08) / 0.76))
+        let shaped = Float(pow(Double(normalized), Double(expansion)))
         return min(1, max(silenceFloor, shaped))
     }
 }
@@ -192,7 +194,7 @@ final class CancelButton: NSButton {
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
-/// Draws the capsule in its three looks (a small dark capsule, a live
+/// Draws the capsule in its three looks (a soft grey capsule, a live
 /// waveform, × to cancel and a stop button to finish). Only the two buttons are subviews.
 final class PillView: NSView {
     var onCancel: (() -> Void)?
@@ -201,12 +203,17 @@ final class PillView: NSView {
     /// The recording cap; the countdown appears in the last `countdownSeconds`.
     var limitSeconds: Double = 120
     static let countdownSeconds: Double = 15
-    /// How many of the most recent levels the waveform shows (about 1.5 s at 20 Hz).
+    /// The waveform shows the latest 0.6 seconds of the 20 Hz level history.
     static let visibleBars = 12
 
     var model = RecordingBarModel() {
         didSet {
-            if model.phase != oldValue.phase { phaseChanged() }
+            if model.phase != oldValue.phase {
+                phaseChanged()
+            } else if model.phase == .recording,
+                      (model.elapsed != oldValue.elapsed || model.history.count != oldValue.history.count) {
+                sampleShiftStarted = ProcessInfo.processInfo.systemUptime
+            }
             needsDisplay = true
         }
     }
@@ -216,12 +223,14 @@ final class PillView: NSView {
     private var bars: [Float] = []
     private var spinnerPhase: CGFloat = 0
     private var pulse: CGFloat = 0
+    private var sampleShiftStarted = ProcessInfo.processInfo.systemUptime
+    private static let ink = NSColor(calibratedWhite: 0.15, alpha: 1)
     private var cancelHover = false
     private var stopHover = false
     private var cancelHoverAmount: CGFloat = 0
     private var stopHoverAmount: CGFloat = 0
 
-    static let height: CGFloat = 34
+    static let height: CGFloat = 40
     /// Diameter of the cancel (left) and finish (right) buttons.
     static let buttonSize: CGFloat = 26
     static func badgeWidth(_ text: String) -> CGFloat {
@@ -237,7 +246,7 @@ final class PillView: NSView {
         switch model.phase {
         case .hidden: return 100
         case .recording:
-            return (limit - model.elapsed <= countdownSeconds ? 154 : 116) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
+            return (limit - model.elapsed <= countdownSeconds ? 180 : 142) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 6)
         case .thinking: return 94 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 10) + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:11)]).width))
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -269,7 +278,7 @@ final class PillView: NSView {
         button.setButtonType(.momentaryChange)
         button.attributedTitle = NSAttributedString(string: glyph, attributes: [
             .font: NSFont.systemFont(ofSize: 10, weight: .bold),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.78),
+            .foregroundColor: PillView.ink.withAlphaComponent(0.78),
         ])
         button.target = self
         button.action = action
@@ -282,6 +291,21 @@ final class PillView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { false }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateBackingScale()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        updateBackingScale()
+    }
+
+    private func updateBackingScale() {
+        layer?.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        needsDisplay = true
+    }
 
     /// Body clicks are deliberately ignored: they must not move, focus or close anything.
     override func mouseDown(with event: NSEvent) {}
@@ -308,6 +332,7 @@ final class PillView: NSView {
     private func phaseChanged() {
         spinnerPhase = 0
         pulse = 0
+        sampleShiftStarted = ProcessInfo.processInfo.systemUptime
         cancelHover = false
         stopHover = false
         cancelHoverAmount = 0
@@ -320,9 +345,8 @@ final class PillView: NSView {
         needsLayout = true
     }
 
-    /// One 20 Hz animation step: scroll the waveform, advance the thinking dots,
-    /// follow the live level. Bars take their sample heights as-is: easing each slot
-    /// towards its neighbour's value would smear the peaks the user needs to see.
+    /// Draw at 60 Hz while levels arrive at 20 Hz. Move the history as one strip,
+    /// rather than blending neighbouring heights, to keep speech peaks distinct.
     func advance() {
         let cancelTarget: CGFloat = cancelHover ? 1 : 0
         let stopTarget: CGFloat = stopHover ? 1 : 0
@@ -330,29 +354,34 @@ final class PillView: NSView {
             cancelHoverAmount = cancelTarget
             stopHoverAmount = stopTarget
         } else {
-            cancelHoverAmount += (cancelTarget - cancelHoverAmount) * 0.38
-            stopHoverAmount += (stopTarget - stopHoverAmount) * 0.38
+            cancelHoverAmount += (cancelTarget - cancelHoverAmount) * 0.15
+            stopHoverAmount += (stopTarget - stopHoverAmount) * 0.15
         }
         if !reduceMotion {
-            spinnerPhase += 0.18
+            spinnerPhase += 0.06
             if spinnerPhase > 2 * .pi { spinnerPhase -= 2 * .pi }
         }
         let slots = max(1, model.history.capacity)
         let targets = model.history.heights()
         let padding = max(0, slots - targets.count)
         bars = [Float](repeating: 0, count: padding) + Array(targets.suffix(slots))
-        pulse += (CGFloat(model.level) - pulse) * 0.5
+        pulse += (CGFloat(model.level) - pulse) * 0.21
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
         guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let scale = max(1, window?.backingScaleFactor ?? layer?.contentsScale ?? 2)
+        let pixel = 1 / scale
+        context.clear(bounds)
+        context.setAllowsAntialiasing(true)
+        context.setShouldAntialias(true)
         let capsule = RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .path(in: bounds.insetBy(dx: 0.5, dy: 0.5)).cgPath
-        NSColor(calibratedWhite: 0.09, alpha: 0.92).setFill()
-        NSColor(calibratedWhite: 1.0, alpha: 0.12).setStroke()
-        context.setLineWidth(1)
+            .path(in: bounds.insetBy(dx: pixel / 2, dy: pixel / 2)).cgPath
+        NSColor(calibratedRed: 0.91, green: 0.92, blue: 0.94, alpha: 0.99).setFill()
+        NSColor(calibratedWhite: 0.33, alpha: 0.17).setStroke()
+        context.setLineWidth(pixel)
         context.addPath(capsule)
         context.drawPath(using: .fillStroke)
 
@@ -379,8 +408,8 @@ final class PillView: NSView {
 
     private func drawRecording() {
         drawCancel()
-        // finish: a white disc with a dark check mark
-        NSColor.white.setFill()
+        // finish: a dark disc with a light check mark
+        PillView.ink.setFill()
         let stopExpansion = reduceMotion ? 0 : stopHoverAmount * 1.8
         NSBezierPath(ovalIn: stopRect.insetBy(dx: -stopExpansion, dy: -stopExpansion)).fill()
         let c = NSPoint(x: stopRect.midX, y: stopRect.midY)
@@ -391,7 +420,7 @@ final class PillView: NSView {
         check.lineWidth = 2.2
         check.lineCapStyle = .round
         check.lineJoinStyle = .round
-        NSColor(calibratedWhite: 0.09, alpha: 1).setStroke()
+        NSColor(calibratedWhite: 0.96, alpha: 1).setStroke()
         check.stroke()
 
         let remaining = limitSeconds - model.elapsed
@@ -415,7 +444,7 @@ final class PillView: NSView {
             waveRight = rect.minX - 6
         }
         let waveLeft = cancelRect.maxX + 8
-        let waveHeight = bounds.height - 14
+        let waveHeight = bounds.height - 10
         drawWaveform(NSRect(x: waveLeft, y: bounds.midY - waveHeight / 2,
                             width: waveRight - waveLeft, height: waveHeight))
     }
@@ -430,7 +459,7 @@ final class PillView: NSView {
             let wave = reduceMotion ? 0.6 : (0.35 + 0.65 * (0.5 + 0.5 * sin(phase)))
             let radius: CGFloat = 2.6 + (reduceMotion ? 0 : CGFloat(wave) * 0.7)
             let x = centreX + CGFloat(index - 1) * spacing
-            NSColor.white.withAlphaComponent(CGFloat(wave)).setFill()
+            PillView.ink.withAlphaComponent(CGFloat(wave)).setFill()
             NSBezierPath(ovalIn: NSRect(x: x - radius, y: bounds.midY - radius,
                                         width: radius * 2, height: radius * 2)).fill()
         }
@@ -446,7 +475,7 @@ final class PillView: NSView {
         }
         if !model.detail.isEmpty {
             let x: CGFloat = 82 + (model.badge.isEmpty ? 0 : PillView.badgeWidth(model.badge) + 10)
-            drawText(model.detail,x:x,centerY:bounds.midY,width:max(0,bounds.width-x-10),font:.systemFont(ofSize:11),color:.white)
+            drawText(model.detail,x:x,centerY:bounds.midY,width:max(0,bounds.width-x-10),font:.systemFont(ofSize:11,weight:.medium),color:PillView.ink)
         }
     }
 
@@ -479,14 +508,14 @@ final class PillView: NSView {
         let text = model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText
         drawText(text, x: 34, centerY: rowY, width: bounds.width - 46,
                  font: PillView.resultFont,
-                 color: NSColor.white)
+                 color: PillView.ink)
     }
 
     // MARK: drawing primitives
 
-    /// A grey disc with a white ×.
+    /// A quiet grey disc with a dark ×.
     private func drawCancel() {
-        NSColor.white.withAlphaComponent(0.22 + cancelHoverAmount * 0.3).setFill()
+        PillView.ink.withAlphaComponent(0.06 + cancelHoverAmount * 0.10).setFill()
         let expansion = reduceMotion ? 0 : cancelHoverAmount * 1.8
         NSBezierPath(ovalIn: cancelRect.insetBy(dx: -expansion, dy: -expansion)).fill()
         let c = NSPoint(x: cancelRect.midX, y: cancelRect.midY), r: CGFloat = 4.6
@@ -499,28 +528,32 @@ final class PillView: NSView {
         cross.move(to: point(-r, r)); cross.line(to: point(r, -r))
         cross.lineWidth = 2
         cross.lineCapStyle = .round
-        NSColor.white.setStroke()
+        PillView.ink.setStroke()
         cross.stroke()
     }
 
-    /// Thin white vertical lines, mirrored around the centre line, newest on the right.
-    /// Silent samples are short and dimmer, so silence reads as a dotted line.
+    /// Rounded dark bars move together; the rightmost new sample enters smoothly.
     private func drawWaveform(_ rect: NSRect) {
-        guard !bars.isEmpty, rect.width > 4 else { return }
-        let shown = Array(bars.suffix(PillView.visibleBars))
-        let slot = rect.width / CGFloat(shown.count)
-        let lineWidth = min(2.2, max(1.2, slot * 0.5))
-        let silent = CGFloat(RecordingBarFormat.silenceFloor)
+        guard !bars.isEmpty, rect.width > 4,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        let shown = Array(bars.suffix(PillView.visibleBars + 1))
+        let slots = max(1, shown.count - 1)
+        let slot = rect.width / CGFloat(slots)
+        let scale = max(1, window?.backingScaleFactor ?? layer?.contentsScale ?? 2)
+        let pixel = 1 / scale
+        let lineWidth = max(pixel * 2, (min(2.5, slot * 0.50) * scale).rounded() / scale)
+        let progress = reduceMotion ? 1 : min(1, max(0, (ProcessInfo.processInfo.systemUptime - sampleShiftStarted) / 0.05))
+        context.saveGState()
+        context.clip(to: rect)
         for (index, value) in shown.enumerated() {
-            let x = rect.minX + slot * CGFloat(index) + (slot - lineWidth) / 2
-            let magnitude = CGFloat(value)
-            let height = max(lineWidth, magnitude * rect.height)
+            let x = rect.minX + slot * (CGFloat(index) + 0.5 - CGFloat(progress)) - lineWidth / 2
+            let height = max(lineWidth, (CGFloat(value) * rect.height * scale).rounded() / scale)
             let line = NSRect(x: x, y: rect.midY - height / 2, width: lineWidth, height: height)
-            let voiced = magnitude > silent + 0.02
-            let alpha: CGFloat = voiced ? 1 : 0.55
-            NSColor.white.withAlphaComponent(alpha).setFill()
+            let voiced = value > RecordingBarFormat.silenceFloor + 0.02
+            PillView.ink.withAlphaComponent(voiced ? 0.95 : 0.38).setFill()
             NSBezierPath(roundedRect: line, xRadius: lineWidth / 2, yRadius: lineWidth / 2).fill()
         }
+        context.restoreGState()
     }
 
     private func drawText(_ string: String, x: CGFloat, centerY: CGFloat, width: CGFloat,
@@ -541,7 +574,7 @@ final class PillView: NSView {
 }
 
 /// The public indicator. All entry points are safe to call from any thread; they hop to
-/// the main queue when needed. While hidden the 20 Hz timer is invalidated, so the
+/// the main queue when needed. While hidden the drawing timer is invalidated, so the
 /// indicator costs exactly zero CPU when idle.
 final class RecordingBar {
     /// Set by the host to react to the pill's cancel affordance. It only ever fires for
@@ -556,7 +589,7 @@ final class RecordingBar {
 
     /// Largest panel the capsule can need; the panel is resized to the capsule per look.
     static let size = NSSize(width: 360, height: PillView.height)
-    private static let tickInterval: TimeInterval = 1.0 / 20.0
+    private static let tickInterval: TimeInterval = 1.0 / 60.0
     private static let resultHold: TimeInterval = 1.0
     private static let fadeDuration: TimeInterval = 1.0
 
@@ -702,7 +735,7 @@ final class RecordingBar {
     func showThinking(detail: String) {
         onMain {
             self.cancelPendingFade()
-            self.model.showThinking(detail: detail)
+            self.model.showThinking(detail: detail.isEmpty ? "thinking" : detail)
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
             self.present()

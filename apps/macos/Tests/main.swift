@@ -1975,7 +1975,7 @@ do {
     checkEq("ten-minute WAV is within the client ceiling",Wav.maxBytes,24*1024*1024)
     checkEq("generation timeout covers recognition and cleanup",client.dictateTimeout,600)
     let progress=try JSONDecoder().decode(TaskProgress.self,from:Data(#"{"stage":"generating","completed":2,"total":5}"#.utf8))
-    checkEq("progress uses actual chunk counts",progress.label,L10n.text("正在整理 {0}/{1}",2,5))
+    checkEq("progress uses actual chunk counts",progress.label,"thinking 2/5")
     let response=try JSONDecoder().decode(DictateResponse.self,from:Data(#"{"task":"assistant","text":"result"}"#.utf8))
     checkEq("task survives response decoding",response.task,"assistant")
 } catch { check("unified task contract",false,String(describing:error)) }
