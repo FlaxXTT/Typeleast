@@ -50,6 +50,8 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
 struct HubRootView: View {
     @EnvironmentObject var model: AppModel
+    // Keep only the last history projection, rather than keeping every page alive.
+    @StateObject private var historyCache = HistoryListCache()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -61,7 +63,7 @@ struct HubRootView: View {
                 Theme.window
                 switch model.page {
                 case .home: HomePage()
-                case .history: HistoryPage()
+                case .history: HistoryPage(cache: historyCache)
                 case .meetings: MeetingsPage().environmentObject(model.meeting)
                 case .settings: SettingsPage()
                 }
@@ -70,6 +72,9 @@ struct HubRootView: View {
         }
         .frame(minWidth: 820, minHeight: 560)
         .ignoresSafeArea()
+        .onChange(of: model.historyRevision) {
+            historyCache.invalidate(unlessOwner: ObjectIdentifier(model), revision: model.historyRevision)
+        }
     }
 }
 

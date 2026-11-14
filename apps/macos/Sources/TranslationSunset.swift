@@ -19,41 +19,48 @@ struct TranslationSunset: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.translationSunPressed) private var pressed
     @State private var hovering = false
-    @State private var pointer = CGSize.zero
+    @State private var hoverAnimating = false
     @State private var enteredAt = Date().timeIntervalSinceReferenceDate
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: reduceMotion || !(hovering || working))) { context in
-            TranslationSunsetArtwork(engaged: hovering || working, working: working, pointer: pointer,
-                                     time: max(0, context.date.timeIntervalSinceReferenceDate - enteredAt),
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || !(hoverAnimating || working))) { context in
+            TranslationSunsetArtwork(engaged: hovering || working, working: working,
+                                     time: hovering && !hoverAnimating && !working ? 0.7
+                                         : max(0, context.date.timeIntervalSinceReferenceDate - enteredAt),
                                      reduceMotion: reduceMotion, pressed: pressed)
         }
         .scaleEffect(Self.displayScale)
         .frame(width: Self.displaySize.width, height: Self.displaySize.height)
         .contentShape(Rectangle())
-        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.7), value: hovering)
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let location):
-                if !hovering {
-                    enteredAt = Date().timeIntervalSinceReferenceDate
-                    hovering = true
-                    hoverChanged(true)
-                }
-                let halfWidth = Self.displaySize.width / 2
-                let halfHeight = Self.displaySize.height / 2
-                pointer = CGSize(width: max(-1, min(1, (location.x - halfWidth) / halfWidth)),
-                                 height: max(-1, min(1, (location.y - halfHeight) / halfHeight)))
-            case .ended:
-                hovering = false
-                pointer = .zero
-                hoverChanged(false)
+        .onHover { active in
+            guard hovering != active else { return }
+            hovering = active
+            hoverAnimating = active && !reduceMotion
+            if active { enteredAt = Date().timeIntervalSinceReferenceDate }
+            hoverChanged(active)
+        }
+        .task(id: hovering) {
+            guard hovering else { return }
+            // Settle after the initial pen stroke instead of redrawing for the
+            // full time the mouse rests on the button. SwiftUI cancels this
+            // task when hover changes or the view leaves the hierarchy.
+            do {
+                try await Task.sleep(nanoseconds: 700_000_000)
+            } catch {
+                return
             }
+            hoverAnimating = false
         }
         .onChange(of: working) { _, active in
             if active { enteredAt = Date().timeIntervalSinceReferenceDate }
         }
-        .onDisappear { if hovering { hoverChanged(false) } }
+        .onChange(of: reduceMotion) { _, enabled in
+            if enabled { hoverAnimating = false }
+        }
+        .onDisappear {
+            hoverAnimating = false
+            if hovering { hovering = false; hoverChanged(false) }
+        }
     }
 }
 
@@ -61,7 +68,6 @@ struct TranslationSunsetArtwork: View {
     @Environment(\.colorScheme) private var colorScheme
     let engaged: Bool
     let working: Bool
-    let pointer: CGSize
     let time: TimeInterval
     let reduceMotion: Bool
     var pressed = false
@@ -69,8 +75,6 @@ struct TranslationSunsetArtwork: View {
     private var moving: Bool { engaged && !reduceMotion }
     private var phase: Double { moving ? time * (working ? 3.7 : 2.05) : 0 }
     private var reveal: CGFloat { moving ? CGFloat(min(1, max(0, time / 0.48))) : 1 }
-    private var pointerX: CGFloat { moving ? pointer.width : 0 }
-    private var pointerY: CGFloat { moving ? pointer.height : 0 }
 
     var body: some View {
         ZStack {
@@ -89,10 +93,8 @@ struct TranslationSunsetArtwork: View {
                 drawInk(in: &context)
             }
             .frame(width: 128, height: 80)
-            .scaleEffect(pressed && !reduceMotion ? 0.83 : 1)
-            .rotationEffect(.degrees(pressed && !reduceMotion ? -7 : 0))
-            .offset(y: pressed && !reduceMotion ? 2 : 0)
-            .animation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.45), value: pressed)
+            .scaleEffect(pressed && !reduceMotion ? 0.96 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: pressed)
             .allowsHitTesting(false)
         }
         .frame(width: 128, height: 80)
@@ -101,9 +103,9 @@ struct TranslationSunsetArtwork: View {
     private func drawInk(in context: inout GraphicsContext) {
         let lift: CGFloat = moving ? CGFloat(sin(min(time / 0.7, 1) * .pi)) * 9 : 0
         let sway = moving ? sin(phase) : 0
-        let sunCenter = CGPoint(x: 64 + pointerX * 6,
-                                y: 34 - (engaged ? 3 : 0) - lift + CGFloat(sway) * (working ? 2.7 : 1.5) + pointerY * 2)
-        let tilt = pointerX * 15 + CGFloat(sway) * (working ? 15 : 5) + (engaged ? -8 : 0)
+        let sunCenter = CGPoint(x: 64,
+                                y: 34 - (engaged ? 3 : 0) - lift + CGFloat(sway) * (working ? 2.7 : 1.5))
+        let tilt = CGFloat(sway) * (working ? 15 : 5) + (engaged ? -8 : 0)
         let ink = Color(white: colorScheme == .dark ? 0.94 : 0.13)
         context.drawLayer { sun in
             sun.translateBy(x: sunCenter.x, y: sunCenter.y)
@@ -146,7 +148,7 @@ struct TranslationSunsetArtwork: View {
         for row in 0..<3 {
             let rhythm = moving ? CGFloat(sin(phase * 0.72 + Double(row) * 1.1)) : 0
             let width: CGFloat = [43, 32, 20][row] + expansion * [33, 26, 18][row]
-            let center: CGFloat = 63 + pointerX * (row == 0 ? -2.5 : 1.8) + CGFloat(row - 1) * 1.5
+            let center: CGFloat = 63 + CGFloat(row - 1) * 1.5
             let y: CGFloat = 55.5 + CGFloat(row) * 6
             var line = Path()
             line.move(to: CGPoint(x: center - width / 2, y: y + rhythm * 0.8))

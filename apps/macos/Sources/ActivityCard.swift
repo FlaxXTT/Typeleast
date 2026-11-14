@@ -12,18 +12,11 @@ struct InsightsPanel: View {
     static let shareItems: [Any] = [shareText, URL(string: "https://typeleast.promptking.workers.dev")!, URL(string: "https://github.com/FlaxXTT/Typeleast")!]
 
     var body: some View {
-        let stats = model.stats
-        VStack(alignment: .leading, spacing: 14) {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
-                Figure(parts: InsightsPanel.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"))
-                Figure(parts: InsightsPanel.duration(stats.savedSeconds), label: L10n.text("节省时间"))
-                Figure(parts: [(Formatters.number(stats.wordsPerMinute), L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"))
-                Figure(parts: InsightsPanel.duration(stats.speakingSeconds), label: L10n.text("总口述时间"))
-            }
-            ActivityCard()
-        }
-        .padding(16)
-        .background(DotGrid().clipShape(RoundedRectangle(cornerRadius: Theme.radius + 4, style: .continuous)))
+        let calendar = Calendar.current
+        InsightsContent(stats: model.stats, activityRevision: model.activityRevision,
+                        today: calendar.startOfDay(for: Date()), calendar: calendar,
+                        language: L10n.language)
+            .equatable()
     }
 
     /// 34.9K 字 / 3.5万 字: large counts are shortened.
@@ -41,6 +34,30 @@ struct InsightsPanel: View {
         if total < 60 { return [(String(total), L10n.text("秒"))] }
         let hours = total / 3600, minutes = (total % 3600) / 60
         return hours == 0 ? [(String(minutes), L10n.text("分钟"))] : [(String(hours), L10n.text("小时")), (String(minutes), L10n.text("分钟"))]
+    }
+}
+
+/// Unrelated service and permission updates do not rebuild the figures or heatmap.
+private struct InsightsContent: View, Equatable {
+    let stats: DictationStats
+    let activityRevision: Int
+    let today: Date
+    let calendar: Calendar
+    let language: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+                Figure(parts: InsightsPanel.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"))
+                Figure(parts: InsightsPanel.duration(stats.savedSeconds), label: L10n.text("节省时间"))
+                Figure(parts: [(Formatters.number(stats.wordsPerMinute), L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"))
+                Figure(parts: InsightsPanel.duration(stats.speakingSeconds), label: L10n.text("总口述时间"))
+            }
+            ActivityCard(revision: activityRevision, today: today, calendar: calendar, language: language)
+                .equatable()
+        }
+        .padding(16)
+        .background(DotGrid().clipShape(RoundedRectangle(cornerRadius: Theme.radius + 4, style: .continuous)))
     }
 }
 
@@ -71,15 +88,17 @@ private struct DotGrid: View {
     var body: some View {
         Canvas { context, size in
             let step: CGFloat = 12
+            var dots = Path()
             var y: CGFloat = step / 2
             while y < size.height {
                 var x: CGFloat = step / 2
                 while x < size.width {
-                    context.fill(Path(ellipseIn: CGRect(x: x - 0.9, y: y - 0.9, width: 1.8, height: 1.8)), with: .color(Theme.dot))
+                    dots.addEllipse(in: CGRect(x: x - 0.9, y: y - 0.9, width: 1.8, height: 1.8))
                     x += step
                 }
                 y += step
             }
+            context.fill(dots, with: .color(Theme.dot))
         }
         .background(Theme.panel)
     }
@@ -131,8 +150,12 @@ private final class HoverShareButton: NSButton {
 }
 
 /// Active days and streaks above the heatmap: weekdays down the side, months along the bottom.
-struct ActivityCard: View {
-    @EnvironmentObject var model: AppModel
+struct ActivityCard: View, Equatable {
+    /// The data source is read only when its revision or the calendar day changes.
+    let revision: Int
+    let today: Date
+    let calendar: Calendar
+    let language: String
 
     private let cell: CGFloat = 18
     private let gap: CGFloat = 6
@@ -140,8 +163,7 @@ struct ActivityCard: View {
 
     var body: some View {
         let log = ActivityLog.shared
-        let streaks = log.streaks()
-        let _ = model.activityRevision   // redraw when a dictation is recorded
+        let streaks = log.streaks(today: today)
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 0) {
                 figure(log.activeDays, L10n.text("活跃天数"))
@@ -176,13 +198,11 @@ struct ActivityCard: View {
     }
 
     private func grid(weeks: Int, log: ActivityLog) -> some View {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
         let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
         let first = calendar.date(byAdding: .day, value: -7 * (weeks - 1), to: thisWeek) ?? thisWeek
         let step = cell + gap
         var symbols = calendar.veryShortStandaloneWeekdaySymbols
-        if L10n.language != "en" {
+        if language != "en" {
             var zh = Calendar(identifier: .gregorian); zh.locale = Locale(identifier: "zh-Hans")
             symbols = zh.veryShortStandaloneWeekdaySymbols
         }

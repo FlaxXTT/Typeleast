@@ -69,6 +69,8 @@ final class AppModel: ObservableObject {
     @Published var page: HubPage = .home
     @Published var settingsCategory = 0
     @Published private(set) var history: [LocalHistoryEntry] = []
+    /// Changes only with the history snapshot, not with service or recording state.
+    private(set) var historyRevision = 0
     @Published private(set) var stats = DictationStats()
     /// Bumped when the per-day activity changes; the heatmap reads ActivityLog.shared.
     @Published private(set) var activityRevision = 0
@@ -110,8 +112,13 @@ final class AppModel: ObservableObject {
     }
 
     func reloadHistory() {
-        history = HistoryStore.shared.entries
-        stats = HistoryStore.shared.stats
+        let entries = HistoryStore.shared.entries
+        if history != entries {
+            historyRevision &+= 1
+            history = entries
+        }
+        let latestStats = HistoryStore.shared.stats
+        if stats != latestStats { stats = latestStats }
     }
 
     func refreshPermissions() {
