@@ -197,7 +197,7 @@ export class VoicePolishService {
    */
   taskContext({ request, base, route, routes = [route], deferred = false, started, rawText }) {
     let successfulRoute = route;
-    const invoke = modelCompletion({ routes, hasDeferredBackups: deferred, rawText,
+    const invoke = modelCompletion({ routes, hasDeferredBackups: deferred, rawText, task: request.task,
       complete: (options) => this.complete(options),
       onSuccess: (used, switched) => {
         successfulRoute = used;

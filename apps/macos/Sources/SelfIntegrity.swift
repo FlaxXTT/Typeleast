@@ -9,7 +9,7 @@ import Security
 
 enum SelfIntegrity {
     /// nil when the bundle's signature (and every sealed file) is intact; otherwise why not.
-    static func problem(bundleURL: URL = Bundle.main.bundleURL) -> String? {
+    static func problem(bundleURL: URL = Bundle.main.bundleURL, matching requirementText: String? = nil) -> String? {
         // A valid replacement signature is insufficient. The on-disk code must still
         // match the code identity held by the OS for this running process.
         if bundleURL.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL {
@@ -22,8 +22,16 @@ enum SelfIntegrity {
         let created = SecStaticCodeCreateWithPath(bundleURL as CFURL, SecCSFlags(), &code)
         guard created == errSecSuccess, let code else { return "unreadable signature (\(created))" }
         let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSStrictValidate | kSecCSCheckNestedCode)
+        var requirement: SecRequirement?
+        if let requirementText {
+            let prefix = "designated =>"
+            let expression = requirementText.hasPrefix(prefix) ? String(requirementText.dropFirst(prefix.count)) : requirementText
+            guard SecRequirementCreateWithString(expression as CFString, [], &requirement) == errSecSuccess else {
+                return "invalid designated requirement"
+            }
+        }
         var error: Unmanaged<CFError>?
-        let status = SecStaticCodeCheckValidityWithErrors(code, flags, nil, &error)
+        let status = SecStaticCodeCheckValidityWithErrors(code, flags, requirement, &error)
         guard status != errSecSuccess else { return nil }
         let detail = error.map { CFErrorCopyDescription($0.takeRetainedValue()) as String } ?? ""
         return "signature check failed (\(status))" + (detail.isEmpty ? "" : ": " + detail)

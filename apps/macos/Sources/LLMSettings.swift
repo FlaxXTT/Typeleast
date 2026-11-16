@@ -69,7 +69,12 @@ enum KeychainStore {
 
     static func read(account: String) -> String? {
         if let stub = stub { return stub[account] }
-        if let hit = lock.withLock({ cache[account] }) { return hit }
+        if let hit = lock.withLock({ cache[account] }) {
+            // A reboot can launch us before the login Keychain is available.
+            // Recover after it unlocks, while preserving the one-dialog limit.
+            if let hit { return hit }
+            return readSilently(account: account)
+        }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

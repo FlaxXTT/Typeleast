@@ -399,6 +399,20 @@ do {
 }
 state.mode = "health"
 
+// A model failure is a completed local-service request, not a transport failure.
+do {
+    for reason in ["model-timeout", "model-error:NETWORK", "model-error:HTTP_401", "model-error:HTTP_429", "fact-review"] {
+        let error = ServiceError.translationFailed(reason: reason)
+        check("translation failure keeps the local service available: " + reason, !error.serviceUnavailable)
+        check("translation failure does not claim service unreachable: " + reason, !error.description.contains("service unreachable"))
+    }
+    checkEq("translation timeout is explained", ServiceError.translationFailed(reason: "model-timeout").description,
+            L10n.text("翻译模型响应超时，请稍后重试或更换模型。"))
+    check("translation timeout differs from provider authorization failure",
+          ServiceError.translationFailed(reason: "model-timeout").description != ServiceError.translationFailed(reason: "model-error:HTTP_401").description)
+    check("actual transport failure still marks the service unavailable", ServiceError.transport("fixture connection refused").serviceUnavailable)
+}
+
 // MARK: 7. the learned description rides with each dictation
 
 do {
@@ -693,6 +707,14 @@ do {
 // MARK: 15. update offers and progress
 
 do {
+    let signed = "designated => identifier \"com.dsh.voice\" and certificate leaf = H\"0123456789abcdef\""
+    let other = "designated => identifier \"com.dsh.voice\" and certificate leaf = H\"fedcba9876543210\""
+    let adhoc = "designated => cdhash H\"0123456789abcdef\""
+    check("same stable signing identity can bypass local re-signing", Updater.canKeepSignature(current: signed, update: signed))
+    check("an ad-hoc signature cannot bypass local re-signing", !Updater.canKeepSignature(current: adhoc, update: adhoc))
+    check("a different certificate cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: other))
+    check("a missing update identity cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: nil))
+    check("a missing current identity cannot bypass local re-signing", !Updater.canKeepSignature(current: nil, update: signed))
     // The update offer rule and the ring's steps.
     check("a quiet check offers a new version once", Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: false))
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
@@ -742,18 +764,6 @@ do {
     checkEq("selection: English with an English target comes back in Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "en"), "zh")
     checkEq("selection: with a Chinese target, Chinese goes to English", SelectionTranslator.target(for: "今天开会", preferred: "zh"), "en")
     checkEq("selection: with a Chinese target, English goes to Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "zh"), "zh")
-    check("selection: ChatGPT, Codex and terminals read by copy",
-          SelectionTranslator.readsByCopy(bundleId: "com.openai.chat", bundleURL: nil) && SelectionTranslator.readsByCopy(bundleId: "com.openai.codex", bundleURL: nil)
-          && SelectionTranslator.readsByCopy(bundleId: "com.todesktop.230313mzl4w4u92", bundleURL: nil) && SelectionTranslator.readsByCopy(bundleId: "com.googlecode.iterm2", bundleURL: nil))
-    check("selection: an ordinary app does not", !SelectionTranslator.readsByCopy(bundleId: "com.apple.Finder", bundleURL: nil))
-    do {
-        let app = FileManager.default.temporaryDirectory.appendingPathComponent("tl-" + UUID().uuidString + ".app")
-        try? FileManager.default.createDirectory(at: app.appendingPathComponent("Contents/Resources"), withIntermediateDirectories: true)
-        check("selection: a plain app is not Electron", !SelectionTranslator.isElectron(bundleURL: app))
-        FileManager.default.createFile(atPath: app.appendingPathComponent("Contents/Resources/app.asar").path, contents: Data())
-        check("selection: app.asar marks Electron even with a renamed framework", SelectionTranslator.isElectron(bundleURL: app))
-        try? FileManager.default.removeItem(at: app)
-    }
     checkEq("selection: other targets are kept", SelectionTranslator.target(for: "Ship it today", preferred: "ja"), "ja")
     checkEq("a rebuilt field: the cursor is found by the text around it", CaretAnchor.locate(before: "你好，", after: "世界", in: "前面的字你好，世界"), 7)
     checkEq("…and in an empty field there is one place", CaretAnchor.locate(before: "", after: "", in: ""), 0)
@@ -899,6 +909,10 @@ do {
     checkEq("first restart after one second", ServiceLocator.restartDelay(attempt: 1), 1)
     checkEq("restarts back off", ServiceLocator.restartDelay(attempt: 4), 30)
     checkEq("then it gives up and says why", ServiceLocator.restartDelay(attempt: 5), nil)
+    var crashAttempt = 0
+    for _ in 0..<5 { crashAttempt = ServiceLocator.nextRestartAttempt(previous: crashAttempt, readyFor: 2) }
+    checkEq("five short-lived ready processes exhaust the restart allowance", ServiceLocator.restartDelay(attempt: crashAttempt), nil)
+    checkEq("a stable service gets a fresh restart allowance", ServiceLocator.nextRestartAttempt(previous: crashAttempt, readyFor: 60), 1)
 
     let downloading = Data(#"{"ok":false,"service":"typeleast","speech":{"providerId":"sensevoice-local","phase":"downloading","ready":false,"download":{"received":60000000,"total":240000000},"modelBytes":241357257}}"#.utf8)
     let h = try? JSONDecoder().decode(HealthResponse.self, from: downloading)

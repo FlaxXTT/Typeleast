@@ -12,19 +12,19 @@ extension EnvironmentValues {
 }
 
 struct TranslationSunset: View {
-    static let displayScale: CGFloat = 3.0 / 5.0
+    static let displayScale: CGFloat = 3.0 / 8.0
     static let displaySize = CGSize(width: 128 * displayScale, height: 80 * displayScale)
     var working = false
     var hoverChanged: (Bool) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.translationSunPressed) private var pressed
     @State private var hovering = false
-    @State private var pointer = CGSize.zero
+    @State private var hoverAnimating = false
     @State private var enteredAt = Date().timeIntervalSinceReferenceDate
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: reduceMotion || !(hovering || working))) { context in
-            TranslationSunsetArtwork(engaged: hovering || working, working: working, pointer: pointer,
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || !(hoverAnimating || working))) { context in
+            TranslationSunsetArtwork(engaged: hovering || working, working: working, pointer: .zero,
                                      time: max(0, context.date.timeIntervalSinceReferenceDate - enteredAt),
                                      reduceMotion: reduceMotion, pressed: pressed)
         }
@@ -32,22 +32,17 @@ struct TranslationSunset: View {
         .frame(width: Self.displaySize.width, height: Self.displaySize.height)
         .contentShape(Rectangle())
         .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.7), value: hovering)
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let location):
-                if !hovering {
-                    enteredAt = Date().timeIntervalSinceReferenceDate
-                    hovering = true
-                    hoverChanged(true)
+        .onHover { inside in
+            guard hovering != inside else { return }
+            hovering = inside
+            hoverChanged(inside)
+            hoverAnimating = inside
+            if inside {
+                let start = Date().timeIntervalSinceReferenceDate
+                enteredAt = start
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                    if enteredAt == start { hoverAnimating = false }
                 }
-                let halfWidth = Self.displaySize.width / 2
-                let halfHeight = Self.displaySize.height / 2
-                pointer = CGSize(width: max(-1, min(1, (location.x - halfWidth) / halfWidth)),
-                                 height: max(-1, min(1, (location.y - halfHeight) / halfHeight)))
-            case .ended:
-                hovering = false
-                pointer = .zero
-                hoverChanged(false)
             }
         }
         .onChange(of: working) { _, active in

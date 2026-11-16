@@ -4,9 +4,9 @@ import CryptoKit
 // Updater.swift - in-app update for this Mac. The release is fetched from GitHub's public
 // release page (no account needed), or from a public mirror when GitHub is slow
 // (UpdateSources). Its SHA-256 is checked against the
-// release's SHA256SUMS.txt, and the app is re-signed with this Mac's own "TypeLeast Local
-// Signing" certificate (made on the first update if there is none) before it replaces the
-// installed copy. Same certificate + same bundle id = same designated requirement, so macOS
+// release's SHA256SUMS.txt. A release with the same certificate identity keeps its signature;
+// otherwise the app is re-signed with this Mac's own "TypeLeast Local Signing" certificate
+// before it replaces the installed copy. Same certificate + same bundle id = same requirement, so macOS
 // keeps the microphone and Accessibility permissions. Existing Keychain items stay
 // in place; preparing an update does not pre-authorize them from a temporary app.
 
@@ -34,6 +34,16 @@ enum Updater {
     static let repo = "FlaxXTT/Typeleast"
     static let signingIdentity = "TypeLeast Local Signing"
     static let bundleID = "com.dsh.voice"
+
+    /// Ad-hoc requirements include a changing code hash. A certificate-backed
+    /// requirement can identify the same application across binary updates.
+    static func hasStableRequirement(_ requirement: String?) -> Bool {
+        requirement?.contains("certificate leaf") == true
+    }
+
+    static func canKeepSignature(current: String?, update: String?) -> Bool {
+        hasStableRequirement(current) && current == update
+    }
 
     // MARK: pure helpers
 
@@ -262,7 +272,6 @@ enum Updater {
     static func prepare(version: String, current: URL = Bundle.main.bundleURL,
                         stage: ((UpdateStage) -> Void)? = nil) throws -> (app: URL, work: URL) {
         stage?(.preparing)
-        try ensureSigningIdentity()
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("TypeLeast-update-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         do {
@@ -304,20 +313,26 @@ enum Updater {
                 throw UpdateError.badBundle(L10n.text("此更新不支持当前 macOS，或未声明有效的最低系统版本。"))
             }
 
-            stage?(.signing)
-            // Not --deep: the bundled Node.js keeps the signature nodejs.org gave it (as in build.sh / package.sh).
-            // Keep the release's Hardened Runtime flag and entitlements; the requirement is this Mac's own.
-            let sign = run("/usr/bin/codesign", ["--force", "--sign", signingIdentity, "--timestamp=none",
-                                                 "--preserve-metadata=entitlements,flags,runtime", app.path])
-            guard sign.status == 0 else { throw UpdateError.sign(sign.err) }
-            let verify = run("/usr/bin/codesign", ["--verify", "--strict", app.path])
-            guard verify.status == 0 else { throw UpdateError.sign(verify.err) }
+            guard let mine = designatedRequirement(of: current) else { throw UpdateError.requirementChanged }
+            // A release with the existing certificate identity needs no local
+            // signing-key access. The cryptographic requirement and all sealed
+            // resources are checked below before either path can be installed.
+            if !canKeepSignature(current: mine, update: designatedRequirement(of: app)) {
+                stage?(.signing)
+                try ensureSigningIdentity()
+                // Not --deep: preserve Node.js's upstream signature.
+                let sign = run("/usr/bin/codesign", ["--force", "--sign", signingIdentity, "--timestamp=none",
+                                                     "--preserve-metadata=entitlements,flags,runtime", app.path])
+                guard sign.status == 0 else { throw UpdateError.sign(sign.err) }
+            }
 
             // Only when the running copy already uses the local certificate can permissions carry over;
             // then the new copy's requirement must be identical.
-            let mine = designatedRequirement(of: current)
-            if let mine, mine.contains("certificate leaf"), designatedRequirement(of: app) != mine {
+            if hasStableRequirement(mine), designatedRequirement(of: app) != mine {
                 throw UpdateError.requirementChanged
+            }
+            if let problem = SelfIntegrity.problem(bundleURL: app, matching: hasStableRequirement(mine) ? mine : nil) {
+                throw UpdateError.sign(problem)
             }
             return (app, work)
         } catch {

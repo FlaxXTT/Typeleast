@@ -19,6 +19,8 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
     case transport(String)
     case http(status: Int, code: String?, message: String)
     case decoding(String)
+    /// The service answered, but the translation model did not deliver a usable result.
+    case translationFailed(reason: String?)
     /// Something answers on the service's port but could not prove it is the service this app started.
     case untrusted
 
@@ -28,6 +30,18 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
         case .transport(let m): return "service unreachable: " + m
         case .http(let s, let c, let m): return "HTTP " + String(s) + " " + (c ?? "") + " " + m
         case .decoding(let m): return "bad response: " + m
+        case .translationFailed(let reason):
+            switch reason {
+            case "model-timeout": return L10n.text("翻译模型响应超时，请稍后重试或更换模型。")
+            case "model-error:NETWORK": return L10n.text("无法连接翻译模型，请检查网络后重试。")
+            case "model-error:HTTP_401", "model-error:HTTP_403", "no-api-key":
+                return L10n.text("翻译模型授权失败，请检查 API Key 和访问权限。")
+            case "model-error:HTTP_429": return L10n.text("翻译模型请求过于频繁，请稍后重试。")
+            case "model-max-tokens": return L10n.text("译文超过模型输出上限，请缩短原文或更换模型。")
+            case "fact-review": return L10n.text("译文未通过事实核对，请重试或更换模型。")
+            case "cancelled": return L10n.text("翻译已取消。")
+            default: return L10n.text("翻译失败，请重试或检查模型设置。")
+            }
         case .untrusted: return "the local service could not prove its identity"
         }
     }
@@ -37,7 +51,7 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
         switch self {
         case .noToken, .transport, .untrusted: return true
         case .http(let s, _, _): return s == 401 || s == 403 || s == 404 || s >= 500
-        case .decoding: return false
+        case .decoding, .translationFailed: return false
         }
     }
 

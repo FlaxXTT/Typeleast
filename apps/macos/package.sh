@@ -17,6 +17,11 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 source "$ROOT/scripts/package-names.sh"
 OUT="${2:-$ROOT/build/release}"
 NODE_VERSION="${NODE_VERSION:-24.21.0}"
+# An explicitly supplied release certificate must survive the final packaging
+# pass; otherwise every downloaded version gets a new ad-hoc identity.
+export TYPELEAST_SIGN_IDENTITY="${TYPELEAST_SIGN_IDENTITY:--}"
+SIGN_TIMESTAMP=(--timestamp=none)
+if [ "$TYPELEAST_SIGN_IDENTITY" != "-" ]; then SIGN_TIMESTAMP=(--timestamp); fi
 case "$ARCH" in
   arm64) NODE_ARCH="arm64"; LABEL="AppleSilicon" ;;
   x86_64) echo "Intel Macs are no longer built (the last Intel release is 1.17.1)" >&2; exit 2 ;;
@@ -73,9 +78,15 @@ else
 fi
 cp "$ROOT/../../THIRD-PARTY-NOTICES.md" "$RES/THIRD-PARTY-NOTICES.md"
 
-# Re-seal the bundle. Not --deep: Node.js keeps the signature nodejs.org gave it.
-codesign --force --sign - --timestamp=none --options runtime --entitlements "$ROOT/TypeLeast.entitlements" "$APP"
-codesign --verify --strict "$APP"
+# Re-seal the bundle with the requested identity. Not --deep: Node.js keeps the
+# signature nodejs.org gave it. Sign our native children before the outer app.
+for engine in mlx-asr moss-transcribe; do
+  if [ -f "$RES/service/native/$engine" ]; then
+    codesign --force --sign "$TYPELEAST_SIGN_IDENTITY" "${SIGN_TIMESTAMP[@]}" --options runtime "$RES/service/native/$engine"
+  fi
+done
+codesign --force --sign "$TYPELEAST_SIGN_IDENTITY" "${SIGN_TIMESTAMP[@]}" --options runtime --entitlements "$ROOT/TypeLeast.entitlements" "$APP"
+codesign --verify --deep --strict "$APP"
 
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"

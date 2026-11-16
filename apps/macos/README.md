@@ -90,6 +90,27 @@ a model check.
   changes the ad-hoc signature, so macOS may ask again.
 - Nothing else: no screen recording, camera or input monitoring.
 
+### Update identity and Keychain prompts
+
+`package.sh` defaults to ad-hoc signing. For a release with a stable certificate, set
+`TYPELEAST_SIGN_IDENTITY` to its installed signing identity; the final package and both
+native workers retain that certificate and receive a secure timestamp. Certificate import
+and Apple notarization remain separate publisher setup steps. Do not commit private keys.
+
+When the installed app and the downloaded update have the same certificate-backed
+designated requirement, the updater verifies the update's signature, nested code and
+resources against that requirement and installs it without accessing a local signing key.
+Other updates retain the existing local-signing path and refuse to replace an existing
+certificate identity with a different one. Already saved API keys and history keys stay in
+the Keychain; this path does not export or reset them or broaden their access controls.
+
+This avoids update-induced signing prompts for releases that preserve the trusted identity.
+It cannot promise that macOS never requests authorization: a locked/reset Keychain, an
+ad-hoc installation moving to its first certificate identity, or a user changing access
+permissions can still require it. The current release workflow must be configured with the
+stable certificate before this works for downloaded releases; the default ad-hoc release
+does not meet that condition.
+
 ## Demo mode
 
 `TYPELEAST_DEMO_WAV=<16 kHz mono PCM16 WAV>` (with `TYPELEAST_DEMO_DELAY`, seconds,

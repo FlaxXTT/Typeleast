@@ -13,6 +13,12 @@ import { parseVariants, variantInstruction } from "../variants.js";
 import { timing } from "./timing.js";
 import { reviewFacts } from "../fact-review.js";
 
+/** Translation needs time for target-language output, even for a short source. */
+function translationParameters(text, config) {
+  return { ...cleanupParameters(text, "prompt", config),
+    timeoutMs: Math.min(config.timeoutMs ?? 300000, 300000, Math.max(90000, Array.from(text).length * 80)) };
+}
+
 export async function runTranslation(ctx, target) {
   const { request, base, started, rawText, config } = ctx;
   const task = new CleanupTask(request.signal);
@@ -24,7 +30,7 @@ export async function runTranslation(ctx, target) {
     let attempts = 0;
     for (const batch of translateBatches(rawText)) {
       const result = await ctx.complete({ system, user: translateUserMessage(target, ctx.redact(batch)),
-        ...cleanupParameters(batch, "prompt", config), temperature: 0, signal: task.signal, retryBudget: task });
+        ...translationParameters(batch, config), temperature: 0, signal: task.signal, retryBudget: task });
       attempts += result.attempts ?? 1;
       parts.push(unwrap(String(result.text ?? "")).text.trim());
     }

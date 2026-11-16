@@ -99,6 +99,12 @@ enum ServiceLocator {
         let delays: [TimeInterval] = [1, 3, 10, 30]
         return attempt >= 1 && attempt <= delays.count ? delays[attempt - 1] : nil
     }
+
+    /// A ready message alone does not prove stability: a service can crash as
+    /// soon as it begins loading its model. Reset back-off only after a minute.
+    static func nextRestartAttempt(previous: Int, readyFor: TimeInterval) -> Int {
+        readyFor >= 60 ? 1 : previous + 1
+    }
 }
 
 /// A Node.js found on this Mac.
@@ -143,6 +149,7 @@ final class ServiceManager {
     private var process: Process?
     private var stopping = false
     private var restartAttempts = 0
+    private var readySince: TimeInterval?
     private var stdoutBuffer = ""
 
     // MARK: lifecycle
@@ -231,6 +238,7 @@ final class ServiceManager {
         let secretHex = secret.map { String(format: "%02x", $0) }.joined()
         client.proofKey = secretHex
         stdoutBuffer = ""
+        readySince = nil
         out.fileHandleForReading.readabilityHandler = { [weak self, weak p] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
@@ -266,9 +274,9 @@ final class ServiceManager {
         while let newline = stdoutBuffer.firstIndex(of: "\n") {
             let line = String(stdoutBuffer[..<newline])
             stdoutBuffer = String(stdoutBuffer[stdoutBuffer.index(after: newline)...])
-            if let port = ServiceLocator.parseReadyLine(line) {
+            if let port = ServiceLocator.parseReadyLine(line), readySince == nil {
                 ServiceClient.shared.usePort(port)
-                restartAttempts = 0
+                readySince = ProcessInfo.processInfo.systemUptime
                 state = .running(port: port)
             }
         }
@@ -289,7 +297,9 @@ final class ServiceManager {
         ServiceClient.shared.invalidatePort()
         DiagnosticsLog.write("service.exit", ["code": String(proc.terminationStatus)])
         if stopping { return }
-        restartAttempts += 1
+        let readyFor = readySince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0
+        readySince = nil
+        restartAttempts = ServiceLocator.nextRestartAttempt(previous: restartAttempts, readyFor: readyFor)
         guard let delay = ServiceLocator.restartDelay(attempt: restartAttempts) else {
             let last = recentLog.last ?? L10n.text("退出码 ") + String(proc.terminationStatus)
             state = .failed(L10n.text("本地服务反复退出：") + last)

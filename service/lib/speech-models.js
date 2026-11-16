@@ -37,6 +37,8 @@ export class SpeechModels {
     this.current = this.factory(this.defaultId);
     this.activeId = this.defaultId;
     this.serial = Promise.resolve();
+    this.preparing = null;
+    this.preparingId = null;
     this.closed = false;
     this.lifecycle = new AbortController();
     this.operation = null;
@@ -48,7 +50,15 @@ export class SpeechModels {
     this.serial = result.catch(() => {});
     return result;
   }
-  prepare() { return this.closed ? Promise.resolve('missing-model') : this.enqueue(() => this.prepareSelected()); }
+  prepare() {
+    if (this.closed) return Promise.resolve('missing-model');
+    if (this.preparing) return this.preparing;
+    this.preparing = this.enqueue(() => this.prepareSelected()).finally(() => {
+      this.preparing = null;
+      this.preparingId = null;
+    });
+    return this.preparing;
+  }
   async prepareSelected() {
     if (this.closed) return 'missing-model';
     try {
@@ -71,6 +81,7 @@ export class SpeechModels {
       }
       selected = this.defaultId;
     }
+    this.preparingId = selected;
     if (selected !== this.defaultId) {
       let next;
       try {
@@ -114,8 +125,11 @@ export class SpeechModels {
   }
   snapshot() {
     if (!this.activeId) return { phase: 'missing-model', ready: false, modelId: '', modelName: '', languages: [], canSetLanguage: false, notice: this.notice, operation: this.operation };
-    const model = this.definition(this.activeId);
-    const state = this.current.snapshot();
+    const model = this.definition(this.preparingId ?? this.activeId);
+    const state = { ...this.current.snapshot() };
+    // Verification can read gigabytes before a worker even starts. Report the
+    // entire startup as loading so clients keep polling after a cold reboot.
+    if (this.preparing) { state.phase = 'loading'; state.ready = false; }
     if (!state.ready && this.operation?.modelId === this.activeId) {
       if (this.operation.phase === 'downloading') {
         state.phase = 'downloading'; state.download = { received: this.operation.received, total: this.operation.total };
