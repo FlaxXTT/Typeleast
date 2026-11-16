@@ -125,7 +125,8 @@ It checks silent credential access after a binary update with the same identity 
 rejects a changed identity or changed sealed resource. It neither reads user credentials
 nor enables authentication UI in the probe applications.
 Signing temporarily trusts only the disposable certificate on the CI build machine; that
-trust is removed before the credential-access probes and the temporary material is cleaned
+positive trust is cleared and ordinary certificate evaluation confirms the root is untrusted
+before the credential-access probes; temporary private material is cleaned
 up afterward. This integration check is skipped by default in `test.sh`; opt in on an
 isolated CI machine with `TYPELEAST_TEST_UPDATE_IDENTITY=1`.
 

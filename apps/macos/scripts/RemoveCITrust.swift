@@ -18,4 +18,12 @@ guard status == errSecSuccess else {
     print("CI positive-trust cleanup failed without authentication UI: \(status)")
     exit(1)
 }
+var trust: SecTrust?
+guard SecTrustCreateWithCertificates(certificate, SecPolicyCreateBasicX509(), &trust) == errSecSuccess,
+      let trust else { exit(1) }
+SecTrustSetNetworkFetchAllowed(trust, false)
+guard !SecTrustEvaluateWithError(trust, nil) else {
+    print("CI root still has system trust; the untrusted-root probe cannot proceed")
+    exit(1)
+}
 print("PASS: temporary CI positive root trust cleared without authentication UI")
