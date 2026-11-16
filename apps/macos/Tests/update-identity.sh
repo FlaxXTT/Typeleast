@@ -2,7 +2,7 @@
 # Use a disposable certificate and Keychain to verify update identity without
 # consulting the user's credentials or allowing authentication UI in the probes.
 set -euo pipefail
-if [ "${CI:-}" != true ]; then
+if [ "${CI:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then
   echo 'This integration check requires an isolated macOS CI runner with passwordless sudo.' >&2
   exit 2
 fi
@@ -58,7 +58,6 @@ MACOS_SIGNING_CERTIFICATE_PASSWORD="$test_password" GITHUB_ENV="$WORK/signing-en
 signing_hash="$(sed -n 's/^TYPELEAST_SIGN_IDENTITY=//p' "$WORK/signing-env")"
 signing_work="$(sed -n 's/^TYPELEAST_RELEASE_SIGNING_WORK=//p' "$WORK/signing-env")"
 KEYCHAIN="$signing_work/signing.keychain-db"
-root_hash="$(/usr/bin/openssl x509 -in "$WORK/root.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
 test "${#signing_hash}" = 40
 
 cat > "$WORK/main.swift" <<'SWIFT'
@@ -142,8 +141,8 @@ EOF
   /usr/bin/codesign --force --keychain "$KEYCHAIN" --sign "$signing_hash" --timestamp=none --options runtime "$app"
 done
 echo 'Removing build-time root trust before running the credential probes'
-/usr/bin/sudo -n /usr/bin/security remove-trusted-cert -d "$WORK/root.pem"
-/usr/bin/sudo -n /usr/bin/security delete-certificate -Z "$root_hash" /Library/Keychains/System.keychain
+bash "$ROOT/scripts/remove-ci-trust.sh" "$WORK/root.pem"
+rm -f "$signing_work/trust-added"
 FIRST="$WORK/v1/IdentityProbe.app"
 UPDATED="$WORK/v2/IdentityProbe.app"
 requirement="$(/usr/bin/codesign -d -r- "$FIRST" 2>&1 | sed -n '/^designated =>/p')"

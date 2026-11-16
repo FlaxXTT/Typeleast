@@ -2,7 +2,7 @@
 # Import a persistent publisher identity into an ephemeral CI-only Keychain.
 # Never generate a fresh publisher identity during a release.
 set -euo pipefail
-if [ "${CI:-}" != true ] || [ -z "${RUNNER_TEMP:-}" ] || [ -z "${GITHUB_ENV:-}" ]; then
+if [ "${CI:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ] || [ -z "${RUNNER_TEMP:-}" ] || [ -z "${GITHUB_ENV:-}" ]; then
   echo 'Release signing setup requires an isolated GitHub Actions macOS runner.' >&2
   exit 2
 fi
