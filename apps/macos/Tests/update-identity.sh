@@ -141,7 +141,7 @@ EOF
   /usr/bin/codesign --force --keychain "$KEYCHAIN" --sign "$signing_hash" --timestamp=none --options runtime "$app"
 done
 echo 'Removing build-time root trust before running the credential probes'
-bash "$ROOT/scripts/remove-ci-trust.sh" "$WORK/root.pem"
+bash "$ROOT/scripts/remove-ci-trust.sh" "$signing_work/root.pem"
 rm -f "$signing_work/trust-added"
 FIRST="$WORK/v1/IdentityProbe.app"
 UPDATED="$WORK/v2/IdentityProbe.app"
