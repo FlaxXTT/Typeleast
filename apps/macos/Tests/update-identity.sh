@@ -9,33 +9,17 @@ fi
 /usr/bin/sudo -n true
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/typeleast-update-identity.XXXXXX")"
-KEYCHAIN="$WORK/update-test.keychain-db"
 cleanup() {
-  if [ -f "$WORK/root.pem" ]; then
-    /usr/bin/sudo -n /usr/bin/security remove-trusted-cert -d "$WORK/root.pem" >/dev/null 2>&1 || true
+  if [ -n "${signing_work:-}" ]; then
+    bash "$ROOT/scripts/cleanup-release-signing.sh" "$signing_work" || true
   fi
-  if [ -n "${root_hash:-}" ]; then
-    /usr/bin/sudo -n /usr/bin/security delete-certificate -Z "$root_hash" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
-  fi
-  if [ -f "$WORK/search-list" ]; then
-    local previous=()
-    while IFS= read -r path; do previous+=("$path"); done < "$WORK/search-list"
-    if [ "${#previous[@]}" -gt 0 ]; then /usr/bin/security list-keychains -d user -s "${previous[@]}"; fi
-  fi
-  /usr/bin/security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
 umask 077
 test_password="$(/usr/bin/openssl rand -hex 24)"
 identity="TypeLeast Update Test $(basename "$WORK")"
-echo 'Preparing the disposable Keychain and certificate chain'
-/usr/bin/security list-keychains -d user | /usr/bin/python3 -c 'import shlex,sys; print("\n".join(shlex.split(sys.stdin.read())))' > "$WORK/search-list"
-/usr/bin/security create-keychain -p "$test_password" "$KEYCHAIN"
-/usr/bin/security unlock-keychain -p "$test_password" "$KEYCHAIN"
-previous=()
-while IFS= read -r path; do previous+=("$path"); done < "$WORK/search-list"
-/usr/bin/security list-keychains -d user -s "$KEYCHAIN" "${previous[@]}"
+echo 'Preparing a disposable publisher certificate chain'
 cat > "$WORK/root.cfg" <<EOF
 [req]
 distinguished_name = dn
@@ -67,19 +51,15 @@ EOF
   -CAcreateserial -extfile "$WORK/cert.cfg" -extensions ext -out "$WORK/cert.pem" 2>/dev/null
 /usr/bin/openssl pkcs12 -export -name "$identity" -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
   -certfile "$WORK/root.pem" -out "$WORK/id.p12" -passout "pass:$test_password" 2>/dev/null
-# codesign access is limited to this disposable test key, never a real identity.
-/usr/bin/security import "$WORK/id.p12" -k "$KEYCHAIN" -P "$test_password" -T /usr/bin/codesign >/dev/null
-/usr/bin/security set-key-partition-list -S apple-tool:,apple: -s -k "$test_password" "$KEYCHAIN" >/dev/null
-# codesign requires a trusted certificate on the build machine, including for a
-# disposable self-signed identity. Trust this test certificate only on the CI VM,
-# and remove that trust before testing the apps' Keychain access.
-signing_hash="$(/usr/bin/openssl x509 -in "$WORK/cert.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
+echo 'Testing the production release-signing setup with disposable material'
+MACOS_SIGNING_CERTIFICATE_BASE64="$(/usr/bin/base64 < "$WORK/id.p12")" \
+MACOS_SIGNING_CERTIFICATE_PASSWORD="$test_password" GITHUB_ENV="$WORK/signing-env" \
+  bash "$ROOT/scripts/setup-release-signing.sh"
+signing_hash="$(sed -n 's/^TYPELEAST_SIGN_IDENTITY=//p' "$WORK/signing-env")"
+signing_work="$(sed -n 's/^TYPELEAST_RELEASE_SIGNING_WORK=//p' "$WORK/signing-env")"
+KEYCHAIN="$signing_work/signing.keychain-db"
 root_hash="$(/usr/bin/openssl x509 -in "$WORK/root.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
 test "${#signing_hash}" = 40
-echo 'Temporarily trusting only the disposable root on the CI VM'
-/usr/bin/sudo -n /usr/bin/security add-trusted-cert -d -r trustRoot -p codeSign \
-  -k /Library/Keychains/System.keychain "$WORK/root.pem"
-/usr/bin/security find-identity -v -p codesigning "$KEYCHAIN"
 
 cat > "$WORK/main.swift" <<'SWIFT'
 import Foundation

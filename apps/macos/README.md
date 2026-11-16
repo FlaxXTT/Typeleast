@@ -107,9 +107,18 @@ the Keychain; this path does not export or reset them or broaden their access co
 This avoids update-induced signing prompts for releases that preserve the trusted identity.
 It cannot promise that macOS never requests authorization: a locked/reset Keychain, an
 ad-hoc installation moving to its first certificate identity, or a user changing access
-permissions can still require it. The current release workflow must be configured with the
-stable certificate before this works for downloaded releases; the default ad-hoc release
-does not meet that condition.
+permissions can still require it. Stable certificate configuration is required before the
+publisher workflow can run. Directly built ad-hoc packages do not meet that condition.
+
+The manual `release.yml` workflow now requires repository secrets
+`MACOS_SIGNING_CERTIFICATE_BASE64` (a persistent PKCS#12 identity and certificate chain,
+encoded as base64) and `MACOS_SIGNING_CERTIFICATE_PASSWORD`. It imports them into a temporary
+CI Keychain and stops publishing if they are missing or invalid; it never generates a new
+release identity or falls back to ad-hoc signing. A publisher-controlled self-signed CA can
+also be used without Developer ID: its root is trusted only on the disposable CI build
+machine and removed afterward. No publisher root is installed on end users' Macs. This
+does not provide Apple notarization or bypass the first installation's Gatekeeper checks.
+Do not replace these secrets with freshly generated identities for each release.
 
 The isolated macOS CI job runs `Tests/update-identity.sh` with a disposable certificate and Keychain.
 It checks silent credential access after a binary update with the same identity and

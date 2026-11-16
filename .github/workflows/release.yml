@@ -39,6 +39,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Import persistent publisher signing identity
+        timeout-minutes: 2
+        env:
+          MACOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.MACOS_SIGNING_CERTIFICATE_BASE64 }}
+          MACOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: bash apps/macos/scripts/setup-release-signing.sh
       - name: Package
         run: NODE_VERSION="$NODE_BUNDLE_VERSION" apps/macos/package.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/out"
       - name: Verify safe Mac asset names
@@ -55,6 +61,10 @@ jobs:
             out/*.dmg
             out/*.zip
           if-no-files-found: error
+      - name: Remove temporary signing material
+        if: always()
+        timeout-minutes: 2
+        run: bash apps/macos/scripts/cleanup-release-signing.sh
 
   publish:
     name: Publish release
