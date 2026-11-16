@@ -2,10 +2,21 @@
 # Use a disposable certificate and Keychain to verify update identity without
 # consulting the user's credentials or allowing authentication UI in the probes.
 set -euo pipefail
+if [ "${CI:-}" != true ]; then
+  echo 'This integration check requires an isolated macOS CI runner with passwordless sudo.' >&2
+  exit 2
+fi
+/usr/bin/sudo -n true
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/typeleast-update-identity.XXXXXX")"
 KEYCHAIN="$WORK/update-test.keychain-db"
 cleanup() {
+  if [ -f "$WORK/cert.pem" ]; then
+    /usr/bin/sudo -n /usr/bin/security remove-trusted-cert -d "$WORK/cert.pem" >/dev/null 2>&1 || true
+  fi
+  if [ -n "${signing_hash:-}" ]; then
+    /usr/bin/sudo -n /usr/bin/security delete-certificate -Z "$signing_hash" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
+  fi
   /usr/bin/security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
@@ -34,11 +45,13 @@ EOF
 # codesign access is limited to this disposable test key, never a real identity.
 /usr/bin/security import "$WORK/id.p12" -k "$KEYCHAIN" -P "$test_password" -T /usr/bin/codesign >/dev/null
 /usr/bin/security set-key-partition-list -S apple-tool:,apple: -s -k "$test_password" "$KEYCHAIN" >/dev/null
-# Select the exact disposable certificate rather than codesign's name-based
-# identity filtering, which excludes some self-signed test certificates.
+# codesign requires a trusted certificate on the build machine, including for a
+# disposable self-signed identity. Trust this test certificate only on the CI VM,
+# and remove that trust before testing the apps' Keychain access.
 signing_hash="$(/usr/bin/openssl x509 -in "$WORK/cert.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
 test "${#signing_hash}" = 40
-/usr/bin/security find-identity -p codesigning "$KEYCHAIN"
+/usr/bin/sudo -n /usr/bin/security add-trusted-cert -d -r trustRoot -p codeSign \
+  -k /Library/Keychains/System.keychain "$WORK/cert.pem"
 
 cat > "$WORK/main.swift" <<'SWIFT'
 import Foundation
@@ -119,6 +132,8 @@ EOF
     -o "$app/Contents/MacOS/IdentityProbe"
   /usr/bin/codesign --force --keychain "$KEYCHAIN" --sign "$signing_hash" --timestamp=none --options runtime "$app"
 done
+/usr/bin/sudo -n /usr/bin/security remove-trusted-cert -d "$WORK/cert.pem"
+/usr/bin/sudo -n /usr/bin/security delete-certificate -Z "$signing_hash" /Library/Keychains/System.keychain
 FIRST="$WORK/v1/IdentityProbe.app"
 UPDATED="$WORK/v2/IdentityProbe.app"
 requirement="$(/usr/bin/codesign -d -r- "$FIRST" 2>&1 | sed -n '/^designated =>/p')"
