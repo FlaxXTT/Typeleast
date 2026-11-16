@@ -37,7 +37,11 @@ signing_keychain_password="$(/usr/bin/openssl rand -hex 24)"
 /usr/bin/security set-key-partition-list -S apple-tool:,apple: -s -k "$signing_keychain_password" "$signing_keychain" >/dev/null
 previous=()
 while IFS= read -r path; do previous+=("$path"); done < "$signing_work/search-list"
-/usr/bin/security list-keychains -d user -s "$signing_keychain" "${previous[@]}"
+if [ "${previous[0]+present}" = present ]; then
+  /usr/bin/security list-keychains -d user -s "$signing_keychain" "${previous[@]}"
+else
+  /usr/bin/security list-keychains -d user -s "$signing_keychain"
+fi
 
 if ! /usr/bin/security find-identity -v -p codesigning "$signing_keychain" | grep -Fiq "$identity_hash"; then
   # A fixed private publisher CA is usable without Developer ID. Trust its root

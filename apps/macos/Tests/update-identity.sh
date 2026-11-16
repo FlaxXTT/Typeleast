@@ -135,7 +135,7 @@ for version in 1 2; do
 <key>CFBundlePackageType</key><string>APPL</string>
 </dict></plist>
 EOF
-  compile_flags=()
+  compile_flags=(-D UPDATED_RELEASE)
   if [ "$version" = 1 ]; then compile_flags=(-D FIRST_RELEASE); fi
   /usr/bin/swiftc -swift-version 5 "${compile_flags[@]}" "$ROOT/Sources/SelfIntegrity.swift" "$WORK/main.swift" \
     -o "$app/Contents/MacOS/IdentityProbe"

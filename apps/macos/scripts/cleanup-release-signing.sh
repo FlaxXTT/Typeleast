@@ -13,6 +13,7 @@ case "$(basename "$work")" in
   *) echo 'Refusing to clean an unrelated signing directory.' >&2; exit 2 ;;
 esac
 if [ -f "$work/trust-added" ] && [ -f "$work/root.pem" ]; then
+  echo 'Removing the temporary CI signing root trust'
   root_hash="$(/usr/bin/openssl x509 -in "$work/root.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
   /usr/bin/sudo -n /usr/bin/security remove-trusted-cert -d "$work/root.pem" >/dev/null 2>&1 || true
   /usr/bin/sudo -n /usr/bin/security delete-certificate -Z "$root_hash" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
@@ -20,7 +21,8 @@ fi
 if [ -f "$work/search-list" ]; then
   previous=()
   while IFS= read -r path; do previous+=("$path"); done < "$work/search-list"
-  if [ "${#previous[@]}" -gt 0 ]; then /usr/bin/security list-keychains -d user -s "${previous[@]}"; fi
+  if [ "${previous[0]+present}" = present ]; then /usr/bin/security list-keychains -d user -s "${previous[@]}"; fi
 fi
+echo 'Removing the temporary CI signing Keychain'
 /usr/bin/security delete-keychain "$work/signing.keychain-db" >/dev/null 2>&1 || true
 rm -rf "$work"
