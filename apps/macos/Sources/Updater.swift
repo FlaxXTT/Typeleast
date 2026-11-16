@@ -38,7 +38,11 @@ enum Updater {
     /// Ad-hoc requirements include a changing code hash. A certificate-backed
     /// requirement can identify the same application across binary updates.
     static func hasStableRequirement(_ requirement: String?) -> Bool {
-        requirement?.contains("certificate leaf") == true
+        guard let requirement else { return false }
+        // Developer ID requirements name a leaf certificate; self-signed
+        // requirements pin the certificate chain's anchor by its hash.
+        return requirement.contains("certificate leaf") || requirement.contains("anchor = H\"")
+            || requirement.contains("anchor H\"")
     }
 
     static func canKeepSignature(current: String?, update: String?) -> Bool {

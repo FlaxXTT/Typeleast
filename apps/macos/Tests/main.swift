@@ -710,7 +710,10 @@ do {
     let signed = "designated => identifier \"com.dsh.voice\" and certificate leaf = H\"0123456789abcdef\""
     let other = "designated => identifier \"com.dsh.voice\" and certificate leaf = H\"fedcba9876543210\""
     let adhoc = "designated => cdhash H\"0123456789abcdef\""
+    let selfSigned = "designated => identifier \"com.dsh.voice\" and anchor = H\"0123456789abcdef\""
     check("same stable signing identity can bypass local re-signing", Updater.canKeepSignature(current: signed, update: signed))
+    check("same self-signed anchor can bypass local re-signing", Updater.canKeepSignature(current: selfSigned, update: selfSigned))
+    check("a different self-signed anchor cannot bypass local re-signing", !Updater.canKeepSignature(current: selfSigned, update: selfSigned + "00"))
     check("an ad-hoc signature cannot bypass local re-signing", !Updater.canKeepSignature(current: adhoc, update: adhoc))
     check("a different certificate cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: other))
     check("a missing update identity cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: nil))
