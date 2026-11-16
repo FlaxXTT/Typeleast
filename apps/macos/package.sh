@@ -87,6 +87,10 @@ for engine in mlx-asr moss-transcribe; do
 done
 codesign --force --sign "$TYPELEAST_SIGN_IDENTITY" "${SIGN_TIMESTAMP[@]}" --options runtime --entitlements "$ROOT/TypeLeast.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
+# Check the actual application, not this checkout or the runner's Node install.
+# All mutable smoke-check state stays outside the sealed application bundle.
+env PATH=/usr/bin:/bin "$RES/node/bin/node" "$ROOT/Tests/package-runtime.mjs" "$APP"
+codesign --verify --deep --strict "$APP"
 
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
