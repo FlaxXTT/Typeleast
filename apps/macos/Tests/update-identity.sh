@@ -34,6 +34,11 @@ EOF
 # codesign access is limited to this disposable test key, never a real identity.
 /usr/bin/security import "$WORK/id.p12" -k "$KEYCHAIN" -P "$test_password" -T /usr/bin/codesign >/dev/null
 /usr/bin/security set-key-partition-list -S apple-tool:,apple: -s -k "$test_password" "$KEYCHAIN" >/dev/null
+# Select the exact disposable certificate rather than codesign's name-based
+# identity filtering, which excludes some self-signed test certificates.
+signing_hash="$(/usr/bin/openssl x509 -in "$WORK/cert.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
+test "${#signing_hash}" = 40
+/usr/bin/security find-identity -p codesigning "$KEYCHAIN"
 
 cat > "$WORK/main.swift" <<'SWIFT'
 import Foundation
@@ -112,7 +117,7 @@ EOF
   if [ "$version" = 1 ]; then compile_flags=(-D FIRST_RELEASE); fi
   /usr/bin/swiftc -swift-version 5 "${compile_flags[@]}" "$ROOT/Sources/SelfIntegrity.swift" "$WORK/main.swift" \
     -o "$app/Contents/MacOS/IdentityProbe"
-  /usr/bin/codesign --force --keychain "$KEYCHAIN" --sign "$identity" --timestamp=none --options runtime "$app"
+  /usr/bin/codesign --force --keychain "$KEYCHAIN" --sign "$signing_hash" --timestamp=none --options runtime "$app"
 done
 FIRST="$WORK/v1/IdentityProbe.app"
 UPDATED="$WORK/v2/IdentityProbe.app"
