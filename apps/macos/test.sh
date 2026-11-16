@@ -28,8 +28,8 @@ echo "compile: ${CMD[*]}"
 echo "run: $BIN"
 TYPELEAST_RELEASE_NOTES="$ROOT/../../service/test/fixtures/release-notes.json" \
 TYPELEAST_CLIENT_CONTRACT="$ROOT/../../tests/conformance/client-v2.json" "$BIN"
-if [ "${CI:-}" = true ]; then
+if [ "${TYPELEAST_TEST_UPDATE_IDENTITY:-}" = 1 ]; then
   bash "$ROOT/Tests/update-identity.sh"
 else
-  echo 'SKIP: the disposable signing/Keychain integration check runs only on isolated macOS CI.'
+  echo 'SKIP: set TYPELEAST_TEST_UPDATE_IDENTITY=1 on isolated macOS CI for the signing/Keychain integration check.'
 fi

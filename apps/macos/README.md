@@ -111,13 +111,14 @@ permissions can still require it. The current release workflow must be configure
 stable certificate before this works for downloaded releases; the default ad-hoc release
 does not meet that condition.
 
-On isolated macOS CI, `test.sh` also runs `Tests/update-identity.sh` with a disposable certificate and Keychain.
+The isolated macOS CI job runs `Tests/update-identity.sh` with a disposable certificate and Keychain.
 It checks silent credential access after a binary update with the same identity and
 rejects a changed identity or changed sealed resource. It neither reads user credentials
 nor enables authentication UI in the probe applications.
 Signing temporarily trusts only the disposable certificate on the CI build machine; that
 trust is removed before the credential-access probes and the temporary material is cleaned
-up afterward. This integration check is skipped by default on a user's Mac.
+up afterward. This integration check is skipped by default in `test.sh`; opt in on an
+isolated CI machine with `TYPELEAST_TEST_UPDATE_IDENTITY=1`.
 
 ## Demo mode
 

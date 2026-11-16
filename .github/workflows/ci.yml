@@ -88,6 +88,14 @@ jobs:
           echo 'This job tests and builds the MLX worker; it does not download weights or run real model inference.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Real Fun-ASR and Qwen model loading and short recognition were tested separately on an Apple Silicon Mac; the cloud runner result does not replace that evidence.' >> "$GITHUB_STEP_SUMMARY"
 
+  macos-update-identity:
+    name: macOS update identity and Keychain
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash apps/macos/Tests/update-identity.sh
+
   windows:
     name: Windows app (tests and build)
     runs-on: windows-latest
