@@ -120,6 +120,26 @@ machine and removed afterward. No publisher root is installed on end users' Macs
 does not provide Apple notarization or bypass the first installation's Gatekeeper checks.
 Do not replace these secrets with freshly generated identities for each release.
 
+An owner with GitHub Actions Secrets permissions can create the fixed self-signed identity
+and configure both secrets once, without using the Mac login Keychain:
+
+```bash
+bash apps/macos/scripts/configure-publisher-signing.sh FlaxXTT/Typeleast "$HOME/.local/share/typeleast-publisher-signing"
+```
+
+The command requires `gh`, `openssl` and `git`, refuses to overwrite existing signing
+secrets, and keeps an encrypted root key and certificate backup outside the repository.
+It does not publish a release or print private values. Preserve that directory securely;
+leaf renewal should keep the same root anchor. If only the first secret uploads, use the
+same local identity to configure the missing password secret rather than generating a new
+identity. The current connector may lack Secrets access even when it can push code.
+
+An existing ad-hoc/local-signed installation may still need a one-time authorization when
+moving to a publisher-signed baseline. An older updater re-signs downloaded apps, so install
+the first publisher-signed baseline directly; subsequent matching-identity updates use the
+signature-preserving path. The new code cannot prevent an old updater's password request
+before it has itself been replaced.
+
 The isolated macOS CI job runs `Tests/update-identity.sh` with a disposable certificate and Keychain.
 It checks silent credential access after a binary update with the same identity and
 rejects a changed identity or changed sealed resource. It neither reads user credentials
