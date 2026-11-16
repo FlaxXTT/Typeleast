@@ -111,6 +111,11 @@ permissions can still require it. The current release workflow must be configure
 stable certificate before this works for downloaded releases; the default ad-hoc release
 does not meet that condition.
 
+`test.sh` also runs `Tests/update-identity.sh` with a disposable certificate and Keychain.
+It checks silent credential access after a binary update with the same identity and
+rejects a changed identity or changed sealed resource. It neither reads user credentials
+nor enables authentication UI in the probe applications.
+
 ## Demo mode
 
 `TYPELEAST_DEMO_WAV=<16 kHz mono PCM16 WAV>` (with `TYPELEAST_DEMO_DELAY`, seconds,

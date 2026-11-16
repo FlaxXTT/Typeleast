@@ -28,3 +28,4 @@ echo "compile: ${CMD[*]}"
 echo "run: $BIN"
 TYPELEAST_RELEASE_NOTES="$ROOT/../../service/test/fixtures/release-notes.json" \
 TYPELEAST_CLIENT_CONTRACT="$ROOT/../../tests/conformance/client-v2.json" "$BIN"
+bash "$ROOT/Tests/update-identity.sh"
