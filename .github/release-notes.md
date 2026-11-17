@@ -3,38 +3,32 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 新应用图标：深色圆角底、清晰声波和蓝色点缀，适合 Dock 与应用程序列表中的小尺寸显示。
-- 桌面语音条按参考图调整为纯黑背景、灰色取消圆钮、白色结束圆钮和黑色勾；高度为 34，待机时悬停可展开快捷键提示。
-- 首次录音、麦克风变化，或超过 5 分钟未录音后，再次开始时会在语音条上方显示实际打开的麦克风名称，约 3 秒后收起。
-- 语音条单独使用固定配色，浅色、深色和跟随系统的外观设置只影响主界面。
-- 波形由真实录音的 FFT 人声频段能量驱动，加入自适应底噪、三段响应、平滑，以及从中心向两侧扩散和衰减的动画。
-- 首次使用中的语音练习复用桌面语音条；Mac 麦克风在后台打开，取消后不接受迟到的启动结果。
-- 处理中加入文字高光；音频帧只更新语音条，跨屏时仅在鼠标所在屏幕变化后移动浮层。
-- 首次使用固定发布证书。后续同一签名身份的更新可保留发布签名；从旧签名迁移时仍可能需要一次系统授权。
+- 修复「设置 → 通用」滚动时重复查询系统登录项状态的问题：开机启动开关与提示读取缓存，只在进入页面、返回应用或修改开关后刷新。
+- 减少无变化的后台健康状态反复触发界面刷新，合并重叠请求；本地化文字与数字格式器复用，减少滚动过程中的重复计算。
+- 缓存用于界面显示的钥匙串条目存在状态，减少重复系统查询；保存、删除和返回应用时更新缓存。
+- 修复模型连接请求的旧结果回写新配置的问题；关闭引导后停止其权限轮询。
+- 保留 2.1.7 的新图标、固定录音条配色、麦克风提示和固定发布签名。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- A new app icon with a dark rounded tile, clear sound bars and a blue accent, designed for the Dock and Applications list.
-- A 34-point black voice capsule with a grey cancel button, a white finish button with a black check, a compact waveform and an idle shortcut hint on hover.
-- On the first recording, after a microphone change, or after more than five minutes without recording, the overlay shows the opened microphone name above the bar for about three seconds.
-- The voice bar keeps its own fixed colours in light, dark and system appearance; the main window still follows the selected appearance.
-- The waveform uses FFT energy from the recorded voice band, with an adaptive noise floor, three response ranges, smoothing, and outward propagation and decay.
-- Onboarding practice uses the desktop voice-bar renderer. Mac microphone startup runs in the background, and cancelled startup callbacks are discarded.
-- Processing text has a moving highlight. Audio frames redraw the voice bar, and the overlay moves between displays only when the pointer changes displays.
-- This is the first release with a persistent publisher certificate. Later updates with the same signing identity can retain that signature; migration from older signing may still require system authorization.
+- Fix repeated system login-item queries while scrolling Settings > General. The launch-at-login switch and hint use cached state, refreshed on entry, app activation or a switch change.
+- Avoid publishing unchanged health data and combine overlapping requests. Reuse localization and number formatters to reduce repeated UI work.
+- Cache Keychain item-presence metadata used by the UI, refreshing it after save, deletion and app activation.
+- Prevent old model-connection results from updating a changed form. Stop permission polling after onboarding closes.
+- Keep the 2.1.7 app icon, fixed voice-bar colours, microphone reminder and persistent publisher signature.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation
 
 仅支持 macOS 14 及以上的 Apple 芯片 Mac。语音模型单独下载，Windows 与 Intel 版不再更新。
 
-本版采用固定自签发布证书，尚无 Apple 公证。首次切换到新发布身份时，请直接安装本版；旧版更新器可能仍会要求本机签名授权。首次打开、钥匙串锁定或权限变更时，macOS 仍可要求授权。
+本版继续使用固定自签发布证书，尚无 Apple 公证。若仍在使用 2.1.6 或更早的签名身份，请直接下载安装，建立固定发布签名基线。
 
 Requires macOS 14 or later on Apple silicon. Speech models are downloaded separately. Windows and Intel releases remain at their previous versions.
 
-This release uses a persistent self-signed publisher certificate and is not notarized by Apple. Install this first publisher-signed baseline directly; older updaters may still request local signing authorization. macOS can still request authorization on first launch, when the Keychain is locked, or when permissions change.
+This release retains the persistent self-signed publisher certificate and is not notarized by Apple. If you still use the signing identity from 2.1.6 or earlier, install directly to establish the publisher-signed baseline.
 
-本次发布跳过测试和运行时冒烟步骤；Mac 界面源码已在本机编译。
-Tests and runtime exercises are skipped for this release. The Mac UI sources were compiled locally.
+按用户要求，本次不运行测试和运行时冒烟步骤。
+Tests and runtime exercises are skipped for this owner-requested release.
 
 [完整记录](https://github.com/FlaxXTT/Typeleast/blob/main/CHANGELOG.md) · [代码签名政策](https://github.com/FlaxXTT/Typeleast/blob/main/docs/CODE_SIGNING_POLICY.md)
