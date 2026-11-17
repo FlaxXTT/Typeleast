@@ -17,10 +17,10 @@ Small icons render from vectors at their own resolution.
 - Background: sRGB `#FAFAF9`.
 - Light: radial white at 5% opacity, from above-left; no linear gradient.
 - Edge: 1 design-pixel inner stroke, `#111111` at 6% opacity.
-- Bars, left to right: heights `0.30 / 0.58 / 1.00 / 0.72 / 0.42` of 720px,
-  each 120px wide with 32px spacing; centred vertically and horizontally.
-  The waveform occupies 728 × 720px (about 88% of the tile), leaving only
-  48px horizontally and 52px vertically inside the enclosure.
+- Bars, left to right: heights `0.30 / 0.58 / 1.00 / 0.72 / 0.42` of 672px,
+  each 112px wide with 30px spacing; centred vertically and horizontally.
+  The waveform occupies 680 × 672px (about 82% of the tile), leaving
+  72px horizontally and 76px vertically inside the enclosure.
 - First four bars: `#1D1A1A`; rightmost bar: `#1F5DF2`.
 - No baked-in shadow. The artwork keeps the same palette in both app themes.
 
