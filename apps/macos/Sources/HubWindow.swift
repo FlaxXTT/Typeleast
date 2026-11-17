@@ -50,11 +50,13 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
 struct HubRootView: View {
     @EnvironmentObject var model: AppModel
+    @State private var showsCommands = false
+    @State private var pendingCommand: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
-            Sidebar()
-                .frame(width: 214)
+            Sidebar(showsCommands: $showsCommands)
+                .frame(width: Theme.sidebarWidth)
                 .background(Theme.sidebar)
             Divider().opacity(0.6)
             ZStack {
@@ -69,22 +71,52 @@ struct HubRootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 820, minHeight: 560)
+        .foregroundColor(Theme.ink)
+        .tint(Theme.accent)
+        .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
+        .sheet(isPresented: $showsCommands, onDismiss: {
+            let action = pendingCommand
+            pendingCommand = nil
+            action?()
+        }) {
+            HubCommandPalette { command in
+                pendingCommand = command.run
+                showsCommands = false
+            }.environmentObject(model)
+        }
         .ignoresSafeArea()
     }
 }
 
 private struct Sidebar: View {
     @EnvironmentObject var model: AppModel
+    @Binding var showsCommands: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 AppMarkView(size: 26).accessibilityHidden(true)
-                Text("TypeLeast").font(.system(size: 21, weight: .semibold))
+                Text("TypeLeast").font(.system(size: 20, weight: .semibold)).tracking(-0.4)
             }
             .padding(.top, 44)
-            .padding(.horizontal, 18)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+
+            Button { showsCommands = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                    Text(L10n.text("搜索与命令"))
+                    Spacer()
+                    Text("⌘K").font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                }
+                .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.cardHover))
+            }
+            .buttonStyle(.plain).hoverInteraction()
+            .keyboardShortcut("k", modifiers: .command)
+            .padding(.bottom, 12)
+            .disabled(model.settings.needsPractice)
 
             ForEach([HubPage.home, .history, .meetings]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)
@@ -106,6 +138,7 @@ private struct Sidebar: View {
 
 private struct SidebarItem: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let page: HubPage
     @State private var hovering = false
 
@@ -124,14 +157,15 @@ private struct SidebarItem: View {
                 Text(page.title).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
                 Spacer()
             }
-            .foregroundColor(selected ? Theme.ink : Theme.secondary)
+            .foregroundColor(selected ? Theme.accent : Theme.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(selected ? Theme.selection : (hovering ? Theme.selection.opacity(0.5) : Color.clear)))
+                .fill(selected ? Theme.selection : (hovering ? Theme.cardHover : Color.clear)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .animation(reduceMotion ? nil : Theme.fast, value: hovering)
         .onHover { hovering = $0 }
     }
 }
@@ -189,7 +223,7 @@ struct PageHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 26, weight: .bold))
+                Text(title).font(.system(size: 26, weight: .bold)).tracking(-0.6)
                 if let subtitle = subtitle, !subtitle.isEmpty {
                     Text(subtitle).font(.system(size: 13)).foregroundColor(Theme.secondary)
                 }
@@ -197,7 +231,7 @@ struct PageHeader<Trailing: View>: View {
             Spacer()
             trailing
         }
-        .padding(.horizontal, 36)
+        .padding(.horizontal, Theme.pageInset)
         .padding(.top, 24)
         .padding(.bottom, 18)
     }
@@ -235,7 +269,7 @@ struct FlexibleSegment: View {
     var body: some View {
         Button(action: action) {
             Text(label).font(.system(size: 12.5, weight: selected ? .semibold : .regular))
-                .foregroundColor(Theme.ink).multilineTextAlignment(.center)
+                .foregroundColor(selected ? Theme.accent : Theme.secondary).multilineTextAlignment(.center)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 34)
                 .padding(.horizontal, 4)

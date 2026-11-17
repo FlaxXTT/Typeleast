@@ -1,8 +1,7 @@
 import SwiftUI
 import AppKit
 
-// Theme.swift - the look: quiet greys, one strong ink colour for
-// primary actions, soft cards, generous spacing, light and dark.
+// Main-window tokens adapted from Typeless_UI_范本. VoiceBarPalette stays independent.
 
 enum Theme {
     private static func dynamic(_ light: NSColor, _ dark: NSColor) -> Color {
@@ -17,28 +16,32 @@ enum Theme {
                 blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
     }
 
-    static let window = dynamic(hex(0xFFFFFF), hex(0x1C1B1B))
-    static let sidebar = dynamic(hex(0xF6F6F5), hex(0x151414))
-    static let card = dynamic(hex(0xF4F4F3), hex(0x262525))
-    static let cardHover = dynamic(hex(0xEDEDEC), hex(0x2E2D2D))
-    static let border = dynamic(hex(0xE7E7E5), hex(0x333232))
-    static let ink = dynamic(hex(0x141313), hex(0xF4F3F3))
-    static let inkInverse = dynamic(hex(0xFFFFFF), hex(0x141313))
-    static let secondary = dynamic(hex(0x6E6D6B), hex(0x9C9B99))
-    static let tertiary = dynamic(hex(0xA3A29F), hex(0x6E6D6B))
-    static let selection = dynamic(hex(0xE9E9E7), hex(0x2F2E2E))
-    /// The blue for "your microphone is heard".
-    static let accent = dynamic(hex(0x3E9BE9), hex(0x62BBF3))
-    /// Style plugins; dictionary packs use `accent`.
-    static let style = dynamic(hex(0x8A5CD8), hex(0xB591F2))
-    static let success = dynamic(hex(0x2E9E5B), hex(0x4CC27A))
-    static let warning = dynamic(hex(0xD9822B), hex(0xF0A04B))
+    static let window = dynamic(hex(0xFFFFFF), hex(0x242121))
+    static let sidebar = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
+    static let detail = dynamic(hex(0xFBFAF9), hex(0x1F1C1C))
+    static let card = dynamic(hex(0xF2F1F0), hex(0x3C3B3B))
+    static let cardHover = dynamic(hex(0x777777, 0.08), hex(0xF2F1F0, 0.06))
+    static let border = dynamic(hex(0x777777, 0.15), hex(0xF2F1F0, 0.10))
+    static let ink = dynamic(hex(0x111111), hex(0xF2F1F0))
+    static let inkInverse = Color.white
+    static let secondary = dynamic(hex(0x111111, 0.75), hex(0xF2F1F0, 0.75))
+    static let tertiary = dynamic(hex(0x111111, 0.55), hex(0xF2F1F0, 0.55))
+    static let selection = dynamic(hex(0x1F5DF2, 0.07), hex(0x4F7BFF, 0.12))
+    static let accent = dynamic(hex(0x1F5DF2), hex(0x4F7BFF))
+    static let style = accent
+    static let success = dynamic(hex(0x008770), hex(0x00957C))
+    static let warning = dynamic(hex(0xEA4D00), hex(0xFF5B00))
 
-    static let radius: CGFloat = 14
+    static let radius: CGFloat = 12
+    static let controlRadius: CGFloat = 8
+    static let pageInset: CGFloat = 32
+    static let sidebarWidth: CGFloat = 236
+    static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12)
+    static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
     /// The Home insights: white tiles on a lightly dotted panel, and the heatmap's blues.
-    static let tile = dynamic(hex(0xFFFFFF), hex(0x262525))
-    static let panel = dynamic(hex(0xF7F7F6), hex(0x1F1E1E))
+    static let tile = dynamic(hex(0xFFFFFF), hex(0x3C3B3B))
+    static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
     static let heatEmpty = dynamic(hex(0xF1F1EF), hex(0x2C2B2B))
     static let heat = [dynamic(hex(0xE6EBFD), hex(0x26304F)), dynamic(hex(0xC3CEF9), hex(0x34458A)),
@@ -58,7 +61,7 @@ extension View {
 
 /// A rounded, softly filled container.
 struct Card<Content: View>: View {
-    var padding: CGFloat = 18
+    var padding: CGFloat = 16
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -66,10 +69,11 @@ struct Card<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 
-/// Black pill (white in dark mode): the one primary action on a page.
+/// Blue is reserved for primary actions and selection.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         HoverPill(configuration: configuration, primary: true)
@@ -94,10 +98,11 @@ private struct HoverPill: View {
             .foregroundColor(primary ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, primary ? 16 : 14)
             .padding(.vertical, primary ? 8 : 7)
-            .background(Capsule().fill(primary ? Theme.ink : Theme.card))
-            .overlay(Capsule().stroke(primary ? Color.clear : Theme.border, lineWidth: 1))
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100, primary: primary))
-            .contentShape(Capsule())
+            .frame(minHeight: 32)
+            .background(RoundedRectangle(cornerRadius: Theme.controlRadius).fill(primary ? Theme.accent : Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(primary ? Color.clear : Theme.border, lineWidth: 1))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.controlRadius, primary: primary))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.controlRadius))
     }
 }
 
@@ -153,7 +158,7 @@ struct ChipPicker<Value: Hashable>: View {
                 } label: {
                     Text(option.1)
                         .font(.system(size: 12.5, weight: selected ? .semibold : .regular))
-                        .foregroundColor(selected ? Theme.ink : Theme.secondary)
+                        .foregroundColor(selected ? Theme.accent : Theme.secondary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Capsule().fill(selected ? Theme.selection : Color.clear))
@@ -199,6 +204,7 @@ struct Badge: View {
 struct SearchField: View {
     @Binding var text: String
     var placeholder = L10n.text("搜索")
+    var width: CGFloat = 220
 
     var body: some View {
         HStack(spacing: 6) {
@@ -215,8 +221,9 @@ struct SearchField: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .frame(width: 220)
-        .background(Capsule().fill(Theme.card))
+        .frame(width: width)
+        .background(RoundedRectangle(cornerRadius: Theme.controlRadius).fill(Theme.card))
+        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 

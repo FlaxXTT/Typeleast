@@ -188,6 +188,8 @@ final class HistoryStore {
     private let database: HistoryDatabase?
     /// What the database holds now: a save writes only the rows that differ.
     private var stored: [String: LocalHistoryEntry] = [:]
+    /// A deleted row leaves the database immediately; its audio waits for the undo toast.
+    private var pendingRemovals: [String: LocalHistoryEntry] = [:]
     private var locked = false
     private(set) var persistenceProblem: String?
     private(set) var entries: [LocalHistoryEntry] = []
@@ -413,8 +415,35 @@ final class HistoryStore {
         save()
     }
 
+    @discardableResult
+    func removeWithUndo(id: String) -> Bool {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return false }
+        invalidateProfile()
+        pendingRemovals[id] = entries.remove(at: index)
+        save()
+        return true
+    }
+
+    func undoRemoval(id: String) {
+        guard let entry = pendingRemovals.removeValue(forKey: id) else { return }
+        let index = entries.firstIndex(where: { $0.ts < entry.ts }) ?? entries.endIndex
+        entries.insert(entry, at: index)
+        applyRetention(Settings.shared.historyRetention, saving: false)
+        if entries.count > Self.limit {
+            for dropped in entries[Self.limit...] { removeAudio(dropped) }
+            entries.removeLast(entries.count - Self.limit)
+        }
+        save()
+    }
+
+    func finishRemoval(id: String) {
+        if let entry = pendingRemovals.removeValue(forKey: id) { removeAudio(entry) }
+    }
+
     func clear() {
         invalidateProfile()
+        for entry in pendingRemovals.values { removeAudio(entry) }
+        pendingRemovals.removeAll()
         for e in entries { removeAudio(e) }
         entries.removeAll()
         d.removeObject(forKey: plainKey)
@@ -433,6 +462,8 @@ final class HistoryStore {
         guard let window = retention.seconds else { return }
         let before = entries.count
         if window == 0 {
+            for entry in pendingRemovals.values { removeAudio(entry) }
+            pendingRemovals.removeAll()
             for dropped in entries { removeAudio(dropped) }
             entries = Array(entries.prefix(1))
             if !entries.isEmpty { entries[0].audioPath = nil }

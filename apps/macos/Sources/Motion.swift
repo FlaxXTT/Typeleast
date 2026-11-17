@@ -17,10 +17,10 @@ struct ControlMotion: ViewModifier {
             .overlay {
                 if active || down {
                     shape.fill(primary ? Color.white.opacity(down ? 0.12 : 0.07)
-                                       : Theme.accent.opacity(down ? 0.07 : 0.035))
+                                       : Theme.cardHover)
                         .overlay {
                             shape.strokeBorder(primary ? Color.white.opacity(0.20)
-                                                       : Theme.accent.opacity(0.16), lineWidth: 1)
+                                                       : Theme.border, lineWidth: 1)
                         }
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -28,7 +28,8 @@ struct ControlMotion: ViewModifier {
             }
             .scaleEffect(down && !reduceMotion ? 0.98 : 1)
             .opacity(down ? 0.90 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: down)
+            .animation(reduceMotion ? nil : Theme.fast, value: down)
+            .animation(reduceMotion ? nil : Theme.fast, value: active)
             .onHover { value in
                 let next = value && enabled
                 if hovering != next { hovering = next }

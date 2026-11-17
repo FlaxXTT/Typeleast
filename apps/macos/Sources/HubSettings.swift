@@ -45,8 +45,8 @@ struct SettingsPage: View {
                     }
                 }
             }.padding(3).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.card))
-            .padding(.horizontal, 36).padding(.bottom, 16)
-            ScrollView {
+            .padding(.horizontal, Theme.pageInset).padding(.bottom, 16)
+            HubScrollView(key: "settings-" + String(model.settingsCategory)) {
                 VStack(alignment: .leading, spacing: 20) {
                     switch model.settingsCategory {
                     case 0: shortcuts; language; translatePrompt; audio; cleanup
@@ -54,7 +54,7 @@ struct SettingsPage: View {
                     default: general; privacy; permissions; updates; advanced
                     }
                 }
-                .padding(.horizontal, 36).padding(.bottom, 32)
+                .padding(.horizontal, Theme.pageInset).padding(.bottom, 32)
             }
             .id(model.settingsCategory)
         }
@@ -323,12 +323,13 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.secondary)
-            VStack(alignment: .leading, spacing: 14) { content }
-                .padding(18)
+            VStack(alignment: .leading, spacing: 16) { content }
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
         }
     }
 }
