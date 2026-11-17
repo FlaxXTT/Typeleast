@@ -13,13 +13,14 @@ on:
         options:
           - all
           - update-identity
+          - signing-readiness
 
 permissions:
   contents: read
 
 jobs:
   service:
-    if: inputs.scope != 'update-identity'
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
     name: Service tests (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -40,7 +41,7 @@ jobs:
       - run: node scripts/check-localization.mjs
 
   macos:
-    if: inputs.scope != 'update-identity'
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
     name: macOS app (tests and build)
     runs-on: macos-latest
     steps:
@@ -64,7 +65,7 @@ jobs:
       - run: apps/macos/build.sh --no-install
 
   speech-models-onnx:
-    if: inputs.scope != 'update-identity'
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
     name: Real ASR models (${{ matrix.os }})
     timeout-minutes: 120
     strategy:
@@ -92,7 +93,7 @@ jobs:
         run: node scripts/check-asr-models.mjs --download --allow-resource-skip --models-dir "${{ runner.temp }}/typeleast-asr-models" --state-dir "${{ runner.temp }}/typeleast-asr-state"
 
   speech-models-mlx:
-    if: inputs.scope != 'update-identity'
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
     name: MLX worker tests and build (macOS)
     runs-on: macos-latest
     timeout-minutes: 120
@@ -111,6 +112,7 @@ jobs:
           echo 'Real Fun-ASR and Qwen model loading and short recognition were tested separately on an Apple Silicon Mac; the cloud runner result does not replace that evidence.' >> "$GITHUB_STEP_SUMMARY"
 
   macos-update-identity:
+    if: inputs.scope != 'signing-readiness'
     name: macOS update identity and Keychain
     runs-on: macos-latest
     timeout-minutes: 5
@@ -119,7 +121,7 @@ jobs:
       - run: bash apps/macos/Tests/update-identity.sh
 
   windows:
-    if: inputs.scope != 'update-identity'
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
     name: Windows app (tests and build)
     runs-on: windows-latest
     defaults:
@@ -134,7 +136,7 @@ jobs:
       - run: dotnet build TypeLeast/TypeLeast.csproj -c Release
 
   windows-render:
-    if: inputs.scope != 'update-identity'
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
     name: Windows UI renders (design review)
     runs-on: windows-latest
     steps:
@@ -156,7 +158,7 @@ jobs:
 
   release-package-macos:
     name: Release package (macOS)
-    if: inputs.scope != 'update-identity' && startsWith(github.ref, 'refs/heads/release/')
+    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness' && startsWith(github.ref, 'refs/heads/release/')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -178,3 +180,21 @@ jobs:
             out/*.dmg
             out/*.zip
           if-no-files-found: error
+
+  signing-readiness:
+    if: inputs.scope == 'signing-readiness'
+    name: Validate persistent macOS publisher identity
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import and validate the configured publisher identity
+        timeout-minutes: 2
+        env:
+          MACOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.MACOS_SIGNING_CERTIFICATE_BASE64 }}
+          MACOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: bash apps/macos/scripts/setup-release-signing.sh
+      - name: Remove temporary signing material
+        if: always()
+        timeout-minutes: 2
+        run: bash apps/macos/scripts/cleanup-release-signing.sh
