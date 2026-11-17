@@ -131,6 +131,8 @@ struct LoadingCircularProgress: View {
 
 private enum MotionBezier {
     static func value(_ x: Double, x1: Double, y1: Double, x2: Double, y2: Double) -> Double {
+        if x <= 0 { return 0 }
+        if x >= 1 { return 1 }
         func coordinate(_ t: Double, _ first: Double, _ second: Double) -> Double {
             3 * (1 - t) * (1 - t) * t * first + 3 * (1 - t) * t * t * second + t * t * t
         }
