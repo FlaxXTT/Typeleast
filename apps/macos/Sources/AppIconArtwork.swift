@@ -7,6 +7,7 @@ import AppKit
 enum AppIconArtwork {
     static let canvasSize: CGFloat = 1024
     static let barRatios: [CGFloat] = [0.30, 0.58, 1.00, 0.72, 0.42]
+    static let waveformOccupancy: CGFloat = 0.72
 
     static func outline(in rect: CGRect) -> CGPath {
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
@@ -101,11 +102,12 @@ enum AppIconArtwork {
         context.strokePath()
         context.restoreGState()
 
-        // Fill about 82% of the tile in both directions, keeping a narrow clear
-        // inset around the waveform and distinct gaps between its five capsules.
-        let barWidth: CGFloat = 112
-        let gap: CGFloat = 30
-        let maximumHeight: CGFloat = 672
+        // The waveform's bounding box fills exactly 72% of the tile's width and
+        // height. Keep the established relative bar widths and gaps.
+        let waveformWidth = tile.width * waveformOccupancy
+        let barWidth = waveformWidth * 112 / 680
+        let gap = waveformWidth * 30 / 680
+        let maximumHeight = tile.height * waveformOccupancy
         let totalWidth = CGFloat(barRatios.count) * barWidth + CGFloat(barRatios.count - 1) * gap
         for (index, ratio) in barRatios.enumerated() {
             let height = maximumHeight * ratio
