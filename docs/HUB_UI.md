@@ -28,13 +28,16 @@ Four metric cards sit in two columns above the active-day card. Engine status an
 management occupy the top-right column, followed by Quick dictation; Recent is the final
 section beneath both columns. The main window is fixed at 1080×750 points. User resizing, zoom and full-screen entry are disabled; scrolling holds content that extends beyond the fixed viewport.
 
-Opening or restoring the hub replays the figures from zero over 1.2 seconds. Units and
+Opening or restoring the hub replays the four metric figures from zero over 250ms. Units and
 final number widths are reserved, so counting does not move surrounding content. Active
-day and streak figures count up too. All empty slots are visible at first; only the real
-active blue fills are revealed from left to right over 1.4 seconds after a 150ms lead-in.
+day and streak figures count up too. Grey day slots are visible at first. Week columns
+enter left to right, staggered by 40ms. Each column runs a 300ms scale pulse from 1 to
+1.2 and back to 1 while a white cover fades away; all seven cells share the column's
+phase. One local elapsed-time animation drives every cell, without per-cell timers.
+Reduce Motion displays the final values and grid immediately.
 Month arrows navigate actual activity history. No synthetic usage data is added.
 
-The animation is local to numeric text and cell masks, not a timer publishing through
+The animation is local to numeric text and cell effects, not a timer publishing through
 AppModel. Ordinary history/health refreshes do not restart it. Opening the hub starts
 Home at its insights; navigation within that opening retains the native scroll offset.
 Reduce Motion shows the final figures and cells immediately.
