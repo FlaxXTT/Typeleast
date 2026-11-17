@@ -23,7 +23,7 @@ struct MeetingsPage: View {
                     Spacer()
                 }
             }
-            .padding(.horizontal, 36)
+            .padding(.horizontal, Theme.pageInset)
             .padding(.bottom, 24)
         }
         .onAppear { meeting.refreshModel() }
@@ -72,8 +72,6 @@ private struct MeetingLiveTranscriptView: View {
 private struct MeetingModelCard: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var meeting: MeetingController
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
 
     var body: some View {
         Card(padding: 14) {
@@ -88,21 +86,12 @@ private struct MeetingModelCard: View {
                 }
             }
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                .stroke(Theme.accent.opacity(hovering ? 0.7 : 0), lineWidth: hovering ? 2 : 0)
-                .allowsHitTesting(false)
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.6), value: hovering)
-        .onHover { hovering = $0 }
     }
 }
 
 private struct MeetingControls: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var meeting: MeetingController
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
 
     private var limit: Int { MeetingLimits.maxSeconds / 60 }
 
@@ -144,13 +133,6 @@ private struct MeetingControls: View {
                     .font(.system(size: 11.5)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                .stroke(Theme.accent.opacity(hovering ? 0.55 : 0), lineWidth: hovering ? 2 : 0)
-                .allowsHitTesting(false)
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.6), value: hovering)
-        .onHover { hovering = $0 }
     }
 
     private func chooseFile() {

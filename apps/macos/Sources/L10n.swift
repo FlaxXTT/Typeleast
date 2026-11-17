@@ -53,6 +53,16 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "搜索与命令": "Search and commands",
+        "搜索记录、页面或命令": "Search history, pages or commands",
+        "没有匹配的记录或命令": "No matching records or commands",
+        "打开页面": "Open page",
+        "切换主题": "Change appearance",
+        "↑↓ 选择 · Enter 打开 · Esc 关闭": "↑↓ Select · Enter Open · Esc Close",
+        "回到顶部": "Back to top",
+        "记录已删除": "Record deleted",
+        "记录详情": "Record details",
+        "听写结果": "Dictation result",
         "会议结束后再更新。": "Finish the meeting recording or transcription before updating.",
         "正在打开麦克风…": "Opening microphone…",
         "当前麦克风": "Current microphone",

@@ -78,10 +78,10 @@ struct HomePage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                PageHeader(title: greeting)
-                VStack(alignment: .leading, spacing: 18) {
+        VStack(spacing: 0) {
+            PageHeader(title: greeting)
+            HubScrollView(key: "home") {
+                VStack(alignment: .leading, spacing: 16) {
                     HeroCard()
                     // Only what is not set up yet; nothing once everything works.
                     if SetupCard.pending(model) { SetupCard() }
@@ -89,8 +89,8 @@ struct HomePage: View {
                     RecentCard()
                     EngineCard()
                 }
-                .padding(.horizontal, 36)
-                .padding(.bottom, 36)
+                .padding(.horizontal, Theme.pageInset)
+                .padding(.bottom, 32)
             }
         }
     }
@@ -100,7 +100,7 @@ private struct HeroCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        Card(padding: 14) {
+        Card(padding: 16) {
             HStack(alignment: .center, spacing: 10) {
                 Text(L10n.text("按")).font(.system(size: 15, weight: .semibold))
                 Keycap(label: model.hotkeyLabel)
@@ -321,6 +321,32 @@ struct HistoryPage: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 760
+            HStack(spacing: 0) {
+                historyList.frame(maxWidth: .infinity)
+                if wide, let entry = selectedEntry {
+                    Divider().overlay(Theme.border)
+                    HistoryDetail(entry: entry) { model.selectedHistoryID = nil }
+                        .id(entry.id).frame(width: 300).background(Theme.detail)
+                }
+            }
+            .sheet(isPresented: Binding(get: { !wide && selectedEntry != nil }, set: {
+                if !$0 { model.selectedHistoryID = nil }
+            })) {
+                if let entry = selectedEntry {
+                    HistoryDetail(entry: entry) { model.selectedHistoryID = nil }
+                        .id(entry.id).frame(width: 480, height: 540).background(Theme.detail)
+                }
+            }
+        }
+    }
+
+    private var selectedEntry: LocalHistoryEntry? {
+        model.history.first { $0.id == model.selectedHistoryID }
+    }
+
+    private var historyList: some View {
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: L10n.text("历史"), subtitle: "") {
                 HStack(spacing: 10) {
@@ -342,12 +368,18 @@ struct HistoryPage: View {
                     .frame(width: 32)
                 }
             }
-            HStack {
-                ChipPicker(options: [(HistoryFilter.all, L10n.text("全部")), (.polished, L10n.text("已整理")), (.raw, L10n.text("已用原文"))], selection: $filter)
-                Spacer()
-                SearchField(text: $query)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    historyChips.fixedSize()
+                    Spacer(minLength: 12)
+                    SearchField(text: $query, width: 180)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    historyChips
+                    SearchField(text: $query, width: 180)
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 36)
+            .padding(.horizontal, Theme.pageInset)
             .padding(.bottom, 12)
 
             if dayGroups.isEmpty {
@@ -357,8 +389,8 @@ struct HistoryPage: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                HubScrollView(key: "history") {
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                         ForEach(dayGroups) { group in
                             Section {
                                 ForEach(group.entries) { entry in
@@ -370,7 +402,9 @@ struct HistoryPage: View {
                                         bottomTrailingRadius: last ? Theme.radius : 0,
                                         topTrailingRadius: first ? Theme.radius : 0, style: .continuous)
                                     VStack(spacing: 0) {
-                                        HistoryRow(entry: entry, compact: false)
+                                        HistoryRow(entry: entry, compact: false, selected: model.selectedHistoryID == entry.id) {
+                                            model.selectedHistoryID = entry.id
+                                        }
                                         if !last { Divider().padding(.leading, 66) }
                                     }
                                     .background(card.fill(Theme.card))
@@ -379,13 +413,14 @@ struct HistoryPage: View {
                             } header: {
                                 Text(group.title)
                                     .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
-                                    .padding(.top, group.id == dayGroups.first?.id ? 0 : 18)
-                                    .padding(.bottom, 8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 12)
+                                    .background(Theme.window.opacity(0.96))
                             }
                         }
                     }
-                    .padding(.horizontal, 36)
-                    .padding(.bottom, 36)
+                    .padding(.horizontal, Theme.pageInset)
+                    .padding(.bottom, 32)
                 }
             }
         }
@@ -403,12 +438,19 @@ struct HistoryPage: View {
             day = Calendar.current.startOfDay(for: Date())
         }
     }
+
+    private var historyChips: some View {
+        ChipPicker(options: [(HistoryFilter.all, L10n.text("全部")), (.polished, L10n.text("已整理")), (.raw, L10n.text("已用原文"))], selection: $filter)
+    }
 }
 
 struct HistoryRow: View {
     @EnvironmentObject var model: AppModel
     let entry: LocalHistoryEntry
     let compact: Bool
+    var selected = false
+    var onSelect: (() -> Void)? = nil
+    @FocusState private var keyboardFocused: Bool
     @State private var hovering = false
     @State private var expanded = false
     @State private var copied = false
@@ -448,7 +490,7 @@ struct HistoryRow: View {
                 } else {
                     SelectableText(text: entry.displayText, font: .systemFont(ofSize: 13.5), color: NSColor(Theme.ink),
                                    maxLines: expanded ? 0 : 4,
-                                   onPlainClick: { expanded.toggle() })
+                                   onPlainClick: { selectOrExpand() })
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .clipped()
@@ -476,13 +518,12 @@ struct HistoryRow: View {
                         let held = ["suspected-noise", "recognition-repetition", "quantity-conflict"].contains(entry.fallbackReason ?? "") && !entry.inserted
                         Badge(text: held ? L10n.text("未自动输入") : L10n.text("已用原文"), tint: Theme.warning).fixedSize()
                     }
-                    if copied { Badge(text: L10n.text("已复制"), tint: Theme.success).fixedSize() }
                 }
             }
             // Reserve the action width. Hover must not change the text wrapping
             // after AppKit has reported its height to SwiftUI.
                 HStack(spacing: 2) {
-                    IconButton(symbol: "doc.on.doc", help: L10n.text("复制")) { copy(raw: false) }
+                    IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? L10n.text("已复制") : L10n.text("复制")) { copy(raw: false) }
                     if !compact {
                         IconButton(symbol: "text.quote", help: L10n.text("复制原话")) { copy(raw: true) }
                         if canRetry {
@@ -491,16 +532,22 @@ struct HistoryRow: View {
                         IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
                     }
                 }
-                .opacity(hovering || copied ? 1 : 0)
-                .allowsHitTesting(hovering || copied)
-                .accessibilityHidden(!hovering && !copied)
+                .opacity(hovering || copied || selected || keyboardFocused ? 1 : 0)
+                .allowsHitTesting(hovering || copied || selected || keyboardFocused)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
-        .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
+        .background(selected ? Theme.selection : hovering ? Theme.cardHover : Color.clear)
+        .focusable(!compact).focused($keyboardFocused)
         .onHover { hovering = $0 }
-        .onTapGesture { if !compact { expanded.toggle() } else { model.page = .history } }
+        .onTapGesture { selectOrExpand() }
+        .onSubmit { selectOrExpand() }
+        .contextMenu {
+            Button(L10n.text("复制")) { copy(raw: false) }
+            Button(L10n.text("复制原话")) { copy(raw: true) }
+            if !compact { Button(L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) } }
+        }
         .task(id: entry.audioPath) {
             retryAvailable = false
             guard !compact, entry.strength != "promptbeta", let path = entry.audioPath else { return }
@@ -516,5 +563,74 @@ struct HistoryRow: View {
         model.actions?.copyEntry(id: entry.id, raw: raw)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+    }
+
+    private func selectOrExpand() {
+        if compact {
+            model.selectedHistoryID = entry.id
+            model.page = .history
+        } else if let onSelect {
+            onSelect()
+        } else {
+            expanded.toggle()
+        }
+    }
+}
+
+private struct HistoryDetail: View {
+    @EnvironmentObject var model: AppModel
+    let entry: LocalHistoryEntry
+    let close: () -> Void
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(L10n.text("记录详情")).font(.system(size: 14, weight: .semibold))
+                Spacer()
+                IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
+            }.padding(24)
+            Divider().overlay(Theme.border)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppNames.name(for: entry.app)).font(.system(size: 13, weight: .medium))
+                        Text(Formatters.dayTitle(entry.ts) + " · " + Formatters.time.string(from: entry.ts))
+                            .font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                    }
+                    detailText(L10n.text("听写结果"), entry.displayText)
+                    if !entry.raw.isEmpty, entry.raw != entry.displayText { detailText(L10n.text("原始识别"), entry.raw) }
+                    if let review = entry.qualityReview {
+                        detailText(L10n.text("原始识别"), review.original)
+                        detailText(L10n.text("待核对整理结果"), review.candidate)
+                    }
+                }
+                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Divider().overlay(Theme.border)
+            HStack {
+                Button(copied ? L10n.text("已复制") : L10n.text("复制")) {
+                    model.actions?.copyEntry(id: entry.id, raw: false)
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+                }.buttonStyle(PrimaryButtonStyle())
+                Spacer()
+                IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) {
+                    model.actions?.deleteEntry(id: entry.id)
+                }
+            }.padding(24)
+        }
+        .foregroundColor(Theme.ink)
+        .onExitCommand(perform: close)
+    }
+
+    private func detailText(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 11, weight: .medium)).foregroundColor(Theme.tertiary)
+            Text(text.isEmpty ? L10n.text("（没有识别到内容）") : text)
+                .font(.system(size: 14)).lineSpacing(5).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }

@@ -186,6 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
+        HubFeedback.shared.dismissAll()
         recorder.cancel()
         dictation.dropCancelledRecording()
         onboarding.practice.cancel()
@@ -452,11 +453,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     // MARK: settings that change the app itself
 
     func applyGeneralSettings() {
+        let appearance: NSAppearance?
         switch settings.appearance {
-        case .system: NSApp.appearance = nil
-        case .light: NSApp.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        case .system: appearance = nil
+        case .light: appearance = NSAppearance(named: .aqua)
+        case .dark: appearance = NSAppearance(named: .darkAqua)
         }
+        HubThemeReveal.apply(appearance)
         let policy: NSApplication.ActivationPolicy = settings.showInDock ? .regular : .accessory
         if NSApp.activationPolicy() != policy {
             NSApp.setActivationPolicy(policy)
@@ -710,10 +713,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func deleteEntry(id: String) {
-        HistoryStore.shared.remove(id: id)
+        let history = HistoryStore.shared
+        guard history.removeWithUndo(id: id) else { return }
+        if model.selectedHistoryID == id { model.selectedHistoryID = nil }
+        HubFeedback.shared.show(L10n.text("记录已删除"),
+                                undo: { history.undoRemoval(id: id) },
+                                expired: { history.finishRemoval(id: id) })
     }
 
     func clearHistory() {
+        HubFeedback.shared.dismissAll()
         HistoryStore.shared.clear()
         ActivityLog.shared.clear()
     }
