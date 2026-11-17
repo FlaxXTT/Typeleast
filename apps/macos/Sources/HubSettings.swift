@@ -585,15 +585,17 @@ struct HotkeyField: View {
 struct ModelSection: View {
     @EnvironmentObject var model: AppModel
     @State private var keyDraft = ""
-    @State private var keySaved = false
     @State private var models: [String] = []
     @State private var status = ""
     @State private var statusOK = true
     @State private var busy = false
+    @State private var requests = FormRequest<[String]>()
 
     private var settings: Settings { model.settings }
+    private var keySaved: Bool { KeychainStore.exists(account: settings.llmPresetID) }
     private var preset: LLMPreset { LLMPreset.find(settings.llmPresetID) }
     private var normalizedKeyDraft: String { keyDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var requestContext: [String] { [settings.llmPresetID, settings.llmBaseURL, settings.llmModel, normalizedKeyDraft] }
 
     var body: some View {
         SettingsSection(title: L10n.text("整理模型")) {
@@ -662,11 +664,22 @@ struct ModelSection: View {
                 }
         }
         .onAppear { reloadForPreset() }
+        .onChange(of: requestContext) { _ in
+            if requests.isActive { invalidateRequest() }
+        }
+        .onChange(of: settings.llmBaseURL) { _ in models = [] }
+        .onDisappear { invalidateRequest() }
+    }
+
+    private func invalidateRequest() {
+        requests.invalidate()
+        busy = false
+        status = ""
     }
 
     private func reloadForPreset() {
+        invalidateRequest()
         keyDraft = ""
-        keySaved = KeychainStore.exists(account: settings.llmPresetID)
         models = []
         status = ""
         model.objectWillChange.send()
@@ -699,12 +712,15 @@ struct ModelSection: View {
         let key = keyForRequest()
         guard !preset.needsKey || !key.isEmpty else { status = L10n.text("没有 Key"); statusOK = false; return }
         let route = LLMRoute(baseURL: base, model: "", apiKey: key)
+        let context = requestContext
+        let request = requests.begin(context: context)
         busy = true
         status = L10n.text("正在获取…")
         statusOK = true
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try ServiceClient.shared.listModelsSync(route: route) }
             DispatchQueue.main.async {
+                guard requests.finish(request, context: requestContext) else { return }
                 busy = false
                 switch result {
                 case .success(let ids) where !ids.isEmpty:
@@ -742,7 +758,6 @@ struct ModelSection: View {
         guard deleting || !value.isEmpty else { return keySaved }
         let ok = KeychainStore.write(value, account: settings.llmPresetID)
         if ok {
-            keySaved = !deleting
             keyDraft = ""
         }
         if !ok {
@@ -760,12 +775,15 @@ struct ModelSection: View {
 
     private func test() {
         guard let route = draftRoute() else { return }
+        let context = requestContext
+        let request = requests.begin(context: context)
         busy = true
         status = L10n.text("正在测试…")
         statusOK = true
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try ServiceClient.shared.testLLMSync(route: route) }
             DispatchQueue.main.async {
+                guard requests.finish(request, context: requestContext) else { return }
                 busy = false
                 switch result {
                 case .success(let answer) where answer.ok:

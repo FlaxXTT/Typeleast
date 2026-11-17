@@ -87,6 +87,28 @@ func settingsScrollTests(output: String) throws {
             settle(view)
             checkEq("returning to General refreshes once", queries, baseline + 2)
             check("returning to General receives the latest disabled state", status.status == .notRegistered)
+            if dark, width == 726 {
+                var presenceQueries = 0
+                KeychainStore.invalidatePresence()
+                KeychainStore.presenceQueryOverride = { _ in presenceQueries += 1; return false }
+                defer {
+                    KeychainStore.presenceQueryOverride = nil
+                    KeychainStore.invalidatePresence()
+                }
+                model.settingsCategory = 1
+                settle(view)
+                checkEq("model form reads key metadata once", presenceQueries, 1)
+                if let modelScroll = scrollView(in: view), let document = modelScroll.documentView {
+                    for step in 0..<30 {
+                        let distance = max(0, document.bounds.height - modelScroll.contentView.bounds.height)
+                        modelScroll.contentView.scroll(to: NSPoint(x: 0, y: distance * CGFloat(step % 10) / 9))
+                        modelScroll.reflectScrolledClipView(modelScroll.contentView)
+                        model.hint = "model fixture \(step)"
+                        settle(view)
+                    }
+                    checkEq("scrolling model settings makes no repeated Keychain queries", presenceQueries, 1)
+                } else { check("model settings have a native scroll view", false) }
+            }
             window.orderOut(nil)
         }
     }

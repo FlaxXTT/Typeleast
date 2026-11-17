@@ -2132,6 +2132,7 @@ do {
 
 contextPreferencesTests()
 meetingTests()
+performanceRegressionTests()
 
 server.stop()
 print("")

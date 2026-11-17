@@ -108,7 +108,13 @@ final class AppModel: ObservableObject {
         observers.append(center.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.settingsRevision += 1
         })
+        observers.append(center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            KeychainStore.invalidatePresence()
+            self?.settingsRevision += 1
+        })
     }
+
+    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
     func reloadHistory() {
         history = HistoryStore.shared.entries

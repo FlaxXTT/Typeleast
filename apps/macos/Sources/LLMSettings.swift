@@ -59,7 +59,14 @@ enum KeychainStore {
     /// OSStatus of the last write, for diagnostics and for telling the user why saving failed.
     private(set) static var lastStatus: OSStatus = errSecSuccess
     /// Screenshot/test seam: when set, the Keychain is never touched.
-    static var stub: [String: String]?
+    static var stub: [String: String]? { didSet { invalidatePresence() } }
+    /// Tests can count attribute queries without touching real credentials.
+    static var presenceQueryOverride: ((String) -> Bool)?
+    private static var presence: [String: Bool] = [:]
+
+    /// Call on app activation so edits in Keychain Access are reflected. Values
+    /// already authorized in this process remain separate from display metadata.
+    static func invalidatePresence() { lock.withLock { presence.removeAll() } }
 
     // Each item is read from the Keychain at most once per launch. macOS asks the user
     // whenever a build it has not seen reads an item, so reading on every redraw meant
@@ -86,7 +93,10 @@ enum KeychainStore {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         let text = status == errSecSuccess ? (item as? Data).flatMap { String(data: $0, encoding: .utf8) } : nil
         // A refused or cancelled dialog is remembered too: no second dialog this launch.
-        lock.withLock { cache[account] = .some(text) }
+        lock.withLock {
+            cache[account] = .some(text)
+            if text != nil { presence[account] = true }
+        }
         return text
     }
 
@@ -113,14 +123,22 @@ enum KeychainStore {
         var item: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data, let value = String(data: data, encoding: .utf8) else { return nil }
-        lock.withLock { cache[account] = .some(value) }
+        lock.withLock { cache[account] = .some(value); presence[account] = true }
         return value
     }
 
     /// Whether an item exists, from its attributes only: never opens a password dialog.
     static func exists(account: String) -> Bool {
-        if let stub = stub { return stub[account] != nil }
-        if let hit = lock.withLock({ cache[account] }), hit != nil { return true }
+        if let hit = lock.withLock({ presence[account] }) { return hit }
+        let found: Bool
+        if let query = presenceQueryOverride { found = query(account) }
+        else if let stub { found = stub[account] != nil }
+        else { found = queryPresence(account: account) }
+        lock.withLock { presence[account] = found }
+        return found
+    }
+
+    private static func queryPresence(account: String) -> Bool {
         let context = LAContext()
         context.interactionNotAllowed = true
         let query: [String: Any] = [
@@ -171,7 +189,7 @@ enum KeychainStore {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         lastStatus = SecItemAdd(item as CFDictionary, nil)
-        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value) } }
+        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value); presence[account] = true } }
         return lastStatus == errSecSuccess
     }
 
@@ -190,14 +208,14 @@ enum KeychainStore {
         if value.isEmpty {
             lastStatus = SecItemDelete(base as CFDictionary)
             guard lastStatus == errSecSuccess || lastStatus == errSecItemNotFound else { return false }
-            lock.withLock { cache[account] = .some(nil) }
+            lock.withLock { cache[account] = .some(nil); presence[account] = false }
             return true
         }
         // Update in place: a refused/failed save must leave the working key intact.
         let changes = [kSecValueData as String: Data(value.utf8)]
         lastStatus = SecItemUpdate(base as CFDictionary, changes as CFDictionary)
         if lastStatus == errSecItemNotFound { return create(value, account: account) }
-        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value) } }
+        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value); presence[account] = true } }
         return lastStatus == errSecSuccess
     }
 
@@ -210,7 +228,7 @@ enum KeychainStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        lock.withLock { cache[account] = nil }
+        lock.withLock { cache[account] = nil; presence[account] = nil }
         return SecItemDelete(base as CFDictionary) == errSecSuccess
     }
 

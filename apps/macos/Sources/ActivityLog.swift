@@ -17,9 +17,15 @@ final class ActivityLog {
     private let d: UserDefaults
     private let calendar: Calendar
     /// "yyyy-MM-dd" in the local calendar -> that day's counts.
-    private(set) var days: [String: ActivityDay] = [:]
+    private(set) var days: [String: ActivityDay] = [:] {
+        didSet { cachedStreaks = nil; cachedActiveDays = nil }
+    }
+    private var cachedStreaks: (day: Date, current: Int, longest: Int)?
+    private var cachedActiveDays: Int?
+    /// Lets regression tests prove redraws do not rescan the full log.
+    private(set) var streakBuildCount = 0
 
-    init(defaults: UserDefaults, calendar: Calendar = .current) {
+    init(defaults: UserDefaults, calendar: Calendar = .autoupdatingCurrent) {
         d = defaults
         self.calendar = calendar
         if let data = d.data(forKey: key),
@@ -63,14 +69,22 @@ final class ActivityLog {
 
     func day(_ date: Date) -> ActivityDay { days[dayKey(date)] ?? ActivityDay() }
 
-    var activeDays: Int { days.values.filter { $0.dictations > 0 }.count }
+    var activeDays: Int {
+        if let cachedActiveDays { return cachedActiveDays }
+        let count = days.values.filter { $0.dictations > 0 }.count
+        cachedActiveDays = count
+        return count
+    }
 
     /// The current streak runs back from today, or from yesterday while today has
     /// nothing yet (a streak is not broken until the day is over).
     func streaks(today: Date = Date()) -> (current: Int, longest: Int) {
+        let day = calendar.startOfDay(for: today)
+        if let cachedStreaks, cachedStreaks.day == day { return (cachedStreaks.current, cachedStreaks.longest) }
+        streakBuildCount += 1
         let active = Set(days.filter { $0.value.dictations > 0 }.keys)
         var current = 0
-        var cursor = calendar.startOfDay(for: today)
+        var cursor = day
         if !active.contains(dayKey(cursor)) { cursor = calendar.date(byAdding: .day, value: -1, to: cursor) ?? cursor }
         while active.contains(dayKey(cursor)) {
             current += 1
@@ -85,6 +99,7 @@ final class ActivityLog {
             longest = max(longest, run)
             previous = date
         }
+        cachedStreaks = (day, current, longest)
         return (current, longest)
     }
 

@@ -131,6 +131,8 @@ final class MeetingController: ObservableObject {
     @Published private(set) var download: SpeechModelOperation?
 
     private let client: ServiceClient
+    private let modelRefresh = CoalescingRefresh<SpeechModelCatalog>()
+    private var modelPoll: DispatchWorkItem?
     let recorder = Recorder()
     private var meter: Timer?
     /// Kept until a transcript exists, so a failure (a missing model, say) can be retried.
@@ -157,16 +159,19 @@ final class MeetingController: ObservableObject {
     // MARK: model
 
     func refreshModel() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self, let catalog = try? self.client.speechModelsSync() else { return }
+        modelPoll?.cancel()
+        modelPoll = nil
+        modelRefresh.request(work: { [client] in try client.speechModelsSync() }) { [weak self] result in
+            guard let self, case .success(let catalog) = result else { return }
             let operation = catalog.operation?.modelId == MeetingLimits.modelID ? catalog.operation : nil
             let installed = catalog.models.first { $0.id == MeetingLimits.modelID }?.installed ?? false
-            DispatchQueue.main.async {
-                self.modelInstalled = installed
-                self.download = operation?.phase == "downloading" ? operation : nil
-                if self.download != nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.refreshModel() }
-                }
+            if self.modelInstalled != installed { self.modelInstalled = installed }
+            let download = operation?.phase == "downloading" ? operation : nil
+            if self.download != download { self.download = download }
+            if self.download != nil {
+                let poll = DispatchWorkItem { [weak self] in self?.refreshModel() }
+                self.modelPoll = poll
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: poll)
             }
         }
     }
@@ -177,7 +182,7 @@ final class MeetingController: ObservableObject {
             guard let self else { return }
             do {
                 try self.client.speechModelActionSync(id: MeetingLimits.modelID, download: true, endpoint: mirror, activate: false)
-                self.refreshModel()
+                DispatchQueue.main.async { self.refreshModel() }
             } catch { DispatchQueue.main.async { self.fail(L10n.text("模型下载没有开始，请重试。")) } }
         }
     }
