@@ -42,7 +42,7 @@ struct HubNoticeStack: View {
             ForEach(feedback.notices) { notice in
                 HStack(spacing: 12) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.success)
-                    Text(notice.message).font(.system(size: 13)).foregroundColor(Theme.ink)
+                    Text(notice.message).font(.system(size: 14)).foregroundColor(Theme.ink)
                     if notice.undo != nil {
                         Button(L10n.text("撤销")) { feedback.dismiss(notice.id, undo: true) }
                             .buttonStyle(.plain).foregroundColor(Theme.accent)
@@ -51,7 +51,7 @@ struct HubNoticeStack: View {
                         Image(systemName: "xmark").font(.system(size: 10)).foregroundColor(Theme.tertiary)
                     }.buttonStyle(.plain).help(L10n.text("关闭"))
                 }
-                .padding(32)
+                .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.card))
                 .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.border, lineWidth: 1))
                 .shadow(color: .black.opacity(0.12), radius: 12, y: 4)

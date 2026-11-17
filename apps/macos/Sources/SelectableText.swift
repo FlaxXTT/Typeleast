@@ -10,6 +10,7 @@ struct SelectableText: NSViewRepresentable {
     let color: NSColor
     /// 0 for no limit.
     let maxLines: Int
+    var lineHeight: CGFloat? = nil
     let onPlainClick: () -> Void
 
     func makeNSView(context: Context) -> HistoryTextView {
@@ -32,6 +33,7 @@ struct SelectableText: NSViewRepresentable {
         if view.string != text { view.string = text; layoutChanged = true }
         if view.font != font { view.font = font; layoutChanged = true }
         if view.textColor != color { view.textColor = color }
+        if view.lineHeight != lineHeight { view.lineHeight = lineHeight; layoutChanged = true }
         if let container = view.textContainer {
             let mode: NSLineBreakMode = maxLines == 0 ? .byWordWrapping : .byTruncatingTail
             if container.maximumNumberOfLines != maxLines {
@@ -40,7 +42,14 @@ struct SelectableText: NSViewRepresentable {
             if container.lineBreakMode != mode { container.lineBreakMode = mode; layoutChanged = true }
         }
         view.onPlainClick = onPlainClick
-        if layoutChanged { view.invalidateMeasurement() }
+        if layoutChanged {
+            let paragraph = NSMutableParagraphStyle()
+            if let lineHeight { paragraph.minimumLineHeight = lineHeight; paragraph.maximumLineHeight = lineHeight }
+            view.defaultParagraphStyle = paragraph
+            view.textStorage?.addAttribute(.paragraphStyle, value: paragraph,
+                                            range: NSRange(location: 0, length: view.string.utf16.count))
+            view.invalidateMeasurement()
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: HistoryTextView, context: Context) -> CGSize? {
@@ -49,6 +58,7 @@ struct SelectableText: NSViewRepresentable {
 }
 
 final class HistoryTextView: NSTextView {
+    var lineHeight: CGFloat?
     var onPlainClick: (() -> Void)?
     private var cachedMeasurement: CGSize?
 

@@ -16,13 +16,13 @@ struct OnboardingPracticeView: View {
             Text(practice.sample)
                 .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
                 .fixedSize(horizontal: false, vertical: true)
             PracticePill(practice: practice)
                 .environment(\.colorScheme, .dark)
                 .padding(.top, 4)
             if !practice.status.isEmpty {
-                Text(practice.status).font(.system(size: 13, weight: .medium))
+                Text(practice.status).font(.system(size: 14, weight: .medium))
                     .foregroundColor(practice.needsReview ? Theme.warning : (practice.complete ? Theme.success : Theme.secondary))
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             }
@@ -32,8 +32,8 @@ struct OnboardingPracticeView: View {
                     Text(row.text).font(.system(size: 14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(32)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
             }
         }
         .onAppear { practice.acceptsShortcut = true }
@@ -49,7 +49,7 @@ private struct PracticePill: View {
         if practice.phase == .idle {
             Button(action: practice.toggle) {
                 HStack(spacing: 10) {
-                    Image(systemName: "waveform").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "waveform").font(.system(size: 14, weight: .semibold))
                         .frame(width: 28, height: 28)
                         .background(Circle().fill(Color.white.opacity(0.08)))
                     Text(practice.complete ? L10n.text("再试一次") : L10n.text("点这里开始"))

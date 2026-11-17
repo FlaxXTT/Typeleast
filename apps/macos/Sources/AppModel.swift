@@ -68,6 +68,7 @@ final class AppModel: ObservableObject {
 
     @Published var page: HubPage = .home
     @Published var settingsCategory = 0
+    @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
     /// Opening the hub replays only the Home presentation, not changes to live stats.
     @Published var homePresentationID = 0
@@ -124,6 +125,11 @@ final class AppModel: ObservableObject {
     }
 
     deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+
+    func navigate(to page: HubPage) {
+        if page == .settings { settingsPresented = true }
+        else { self.page = page }
+    }
 
     func reloadHistory() {
         history = HistoryStore.shared.entries

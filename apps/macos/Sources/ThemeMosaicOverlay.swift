@@ -27,6 +27,7 @@ private struct ThemeMosaicGrid {
 }
 
 final class ThemeMosaicOverlay: NSView {
+    var onFinish: (() -> Void)?
     private static let flipDuration: TimeInterval = 0.42
     private static let waveDuration: TimeInterval = 0.32
     private static let settleDuration: TimeInterval = 0.04
@@ -35,13 +36,20 @@ final class ThemeMosaicOverlay: NSView {
     private let oldImage: NSImage
     private let cover: NSImageView
     private weak var previousResponder: NSResponder?
+    private var appearanceLink: CADisplayLink?
+    private var appearanceFrames = 0
+    private var renderReady: (() -> Void)?
+    private var windowCloseObserver: NSObjectProtocol?
     override var acceptsFirstResponder: Bool { true }
 
-    init(frame: NSRect, oldImage: NSImage) {
+    init(frame: NSRect, oldImage: NSImage, cornerRadius: CGFloat = Theme.panelRadius) {
         self.oldImage = oldImage
         cover = NSImageView(frame: NSRect(origin: .zero, size: frame.size))
         super.init(frame: frame)
         wantsLayer = true
+        layer?.cornerCurve = .circular
+        layer?.cornerRadius = min(cornerRadius, min(frame.width, frame.height) / 2)
+        layer?.masksToBounds = true
         setAccessibilityElement(false)
         cover.image = oldImage
         cover.imageScaling = .scaleAxesIndependently
@@ -53,6 +61,28 @@ final class ThemeMosaicOverlay: NSView {
     func lockContent(in window: NSWindow) {
         previousResponder = window.firstResponder
         window.makeFirstResponder(self)
+        windowCloseObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
+                                                                      object: window, queue: .main) { [weak self] _ in
+            self?.finish()
+        }
+    }
+
+    func afterAppearanceRender(_ ready: @escaping () -> Void) {
+        renderReady = ready
+        appearanceFrames = 0
+        let link = displayLink(target: self, selector: #selector(appearanceFrame(_:)))
+        appearanceLink = link
+        link.add(to: .main, forMode: .common)
+    }
+
+    @objc private func appearanceFrame(_ link: CADisplayLink) {
+        appearanceFrames += 1
+        guard appearanceFrames == 2 else { return }
+        link.invalidate()
+        appearanceLink = nil
+        let ready = renderReady
+        renderReady = nil
+        ready?()
     }
 
     // Consume content input while its two snapshots are on screen.
@@ -66,10 +96,20 @@ final class ThemeMosaicOverlay: NSView {
     override func keyUp(with event: NSEvent) {}
 
     func finish() {
+        let completion = onFinish
+        onFinish = nil
+        appearanceLink?.invalidate()
+        appearanceLink = nil
+        renderReady = nil
+        if let windowCloseObserver {
+            NotificationCenter.default.removeObserver(windowCloseObserver)
+            self.windowCloseObserver = nil
+        }
         if let window, window.firstResponder === self {
             window.makeFirstResponder(previousResponder)
         }
         removeFromSuperview()
+        completion?()
     }
 
     func crossfade() {
@@ -113,7 +153,9 @@ final class ThemeMosaicOverlay: NSView {
                 let top = (size.height * CGFloat(grid.rows - row) / CGFloat(grid.rows) * scale).rounded() / scale
                 let rect = CGRect(x: left, y: bottom, width: right - left, height: top - bottom)
                     .insetBy(dx: Self.gap / 2, dy: Self.gap / 2)
-                let crop = CGRect(x: rect.minX / size.width, y: rect.minY / size.height,
+                // Image crops start at the top, while these layer positions start
+                // at the bottom. Keep each old/new image fragment in its own row.
+                let crop = CGRect(x: rect.minX / size.width, y: (size.height - rect.maxY) / size.height,
                                   width: rect.width / size.width, height: rect.height / size.height)
                 let horizontal = (row + column).isMultiple(of: 2)
                 let x: CGFloat = horizontal ? 1 : 0
@@ -179,8 +221,11 @@ final class ThemeMosaicOverlay: NSView {
     private func face(_ image: CGImage, crop: CGRect, size: CGSize, scale: CGFloat) -> CALayer {
         let face = CALayer()
         face.frame = CGRect(origin: .zero, size: size)
-        face.contents = image
-        face.contentsRect = crop
+        let pixels = CGRect(x: (crop.minX * CGFloat(image.width)).rounded(),
+                            y: (crop.minY * CGFloat(image.height)).rounded(),
+                            width: (crop.width * CGFloat(image.width)).rounded(),
+                            height: (crop.height * CGFloat(image.height)).rounded())
+        face.contents = image.cropping(to: pixels)
         face.contentsGravity = .resize
         face.contentsScale = scale
         face.isDoubleSided = false

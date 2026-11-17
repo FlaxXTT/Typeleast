@@ -326,11 +326,11 @@ struct SelectionBubbleView: View {
             case .loading:
                 HStack(spacing: 8) {
                     TranslationSunset(working: true)
-                    Text(L10n.text("正在翻译…")).font(.system(size: 13))
+                    Text(L10n.text("正在翻译…")).font(.system(size: 14))
                 }
             case .done(let text):
                 HubScrollView(showsChrome: false) {
-                    Text(text).font(.system(size: 13.5)).lineSpacing(3)
+                    Text(text).font(.system(size: 14)).lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxHeight: 260)
@@ -346,14 +346,14 @@ struct SelectionBubbleView: View {
             case .failed(let message):
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle").foregroundColor(.orange)
-                    Text(message).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                    Text(message).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .padding(40)
+        .padding(24)
         .frame(width: 350, height: 500, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color(nsColor: .windowBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.primary.opacity(0.1)))
+        .background(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular).fill(Color(nsColor: .windowBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular).stroke(Color.primary.opacity(0.1)))
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
     }

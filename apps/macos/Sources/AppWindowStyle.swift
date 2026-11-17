@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Match border-radius: 99px with circular arcs, including owned window surfaces.
+/// Rounded native surfaces use the panel radius; the voice capsule has its own geometry.
 enum AppWindowStyle {
     static func fixSize(_ window: NSWindow, to size: NSSize) {
         window.styleMask.remove(.resizable)
@@ -11,7 +11,7 @@ enum AppWindowStyle {
         window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
-    static func round(_ window: NSWindow) {
+    static func round(_ window: NSWindow, radius: CGFloat = Theme.panelRadius) {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
@@ -19,15 +19,13 @@ enum AppWindowStyle {
         if let content = window.contentView {
             content.wantsLayer = true
             content.layer?.cornerCurve = .circular
-            content.layer?.cornerRadius = min(99, min(content.bounds.width, content.bounds.height) / 2)
+            content.layer?.cornerRadius = min(radius, min(content.bounds.width, content.bounds.height) / 2)
             content.layer?.masksToBounds = true
         }
-        // Use the native frame as parent; the original traffic-light cluster can be
-        // too narrow to show buttons moved inward for a 99-point corner.
-        if let content = window.contentView, let frame = content.superview {
+        if window.sheetParent == nil, let content = window.contentView, let frame = content.superview {
             for (index, type) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
                 if let button = window.standardWindowButton(type) {
-                    let rect = NSRect(x: 60 + CGFloat(index) * 20,
+                    let rect = NSRect(x: 14 + CGFloat(index) * 20,
                                       y: content.isFlipped ? 14 : content.bounds.maxY - 28,
                                       width: 14, height: 14)
                     if button.superview !== frame {
@@ -44,23 +42,31 @@ enum AppWindowStyle {
 }
 
 struct RoundedWindowMarker: NSViewRepresentable {
-    func makeNSView(context: Context) -> WindowRoundingView { WindowRoundingView() }
-    func updateNSView(_ view: WindowRoundingView, context: Context) { view.apply() }
+    var radius: CGFloat = Theme.panelRadius
+    func makeNSView(context: Context) -> WindowRoundingView {
+        let view = WindowRoundingView()
+        view.radius = radius
+        return view
+    }
+    func updateNSView(_ view: WindowRoundingView, context: Context) { view.radius = radius; view.apply() }
 }
 
 final class WindowRoundingView: NSView {
     private weak var configured: NSWindow?
     private var size = NSSize.zero
+    var radius: CGFloat = Theme.panelRadius
+    private var appliedRadius: CGFloat = -1
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); apply() }
     override func layout() { super.layout(); apply() }
     func apply() {
         guard let window, let content = window.contentView else { return }
-        guard configured !== window || size != content.bounds.size else { return }
+        guard configured !== window || size != content.bounds.size || appliedRadius != radius else { return }
         configured = window
         size = content.bounds.size
-        AppWindowStyle.round(window)
-        DispatchQueue.main.async { [weak window] in
-            if let window { AppWindowStyle.round(window) }
+        appliedRadius = radius
+        AppWindowStyle.round(window, radius: radius)
+        DispatchQueue.main.async { [weak window, radius] in
+            if let window { AppWindowStyle.round(window, radius: radius) }
         }
     }
 }
@@ -75,7 +81,7 @@ final class CapsuleEditorScrollView: NSScrollView {
         super.layout()
         wantsLayer = true
         layer?.cornerCurve = .circular
-        layer?.cornerRadius = min(99, min(bounds.width, bounds.height) / 2)
+        layer?.cornerRadius = min(Theme.radius, min(bounds.width, bounds.height) / 2)
         layer?.masksToBounds = true
     }
 }

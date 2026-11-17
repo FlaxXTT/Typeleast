@@ -39,7 +39,7 @@ struct HubCommandPalette: View {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         var commands = HubPage.allCases.map { page in
             Result(id: "page-" + page.rawValue, title: page.title, detail: L10n.text("打开页面"), symbol: page.symbol) {
-                model.page = page
+                model.navigate(to: page)
             }
         }
         commands += AppearancePreference.allCases.map { appearance in
@@ -81,14 +81,14 @@ struct HubCommandPalette: View {
                     LazyVStack(spacing: 4) {
                         if results.isEmpty {
                             Text(L10n.text("没有匹配的记录或命令"))
-                                .foregroundColor(Theme.secondary).frame(maxWidth: .infinity).padding(32)
+                                .foregroundColor(Theme.secondary).frame(maxWidth: .infinity).padding(16)
                         }
                         ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
                             Button { activate(index) } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: result.symbol).frame(width: 20).foregroundColor(Theme.accent)
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(result.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                        Text(result.title).font(.system(size: 14, weight: .medium)).lineLimit(1)
                                         Text(result.detail).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
                                     }
                                     Spacer()
@@ -117,7 +117,7 @@ struct HubCommandPalette: View {
         }
         .frame(width: 560, height: 420)
         .background(Theme.window).foregroundColor(Theme.ink)
-        .background(RoundedWindowMarker()).buttonBorderShape(.capsule)
+        .background(RoundedWindowMarker())
         .onChange(of: searchInputs, initial: true) { old, new in
             results = buildResults()
             selected = old.query == new.query ? min(selected, max(0, results.count - 1)) : 0

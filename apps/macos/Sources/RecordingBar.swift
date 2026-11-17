@@ -273,7 +273,7 @@ final class PillView: NSView {
     /// Scale the existing geometry together, including the waveform and hit areas.
     static let displayScale: CGFloat = 1
     /// Diameter of the cancel (left) and finish (right) buttons.
-    static let buttonSize: CGFloat = 26
+    static let buttonSize: CGFloat = 24
 
     var holdsRecordingWidth: Bool {
         recordingHandoff != nil && !reduceMotion && phaseElapsed < Self.handoffHold
@@ -487,7 +487,7 @@ final class PillView: NSView {
 
     private func fillBadge(in rect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
+        let shape = RoundedRectangle(cornerRadius: VoiceBarGeometry.radius, style: .circular)
         context.addPath(shape.path(in: rect).cgPath)
         context.fillPath()
     }

@@ -1,10 +1,15 @@
 import AppKit
 
 /// Shared vector artwork for the app bundle, Dock, sidebar and onboarding.
-/// Enclosure: Apple App Icon Template (Illustrator, iOS 27), scaled into an
-/// 824 × 824 tile on the legacy macOS 1024 × 1024 ICNS canvas.
+/// Enclosure: Apple App Icon Template (Illustrator, iOS 27). System icons use an
+/// 824 × 824 tile on a 1024px canvas; interface marks fill their square bounds.
 /// Source and reproduction instructions: docs/APP_ICON.md.
 enum AppIconArtwork {
+    enum Surface {
+        case systemIcon
+        case interface
+    }
+
     static let canvasSize: CGFloat = 1024
     static let barRatios: [CGFloat] = [0.30, 0.58, 1.00, 0.72, 0.42]
     static let waveformOccupancy: CGFloat = 0.618
@@ -69,14 +74,18 @@ enum AppIconArtwork {
                 blue: CGFloat(hex & 255) / 255, alpha: alpha)
     }
 
-    static func draw(in context: CGContext, rect: CGRect) {
+    static func draw(in context: CGContext, rect: CGRect, surface: Surface = .systemIcon) {
         context.saveGState()
         defer { context.restoreGState() }
         context.translateBy(x: rect.minX, y: rect.minY)
         context.scaleBy(x: rect.width / canvasSize, y: rect.height / canvasSize)
         context.setShouldAntialias(true)
 
-        let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
+        // Dock/Finder use the platform canvas margin. Interface marks fill their
+        // control bounds; both derive the waveform from the same 0.618 tile ratio.
+        let tile = surface == .systemIcon
+            ? CGRect(x: 100, y: 100, width: 824, height: 824)
+            : CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize)
         let enclosure = outline(in: tile)
         context.saveGState()
         context.addPath(enclosure)
@@ -120,10 +129,10 @@ enum AppIconArtwork {
         }
     }
 
-    static func image(size: CGFloat) -> NSImage {
+    static func image(size: CGFloat, surface: Surface = .systemIcon) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            draw(in: context, rect: rect)
+            draw(in: context, rect: rect, surface: surface)
             return true
         }
     }

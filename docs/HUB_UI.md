@@ -7,7 +7,9 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 - Window: white / `#242121`; sidebar: `#F7F6F5` / `#1D1A1A`.
 - Cards: `#F2F1F0` / `#3C3B3B`; text: `#111111` / `#F2F1F0`.
 - Primary actions and selection: `#1F5DF2` / `#4F7BFF`.
-- Rounded UI surfaces use a 99-point circular radius, clamped to half the width/height. Page insets are 32 points. Controls, cards, fields, activity cells and owned popups share this rule; larger cards reserve more space for their content.
+- Corners are tiered: base controls 8pt, small controls 6pt, cards 12pt, history groups 10pt, Home cards and sidebar 20pt, normal panels 16pt, Settings 12pt. True pills keep capsule geometry. Page horizontal insets are 24pt, with a 44pt top drag region and 16pt bottom inset.
+- The sidebar is 210pt including its 8pt outer inset; its 202pt inner surface has a 20pt corner and 44/12/8pt top/horizontal/bottom padding. Navigation rows are 36pt high with 16pt icons and 14pt text.
+- Prompt Medium titles are 48pt on Home, 36pt on other pages, and 24pt for sections. Body, row, explanatory and small-label sizes are 16, 14, 12 and 11pt. Prompt fonts and their OFL licence ship in Resources/Fonts.
 - Flat borders separate normal surfaces. Shadows belong to transient notices.
 - Control feedback uses 120–200ms easing. Meeting cards do not bounce or acquire decorative blue outlines.
 
@@ -16,7 +18,7 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 ### Home insights
 
 The supplied Home screenshot defines the insights area: system bold figures, grey labels,
-large white cards with circular 99-point corners, a soft grey-to-white dot-grid backdrop and a
+large white cards with 20-point corners, a soft grey-to-white dot-grid backdrop and a
 pill-shaped Share button. Figures use the default system design rather than rounded digits.
 The light heatmap colours sampled from the reference are `#F8F8F8` (empty), `#ECF0FE`,
 `#C6D2FC`, `#A0B4FB` and `#426AF6`. The screenshot's Display P3 colour space is retained
@@ -44,7 +46,7 @@ field editor handles text input; arrow keys select results, Return opens them an
 closes the panel. Input-method candidate selection takes priority over command navigation.
 
 History retains its header and filters while the list scrolls. Date headings pin at the
-top. Selecting a row opens a trailing detail column when the content area is at least
+top. Groups have 10pt corners at their first/last rows, with square middle rows and no dividers. Rows use 8×12pt insets, a 52pt time column and 14pt text on a 22pt line. Selecting a row opens a trailing detail column when the content area is at least
 760 points wide; narrower windows use a native detail sheet. Copies confirm with a check.
 
 Single-record deletion removes the row immediately and provides a three-second Undo
@@ -68,7 +70,7 @@ darkened by 8% and have a one-physical-pixel highlight. Perspective is 900 point
 Equal row+column diagonals start together, from top-left to bottom-right. A tile rotates
 180 degrees over 420ms; the diagonal wave spans 320ms. After a 40ms settling interval,
 the mosaic fades out over 120ms, for a total of 900ms. Only transforms and opacity animate.
-The tiles share two snapshots rather than separate live page hierarchies. Content input
+Each window uses two snapshots, cropped into tile faces rather than separate live page hierarchies. Covers live above the SwiftUI hosting hierarchy; the main window and an attached Settings dialog animate together. New-theme capture waits for display frames, and only then compares the effective appearances. Content input
 is held while the snapshots are shown. Reduce Motion uses a 180ms crossfade. Changing a
 preference without changing the effective light/dark appearance does not animate.
 
@@ -101,5 +103,15 @@ explains partial time coverage. Totals are cached until activity changes.
 The sidebar search control is 40 points high. The native share button centres
 its symbol and localized title together. The main window reapplies its native
 traffic-light placement after AppKit's presentation layout, keeping the buttons
-inside the requested 99-point corner.
+inside the window corner.
 
+
+## Settings dialog
+
+Settings opens as a dedicated 940×652 sheet with 12pt corners. The 202pt left
+classification pane uses 36pt navigation rows; the right pane has independent
+scrolling and 36pt horizontal/24pt vertical insets. Groups use 12pt corners with
+16pt internal padding. Regular rows have a 48pt minimum height, 14pt labels and
+12pt explanations; switches are 38×22pt. A 24pt close button dismisses the sheet.
+All existing Settings entry points use `AppModel.navigate(to:)` and keep the
+underlying Home/History/Meeting page in place.

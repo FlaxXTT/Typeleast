@@ -14,10 +14,11 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     var isVisible: Bool { window?.isVisible ?? false }
+    var themeTransitionWindow: NSWindow? { isVisible ? window : nil }
 
     func show(page: HubPage? = nil) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
-        if let page = page { model.page = page }
+        if let page = page { model.navigate(to: page) }
         model.homePresentationID &+= 1
         if window == nil { window = makeWindow() }
         model.refreshPermissions()
@@ -25,7 +26,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         if window?.isMiniaturized == true { window?.deminiaturize(nil) }
         window?.makeKeyAndOrderFront(nil)
         // AppKit lays out the title bar again on first presentation. Reposition the
-        // native buttons afterwards so they stay inside the 99-point window curve.
+        // native buttons afterwards so they stay inside the window curve.
         DispatchQueue.main.async { [weak window] in
             if let window { AppWindowStyle.round(window) }
         }
@@ -73,24 +74,25 @@ struct HubRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             Sidebar(showsCommands: $showsCommands)
-                .frame(width: Theme.sidebarWidth)
-                .background(Theme.sidebar)
-            Divider().opacity(0.6)
+                .frame(width: Theme.sidebarWidth - 8)
+                .background(RoundedRectangle(cornerRadius: Theme.sidebarRadius).fill(Theme.sidebar))
+                .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
             ZStack {
                 Theme.window
                 switch model.page {
                 case .home: HomePage()
                 case .history: HistoryPage()
                 case .meetings: MeetingsPage().environmentObject(model.meeting)
-                case .settings: SettingsPage()
+                case .settings: HomePage()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 1080, height: 750)
+        .background(Theme.window)
+        .font(Theme.bodyFont)
         .foregroundColor(Theme.ink)
         .tint(Theme.accent)
-        .buttonBorderShape(.capsule)
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
         .sheet(isPresented: $showsCommands, onDismiss: {
             let action = pendingCommand
@@ -101,6 +103,9 @@ struct HubRootView: View {
                 pendingCommand = command.run
                 showsCommands = false
             }.environmentObject(model)
+        }
+        .sheet(isPresented: $model.settingsPresented) {
+            SettingsPage().environmentObject(model)
         }
         .ignoresSafeArea()
     }
@@ -114,10 +119,8 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 AppMarkView(size: 26).accessibilityHidden(true)
-                Text("TypeLeast").font(.system(size: 20, weight: .semibold)).tracking(-0.4)
+                Text("TypeLeast").font(.custom("Prompt-SemiBold", size: 20)).tracking(-0.4)
             }
-            .padding(.top, 44)
-            .padding(.horizontal, 16)
             .padding(.bottom, 16)
 
             Button { showsCommands = true } label: {
@@ -127,9 +130,9 @@ private struct Sidebar: View {
                     Spacer()
                     Text("⌘K").font(.system(size: 11)).foregroundColor(Theme.tertiary)
                 }
-                .font(.system(size: 12)).foregroundColor(Theme.secondary)
-                .padding(.horizontal, 16)
-                .frame(height: 40)
+                .font(Theme.rowFont).foregroundColor(Theme.secondary)
+                .padding(.horizontal, 12)
+                .frame(height: 36)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.cardHover))
             }
             .buttonStyle(.plain).hoverInteraction()
@@ -144,14 +147,12 @@ private struct Sidebar: View {
             Spacer()
 
             SidebarModes()
-                .padding(.bottom, 10)
+                .padding(.bottom, 8)
             ServiceBadge()
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
+                .padding(.bottom, 8)
             SidebarItem(page: .settings)
-                .padding(.bottom, 16)
         }
-        .padding(.horizontal, 8)
+        .padding(EdgeInsets(top: 44, leading: 12, bottom: 8, trailing: 12))
     }
 }
 
@@ -162,23 +163,24 @@ private struct SidebarItem: View {
     @State private var hovering = false
 
     private var icon: some View {
-        SidebarMotionIcon(page: page, selected: model.page == page, hovering: hovering)
+        SidebarMotionIcon(page: page, selected: page == .settings ? model.settingsPresented : model.page == page,
+                          hovering: hovering)
     }
 
     var body: some View {
-        let selected = model.page == page
+        let selected = page == .settings ? model.settingsPresented : model.page == page
         Button {
-            model.page = page
+            model.navigate(to: page)
         } label: {
             HStack(spacing: 10) {
                 icon
-                    .frame(width: 18, height: 18)
-                Text(page.title).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                    .frame(width: 16, height: 16)
+                Text(page.title).font(Theme.rowFont)
                 Spacer()
             }
             .foregroundColor(selected ? Theme.accent : Theme.secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 8)
+            .frame(height: 36)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                 .fill(selected ? Theme.selection : (hovering ? Theme.cardHover : Color.clear)))
             .contentShape(Rectangle())
@@ -209,27 +211,27 @@ private struct ServiceBadge: View {
                 .fill(model.serviceUp ? Theme.success : Theme.warning)
                 .frame(width: 7, height: 7)
             Text(badgeText)
-                .font(.system(size: 11.5))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(Theme.secondary)
                 .lineLimit(1)
             Spacer()
             if model.modelsMissing {
                 Button(L10n.text("下载模型")) { model.actions?.downloadModels() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Theme.ink)
                     .hoverInteraction()
             } else if !model.serviceUp && !model.modelsDownloading {
                 Button(L10n.text("重启")) { model.actions?.restartService() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Theme.ink)
                     .hoverInteraction()
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+        .frame(height: 30)
+        .background(Capsule().fill(Theme.card))
     }
 }
 
@@ -242,17 +244,17 @@ struct PageHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 26, weight: .bold)).tracking(-0.6)
+                Text(title).font(Theme.titleFont).tracking(-0.6).frame(height: 40, alignment: .leading)
                 if let subtitle = subtitle, !subtitle.isEmpty {
-                    Text(subtitle).font(.system(size: 13)).foregroundColor(Theme.secondary)
+                    Text(subtitle).font(Theme.captionFont).foregroundColor(Theme.secondary)
                 }
             }
             Spacer()
             trailing
         }
         .padding(.horizontal, Theme.pageInset)
-        .padding(.top, 24)
-        .padding(.bottom, 18)
+        .padding(.top, 44)
+        .padding(.bottom, 16)
     }
 }
 
@@ -271,7 +273,7 @@ struct SidebarModes: View {
         VStack(alignment: .leading, spacing: 2) {
             Button { model.actions?.startAssistant() } label: {
                 Label(L10n.text("提示词模式"), systemImage:"text.bubble")
-                    .font(.system(size:13,weight:.medium)).padding(10)
+                    .font(.system(size: 14,weight:.medium)).padding(10)
             }.buttonStyle(.plain).hoverInteraction()
         }
         .disabled(model.phase != .idle)
@@ -287,10 +289,10 @@ struct FlexibleSegment: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label).font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+            Text(label).font(.system(size: 14, weight: selected ? .medium : .regular))
                 .foregroundColor(selected ? Theme.accent : Theme.secondary).multilineTextAlignment(.center)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 34)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 32)
                 .padding(.horizontal, 4)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(selected ? Theme.selection : Color.clear))
                 .contentShape(Rectangle())
