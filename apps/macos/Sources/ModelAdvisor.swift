@@ -123,7 +123,7 @@ struct ModelRecommendationCard: View {
             switch state {
             case .loading:
                 HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
+                    LoadingCircularProgress(size: 20, color: Theme.ink)
                     Text(L10n.text("正在联网查当前软件的模型…")).font(.system(size: 17))
                 }
             case .done(let recommendation):

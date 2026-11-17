@@ -118,7 +118,7 @@ struct SpeechModelOptions: View {
                     HStack {
                         Text(op.phase == "downloading" ? L10n.text("正在下载…") : L10n.text("等待或加载中…"))
                         if op.phase == "downloading", op.total > 0 {
-                            ProgressView(value: min(op.received, op.total), total: op.total).frame(width: 100)
+                            LoadingLinearProgress(value: min(op.received, op.total) / op.total).frame(width: 100)
                         }
                         if op.phase != "committing" {
                             Button(L10n.text("取消")) { model.actions?.manageSpeechModel(id: entry.id, download: false, cancel: true) }

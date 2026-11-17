@@ -39,7 +39,12 @@ final class DictationController {
     private func unregisterEscape() { host.unregisterEscape() }
     private func scheduleHealthRetry() { host.scheduleHealthRetry() }
 
-    private(set) var phase: AppPhase = .idle { didSet { model.phase = phase } }
+    private(set) var phase: AppPhase = .idle {
+        didSet {
+            model.phase = phase
+            if phase == .idle, model.retryingHistoryID != nil { model.retryingHistoryID = nil }
+        }
+    }
     private(set) var recordingStartedAt: Date?
     private var pendingAppBundleId = ""
     private var pendingField: FocusedField?

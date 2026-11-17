@@ -38,6 +38,8 @@ enum Theme {
     static let style = accent
     static let success = dynamic(hex(0x008770), hex(0x00957C))
     static let warning = dynamic(hex(0xEA4D00), hex(0xFF5B00))
+    static let loadingTrack = dynamic(hex(0x777777, 0.10), hex(0x777777, 0.40))
+    static let skeletonHighlight = dynamic(hex(0x000000, 0.04), hex(0xFFFFFF, 0.04))
 
     static let radius: CGFloat = 8
     static let controlRadius: CGFloat = 8
