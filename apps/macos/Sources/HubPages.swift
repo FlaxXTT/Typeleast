@@ -110,7 +110,7 @@ private struct HeroCard: View {
                 Text(L10n.text("说话，再按一次结束")).font(.system(size: 15, weight: .semibold))
                 Spacer(minLength: 12)
                 ShareButton(items: InsightsPanel.shareItems).fixedSize()
-                Button(model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
+                Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(model.phase == .thinking)
             }

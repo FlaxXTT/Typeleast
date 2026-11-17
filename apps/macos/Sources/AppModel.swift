@@ -4,7 +4,7 @@ import Combine
 
 // AppModel.swift - observable state shared by the main window, onboarding and menu.
 
-enum AppPhase { case idle, recording, thinking }
+enum AppPhase { case idle, starting, recording, thinking }
 
 enum HubPage: String, CaseIterable, Identifiable {
     case home, history, meetings, settings

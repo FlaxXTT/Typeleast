@@ -426,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// for the system and the microphone stays closed.
     func fnTapped(sourceAtPress: String?) {
         guard phase == .idle else { hotkeyPressed(); return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + FnTapGate.settleSeconds) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + FnTapGate.currentDelay) { [weak self] in
             guard let self = self, self.phase == .idle else { return }
             if FnTapGate.shouldStart(sourceAtPress: sourceAtPress, sourceAfter: InputSourceProbe.currentID()) {
                 self.hotkeyPressed()

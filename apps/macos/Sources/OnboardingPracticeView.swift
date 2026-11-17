@@ -64,7 +64,7 @@ private struct PracticePill: View {
                 .animation(.linear(duration: 0.05), value: practice.levels)
                 circleButton(symbol: "checkmark", filled: true) { practice.stop() }
                     .help(L10n.text("结束并整理"))
-            case .thinking:
+            case .starting, .thinking:
                 HStack(spacing: 7) {
                     ForEach(0..<3) { index in
                         Circle().fill(Color.white).frame(width: 6, height: 6)

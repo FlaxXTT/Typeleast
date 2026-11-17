@@ -89,6 +89,44 @@ if let index = CommandLine.arguments.firstIndex(of: "--history-ui-render"), Comm
     exit(0)
 }
 
+// Compact recording-bar fixture. Synthetic levels only: no microphone, service,
+// user credentials or global shortcuts. The reference is the same geometry at 100%.
+if let index = CommandLine.arguments.firstIndex(of: "--pill-ui-render"), CommandLine.arguments.count > index + 1 {
+    let output = CommandLine.arguments[index + 1]
+    guard output.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
+    try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+    _ = NSApplication.shared
+    for name in ["recording", "translation", "countdown", "starting", "result"] {
+        var model = RecordingBarModel()
+        model.showRecording(destination: "fixture", badge: name == "translation" ? "翻译 →EN" : "")
+        for (i, level) in [Float(0), 0.15, 0.42, 0.7, 0.4, 0.22, 0.8, 0.92, 0.5, 0.3, 0.1, 0.35, 0.6].enumerated() {
+            model.update(level: level, elapsed: Double(i) * 0.05 + (name == "countdown" ? 108 : 0))
+        }
+        if name == "starting" { model.showThinking(detail: L10n.text("正在打开麦克风…")) }
+        if name == "result" { model.showResult("报告周四发，控制在三页以内。", warning: false) }
+        let logical = NSSize(width: PillView.width(for: model, limit: 120), height: PillView.height)
+        for scale in [PillView.displayScale, CGFloat(1)] {
+            let size = NSSize(width: (logical.width * scale).rounded(), height: logical.height * scale)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+            let view = PillView(frame: NSRect(origin: .zero, size: size))
+            window.contentView = view
+            view.setBoundsSize(logical)
+            view.reduceMotion = true
+            view.model = model
+            view.advance()
+            view.layoutSubtreeIfNeeded()
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            guard let png = bitmap.representation(using: .png, properties: [:]) else { exit(1) }
+            let filename = name + (scale == 1 ? "-reference.png" : "-compact.png")
+            try png.write(to: URL(fileURLWithPath: output + "/" + filename))
+            print("RENDER \(filename): \(size.width) × \(size.height) points")
+            window.orderOut(nil)
+        }
+    }
+    exit(0)
+}
+
 // Developer-only UI fixture. No service, microphone, global shortcuts or real Keychain access.
 if let index = CommandLine.arguments.firstIndex(of: "--model-ui-render"), CommandLine.arguments.count > index + 1 {
     let output = CommandLine.arguments[index + 1]
@@ -561,6 +599,61 @@ do {
     model.hide()
 }
 
+// Slow device opening must not block UI events, and cancelling then starting
+// again must close the abandoned device before opening its replacement.
+do {
+    func pumpStartup(until condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while !condition(), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.005))
+        }
+        return condition()
+    }
+    let startup = RecordingStartup()
+    let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
+    let eventsLock = NSLock()
+    var events: [String] = []
+    func event(_ value: String) { eventsLock.lock(); events.append(value); eventsLock.unlock() }
+    var staleCompletions = 0, adopted = false, heartbeat = false
+    startup.begin(open: {
+        event(Thread.isMainThread ? "opened-on-main" : "worker-open")
+        entered.signal()
+        _ = release.wait(timeout: .now() + 3)
+        return "old"
+    }, discard: { event("discard-" + $0) }, completion: { _ in staleCompletions += 1 })
+    check("audio opening runs on a worker", entered.wait(timeout: .now() + 1) == .success)
+    DispatchQueue.main.async { heartbeat = true }
+    check("main events run while the device is still opening", pumpStartup { heartbeat })
+    startup.cancel()
+    check("cancelling clears the pending recording immediately", !startup.isPending)
+    startup.begin(open: { event("replacement-open"); return "new" }, discard: { event("discard-" + $0) }, completion: {
+        adopted = (try? $0.get()) == "new" && Thread.isMainThread && !startup.isPending
+    })
+    release.signal()
+    check("replacement capture is adopted on main", pumpStartup { adopted })
+    checkEq("cancelled capture cannot deliver a late ready callback", staleCompletions, 0)
+    eventsLock.lock(); let ordering = events; eventsLock.unlock()
+    checkEq("old input closes before a replacement opens", ordering, ["worker-open", "discard-old", "replacement-open"])
+
+    var failedOnMain = false
+    startup.begin(open: { () throws -> String in throw NSError(domain: "fixture", code: 1) }, discard: { _ in }, completion: {
+        if case .failure = $0 { failedOnMain = Thread.isMainThread && !startup.isPending }
+    })
+    check("audio startup failure returns to main and clears pending state", pumpStartup { failedOnMain })
+
+    let recorder = Recorder()
+    recorder.demoPCM = Data(repeating: 0, count: Recorder.bytesPerSecond)
+    var cancelledReady = 0, liveReady = false
+    recorder.startAsync { _ in cancelledReady += 1 }
+    recorder.cancel()
+    recorder.startAsync { liveReady = (try? $0.get()) != nil && recorder.isRecording }
+    check("demo capture follows async readiness without a microphone", pumpStartup { liveReady })
+    check("the adopted demo feeds audio on the main run loop", pumpStartup { recorder.byteCount > 0 })
+    checkEq("cancelled recorder startup never turns ready later", cancelledReady, 0)
+    recorder.cancel()
+    check("cancelled async recording releases its UI state and audio", !recorder.isStarting && !recorder.isRecording && recorder.byteCount == 0)
+}
+
 // MARK: 11. Recorder live level - smoothing, clamping and RMS without a microphone
 
 do {
@@ -688,6 +781,9 @@ do {
     check("fn gate never blocks when the source is unknown",
           FnTapGate.shouldStart(sourceAtPress: nil, sourceAfter: "x") && FnTapGate.shouldStart(sourceAtPress: "x", sourceAfter: nil))
     check("fn gate waits briefly, well under half a second", FnTapGate.settleSeconds > 0 && FnTapGate.settleSeconds < 0.5)
+    checkEq("Fn configured as Do Nothing has no artificial delay", FnTapGate.delay(systemUsageType: 0), 0)
+    checkEq("Fn input switching keeps its observation window", FnTapGate.delay(systemUsageType: 1), FnTapGate.settleSeconds)
+    checkEq("unknown Fn settings retain input-switch protection", FnTapGate.delay(systemUsageType: nil), FnTapGate.settleSeconds)
     var fn = FnTapDetector()
     fn.fnDown(at: t0, otherModifiersHeld: false)
     check("fn tap fires on a quick clean press", fn.fnUp(at: t0.addingTimeInterval(0.2)))

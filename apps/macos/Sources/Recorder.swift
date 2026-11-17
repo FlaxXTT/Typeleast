@@ -5,6 +5,7 @@ import Foundation
 
 enum RecorderError: Error, CustomStringConvertible {
     case busy
+    case cancelled
     case noInputDevice
     case permissionDenied
     case permissionNotDetermined
@@ -15,6 +16,7 @@ enum RecorderError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .busy: return L10n.text("正在录音")
+        case .cancelled: return L10n.text("已取消")
         case .noInputDevice: return L10n.text("找不到麦克风")
         case .permissionDenied: return L10n.text("麦克风权限被拒绝")
         case .permissionNotDetermined: return L10n.text("没有麦克风权限")
@@ -31,15 +33,16 @@ final class Recorder {
 
     /// Rebuilt for every recording: after sleep, a restart or a device change, a long-lived engine
     /// keeps the old input format, and installing a tap with it raises an exception that aborts the app.
-    private var engine = AVAudioEngine()
+    private var engine: AVAudioEngine?
+    private let startup = RecordingStartup()
     private let lock = NSLock()
     private var pcm = Data()
-    private var converter: AVAudioConverter?
-    private var outFormat: AVAudioFormat?
+    private var captureGeneration: UInt64 = 0
     private var capTimer: Timer?
     private var smoothedLevel: Float = 0
 
     private(set) var isRecording = false
+    var isStarting: Bool { startup.isPending }
     private(set) var startedAt: Date?
     private(set) var truncated = false
 
@@ -181,18 +184,61 @@ final class Recorder {
     // MARK: lifecycle
 
     func start() throws {
-        guard !isRecording else { throw RecorderError.busy }
+        guard !isRecording, !isStarting else { throw RecorderError.busy }
         if let demo = demoPCM {
             startDemo(demo)
             return
         }
+        let token = resetCapture()
+        engine = try openInput(prepare: prepareEngine, limit: maxSeconds, token: token)
+        captureStarted(at: Date())
+    }
+
+    /// The daily dictation path: the pill and Escape remain responsive while
+    /// Core Audio selects a device and starts its engine. Demo timers stay on main.
+    func startAsync(completion: @escaping (Result<Void, Error>) -> Void) {
+        guard !isRecording, !isStarting else { completion(.failure(RecorderError.busy)); return }
+        let token = resetCapture(), prepare = prepareEngine, limit = maxSeconds, demo = demoPCM
+        startup.begin(open: { () -> (AVAudioEngine?, Date) in
+            guard self.isCurrentCapture(token) else { throw RecorderError.cancelled }
+            let input: AVAudioEngine?
+            if demo == nil { input = try self.openInput(prepare: prepare, limit: limit, token: token) }
+            else { input = nil }
+            return (input, Date())
+        }, discard: { capture in
+            Self.closeInput(capture.0)
+        }, completion: { result in
+            switch result {
+            case .success(let (input, started)):
+                self.engine = input
+                if let demo { self.startDemo(demo) } else { self.captureStarted(at: started) }
+                completion(.success(()))
+            case .failure(let error): completion(.failure(error))
+            }
+        })
+    }
+
+    private func resetCapture() -> UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        captureGeneration &+= 1
+        pcm = Data(); smoothedLevel = 0
+        truncated = false
+        return captureGeneration
+    }
+
+    private func isCurrentCapture(_ token: UInt64) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return captureGeneration == token
+    }
+
+    private func openInput(prepare: ((AVAudioEngine) -> Void)?, limit: Int, token: UInt64) throws -> AVAudioEngine {
         let status = Recorder.authorizationStatus()
         if status == .denied || status == .restricted { throw RecorderError.permissionDenied }
         if status == .notDetermined { throw RecorderError.permissionNotDetermined }
 
-        engine = AVAudioEngine()
+        let engine = AVAudioEngine()
         // Host hook, e.g. to select a non-default microphone, before the input format is read.
-        prepareEngine?(engine)
+        prepare?(engine)
         let input = engine.inputNode
         let inFormat = input.outputFormat(forBus: 0)
         guard inFormat.sampleRate > 0, inFormat.channelCount > 0 else { throw RecorderError.noInputDevice }
@@ -200,31 +246,40 @@ final class Recorder {
               let conv = AudioConvert.makeConverter(from: inFormat) else {
             throw RecorderError.converterUnavailable
         }
-        converter = conv
-        outFormat = target
-        lock.lock(); pcm = Data(); smoothedLevel = 0; lock.unlock()
-        truncated = false
-
         input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
-            self?.consume(buffer)
+            self?.consume(buffer, converter: conv, target: target, limit: limit, token: token)
         }
-        engine.prepare()
         do {
+            guard isCurrentCapture(token) else { throw RecorderError.cancelled }
+            engine.prepare()
+            guard isCurrentCapture(token) else { throw RecorderError.cancelled }
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
-            converter = nil
+            engine.stop()
+            if let error = error as? RecorderError { throw error }
             throw RecorderError.engineFailed(error.localizedDescription)
         }
+        return engine
+    }
 
+    private func captureStarted(at date: Date) {
         isRecording = true
-        startedAt = Date()
-        capTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+        startedAt = date
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self = self, self.isRecording else { return }
             if self.elapsed >= Double(self.maxSeconds) {
                 self.onAutoStop?()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        capTimer = timer
+    }
+
+    private static func closeInput(_ engine: AVAudioEngine?) {
+        guard let engine else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
     }
 
     /// Returns the finished WAV, or throws if nothing usable was captured.
@@ -237,15 +292,13 @@ final class Recorder {
             demoTimer?.invalidate()
             demoTimer = nil
         } else {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
+            Self.closeInput(engine)
+            engine = nil
         }
         isRecording = false
         let seconds = elapsed
         startedAt = nil
-        converter = nil
-
-        lock.lock(); let data = pcm; lock.unlock()
+        lock.lock(); captureGeneration &+= 1; let data = pcm; lock.unlock()
         let audioSeconds = Double(data.count) / Double(Recorder.bytesPerSecond)
         guard data.count >= Recorder.bytesPerSecond / 5, audioSeconds > 0.15 else {
             throw RecorderError.tooShort(audioSeconds)
@@ -258,17 +311,18 @@ final class Recorder {
     }
 
     func cancel() {
+        startup.cancel()
+        lock.lock(); captureGeneration &+= 1; lock.unlock()
         capTimer?.invalidate()
         capTimer = nil
         demoTimer?.invalidate()
         demoTimer = nil
         if isRecording && demoPCM == nil {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
+            Self.closeInput(engine)
+            engine = nil
         }
         isRecording = false
         startedAt = nil
-        converter = nil
         lock.lock(); pcm = Data(); smoothedLevel = 0; lock.unlock()
     }
 
@@ -315,12 +369,13 @@ final class Recorder {
 
     // MARK: capture
 
-    private func consume(_ buffer: AVAudioPCMBuffer) {
-        guard let conv = converter, let target = outFormat else { return }
-        guard let chunk = AudioConvert.convert(buffer, using: conv, to: target) else { return }
+    private func consume(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter,
+                         target: AVAudioFormat, limit: Int, token: UInt64) {
+        guard isCurrentCapture(token), let chunk = AudioConvert.convert(buffer, using: converter, to: target) else { return }
         let sample = Recorder.rms(of: buffer)
-        let maxBytes = Recorder.bytesPerSecond * maxSeconds
+        let maxBytes = Recorder.bytesPerSecond * limit
         lock.lock()
+        guard captureGeneration == token else { lock.unlock(); return }
         smoothedLevel = Recorder.smoothLevel(previous: smoothedLevel, sample: Recorder.loudness(rms: sample))
         if pcm.count < maxBytes {
             let room = min(chunk.count, maxBytes - pcm.count)

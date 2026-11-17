@@ -41,6 +41,7 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "正在打开麦克风…": "Opening microphone…",
         "整理结果（可编辑）": "Cleaned text (editable)",
         "原文：{0} 字符 · {1} 词": "Source: {0} characters · {1} words",
         "模型与存储": "Models and storage",
