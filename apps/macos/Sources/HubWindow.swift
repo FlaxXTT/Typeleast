@@ -1,20 +1,30 @@
 import SwiftUI
 import AppKit
+import Combine
 
 // HubWindow.swift - the main window: a quiet
 // sidebar (Home, History; Settings at the bottom left) and one page.
 
 final class HubWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
+    private let settingsWindow: SettingsWindowController
+    private var settingsPresentation: AnyCancellable?
     let model: AppModel
 
     init(model: AppModel) {
         self.model = model
+        settingsWindow = SettingsWindowController(model: model)
         super.init()
+        settingsPresentation = model.$settingsPresented.receive(on: DispatchQueue.main).sink { [weak self] presented in
+            guard let self else { return }
+            if presented { self.settingsWindow.show(relativeTo: self.window) }
+            else { self.settingsWindow.close() }
+        }
     }
 
     var isVisible: Bool { window?.isVisible ?? false }
     var themeTransitionWindow: NSWindow? { isVisible ? window : nil }
+    var settingsThemeTransitionWindow: NSWindow? { settingsWindow.visibleWindow }
 
     func show(page: HubPage? = nil) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
@@ -92,8 +102,9 @@ struct HubRootView: View {
         .font(Theme.bodyFont)
         .foregroundColor(Theme.ink)
         .tint(Theme.accent)
-        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44) }
+        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44).padding(.leading, 84) }
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
+        .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
         .sheet(isPresented: $showsCommands, onDismiss: {
             let action = pendingCommand
             pendingCommand = nil
@@ -103,9 +114,6 @@ struct HubRootView: View {
                 pendingCommand = command.run
                 showsCommands = false
             }.environmentObject(model)
-        }
-        .sheet(isPresented: $model.settingsPresented) {
-            SettingsPage().environmentObject(model)
         }
         .ignoresSafeArea()
     }

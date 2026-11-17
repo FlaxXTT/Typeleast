@@ -70,7 +70,48 @@ final class WindowDragView: NSView {
     override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
     override func resetCursorRects() {
         super.resetCursorRects()
-        addCursorRect(bounds, cursor: .openHand)
+        addCursorRect(bounds, cursor: .arrow)
+    }
+}
+
+/// The locked corner keeps the familiar diagonal shape without offering a resize action.
+struct FixedWindowCornerRegion: NSViewRepresentable {
+    func makeNSView(context: Context) -> FixedWindowCornerView { FixedWindowCornerView() }
+    func updateNSView(_ view: FixedWindowCornerView, context: Context) {}
+}
+
+final class FixedWindowCornerView: NSView {
+    private static let cursor: NSCursor = {
+        let source: NSImage
+        let hotspot: NSPoint
+        if #available(macOS 15.0, *) {
+            let native = NSCursor.frameResize(position: .bottomRight, directions: .all)
+            source = native.image
+            hotspot = native.hotSpot
+        } else {
+            source = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: nil)!
+                .withSymbolConfiguration(.init(pointSize: 16, weight: .regular))!
+            hotspot = NSPoint(x: source.size.width / 2, y: source.size.height / 2)
+        }
+        let image = NSImage(size: source.size, flipped: false) { rect in
+            source.draw(in: rect)
+            NSColor(calibratedWhite: 0.55, alpha: 1).setFill()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        return NSCursor(image: image, hotSpot: hotspot)
+    }()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("Created in code") }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func mouseDown(with event: NSEvent) {}
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: Self.cursor)
     }
 }
 
