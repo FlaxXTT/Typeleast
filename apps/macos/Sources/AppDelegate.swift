@@ -179,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         // A demo recording shows only the voice bar over another app.
         if recorder.demoPCM != nil { return false }
         if settings.needsPractice { showOnboarding(); return true }
-        if !flag { hub.show() }
+        hub.show()
         return true
     }
 

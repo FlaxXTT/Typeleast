@@ -13,6 +13,33 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 
 ## Navigation and records
 
+### Home insights
+
+The supplied Home screenshot defines the insights area: system bold figures, grey labels,
+large white cards with 26-point corners, a soft grey-to-white dot-grid backdrop and a
+pill-shaped Share button. Figures use the default system design rather than rounded digits.
+The light heatmap colours sampled from the reference are `#F8F8F8` (empty), `#ECF0FE`,
+`#C6D2FC`, `#A0B4FB` and `#426AF6`. The screenshot's Display P3 colour space is retained
+for its coloured fills and backdrop. Large counts use the reference's K notation.
+
+Four metric cards sit in two columns above the active-day card. Engine status and model
+management occupy the top-right column, followed by Quick dictation; Recent is the final
+section beneath both columns. A narrow window stacks the side column. The initial window
+size is 1180×860 points; the layout still adapts to the user's existing window size.
+
+Opening or restoring the hub replays the figures from zero over 1.2 seconds. Units and
+final number widths are reserved, so counting does not move surrounding content. Active
+day and streak figures count up too. All empty slots are visible at first; only the real
+active blue fills are revealed from left to right over 1.4 seconds after a 150ms lead-in.
+Month arrows navigate actual activity history. No synthetic usage data is added.
+
+The animation is local to numeric text and cell masks, not a timer publishing through
+AppModel. Ordinary history/health refreshes do not restart it. Opening the hub starts
+Home at its insights; navigation within that opening retains the native scroll offset.
+Reduce Motion shows the final figures and cells immediately.
+
+### History and commands
+
 `⌘K` opens one search field for pages, appearance commands and history text. The native
 field editor handles text input; arrow keys select results, Return opens them and Escape
 closes the panel. Input-method candidate selection takes priority over command navigation.

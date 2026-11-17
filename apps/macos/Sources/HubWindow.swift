@@ -18,9 +18,11 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     func show(page: HubPage? = nil) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
         if let page = page { model.page = page }
+        model.homePresentationID &+= 1
         if window == nil { window = makeWindow() }
         model.refreshPermissions()
         NSApp.activate(ignoringOtherApps: true)
+        if window?.isMiniaturized == true { window?.deminiaturize(nil) }
         window?.makeKeyAndOrderFront(nil)
     }
 
@@ -32,7 +34,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.setContentSize(NSSize(width: 940, height: 640))
+        window.setContentSize(NSSize(width: 1180, height: 860))
         window.minSize = NSSize(width: 820, height: 560)
         window.isReleasedWhenClosed = false
         window.center()
@@ -45,6 +47,10 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         model.refreshPermissions()
         // The service may have restarted on a new port since the last check.
         model.actions?.recheckHealth()
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        model.homePresentationID &+= 1
     }
 }
 

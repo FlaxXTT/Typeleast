@@ -16,6 +16,13 @@ enum Theme {
                 blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
     }
 
+    /// The Home reference is tagged Display P3. Keep its sampled colours in that space.
+    private static func referenceColour(_ value: UInt32) -> NSColor {
+        NSColor(displayP3Red: CGFloat((value >> 16) & 0xFF) / 255,
+                green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
+
     static let window = dynamic(hex(0xFFFFFF), hex(0x242121))
     static let sidebar = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let detail = dynamic(hex(0xFBFAF9), hex(0x1F1C1C))
@@ -43,9 +50,12 @@ enum Theme {
     static let tile = dynamic(hex(0xFFFFFF), hex(0x3C3B3B))
     static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
-    static let heatEmpty = dynamic(hex(0xF1F1EF), hex(0x2C2B2B))
-    static let heat = [dynamic(hex(0xE6EBFD), hex(0x26304F)), dynamic(hex(0xC3CEF9), hex(0x34458A)),
-                       dynamic(hex(0x9BAEF3), hex(0x4A63C9)), dynamic(hex(0x4468EC), hex(0x6E8BF5))]
+    static let homeBackdrop = dynamic(referenceColour(0xE9ECEF), hex(0x242121))
+    static let homeDot = dynamic(referenceColour(0xD5D7DC), hex(0x444040))
+    static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
+    static let heatEmpty = dynamic(hex(0xF8F8F8), hex(0x2C2B2B))
+    static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
+                       dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(referenceColour(0x426AF6), hex(0x6E8BF5))]
 }
 
 /// Common pointer and press feedback for native-style controls.
