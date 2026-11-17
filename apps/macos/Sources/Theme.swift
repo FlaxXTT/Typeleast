@@ -275,63 +275,20 @@ struct LevelBars: View {
     }
 }
 
-/// The full-resolution artwork used for the Dock icon.
+/// Resolution-independent artwork, shared with the packaged icon generator.
 enum AppMark {
     static func image(size: CGFloat) -> NSImage {
-        if let url = Bundle.main.url(forResource: "BrandIcon", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            image.size = NSSize(width: size, height: size)
-            return image
-        }
-        return NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            let inset = rect.width * 0.08
-            let box = rect.insetBy(dx: inset, dy: inset)
-            // A white tile with a hairline edge, so it still reads on white backgrounds.
-            let path = NSBezierPath(roundedRect: box.insetBy(dx: 0.5, dy: 0.5), xRadius: box.width * 0.23, yRadius: box.width * 0.23)
-            NSColor.white.setFill()
-            path.fill()
-            NSColor(white: 0, alpha: 0.12).setStroke()
-            path.lineWidth = max(1, box.width * 0.012)
-            path.stroke()
-            let heights: [CGFloat] = [0.26, 0.48, 0.70, 0.48, 0.26]
-            let barWidth = box.width * 0.085
-            let gap = box.width * 0.065
-            let total = CGFloat(heights.count) * barWidth + CGFloat(heights.count - 1) * gap
-            var x = box.midX - total / 2
-            NSColor(srgbRed: 0.08, green: 0.075, blue: 0.075, alpha: 1).setFill()
-            for h in heights {
-                let height = box.height * h
-                let bar = NSRect(x: x, y: box.midY - height / 2, width: barWidth, height: height)
-                NSBezierPath(roundedRect: bar, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()
-                x += barWidth + gap
-            }
-            return true
-        }
+        AppIconArtwork.image(size: size)
     }
 }
 
 struct AppMarkView: View {
     var size: CGFloat = 28
 
-    /// Native shapes keep the small sidebar mark smooth at any display scale.
     var body: some View {
-        let heights: [CGFloat] = [0.136, 0.273, 0.438, 0.273, 0.136]
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.19, style: .continuous)
-                .fill(LinearGradient(colors: [Color(red: 0.24, green: 0.24, blue: 0.27),
-                                              Color(red: 0.065, green: 0.065, blue: 0.08)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            RoundedRectangle(cornerRadius: size * 0.19, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: size * 0.008)
-            HStack(spacing: size * 0.034) {
-                ForEach(heights.indices, id: \.self) { index in
-                    Capsule()
-                        .fill(index == 4 ? Color(red: 0.29, green: 0.69, blue: 0.97) : Color(white: 0.98))
-                        .frame(width: size * 0.073, height: size * heights[index])
-                }
-            }
-        }
-        .frame(width: size * 0.78, height: size * 0.78)
-        .frame(width: size, height: size)
+        Image(nsImage: AppMark.image(size: size))
+            .resizable()
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
