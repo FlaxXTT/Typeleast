@@ -44,7 +44,8 @@ final class MainMenu: NSObject {
 
         let window = NSMenu(title: L10n.text("窗口"))
         window.addItem(withTitle: L10n.text("最小化"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        window.addItem(withTitle: L10n.text("缩放"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        // All app windows have fixed geometry. Keep Zoom visible but unavailable.
+        window.addItem(withTitle: L10n.text("缩放"), action: nil, keyEquivalent: "").isEnabled = false
         window.addItem(withTitle: L10n.text("关闭"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         window.addItem(.separator())
         window.addItem(withTitle: L10n.text("前置全部窗口"), action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")

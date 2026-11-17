@@ -43,7 +43,6 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         let size = NSSize(width: 1080, height: 750)
         window.setContentSize(size)
         AppWindowStyle.fixSize(window, to: size)
-        window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.center()
@@ -93,6 +92,7 @@ struct HubRootView: View {
         .font(Theme.bodyFont)
         .foregroundColor(Theme.ink)
         .tint(Theme.accent)
+        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44) }
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
         .sheet(isPresented: $showsCommands, onDismiss: {
             let action = pendingCommand
@@ -120,8 +120,10 @@ private struct Sidebar: View {
             HStack(spacing: 9) {
                 AppMarkView(size: 26).accessibilityHidden(true)
                 Text("TypeLeast").font(.custom("Prompt-SemiBold", size: 20)).tracking(-0.4)
+                Spacer(minLength: 0)
             }
             .padding(.bottom, 16)
+            .overlay { WindowDragRegion() }
 
             Button { showsCommands = true } label: {
                 HStack(spacing: 8) {

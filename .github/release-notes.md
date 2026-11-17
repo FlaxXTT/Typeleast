@@ -3,6 +3,7 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
+- 保留原生缩放按钮和菜单项，显示为灰色且不可用，窗口尺寸继续固定；顶部 44 点区域和侧栏品牌区可直接拖动窗口，悬停显示手形光标。
 - 按新的分级规范调整界面：基础圆角 8、控件 6、列表组 10、卡片 12、首页和侧栏 20、普通面板 16；主侧栏宽 210，页面左右间距 24、顶部留出 44。
 - 随包加入 Prompt 标题字体：首页标题 48、其他页面标题 36、区块标题 24；历史正文 14/22、时间列宽 52，分组首尾圆角 10，中间项无分隔线。
 - 设置改为 940×652 独立弹窗，包含 202 宽分类栏、独立滚动内容和 24 点关闭按钮；保持设置入口和分类跳转。
@@ -14,6 +15,7 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
+- Keep the native Zoom button and menu item visible, grey and disabled. Window size stays fixed. Drag the window from the 44pt top strip or sidebar brand area, with a hand cursor on hover.
 - Apply the new geometry: 8pt base corners, 6pt small controls, 10pt list groups, 12pt cards, 20pt Home/sidebar surfaces and 16pt panels. Use a 210pt main sidebar, 24pt horizontal page insets and a 44pt top region.
 - Bundle Prompt heading fonts at 48pt on Home, 36pt on other pages and 24pt for sections. History uses 14/22 text, a 52pt time column, 10pt group corners and no middle-row dividers.
 - Open Settings as a separate 940×652 dialog with a 202pt category pane, independent content scrolling and a 24pt close button. Keep existing Settings entry points and category navigation.
