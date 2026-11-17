@@ -169,7 +169,7 @@ struct OnboardingView: View {
                 VStack(spacing: 14) {
                     LevelBars(level: meter.level, count: 18).scaleEffect(1.3)
                     Text(meter.heardVoice ? L10n.text("听到了 ✓") : (meter.running ? L10n.text("等待说话…") : L10n.text("麦克风未打开")))
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(meter.heardVoice ? Theme.success : Theme.secondary)
                     Button(meter.running ? L10n.text("停止测试") : L10n.text("开始测试")) {
                         if meter.running { meter.stop() } else { meter.start(deviceUID: model.settings.inputDeviceUID) }
@@ -191,7 +191,7 @@ struct OnboardingView: View {
                 VStack(spacing: 14) {
                     if !model.assistantLabel.isEmpty { Keycap(label: model.assistantLabel, large: true) }
                     Text(L10n.text("先选中一段文字再按这个键，就以选中内容为底稿修改。按翻译键则直接翻译选中内容。"))
-                        .font(.system(size: 13)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                        .font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("拆解一段示例提示词")) { model.actions?.breakdownSample() }
                         .buttonStyle(SecondaryButtonStyle()).disabled(!model.llmConfigured)
@@ -285,7 +285,7 @@ private struct StepView<Accessory: View>: View {
                     .frame(width: 64, height: 64)
                     .background(Circle().fill(Theme.card))
             }
-            Text(title).font(.system(size: 24, weight: .bold)).multilineTextAlignment(.center)
+            Text(title).font(Theme.sectionTitleFont).multilineTextAlignment(.center)
             Text(text)
                 .font(.system(size: 14))
                 .foregroundColor(Theme.secondary)
@@ -309,8 +309,8 @@ private struct OnboardingCheck<Trailing: View>: View {
                 .font(.system(size: 16))
                 .foregroundColor(done ? Theme.success : Theme.tertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .medium))
-                Text(detail).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                Text(title).font(.system(size: 14, weight: .medium))
+                Text(detail).font(.system(size: 12)).foregroundColor(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
@@ -326,7 +326,7 @@ private struct TranslatePracticeView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(L10n.text("说中文，写成其他语言")).font(.system(size: 24, weight: .bold))
+            Text(L10n.text("说中文，写成其他语言")).font(Theme.sectionTitleFont)
             Text(L10n.text("平时按 {0} 翻译。现在选一种语言，读下面这句试试。", HotKeyCentre.describe(keyCode: model.settings.hotkeyTranslate.keyCode, modifiers: model.settings.hotkeyTranslate.modifiers)))
                 .font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
             Picker("", selection: model.setting(\.translateTarget)) {
@@ -335,16 +335,16 @@ private struct TranslatePracticeView: View {
             Text(practice.translateSample)
                 .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
             Button(practice.phase == .recording ? L10n.text("停止并翻译") : L10n.text("开始录音")) { practice.toggle() }
                 .buttonStyle(PrimaryButtonStyle()).disabled(practice.phase == .thinking)
             if !practice.status.isEmpty {
-                Text(practice.status).font(.system(size: 13)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                Text(practice.status).font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
             }
             if !practice.output.isEmpty {
                 Text(practice.output).font(.system(size: 14)).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(32)
-                    .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
             }
         }
         .onAppear { practice.translateTo = model.settings.translateTarget; practice.acceptsShortcut = true; practice.reset() }

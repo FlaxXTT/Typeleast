@@ -114,7 +114,7 @@ struct LearnedToastView: View {
             Text(message)
                 .font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(1)
             Button(action: undo) {
-                Text(L10n.text("撤销")).font(.system(size: 13, weight: .medium)).foregroundColor(.white)
+                Text(L10n.text("撤销")).font(.system(size: 14, weight: .medium)).foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 7)
                     .background(Capsule(style: .circular).fill(Color.white.opacity(0.16)))
             }

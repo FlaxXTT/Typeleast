@@ -91,7 +91,7 @@ struct HomePage: View {
                     if SetupCard.pending(model) { SetupCard() }
                     RecentCard()
                 }
-                .padding(24)
+                .padding(EdgeInsets(top: 44, leading: 24, bottom: 16, trailing: 24))
             }
         }
         .background(HomeDotGrid())
@@ -103,7 +103,7 @@ private struct HeroCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.text("快捷听写")).font(.system(size: 15, weight: .semibold))
+            Text(L10n.text("快捷听写")).font(Theme.sectionTitleFont)
             HStack(spacing: 8) {
                 Keycap(label: model.hotkeyLabel)
                 Text(L10n.text("说话，再按一次结束")).font(.system(size: 12)).foregroundColor(Theme.homeLabel)
@@ -112,8 +112,8 @@ private struct HeroCard: View {
             Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
                 .buttonStyle(PrimaryButtonStyle()).disabled(model.phase == .thinking)
         }
-        .padding(32).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
     }
 }
 
@@ -157,7 +157,7 @@ private struct SetupCard: View {
                          detail: model.llmConfigured ? model.modelSummary : "",
                          action: L10n.text("打开设置")) {
                     model.settingsCategory = 1
-                    model.page = .settings
+                    model.navigate(to: .settings)
                 }
             }
         }
@@ -182,9 +182,9 @@ private struct SetupRow: View {
                 .font(.system(size: 16))
                 .foregroundColor(done ? Theme.success : Theme.tertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .medium))
+                Text(title).font(.system(size: 14, weight: .medium))
                 if !detail.isEmpty {
-                    Text(detail).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                    Text(detail).font(.system(size: 12)).foregroundColor(Theme.secondary)
                 }
             }
             Spacer()
@@ -202,7 +202,7 @@ private struct RecentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(L10n.text("最近")).font(.system(size: 18, weight: .semibold)).foregroundColor(Theme.homeLabel)
+                Text(L10n.text("最近")).font(Theme.sectionTitleFont).foregroundColor(Theme.homeLabel)
                 Spacer()
                 if !model.history.isEmpty {
                     Button { model.page = .history } label: {
@@ -219,10 +219,10 @@ private struct RecentCard: View {
             }
             if model.history.isEmpty {
                 Text(L10n.text("没有听写记录。按 {0} 说一句。", model.hotkeyLabel))
-                        .font(.system(size: 13))
+                        .font(.system(size: 14))
                         .foregroundColor(Theme.homeLabel)
-                        .padding(32).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+                        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
             } else {
                 VStack(spacing: 0) {
                     ForEach(model.history.prefix(4)) { entry in
@@ -231,8 +231,8 @@ private struct RecentCard: View {
                     }
                 }
                 .padding(24)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))
+                .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular))
             }
         }
     }
@@ -243,7 +243,7 @@ private struct EngineCard: View {
 
     var body: some View {
             VStack(alignment: .leading, spacing: 16) {
-                Text(L10n.text("引擎")).font(.system(size: 15, weight: .semibold))
+                Text(L10n.text("引擎")).font(Theme.sectionTitleFont)
                 HStack(spacing: 6) {
                     Circle().fill(model.serviceUp ? Theme.success : Theme.tertiary).frame(width: 6, height: 6)
                     Text(model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪"))
@@ -254,11 +254,11 @@ private struct EngineCard: View {
                 EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: model.modelSummary)
                 Button(L10n.text("管理模型")) {
                     model.settingsCategory = 1
-                    model.page = .settings
+                    model.navigate(to: .settings)
                 }.buttonStyle(.plain).font(.system(size: 12)).foregroundColor(Theme.accent).hoverInteraction()
             }
-            .padding(32).frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
     }
 }
 
@@ -270,7 +270,7 @@ private struct EngineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: symbol).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
-            Text(value).font(.system(size: 13, weight: .medium))
+            Text(value).font(.system(size: 14, weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -410,19 +410,17 @@ struct HistoryPage: View {
                                     let first = entry.id == group.entries.first?.id
                                     let last = entry.id == group.entries.last?.id
                                     let card = UnevenRoundedRectangle(
-                                        topLeadingRadius: first ? Theme.radius : 0,
-                                        bottomLeadingRadius: last ? Theme.radius : 0,
-                                        bottomTrailingRadius: last ? Theme.radius : 0,
-                                        topTrailingRadius: first ? Theme.radius : 0, style: .circular)
+                                        topLeadingRadius: first ? Theme.listGroupRadius : 0,
+                                        bottomLeadingRadius: last ? Theme.listGroupRadius : 0,
+                                        bottomTrailingRadius: last ? Theme.listGroupRadius : 0,
+                                        topTrailingRadius: first ? Theme.listGroupRadius : 0, style: .circular)
                                     VStack(spacing: 0) {
                                         HistoryRow(entry: entry, compact: false, selected: model.selectedHistoryID == entry.id) {
                                             model.selectedHistoryID = entry.id
                                         }
-                                        if !last { Divider().padding(.leading, 66) }
                                     }
-                                    .padding(.horizontal, 24)
-                                    .padding(.top, first ? 32 : 0)
-                                    .padding(.bottom, last ? 32 : 0)
+                                    .padding(.top, first ? 4 : 0)
+                                    .padding(.bottom, last ? 4 : 0)
                                     .background(card.fill(Theme.card))
                                     .clipShape(card)
                                 }
@@ -486,16 +484,16 @@ struct HistoryRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 12) {
             Text(Formatters.time.string(from: entry.ts))
                 .font(.system(size: 12, design: .rounded))
                 .foregroundColor(hovering ? Theme.accent : Theme.tertiary)
-                .frame(width: 38, alignment: .leading)
+                .frame(width: 52, alignment: .leading)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
                 if entry.displayText.isEmpty || compact {
                     Text(entry.displayText.isEmpty ? (entry.fallbackReason == "quantity-conflict" ? L10n.text("数量或单位待核对") : L10n.text("（没有识别到内容）")) : entry.displayText)
-                        .font(.system(size: 13.5))
+                        .font(Theme.rowFont)
                         .foregroundColor(Theme.ink)
                         .lineLimit(expanded ? nil : (compact ? 2 : 4))
                         .textSelection(.enabled)
@@ -504,8 +502,8 @@ struct HistoryRow: View {
                         .clipped()
                         .onTapGesture { if entry.qualityReview != nil { expanded.toggle() } }
                 } else {
-                    SelectableText(text: entry.displayText, font: .systemFont(ofSize: 13.5), color: NSColor(Theme.ink),
-                                   maxLines: expanded ? 0 : 4,
+                    SelectableText(text: entry.displayText, font: .systemFont(ofSize: 14), color: NSColor(Theme.ink),
+                                   maxLines: expanded ? 0 : 4, lineHeight: 22,
                                    onPlainClick: { selectOrExpand() })
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -526,6 +524,7 @@ struct HistoryRow: View {
                         .font(.system(size: 12)).foregroundColor(Theme.secondary).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if compact || expanded || entry.fallback {
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
                     if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "提示词模式" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
@@ -535,26 +534,30 @@ struct HistoryRow: View {
                         Badge(text: held ? L10n.text("未自动输入") : L10n.text("已用原文"), tint: Theme.warning).fixedSize()
                     }
                 }
+                }
             }
             // Reserve the action width. Hover must not change the text wrapping
             // after AppKit has reported its height to SwiftUI.
                 HStack(spacing: 2) {
-                    IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? L10n.text("已复制") : L10n.text("复制")) { copy(raw: false) }
+                    IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? L10n.text("已复制") : L10n.text("复制"), symbolSize: 14) { copy(raw: false) }
                     if !compact {
-                        IconButton(symbol: "text.quote", help: L10n.text("复制原话")) { copy(raw: true) }
+                        IconButton(symbol: "text.quote", help: L10n.text("复制原话"), symbolSize: 14) { copy(raw: true) }
                         if canRetry {
-                            IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试")) { model.actions?.retryEntry(id: entry.id) }
+                            IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试"), symbolSize: 14) { model.actions?.retryEntry(id: entry.id) }
                         }
-                        IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) }
+                        IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive, symbolSize: 14) { model.actions?.deleteEntry(id: entry.id) }
                     }
                 }
+                .frame(height: 24)
                 .opacity(hovering || copied || selected || keyboardFocused ? 1 : 0)
                 .allowsHitTesting(hovering || copied || selected || keyboardFocused)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: compact ? 48 : 42)
         .contentShape(Rectangle())
         .background(selected ? Theme.selection : hovering ? Theme.cardHover : Color.clear)
+        .help(AppNames.name(for: entry.app))
         .focusable(!compact).focused($keyboardFocused)
         .onHover { hovering = $0 }
         .onTapGesture { selectOrExpand() }
@@ -605,12 +608,12 @@ private struct HistoryDetail: View {
                 Text(L10n.text("记录详情")).font(.system(size: 14, weight: .semibold))
                 Spacer()
                 IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
-            }.padding(40)
+            }.padding(24)
             Divider().overlay(Theme.border)
             HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(AppNames.name(for: entry.app)).font(.system(size: 13, weight: .medium))
+                        Text(AppNames.name(for: entry.app)).font(.system(size: 14, weight: .medium))
                         Text(Formatters.dayTitle(entry.ts) + " · " + Formatters.time.string(from: entry.ts))
                             .font(.system(size: 11)).foregroundColor(Theme.tertiary)
                     }
@@ -621,7 +624,7 @@ private struct HistoryDetail: View {
                         detailText(L10n.text("待核对整理结果"), review.candidate)
                     }
                 }
-                .padding(40).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider().overlay(Theme.border)
             HStack {
@@ -634,10 +637,10 @@ private struct HistoryDetail: View {
                 IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) {
                     model.actions?.deleteEntry(id: entry.id)
                 }
-            }.padding(40)
+            }.padding(24)
         }
         .foregroundColor(Theme.ink)
-        .background(RoundedWindowMarker()).buttonBorderShape(.capsule)
+        .background(RoundedWindowMarker())
         .onExitCommand(perform: close)
     }
 

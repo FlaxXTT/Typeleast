@@ -3,7 +3,7 @@ import SwiftUI
 /// Hover changes only a flat highlight; press feedback is short and does not move layout.
 struct ControlMotion: ViewModifier {
     var pressed = false
-    var cornerRadius: CGFloat = 99
+    var cornerRadius: CGFloat = Theme.radius
     var primary = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var enabled
@@ -46,14 +46,14 @@ struct SidebarMotionIcon: View {
 
     var body: some View {
         Image(systemName: page.symbol)
-            .font(.system(size: 14, weight: selected ? .semibold : .regular))
+            .font(.system(size: 16, weight: .regular))
             .opacity(enabled ? (selected || hovering ? 1 : 0.86) : 0.5)
-            .frame(width: 18, height: 18)
+            .frame(width: 16, height: 16)
     }
 }
 
 struct MotionIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.radius))
+        configuration.label.modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.smallControlRadius))
     }
 }

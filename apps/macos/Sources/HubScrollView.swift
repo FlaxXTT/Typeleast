@@ -25,6 +25,7 @@ enum NativeScrollAppearance {
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = false
         scroll.autohidesScrollers = true
+        scroll.verticalScroller?.controlSize = .small
     }
 }
 
@@ -228,7 +229,7 @@ private final class HubScrollChrome: NSView {
         topButton.target = self
         topButton.action = #selector(backToTop)
         topButton.wantsLayer = true
-        topButton.layer?.cornerRadius = 16
+        topButton.layer?.cornerRadius = Theme.smallControlRadius
         topButton.isHidden = true
         addSubview(topButton)
         updateColours()

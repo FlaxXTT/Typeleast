@@ -146,7 +146,7 @@ struct BetaQuestionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("提示词模式 · 第 {0} 轮", info.round ?? 1))
-                .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
+                .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.accent)
             HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let goals = info.goals, !goals.isEmpty {
@@ -159,7 +159,7 @@ struct BetaQuestionsView: View {
                         Text(L10n.text("需要你说明")).font(.system(size: 12, weight: .semibold)).padding(.top, 4)
                         ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(String(index + 1) + ". " + question).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                                Text(String(index + 1) + ". " + question).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
                                 let options = BetaQuestionsView.choices(for: question)
                                 if !options.isEmpty {
                                     VStack(alignment: .leading, spacing: 6) {
@@ -181,7 +181,7 @@ struct BetaQuestionsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(model.busy ?? L10n.text("点选或按 {0} 语音补充，点「生成」结束。", model.hotkey))
-                .font(.system(size: 11.5)).foregroundColor(model.busy == nil ? Theme.secondary : Theme.accent)
+                .font(.system(size: 12)).foregroundColor(model.busy == nil ? Theme.secondary : Theme.accent)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(L10n.text("取消"), action: cancel).buttonStyle(SecondaryButtonStyle())
@@ -202,7 +202,7 @@ struct BetaQuestionsView: View {
                 }.buttonStyle(PrimaryButtonStyle()).disabled(model.busy != nil)
             }
         }
-        .padding(40)
+        .padding(24)
         .frame(width: 350, height: 500, alignment: .leading)
         .background(Theme.window)
     }
@@ -211,7 +211,7 @@ struct BetaQuestionsView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title).font(.system(size: 12, weight: .semibold))
             ForEach(Array(lines.enumerated()), id: \.offset) { _, text in
-                Text("• " + text).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
+                Text("• " + text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
             }
         }
     }

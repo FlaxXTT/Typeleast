@@ -39,10 +39,27 @@ enum Theme {
     static let success = dynamic(hex(0x008770), hex(0x00957C))
     static let warning = dynamic(hex(0xEA4D00), hex(0xFF5B00))
 
-    static let radius: CGFloat = 99
-    static let controlRadius: CGFloat = 99
-    static let pageInset: CGFloat = 32
-    static let sidebarWidth: CGFloat = 236
+    static let radius: CGFloat = 8
+    static let controlRadius: CGFloat = 8
+    static let smallControlRadius: CGFloat = 6
+    static let cardRadius: CGFloat = 12
+    static let listGroupRadius: CGFloat = 10
+    static let homeCardRadius: CGFloat = 20
+    static let panelRadius: CGFloat = 16
+    static let sidebarRadius: CGFloat = 20
+    static let settingsRadius: CGFloat = 12
+    static let capsuleRadius: CGFloat = 999
+    static let heatCellRadius: CGFloat = 4
+    static let pageInset: CGFloat = 24
+    static let sidebarWidth: CGFloat = 210
+    static let spacing: CGFloat = 8
+    static let halfSpacing: CGFloat = 4
+    static let titleFont = Font.custom("Prompt-Medium", size: 36)
+    static let homeTitleFont = Font.custom("Prompt-Medium", size: 48)
+    static let sectionTitleFont = Font.custom("Prompt-Medium", size: 24)
+    static let bodyFont = Font.system(size: 16)
+    static let rowFont = Font.system(size: 14)
+    static let captionFont = Font.system(size: 12)
     static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12)
     static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
@@ -62,6 +79,7 @@ enum Theme {
 extension View {
     func capsuleInput() -> some View {
         self.padding(.horizontal, 12).padding(.vertical, 6)
+            .frame(minHeight: 32)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
             .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
     }
@@ -73,7 +91,7 @@ struct CapsuleTextEditor: View {
         TextEditor(text: $text)
             .scrollContentBackground(.hidden)
             .scrollIndicators(.visible)
-            .padding(32)
+            .padding(12)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
             .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))
     }
@@ -91,15 +109,15 @@ extension View {
 
 /// A rounded, softly filled container.
 struct Card<Content: View>: View {
-    var padding: CGFloat = 32
+    var padding: CGFloat = 20
     @ViewBuilder var content: Content
 
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 
@@ -110,7 +128,7 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Quiet outlined pill for secondary actions.
+/// Quiet rounded outline for secondary actions.
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         HoverPill(configuration: configuration, primary: false)
@@ -124,7 +142,7 @@ private struct HoverPill: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 13, weight: primary ? .semibold : .medium))
+            .font(.system(size: 14, weight: primary ? .semibold : .medium))
             .foregroundColor(primary ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, primary ? 16 : 14)
             .padding(.vertical, primary ? 8 : 7)
@@ -141,15 +159,17 @@ struct IconButton: View {
     let symbol: String
     let help: String
     var role: ButtonRole? = nil
+    var size: CGFloat = 32
+    var symbolSize: CGFloat = 16
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(role: role, action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: symbolSize, weight: .medium))
                 .foregroundColor(role == .destructive && hovering ? .red : Theme.secondary)
-                .frame(width: 26, height: 26)
+                .frame(width: size, height: size)
         }
         .buttonStyle(MotionIconButtonStyle())
         .help(help)
@@ -168,8 +188,8 @@ struct Keycap: View {
             .foregroundColor(Theme.ink)
             .padding(.horizontal, large ? 12 : 8)
             .frame(minWidth: large ? 40 : 28, minHeight: large ? 32 : 24)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Theme.border, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: Theme.smallControlRadius, style: .circular).fill(Theme.window))
+            .overlay(RoundedRectangle(cornerRadius: Theme.smallControlRadius, style: .circular).stroke(Theme.border, lineWidth: 1))
             .shadow(color: Color.black.opacity(0.06), radius: 0, x: 0, y: 1)
     }
 }
@@ -180,22 +200,24 @@ struct ChipPicker<Value: Hashable>: View {
     @Binding var selection: Value
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 let selected = option.0 == selection
                 Button {
                     selection = option.0
                 } label: {
                     Text(option.1)
-                        .font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+                        .font(.system(size: 14, weight: selected ? .medium : .regular))
                         .foregroundColor(selected ? Theme.accent : Theme.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .frame(minWidth: 40, minHeight: 32)
                         .background(Capsule().fill(selected ? Theme.selection : Color.clear))
                 }
                 .buttonStyle(HoverChipStyle())
             }
         }
+        .padding(4).frame(height: 40)
+        .background(Capsule().fill(Theme.card))
     }
 }
 
@@ -210,7 +232,7 @@ private struct HoverChipLabel: View {
 
     var body: some View {
         configuration.label
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.radius))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.capsuleRadius))
             .contentShape(Capsule())
     }
 }
@@ -222,7 +244,7 @@ struct Badge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10.5, weight: .medium))
+            .font(.system(size: 11, weight: .medium))
             .foregroundColor(tint)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
@@ -242,7 +264,7 @@ struct SearchField: View {
                 .font(.system(size: 12)).foregroundColor(Theme.tertiary)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(Theme.rowFont)
             if !text.isEmpty {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundColor(Theme.tertiary)
@@ -251,7 +273,7 @@ struct SearchField: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .frame(width: width)
+        .frame(width: width, height: 36)
         .background(RoundedRectangle(cornerRadius: Theme.controlRadius).fill(Theme.card))
         .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border, lineWidth: 1))
     }
@@ -287,7 +309,7 @@ struct AppMarkView: View {
     var size: CGFloat = 28
 
     var body: some View {
-        Image(nsImage: AppMark.image(size: size))
+        Image(nsImage: AppIconArtwork.image(size: size, surface: .interface))
             .resizable()
             .frame(width: size, height: size)
             .accessibilityHidden(true)

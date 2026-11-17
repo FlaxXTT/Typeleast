@@ -10,6 +10,7 @@ the user cannot drag a resize edge or zoom the main window.
 | Main | 1080 × 750 |
 | Transparent recording carrier | 750 × 500 |
 | First-run setup | 940 × 610 |
+| Settings dialog | 940 × 652 |
 | Prompt questions, recognition/quantity review, update progress and result/advice panels | 350 × 500 |
 
 The project has no separate account-login flow; its first-run setup uses the supplied
@@ -17,14 +18,17 @@ login-window footprint. The reference's 988×685 lower bound is not an interacti
 range: the main window's minimum and maximum frame sizes are both 1080×750. A separate
 frame-save key prevents restoration of an older resizable layout.
 
-## Circular corners
+## Surface geometry
 
-Controls, fields, cards, activity cells and owned popup surfaces use a 99-point radius.
-Native layers clamp it to `min(99, width / 2, height / 2)`. SwiftUI uses circular geometry,
-not the continuous/squircle style. Larger cards and editors reserve content insets so text
-stays within the curve. Owned windows have clear backgrounds and rounded content layers;
-their native traffic lights sit inside the larger corner. Brand artwork and the mosaic's
-image fragments retain their own drawing geometry.
+The interface uses tiered circular corners: 8pt base controls, 6pt small controls,
+12pt cards, 10pt history groups, 20pt Home cards and sidebar, 16pt generic panels,
+and 12pt Settings sheets. Only actual pills, switches and the voice bar use
+capsule geometry. Native text editors use an 8pt clip. Main-window traffic lights
+sit at the regular 14pt inset; panel rounding does not affect brand artwork.
+
+The main sidebar is 210pt including its 8pt left inset; its inner surface is 202pt
+wide. The main content has 24pt horizontal, 44pt top and 16pt bottom insets.
+Settings has a 202pt category pane and its own scrollable content column.
 
 ## Visible capsule
 
@@ -39,7 +43,7 @@ image fragments retain their own drawing geometry.
 | Error | 70 × 34 |
 
 The app's press-once/press-again workflow uses hands-free recording, as confirmed by the
-owner. It retains both 26-point discs: a grey cancel button and white finish button with
+owner. It retains both 24-point discs: a grey cancel button and white finish button with
 a black check. Compact modes are explicit `RecordingBarMode` options. The existing final
 15-second countdown adds exactly 40 points to the recording width.
 Supplying `IdleBar.countdown` also gives the hover capsule a 40-point timer slot (110×34).

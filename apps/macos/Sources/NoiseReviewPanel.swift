@@ -52,9 +52,9 @@ struct NoiseReviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(repeated ? L10n.text("识别结果出现异常重复") : L10n.text("可能主要是背景噪声"))
-                .font(.headline).foregroundColor(Theme.ink)
+                .font(.system(size: 18, weight: .semibold)).foregroundColor(Theme.ink)
             Text(L10n.text("没有自动输入。继续后按当前设置处理；如使用联网整理模型，文字会发送给该服务。"))
-                .font(.subheadline).foregroundColor(Theme.secondary)
+                .font(Theme.rowFont).foregroundColor(Theme.secondary)
             HubScrollView(showsChrome: false) {
                 Text(candidate.isEmpty ? L10n.text("没有识别到文字") : candidate)
                     .textSelection(.enabled)
@@ -68,7 +68,7 @@ struct NoiseReviewView: View {
                     .buttonStyle(PrimaryButtonStyle()).disabled(candidate.isEmpty)
             }
         }
-        .padding(32)
+        .padding(16)
         .frame(width: 350, height: 500)
         .background(Theme.window)
     }
@@ -146,9 +146,9 @@ struct QuantityReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(review.kind == "quantity" ? L10n.text("数量或单位可能发生变化") : L10n.text("整理结果需要核对")).font(.headline).foregroundColor(Theme.ink)
+            Text(review.kind == "quantity" ? L10n.text("数量或单位可能发生变化") : L10n.text("整理结果需要核对")).font(.system(size: 18, weight: .semibold)).foregroundColor(Theme.ink)
             Text(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"))
-                .font(.subheadline).foregroundColor(Theme.secondary)
+                .font(Theme.rowFont).foregroundColor(Theme.secondary)
             HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(L10n.text("原始识别")).font(.caption).foregroundColor(Theme.secondary)
@@ -168,7 +168,7 @@ struct QuantityReviewView: View {
                     .disabled(editedCandidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(32).frame(width: 350, height: 500).background(Theme.window)
+        .padding(16).frame(width: 350, height: 500).background(Theme.window)
     }
 }
 
@@ -190,7 +190,7 @@ private struct ReviewTextEditor: NSViewRepresentable {
         view.isRichText = false
         view.allowsUndo = true
         view.drawsBackground = false
-        view.font = .systemFont(ofSize: NSFont.systemFontSize)
+        view.font = .systemFont(ofSize: 14)
         view.textColor = .labelColor
         view.textContainerInset = NSSize(width: 32, height: 32)
         view.isVerticallyResizable = true

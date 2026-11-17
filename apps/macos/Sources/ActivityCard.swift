@@ -21,12 +21,12 @@ struct InsightsPanel: View {
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text(L10n.text("洞察")).font(.system(size: 28, weight: .bold)).tracking(-0.6)
+                Text(L10n.text("洞察")).font(Theme.homeTitleFont).tracking(-0.6)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
-            .frame(height: 40)
+            .frame(height: 54)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 20) {
                 Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), progress: countProgress, compact: compact)
                 Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), progress: countProgress, compact: compact,
@@ -145,7 +145,7 @@ private struct Figure: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
         .help(note ?? label)
     }
 }
@@ -186,7 +186,7 @@ struct ShareButton: NSViewRepresentable {
         button.font = .systemFont(ofSize: 16, weight: .medium)
         button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
         button.wantsLayer = true
-        button.layer?.cornerRadius = 20 // min(99, 40 / 2)
+        button.layer?.cornerRadius = 20 // 40-point capsule
         button.layer?.borderWidth = 0.5
         button.updateSurface()
         button.controlSize = .regular
@@ -270,15 +270,15 @@ struct ActivityCard: View {
     var compact = false
     @State private var weekOffset = 0
 
-    private let cell: CGFloat = 18
-    private let gap: CGFloat = 10
-    private let dayColumn: CGFloat = 44
+    private let cell: CGFloat = 16
+    private let gap: CGFloat = 8
+    private let dayColumn: CGFloat = 32
 
     var body: some View {
         let log = ActivityLog.shared
         let streaks = log.streaks()
         let _ = model.activityRevision   // redraw when a dictation is recorded
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top, spacing: 0) {
                 figure(log.activeDays, L10n.text("活跃天数"))
                 figure(streaks.current, L10n.text("当前连续天数"))
@@ -295,9 +295,9 @@ struct ActivityCard: View {
                 Text(L10n.text("更多")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
             }
         }
-        .padding(40)
+        .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
         .onChange(of: model.homePresentationID) { _, _ in weekOffset = 0 }
     }
 
@@ -306,9 +306,9 @@ struct ActivityCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")), progress: countProgress)
                     .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
-                Text(L10n.text("天")).font(.system(size: 13, weight: .semibold))
+                Text(L10n.text("天")).font(.system(size: 14, weight: .semibold))
             }
-            Text(label).font(.system(size: compact ? 12 : 15)).foregroundColor(Theme.homeLabel)
+            Text(label).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -359,7 +359,7 @@ struct ActivityCard: View {
                                 }
                                 .help(tooltip(date, day)).accessibilityLabel(tooltip(date, day))
                         } else {
-                            RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
+                            RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
                                 .stroke(Theme.border, lineWidth: 1).frame(width: cell, height: cell)
                         }
                     }
@@ -386,7 +386,7 @@ struct ActivityCard: View {
     }
 
     private func square(_ level: Int) -> some View {
-        RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
+        RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
             .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
             .frame(width: cell, height: cell)
     }

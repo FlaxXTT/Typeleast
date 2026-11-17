@@ -23,6 +23,7 @@ final class LoginItemStatus: ObservableObject {
 }
 
 struct SettingsPage: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var model: AppModel
     @StateObject private var meter = MicMeter()
     @StateObject private var loginItemStatus: LoginItemStatus
@@ -36,28 +37,57 @@ struct SettingsPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(title: L10n.text("设置"))
-            HStack(spacing: 2) {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.text("设置")).font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 8).padding(.bottom, 12)
                 ForEach(categories.indices, id: \.self) { index in
-                    FlexibleSegment(label: L10n.text(categories[index]), selected: model.settingsCategory == index) {
-                        model.settingsCategory = index
+                    let selected = model.settingsCategory == index
+                    Button { model.settingsCategory = index } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: ["mic", "cpu", "gearshape"][index])
+                                .font(.system(size: 16)).frame(width: 16)
+                            Text(L10n.text(categories[index])).font(Theme.rowFont)
+                            Spacer()
+                        }
+                        .foregroundColor(selected ? Theme.accent : Theme.secondary)
+                        .padding(.horizontal, 8).frame(height: 36)
+                        .background(RoundedRectangle(cornerRadius: Theme.radius)
+                            .fill(selected ? Theme.selection : .clear))
                     }
+                    .buttonStyle(.plain).hoverInteraction()
                 }
-            }.padding(3).background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
-            .padding(.horizontal, Theme.pageInset).padding(.bottom, 16)
-            HubScrollView(key: "settings-" + String(model.settingsCategory)) {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch model.settingsCategory {
-                    case 0: shortcuts; language; translatePrompt; audio; cleanup
-                    case 1: ModelSection(); speech
-                    default: general; privacy; permissions; updates; advanced
-                    }
-                }
-                .padding(.horizontal, Theme.pageInset).padding(.bottom, 32)
+                Spacer()
             }
-            .id(model.settingsCategory)
+            .padding(.horizontal, 12).padding(.vertical, 20)
+            .frame(width: 202).background(Theme.sidebar)
+            Divider().overlay(Theme.border)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(L10n.text(categories[model.settingsCategory])).font(Theme.sectionTitleFont)
+                    Spacer()
+                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24) { dismiss() }
+                }
+                .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 16)
+                HubScrollView(key: "settings-" + String(model.settingsCategory)) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        switch model.settingsCategory {
+                        case 0: shortcuts; language; translatePrompt; audio; cleanup
+                        case 1: ModelSection(); speech
+                        default: general; privacy; permissions; updates; advanced
+                        }
+                    }
+                    .padding(.horizontal, 36).padding(.bottom, 24)
+                }
+                .id(model.settingsCategory)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(width: 940, height: 652)
+        .font(Theme.bodyFont).foregroundColor(Theme.ink).tint(Theme.accent).controlSize(.large)
+        .background(Theme.tile)
+        .background(RoundedWindowMarker(radius: Theme.settingsRadius))
+        .onExitCommand { dismiss() }
         .onChange(of: model.settingsCategory) { _ in
             meter.stop()
             refreshLoginStatus()
@@ -237,7 +267,7 @@ struct SettingsPage: View {
         SpeechModelOptions()
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+            .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
     }
 
     private var updates: some View {
@@ -324,12 +354,12 @@ struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.secondary)
-            VStack(alignment: .leading, spacing: 16) { content }
-                .padding(32)
+            Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.secondary)
+            VStack(alignment: .leading, spacing: 8) { content }
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
         }
     }
 }
@@ -341,10 +371,10 @@ struct SettingRow<Trailing: View>: View {
 
     private var labels: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 13.5, weight: .medium))
+            Text(title).font(Theme.rowFont)
                 .fixedSize(horizontal: false, vertical: true)
             if let detail = detail, !detail.isEmpty {
-                Text(detail).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
+                Text(detail).font(Theme.captionFont).lineSpacing(4).foregroundColor(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -362,6 +392,7 @@ struct SettingRow<Trailing: View>: View {
                 trailing.hoverInteraction()
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.vertical, 8).frame(minHeight: 48)
     }
 }
 
@@ -387,14 +418,14 @@ struct StateSwitchStyle: ToggleStyle {
         ZStack(alignment: configuration.isOn ? .trailing : .leading) {
             Capsule(style: .circular)
                 .fill(configuration.isOn ? Self.onColor : Self.offColor)
-                .frame(width: 36, height: 20)
+                .frame(width: 38, height: 22)
             Circle()
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
-                .frame(width: 16, height: 16)
+                .frame(width: 18, height: 18)
                 .padding(2)
         }
-        .frame(width: 36, height: 20)
+        .frame(width: 38, height: 22)
         .contentShape(Capsule(style: .circular))
         .onTapGesture {
             withAnimation(.easeOut(duration: 0.15)) { configuration.isOn.toggle() }
@@ -422,7 +453,7 @@ private struct NoteRow: View {
                 Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
             }
         }
-        .padding(32)
+        .padding(16)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window.opacity(0.7)))
     }
 }
@@ -437,7 +468,7 @@ private struct PermissionRow: View {
         HStack {
             Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
                 .foregroundColor(granted ? Theme.success : Theme.warning)
-            Text(title).font(.system(size: 13.5, weight: .medium))
+            Text(title).font(Theme.rowFont)
             Spacer()
             if granted {
                 Text(L10n.text("已允许")).font(.system(size: 12)).foregroundColor(Theme.secondary)
@@ -507,7 +538,7 @@ struct HotkeyField: View {
             .hoverInteraction()
             .help(L10n.text("Esc 取消，Delete 清除。"))
             if let problem = model.hotkeyProblems[slot.name], !recording {
-                Text(problem).font(.system(size: 11.5)).foregroundColor(Theme.warning)
+                Text(problem).font(Theme.captionFont).foregroundColor(Theme.warning)
             }
         }
         .onDisappear { stop() }
@@ -661,7 +692,7 @@ struct ModelSection: View {
                 }
                 if !settings.llmRouteReady {
                     Text(missingParts() + L10n.text("。可以听写，但不整理。"))
-                        .font(.system(size: 11.5)).foregroundColor(Theme.warning)
+                        .font(Theme.captionFont).foregroundColor(Theme.warning)
                 }
         }
         .onAppear { reloadForPreset() }
@@ -844,7 +875,7 @@ struct TranslatePromptEditor: View {
             Text(L10n.text("说话翻译和选中翻译都用它。{{to}} 代表目标语言。"))
                 .font(.system(size: 12)).foregroundColor(.secondary)
             CapsuleTextEditor(text: $draft)
-                .font(.system(size: 12))
+                .font(Theme.rowFont)
                 .frame(height: 150)
                 .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.primary.opacity(0.12)))
                 .onChange(of: draft) { _ in saved = false }

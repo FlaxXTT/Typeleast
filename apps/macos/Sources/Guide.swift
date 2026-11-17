@@ -28,7 +28,7 @@ enum SettingsGuide {
     static func open(_ entry: Entry, in model: AppModel) {
         guard let page = entry.page else { return }
         if page == .settings { model.settingsCategory = entry.category }
-        model.page = page
+        model.navigate(to: page)
     }
 }
 
@@ -40,9 +40,9 @@ struct GuideList: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(SettingsGuide.entries) { entry in
                 HStack(spacing: 10) {
-                    Text(entry.title).font(.system(size: 13, weight: .medium))
+                    Text(entry.title).font(.system(size: 14, weight: .medium))
                     Spacer(minLength: 8)
-                    Text(entry.place).font(.system(size: 12.5)).foregroundColor(Theme.secondary)
+                    Text(entry.place).font(.system(size: 12)).foregroundColor(Theme.secondary)
                     if let open, entry.page != nil {
                         Button(L10n.text("前往")) { open(entry) }.buttonStyle(SecondaryButtonStyle())
                     }
@@ -76,10 +76,10 @@ struct MirrorHint: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.text("下载失败？网络可能连不上 Hugging Face，请用镜像："))
-                .font(.system(size: 12.5)).foregroundColor(Theme.ink)
+                .font(.system(size: 12)).foregroundColor(Theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Text(ModelMirror.suggested).font(.system(size: 12.5, design: .monospaced)).textSelection(.enabled)
+                Text(ModelMirror.suggested).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                 Button(copied ? L10n.text("已复制") : L10n.text("复制")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(ModelMirror.suggested, forType: .string)

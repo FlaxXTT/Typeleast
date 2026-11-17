@@ -124,6 +124,7 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then cp "$ROOT/Resources/AppIcon.icns"
 for artwork in BrandIcon.png BrandWordmark.png; do
   if [ -f "$ROOT/Resources/$artwork" ]; then cp "$ROOT/Resources/$artwork" "$APP/Contents/Resources/$artwork"; fi
 done
+cp -R "$ROOT/Resources/Fonts" "$APP/Contents/Resources/Fonts"
 
 # Enable Hardened Runtime to restrict library injection and debugger attachment.
 # This process holds microphone, Accessibility and Keychain permissions.

@@ -6,8 +6,9 @@ Small icons render from vectors at their own resolution.
 
 ## Geometry and colour
 
-- Canvas: 1024 × 1024, transparent outside the enclosure.
-- Enclosure: 824 × 824, centred at (512, 512).
+- System canvas: 1024 × 1024, with an 824 × 824 enclosure centred at (512, 512).
+- Interface canvas: the enclosure fills the square control bounds, with no extra transparent margin.
+  Sidebar, onboarding, website marks, favicons and the shared ICO use this framing.
 - Enclosure curve: the continuous Bézier outline from Apple's Illustrator
   **App Icon Template**, downloaded from [Apple Design Resources](https://developer.apple.com/design/resources/)
   on 17 November 2026 (`iOS-27-Icon-Templates-Photoshop-Illustrator.dmg`).
@@ -24,8 +25,8 @@ Small icons render from vectors at their own resolution.
 - First four bars: `#1D1A1A`; rightmost bar: `#1F5DF2`.
 - No baked-in shadow. The artwork keeps the same palette in both app themes.
 
-The enclosure is the application-icon exception to the main interface's
-99px circular corner rule.
+The same `waveformOccupancy = 0.618` controls both framings. The app icon keeps
+its official continuous enclosure independently of the interface's 6–20px control/card corners.
 
 ## Recreate the assets
 
@@ -35,8 +36,11 @@ From `apps/macos`, choose an output folder and run:
 mkdir -p build/icon-artwork
 swiftc Sources/AppIconArtwork.swift scripts/make-icon.swift \
   -o build/icon-artwork/make-icon
-build/icon-artwork/make-icon build/icon-artwork/AppIcon.iconset Resources/BrandIcon.png
+build/icon-artwork/make-icon build/icon-artwork/AppIcon.iconset Resources/BrandIcon.png ../..
 iconutil -c icns build/icon-artwork/AppIcon.iconset -o Resources/AppIcon.icns
 ```
+
+The generator also updates `docs/media/icon-256.png`, both website favicon files,
+and the Windows icon resource from the edge-to-edge framing.
 
 This creates artwork only. It does not build, install, launch or sign the app.
