@@ -46,6 +46,7 @@ final class LearnedToast {
         }
         p.contentView = host
         p.setContentSize(size)
+        AppWindowStyle.round(p)
         // Bottom-centre of the screen the mouse is on, above the recording pill.
         let mouse = NSEvent.mouseLocation
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
@@ -115,13 +116,13 @@ struct LearnedToastView: View {
             Button(action: undo) {
                 Text(L10n.text("撤销")).font(.system(size: 13, weight: .medium)).foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(Capsule(style: .continuous).fill(Color.white.opacity(0.16)))
+                    .background(Capsule(style: .circular).fill(Color.white.opacity(0.16)))
             }
             .buttonStyle(.plain)
             .hoverInteraction()
         }
         .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(white: 0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.12)))
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color(white: 0.1)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.white.opacity(0.12)))
     }
 }

@@ -182,7 +182,7 @@ struct VoiceWaveform {
             active = true
             quietFor = 0
         }
-        let target = active ? 2 + 14 * Double(level.response) : 2
+        let target = active ? 2 + 16 * Double(level.response) : 2
         let responseTime = target > currentHeight ? 0.10 : 0.24
         currentHeight += (target - currentHeight) * (1 - exp(-dt / responseTime))
         // A new pulse picks a destination; the centre travels there instead of jumping.
@@ -218,7 +218,7 @@ struct VoiceWaveform {
                 injectionTime.formTruncatingRemainder(dividingBy: 0.05)
                 if active {
                     let variation = level.signal < 0.03 ? 0.01 : level.signal < 0.10 ? 0.04 : 0.06
-                    let height = min(16, max(2, currentHeight + (random() * 2 - 1) * variation * 14))
+                    let height = min(18, max(2, currentHeight + (random() * 2 - 1) * variation * 16))
                     if level.signal >= 0.10 && random() < min(0.6, Double(level.signal) * 1.5) {
                         targetCentreOffset = (random() * 2 - 1) * 1.2
                         impulses.append(Impulse(due: time + 0.08, centre: voiceCentre, height: height, reach: reach))
@@ -232,7 +232,7 @@ struct VoiceWaveform {
                     let distance = abs(Double(bar) - impulses[eventIndex].centre)
                     if time < impulses[eventIndex].due + distance * 0.014 { continue }
                     let decay = max(0, 1 - distance / impulses[eventIndex].reach)
-                    let target = min(16, 2 + (impulses[eventIndex].height - 2) * decay * (0.95 + random() * 0.1))
+                    let target = min(18, 2 + (impulses[eventIndex].height - 2) * decay * (0.95 + random() * 0.1))
                     targets[bar] = max(targets[bar], target)
                     ages[bar] = 0
                     impulses[eventIndex].applied |= bit

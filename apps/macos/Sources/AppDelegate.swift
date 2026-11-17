@@ -123,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
         recordingBar.onCancel = { [weak self] in self?.cancelDictation() }
+        recordingBar.onDismiss = { [weak self] in self?.updateIdleBar() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
         startSelectionTranslator()
         idleBar.onClick = { [weak self] in self?.toggleDictation() }

@@ -125,7 +125,7 @@ private struct Figure: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
     }
 }
 
@@ -165,7 +165,7 @@ struct ShareButton: NSViewRepresentable {
         button.font = .systemFont(ofSize: 16, weight: .medium)
         button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
         button.wantsLayer = true
-        button.layer?.cornerRadius = 20
+        button.layer?.cornerRadius = 20 // min(99, 40 / 2)
         button.layer?.borderWidth = 0.5
         button.updateSurface()
         button.controlSize = .regular
@@ -254,9 +254,9 @@ struct ActivityCard: View {
                 Text(L10n.text("更多")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
             }
         }
-        .padding(20)
+        .padding(40)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
         .onChange(of: model.homePresentationID) { _, _ in weekOffset = 0 }
     }
 
@@ -318,7 +318,7 @@ struct ActivityCard: View {
                                 }
                                 .help(tooltip(date, day)).accessibilityLabel(tooltip(date, day))
                         } else {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                                 .stroke(Theme.border, lineWidth: 1).frame(width: cell, height: cell)
                         }
                     }
@@ -345,7 +345,7 @@ struct ActivityCard: View {
     }
 
     private func square(_ level: Int) -> some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
+        RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
             .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
             .frame(width: cell, height: cell)
     }

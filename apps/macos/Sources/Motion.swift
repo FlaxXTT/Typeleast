@@ -3,7 +3,7 @@ import SwiftUI
 /// Hover changes only a flat highlight; press feedback is short and does not move layout.
 struct ControlMotion: ViewModifier {
     var pressed = false
-    var cornerRadius: CGFloat = 10
+    var cornerRadius: CGFloat = 99
     var primary = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var enabled
@@ -12,7 +12,7 @@ struct ControlMotion: ViewModifier {
     func body(content: Content) -> some View {
         let active = hovering && enabled
         let down = pressed && enabled
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .circular)
         content
             .overlay {
                 if active || down {
@@ -54,6 +54,6 @@ struct SidebarMotionIcon: View {
 
 struct MotionIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 7))
+        configuration.label.modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.radius))
     }
 }

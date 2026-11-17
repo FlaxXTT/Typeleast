@@ -53,17 +53,19 @@ final class BetaPanel {
         model.busy = busy
         let p = panel ?? makePanel()
         p.contentView?.layoutSubtreeIfNeeded()
-        let height = max(p.contentView?.fittingSize.height ?? 0, 160)
-        p.setContentSize(NSSize(width: 440, height: height))
+        p.setContentSize(NSSize(width: 350, height: 500))
+        AppWindowStyle.fixSize(p, to: NSSize(width: 350, height: 500))
+        AppWindowStyle.round(p)
         // Only placed when it appears: a later update keeps it where the user may have moved it.
         if firstShow { place(p, anchor: anchor) }
         p.orderFrontRegardless()
+        AppWindowStyle.round(p)
     }
 
     func hide() { panel?.orderOut(nil) }
 
     private func makePanel() -> NSPanel {
-        let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 240),
+        let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 350, height: 500),
                         styleMask: [.titled, .nonactivatingPanel, .utilityWindow, .fullSizeContentView],
                         backing: .buffered, defer: false)
         p.titleVisibility = .hidden
@@ -160,7 +162,7 @@ struct BetaQuestionsView: View {
                                 Text(String(index + 1) + ". " + question).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
                                 let options = BetaQuestionsView.choices(for: question)
                                 if !options.isEmpty {
-                                    HStack(spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 6) {
                                         ForEach(options, id: \.self) { option in
                                             Button(option) { model.chosen[question] = model.chosen[question] == option ? nil : option }
                                                 .buttonStyle(ChoiceChipStyle(selected: model.chosen[question] == option))
@@ -173,7 +175,7 @@ struct BetaQuestionsView: View {
                         }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(height: 300)
+            }.frame(maxHeight: .infinity)
             if let notice = info.notice {
                 Text(BetaMessages.notice(notice)).font(.system(size: 12)).foregroundColor(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
@@ -200,8 +202,9 @@ struct BetaQuestionsView: View {
                 }.buttonStyle(PrimaryButtonStyle()).disabled(model.busy != nil)
             }
         }
-        .padding(EdgeInsets(top: 30, leading: 20, bottom: 18, trailing: 20))
-        .frame(width: 440, alignment: .leading)
+        .padding(40)
+        .frame(width: 350, height: 500, alignment: .leading)
+        .background(Theme.window)
     }
 
     private func section(_ title: String, _ lines: [String]) -> some View {
@@ -222,8 +225,8 @@ private struct ChoiceChipStyle: ButtonStyle {
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(selected ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule(style: .continuous).fill(selected ? Theme.ink : Theme.card))
-            .overlay(Capsule(style: .continuous).stroke(Theme.border))
+            .background(Capsule(style: .circular).fill(selected ? Theme.accent : Theme.card))
+            .overlay(Capsule(style: .circular).stroke(Theme.border))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }

@@ -107,6 +107,7 @@ struct ModelRecommendationCard: View {
     let dragEnded: () -> Void
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(heading).font(.system(size: 15, weight: .semibold)).foregroundColor(.secondary)
@@ -163,20 +164,20 @@ struct ModelRecommendationCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.05)))
+                .padding(32)
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color.primary.opacity(0.05)))
                 Text(L10n.text("来自 {0}", recommendation.source)).font(.system(size: 12)).foregroundColor(.secondary)
             case .failed(let message):
                 Text(message).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(18)
-        .frame(width: 400, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(nsColor: .windowBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.primary.opacity(0.12)))
+        .padding(40)
+        }
+        .frame(width: 350, height: 500, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color(nsColor: .windowBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.primary.opacity(0.12)))
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
-        .padding(4)
     }
 
     private func adviceRow(_ title: String, _ value: String) -> some View {

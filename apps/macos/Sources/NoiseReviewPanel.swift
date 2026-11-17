@@ -12,7 +12,7 @@ final class NoiseReviewPanel {
 
     func show(candidate: String, repeated: Bool, use: @escaping (String) -> Bool) {
         let id = UUID()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 260),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 350, height: 500),
                             styleMask: [.titled, .nonactivatingPanel, .utilityWindow, .fullSizeContentView],
                             backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
@@ -37,7 +37,9 @@ final class NoiseReviewPanel {
             panel.setFrameOrigin(NSPoint(x: max(frame.minX, frame.maxX - panel.frame.width - 24),
                                          y: max(frame.minY, frame.maxY - panel.frame.height - 24)))
         } else { panel.center() }
+        AppWindowStyle.fixSize(panel, to: NSSize(width: 350, height: 500))
         panel.orderFrontRegardless()
+        AppWindowStyle.round(panel)
     }
 }
 
@@ -66,8 +68,8 @@ struct NoiseReviewView: View {
                     .buttonStyle(PrimaryButtonStyle()).disabled(candidate.isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 440, height: 260)
+        .padding(32)
+        .frame(width: 350, height: 500)
         .background(Theme.window)
     }
 }
@@ -79,7 +81,7 @@ final class QuantityReviewPanel {
 
     func show(review: QualityReview, choose: @escaping (Choice) -> Bool) {
         let id = UUID()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 370),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 350, height: 500),
                             styleMask: [.titled, .nonactivatingPanel, .utilityWindow, .fullSizeContentView],
                             backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
@@ -106,7 +108,9 @@ final class QuantityReviewPanel {
             panel.setFrameOrigin(NSPoint(x: max(frame.minX, frame.maxX - panel.frame.width - 24),
                                          y: max(frame.minY, frame.maxY - panel.frame.height - 24)))
         } else { panel.center() }
+        AppWindowStyle.fixSize(panel, to: NSSize(width: 350, height: 500))
         panel.orderFrontRegardless()
+        AppWindowStyle.round(panel)
     }
 }
 
@@ -152,7 +156,7 @@ struct QuantityReviewView: View {
                     Text(L10n.text("整理结果（可编辑）")).font(.caption).foregroundColor(Theme.secondary)
                     ReviewTextEditor(text: $editedCandidate, quotes: (review.issues ?? []).map(\.candidate))
                         .frame(minHeight: 110, maxHeight: 180)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Color.secondary.opacity(0.3)))
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: .infinity)
             HStack {
@@ -164,7 +168,7 @@ struct QuantityReviewView: View {
                     .disabled(editedCandidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(20).frame(width: 520, height: 370).background(Theme.window)
+        .padding(32).frame(width: 350, height: 500).background(Theme.window)
     }
 }
 
@@ -176,7 +180,7 @@ private struct ReviewTextEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = CapsuleEditorScrollView()
         scroll.hasVerticalScroller = true
         scroll.borderType = .noBorder
         scroll.drawsBackground = false
@@ -188,7 +192,7 @@ private struct ReviewTextEditor: NSViewRepresentable {
         view.drawsBackground = false
         view.font = .systemFont(ofSize: NSFont.systemFontSize)
         view.textColor = .labelColor
-        view.textContainerInset = NSSize(width: 6, height: 6)
+        view.textContainerInset = NSSize(width: 32, height: 32)
         view.isVerticallyResizable = true
         view.textContainer?.widthTracksTextView = true
         view.delegate = context.coordinator

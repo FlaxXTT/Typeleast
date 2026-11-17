@@ -39,8 +39,8 @@ enum Theme {
     static let success = dynamic(hex(0x008770), hex(0x00957C))
     static let warning = dynamic(hex(0xEA4D00), hex(0xFF5B00))
 
-    static let radius: CGFloat = 12
-    static let controlRadius: CGFloat = 8
+    static let radius: CGFloat = 99
+    static let controlRadius: CGFloat = 99
     static let pageInset: CGFloat = 32
     static let sidebarWidth: CGFloat = 236
     static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12)
@@ -59,6 +59,25 @@ enum Theme {
 }
 
 /// Common pointer and press feedback for native-style controls.
+extension View {
+    func capsuleInput() -> some View {
+        self.padding(.horizontal, 12).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
+    }
+}
+
+struct CapsuleTextEditor: View {
+    @Binding var text: String
+    var body: some View {
+        TextEditor(text: $text)
+            .scrollContentBackground(.hidden)
+            .padding(32)
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))
+    }
+}
+
 struct HoverInteraction: ViewModifier {
     func body(content: Content) -> some View {
         content.modifier(ControlMotion())
@@ -71,15 +90,15 @@ extension View {
 
 /// A rounded, softly filled container.
 struct Card<Content: View>: View {
-    var padding: CGFloat = 16
+    var padding: CGFloat = 32
     @ViewBuilder var content: Content
 
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 
@@ -148,8 +167,8 @@ struct Keycap: View {
             .foregroundColor(Theme.ink)
             .padding(.horizontal, large ? 12 : 8)
             .frame(minWidth: large ? 40 : 28, minHeight: large ? 32 : 24)
-            .background(RoundedRectangle(cornerRadius: large ? 8 : 6, style: .continuous).fill(Theme.window))
-            .overlay(RoundedRectangle(cornerRadius: large ? 8 : 6, style: .continuous).stroke(Theme.border, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Theme.border, lineWidth: 1))
             .shadow(color: Color.black.opacity(0.06), radius: 0, x: 0, y: 1)
     }
 }
@@ -190,7 +209,7 @@ private struct HoverChipLabel: View {
 
     var body: some View {
         configuration.label
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: 100))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.radius))
             .contentShape(Capsule())
     }
 }
@@ -247,7 +266,7 @@ struct LevelBars: View {
             ForEach(0..<count, id: \.self) { index in
                 let threshold = Float(index + 1) / Float(count)
                 let lit = level * 1.15 >= threshold
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                     .fill(lit ? Theme.accent : Theme.border)
                     .frame(width: 5, height: 8 + CGFloat(index % 4) * 3)
             }

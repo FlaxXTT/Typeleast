@@ -7,7 +7,7 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 - Window: white / `#242121`; sidebar: `#F7F6F5` / `#1D1A1A`.
 - Cards: `#F2F1F0` / `#3C3B3B`; text: `#111111` / `#F2F1F0`.
 - Primary actions and selection: `#1F5DF2` / `#4F7BFF`.
-- Controls use 8-point corners; cards use 12-point corners. Page insets are 32 points.
+- Rounded UI surfaces use a 99-point circular radius, clamped to half the width/height. Page insets are 32 points. Controls, cards, fields, activity cells and owned popups share this rule; larger cards reserve more space for their content.
 - Flat borders separate normal surfaces. Shadows belong to transient notices.
 - Control feedback uses 120–200ms easing. Meeting cards do not bounce or acquire decorative blue outlines.
 
@@ -16,7 +16,7 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 ### Home insights
 
 The supplied Home screenshot defines the insights area: system bold figures, grey labels,
-large white cards with 26-point corners, a soft grey-to-white dot-grid backdrop and a
+large white cards with circular 99-point corners, a soft grey-to-white dot-grid backdrop and a
 pill-shaped Share button. Figures use the default system design rather than rounded digits.
 The light heatmap colours sampled from the reference are `#F8F8F8` (empty), `#ECF0FE`,
 `#C6D2FC`, `#A0B4FB` and `#426AF6`. The screenshot's Display P3 colour space is retained
@@ -24,8 +24,7 @@ for its coloured fills and backdrop. Large counts use the reference's K notation
 
 Four metric cards sit in two columns above the active-day card. Engine status and model
 management occupy the top-right column, followed by Quick dictation; Recent is the final
-section beneath both columns. A narrow window stacks the side column. The initial window
-size is 1180×860 points; the layout still adapts to the user's existing window size.
+section beneath both columns. The main window is fixed at 1080×750 points. User resizing, zoom and full-screen entry are disabled; scrolling holds content that extends beyond the fixed viewport.
 
 Opening or restoring the hub replays the figures from zero over 1.2 seconds. Units and
 final number widths are reserved, so counting does not move surrounding content. Active
@@ -76,6 +75,6 @@ preference without changing the effective light/dark appearance does not animate
 The implementation uses native [Core Animation layers](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreAnimation_guide/CoreAnimationBasics/CoreAnimationBasics.html)
 and [perspective transforms](https://developer.apple.com/documentation/quartzcore/calayer/sublayertransform).
 
-The recording overlay keeps its own `VoiceBarPalette`, fixed black-and-white appearance,
+The recording overlay uses a fixed transparent 750×500 carrier around its changing capsule. Detailed sizes are in [Window and capsule geometry](WINDOW_AND_CAPSULE_GEOMETRY.md). It keeps its own `VoiceBarPalette`, fixed black-and-white appearance,
 configured shortcuts and microphone-driven animation. Main-window theme tokens do not
 set its colours.

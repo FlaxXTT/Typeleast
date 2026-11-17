@@ -30,16 +30,21 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         let host = NSHostingController(rootView: HubRootView().environmentObject(model))
         let window = NSWindow(contentViewController: host)
         window.title = "TypeLeast"
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.setContentSize(NSSize(width: 1180, height: 860))
-        window.minSize = NSSize(width: 820, height: 560)
+        let size = NSSize(width: 1080, height: 750)
+        window.setContentSize(size)
+        AppWindowStyle.fixSize(window, to: size)
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
+        window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.center()
-        window.setFrameAutosaveName("typeleast.hub")
+        // Keep this frame record separate from the old resizable window.
+        window.setFrameAutosaveName("typeleast.hub.1080x750")
         window.delegate = self
+        AppWindowStyle.round(window)
         return window
     }
 
@@ -76,9 +81,10 @@ struct HubRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(width: 1080, height: 750)
         .foregroundColor(Theme.ink)
         .tint(Theme.accent)
+        .buttonBorderShape(.capsule)
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
         .sheet(isPresented: $showsCommands, onDismiss: {
             let action = pendingCommand
@@ -116,8 +122,8 @@ private struct Sidebar: View {
                     Text("⌘K").font(.system(size: 11)).foregroundColor(Theme.tertiary)
                 }
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.cardHover))
+                .padding(32)
+                .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.cardHover))
             }
             .buttonStyle(.plain).hoverInteraction()
             .keyboardShortcut("k", modifiers: .command)
@@ -166,7 +172,7 @@ private struct SidebarItem: View {
             .foregroundColor(selected ? Theme.accent : Theme.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                 .fill(selected ? Theme.selection : (hovering ? Theme.cardHover : Color.clear)))
             .contentShape(Rectangle())
         }
@@ -216,7 +222,7 @@ private struct ServiceBadge: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.card))
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
     }
 }
 
@@ -279,7 +285,7 @@ struct FlexibleSegment: View {
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 34)
                 .padding(.horizontal, 4)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? Theme.selection : Color.clear))
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(selected ? Theme.selection : Color.clear))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain).hoverInteraction()
             .accessibilityAddTraits(selected ? .isSelected : [])

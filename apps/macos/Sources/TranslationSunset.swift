@@ -69,14 +69,14 @@ struct TranslationSunsetArtwork: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                 .fill(.ultraThinMaterial)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                         .fill(Color(white: 0.95).opacity(engaged ? 0.18 : 0.10))
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
                         .strokeBorder(LinearGradient(colors: [.white, Color.black.opacity(engaged ? 0.18 : 0.07)],
                                                      startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
                 }

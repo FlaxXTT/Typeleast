@@ -44,7 +44,7 @@ struct SettingsPage: View {
                         model.settingsCategory = index
                     }
                 }
-            }.padding(3).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.card))
+            }.padding(3).background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
             .padding(.horizontal, Theme.pageInset).padding(.bottom, 16)
             HubScrollView(key: "settings-" + String(model.settingsCategory)) {
                 VStack(alignment: .leading, spacing: 20) {
@@ -198,7 +198,7 @@ struct SettingsPage: View {
                             model.setting(\.appearance, then: { model.actions?.applyGeneralSettings() }).wrappedValue = preference
                         }
                     }
-                }.padding(3).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.window))
+                }.padding(3).background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
                     .frame(width: 220)
             }
             ToggleRow(title: L10n.text("开机启动"), detail: loginDetail,
@@ -237,7 +237,7 @@ struct SettingsPage: View {
         SpeechModelOptions()
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
     }
 
     private var updates: some View {
@@ -266,7 +266,7 @@ struct SettingsPage: View {
                        detail: nil) {
                 HStack(spacing: 8) {
                     TextField("https://huggingface.co", text: model.setting(\.modelMirror))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain).capsuleInput()
                         .frame(width: 220)
                     if model.settings.modelMirror != ModelMirror.suggested {
                         Button(L10n.text("使用 hf-mirror.com")) { model.setting(\.modelMirror).wrappedValue = ModelMirror.suggested }
@@ -326,10 +326,10 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.secondary)
             VStack(alignment: .leading, spacing: 16) { content }
-                .padding(16)
+                .padding(32)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
         }
     }
 }
@@ -385,7 +385,7 @@ struct StateSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-            Capsule(style: .continuous)
+            Capsule(style: .circular)
                 .fill(configuration.isOn ? Self.onColor : Self.offColor)
                 .frame(width: 36, height: 20)
             Circle()
@@ -395,7 +395,7 @@ struct StateSwitchStyle: ToggleStyle {
                 .padding(2)
         }
         .frame(width: 36, height: 20)
-        .contentShape(Capsule(style: .continuous))
+        .contentShape(Capsule(style: .circular))
         .onTapGesture {
             withAnimation(.easeOut(duration: 0.15)) { configuration.isOn.toggle() }
         }
@@ -422,8 +422,8 @@ private struct NoteRow: View {
                 Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.window.opacity(0.7)))
+        .padding(32)
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window.opacity(0.7)))
     }
 }
 
@@ -501,7 +501,7 @@ struct HotkeyField: View {
                     }
                 }
                 .padding(3)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(recording ? Theme.accent : Color.clear, lineWidth: 1.5))
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(recording ? Theme.accent : Color.clear, lineWidth: 1.5))
             }
             .buttonStyle(.plain)
             .hoverInteraction()
@@ -612,14 +612,14 @@ struct ModelSection: View {
                 }
                 SettingRow(title: L10n.text("接口地址"), detail: LLMPreset.isAllowedBaseURL(settings.llmBaseURL) ? nil : L10n.text("需要 https（本机可用 http://127.0.0.1）")) {
                     TextField("https://…/v1", text: model.setting(\.llmBaseURL))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain).capsuleInput()
                         .frame(width: 300)
                 }
                 if preset.needsKey {
                     SettingRow(title: "API Key", detail: keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试"))) {
                         HStack(spacing: 8) {
                             SecureField(keySaved ? L10n.text("已保存，留空保持不变") : "sk-…", text: $keyDraft)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.plain).capsuleInput()
                                 .frame(width: 220)
                             // Deletion is an explicit action; a blank draft keeps the saved key.
                             Button(normalizedKeyDraft.isEmpty && keySaved ? L10n.text("删除") : L10n.text("保存")) {
@@ -633,7 +633,7 @@ struct ModelSection: View {
                 SettingRow(title: L10n.text("模型"), detail: models.isEmpty ? L10n.text("填模型 ID，或点「获取列表」") : L10n.text("共 {0} 个", models.count)) {
                     HStack(spacing: 8) {
                         TextField(preset.modelHint, text: model.setting(\.llmModel))
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.plain).capsuleInput()
                             .frame(width: 200)
                         if !models.isEmpty {
                             Menu(L10n.text("选择")) {
@@ -843,10 +843,10 @@ struct TranslatePromptEditor: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.text("说话翻译和选中翻译都用它。{{to}} 代表目标语言。"))
                 .font(.system(size: 12)).foregroundColor(.secondary)
-            TextEditor(text: $draft)
+            CapsuleTextEditor(text: $draft)
                 .font(.system(size: 12))
                 .frame(height: 150)
-                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color.primary.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.primary.opacity(0.12)))
                 .onChange(of: draft) { _ in saved = false }
             HStack {
                 Button(L10n.text("恢复默认")) {

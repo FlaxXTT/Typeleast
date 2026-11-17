@@ -16,7 +16,7 @@ struct OnboardingPracticeView: View {
             Text(practice.sample)
                 .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
                 .fixedSize(horizontal: false, vertical: true)
             PracticePill(practice: practice)
                 .environment(\.colorScheme, .dark)
@@ -32,8 +32,8 @@ struct OnboardingPracticeView: View {
                     Text(row.text).font(.system(size: 14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+                .padding(32)
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
             }
         }
         .onAppear { practice.acceptsShortcut = true }
@@ -115,7 +115,8 @@ private final class PracticeVoiceBarHost: NSView {
     override func layout() {
         super.layout()
         let width = pill.presentationWidth
-        let frame = NSRect(x: (bounds.width - width) / 2, y: 0, width: width, height: PillView.height)
+        let height = pill.presentationHeight
+        let frame = NSRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
         guard pill.frame != frame else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = pill.reduceMotion || window == nil ? 0 : 0.20
