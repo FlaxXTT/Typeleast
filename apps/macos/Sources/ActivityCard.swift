@@ -1,15 +1,24 @@
 import SwiftUI
 import AppKit
 
-// Screenshot-matched Home insights. Only number and cell-mask views interpolate;
+// Screenshot-matched Home insights. Only number and cell-effect views interpolate;
 // animation frames do not publish through AppModel or rebuild the activity log.
+
+private enum DashboardMotion {
+    static let countDuration = 0.250
+    static let columnDuration = 0.300
+    static let columnStagger = 0.040
+
+    static func heatmapDuration(weeks: Int) -> Double {
+        columnDuration + Double(max(0, weeks - 1)) * columnStagger
+    }
+}
 
 struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var compact = false
     @State private var countProgress: Double = 0
-    @State private var heatmapProgress: Double = 0
 
     static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
     static let shareItems: [Any] = [shareText, URL(string: "https://typeleast.promptking.workers.dev")!, URL(string: "https://github.com/FlaxXTT/Typeleast")!]
@@ -36,13 +45,13 @@ struct InsightsPanel: View {
                 Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), progress: countProgress, compact: compact,
                        unavailable: timingUnavailable, note: timingNote)
             }
-            ActivityCard(countProgress: countProgress, heatmapProgress: heatmapProgress, compact: compact)
+            ActivityCard(countProgress: countProgress, compact: compact)
         }
         .onChange(of: model.homePresentationID, initial: true) { _, _ in replay() }
         .onChange(of: reduceMotion) { _, reduced in
             if reduced {
                 var transaction = Transaction(); transaction.disablesAnimations = true
-                withTransaction(transaction) { countProgress = 1; heatmapProgress = 1 }
+                withTransaction(transaction) { countProgress = 1 }
             }
         }
     }
@@ -51,13 +60,11 @@ struct InsightsPanel: View {
         var transaction = Transaction(); transaction.disablesAnimations = true
         withTransaction(transaction) {
             countProgress = reduceMotion ? 1 : 0
-            heatmapProgress = reduceMotion ? 1 : 0
         }
         guard !reduceMotion else { return }
         DispatchQueue.main.async {
             guard !reduceMotion else { return }
-            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 1.2)) { countProgress = 1 }
-            withAnimation(.linear(duration: 1.4).delay(0.15)) { heatmapProgress = 1 }
+            withAnimation(.timingCurve(0.2, 0.8, 0.2, 1, duration: DashboardMotion.countDuration)) { countProgress = 1 }
         }
     }
 
@@ -265,10 +272,11 @@ private final class HoverShareButton: NSButton {
 /// Active days and streaks above the heatmap: weekdays down the side, months along the bottom.
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var countProgress: Double = 1
-    var heatmapProgress: Double = 1
     var compact = false
     @State private var weekOffset = 0
+    @State private var heatmapElapsed: Double = 0
 
     private let cell: CGFloat = 16
     private let gap: CGFloat = 8
@@ -287,6 +295,15 @@ struct ActivityCard: View {
             GeometryReader { geo in
                 let weeks = max(6, min(53, Int((geo.size.width - dayColumn - 18 + gap) / (cell + gap))))
                 grid(weeks: weeks, log: log)
+                    .task(id: [model.homePresentationID, weeks, reduceMotion ? 1 : 0]) {
+                        let duration = DashboardMotion.heatmapDuration(weeks: weeks)
+                        var transaction = Transaction(); transaction.disablesAnimations = true
+                        withTransaction(transaction) { heatmapElapsed = reduceMotion ? duration : 0 }
+                        guard !reduceMotion else { return }
+                        await Task.yield()
+                        guard !Task.isCancelled else { return }
+                        withAnimation(.linear(duration: duration)) { heatmapElapsed = duration }
+                    }
             }
             .frame(height: 7 * (cell + gap) + 20)
             HStack(spacing: 6) {
@@ -352,15 +369,13 @@ struct ActivityCard: View {
                             let level = ActivityLog.level(day.dictations)
                             square(0)
                                 .overlay {
-                                    if level > 0 {
-                                        square(level).modifier(HeatmapColumnReveal(progress: heatmapProgress, column: column,
-                                                                                 columns: weeks, width: cell))
-                                    }
+                                    square(level).modifier(HeatmapColumnReveal(elapsed: heatmapElapsed, column: column))
                                 }
                                 .help(tooltip(date, day)).accessibilityLabel(tooltip(date, day))
                         } else {
                             RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
                                 .stroke(Theme.border, lineWidth: 1).frame(width: cell, height: cell)
+                                .modifier(HeatmapColumnReveal(elapsed: heatmapElapsed, column: column))
                         }
                     }
                     .offset(x: x, y: CGFloat(row) * step)
@@ -410,19 +425,31 @@ struct ActivityCard: View {
     }
 }
 
-/// All grey day slots are visible immediately. Only active blue fills sweep in.
+/// One shared timeline drives every column; cells in the same week stay in phase.
 private struct HeatmapColumnReveal: AnimatableModifier {
-    var progress: Double
+    var elapsed: Double
     let column: Int
-    let columns: Int
-    let width: CGFloat
     var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
+        get { elapsed }
+        set { elapsed = newValue }
     }
 
     func body(content: Content) -> some View {
-        let fraction = min(1, max(0, progress * Double(columns) - Double(column)))
-        content.mask(alignment: .leading) { Rectangle().frame(width: width * CGFloat(fraction)) }
+        let start = Double(column) * DashboardMotion.columnStagger
+        let fraction = min(1, max(0, (elapsed - start) / DashboardMotion.columnDuration))
+        let pulse = fraction < 0.45
+            ? 1 - pow(1 - fraction / 0.45, 3)
+            : pow((1 - fraction) / 0.55, 2)
+        let visible = fraction > 0 ? 1.0 : 0.0
+        content
+            .opacity(visible)
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
+                    .fill(Color.white)
+                    .opacity(visible * pow(1 - fraction, 2))
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+            }
+            .scaleEffect(1 + 0.2 * pulse)
     }
 }
