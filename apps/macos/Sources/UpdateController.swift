@@ -30,6 +30,9 @@ final class UpdateController {
     /// The version offered in this run: after 稍后 it is asked again at the next launch, not every six hours.
     private var offered: String?
     private var summary = ""
+    private var checking = false
+    private var interactiveCheck = false
+    private var installing = false
 
     init(host: Host) {
         self.host = host
@@ -37,6 +40,10 @@ final class UpdateController {
 
     /// `interactive`: the user asked, so say "already up to date" and show errors.
     func check(interactive: Bool) {
+        if installing {
+            if interactive { progress.bringToFront() }
+            return
+        }
         guard !Updater.intelDiscontinued() else {
             if interactive {
                 alert(L10n.text("Intel Mac 不再更新"),
@@ -44,12 +51,21 @@ final class UpdateController {
             }
             return
         }
-        if interactive { host.setHint(L10n.text("正在检查更新…")) }
+        if interactive {
+            interactiveCheck = true
+            host.setHint(L10n.text("正在检查更新…"))
+            progress.showChecking()
+        }
+        guard !checking else { return }
+        checking = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try Updater.latestRelease() }
             DispatchQueue.main.async {
                 guard let self else { return }
-                if interactive { self.host.setHint(nil) }
+                let interactive = self.interactiveCheck
+                self.interactiveCheck = false
+                self.checking = false
+                if interactive { self.host.setHint(nil); self.progress.close() }
                 switch result {
                 case .success(let release) where Updater.isNewer(release.version, than: Updater.currentVersion):
                     let latest = release.version
@@ -101,6 +117,7 @@ final class UpdateController {
             alert(reason.title, reason.text)
             return
         }
+        installing = true
         host.setHint(L10n.text("正在下载更新 ") + version + "…")
         progress.show(version: version, summary: summary)
         let report: (UpdateStage) -> Void = { [weak self] stage in
@@ -116,6 +133,7 @@ final class UpdateController {
                 case .success(let ready):
                     // Recording may have started while the archive downloaded.
                     if let reason = self.host.busyReason() {
+                        self.installing = false
                         self.host.setHint(nil)
                         self.progress.close()
                         try? FileManager.default.removeItem(at: ready.work)
@@ -140,6 +158,7 @@ final class UpdateController {
     }
 
     private func fail(_ error: Error) {
+        installing = false
         host.setHint(nil)
         progress.close()
         alert(L10n.text("更新失败"), error.localizedDescription)

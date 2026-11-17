@@ -5,7 +5,7 @@ import SwiftUI
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let identifier = NSUserInterfaceItemIdentifier("typeleast.settings")
     private let model: AppModel
-    private var window: NSWindow?
+    private var window: SettingsDialogWindow?
 
     init(model: AppModel) { self.model = model; super.init() }
 
@@ -33,7 +33,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             AppWindowStyle.round(panel, radius: Theme.settingsRadius)
         }
         NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
+        window?.present()
     }
 
     func close() { window?.close() }
@@ -51,6 +51,39 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 }
 
 private final class SettingsDialogWindow: NSWindow {
+    private var fadeGeneration = 0
+    private var closing = false
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    func present() {
+        fadeGeneration &+= 1
+        closing = false
+        ignoresMouseEvents = false
+        let appearing = !isVisible
+        if appearing { alphaValue = 0 }
+        makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.225
+            animator().alphaValue = 1
+        }
+    }
+
+    override func close() {
+        guard !closing else { return }
+        if !isVisible || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { super.close(); return }
+        closing = true
+        ignoresMouseEvents = true
+        fadeGeneration &+= 1
+        let generation = fadeGeneration
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.195
+            animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            guard let self, self.closing, self.fadeGeneration == generation else { return }
+            self.finishClose()
+        }
+    }
+
+    private func finishClose() { super.close() }
 }

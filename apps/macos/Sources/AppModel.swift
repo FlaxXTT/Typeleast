@@ -70,6 +70,7 @@ final class AppModel: ObservableObject {
     @Published var settingsCategory = 0
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
+    @Published var retryingHistoryID: String?
     /// Opening the hub replays only the Home presentation, not changes to live stats.
     @Published var homePresentationID = 0
     @Published private(set) var history: [LocalHistoryEntry] = []

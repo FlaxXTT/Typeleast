@@ -491,7 +491,9 @@ struct HistoryRow: View {
                 .frame(width: 52, alignment: .leading)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
-                if entry.displayText.isEmpty || compact {
+                if model.retryingHistoryID == entry.id {
+                    SkeletonWave(height: 24)
+                } else if entry.displayText.isEmpty || compact {
                     Text(entry.displayText.isEmpty ? (entry.fallbackReason == "quantity-conflict" ? L10n.text("数量或单位待核对") : L10n.text("（没有识别到内容）")) : entry.displayText)
                         .font(Theme.rowFont)
                         .foregroundColor(Theme.ink)

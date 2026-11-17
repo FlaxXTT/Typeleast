@@ -100,12 +100,12 @@ private struct MeetingControls: View {
                         Button(L10n.text("放弃")) { meeting.cancel() }.buttonStyle(SecondaryButtonStyle())
                         Button(L10n.text("结束录音")) { meeting.stopRecording() }.buttonStyle(PrimaryButtonStyle())
                     case .converting:
-                        ProgressView().controlSize(.small)
+                        LoadingCircularProgress(size: 20, color: Theme.ink)
                         Text(L10n.text("正在读取音频…")).font(.system(size: 14, weight: .medium))
                         Spacer()
                         Button(L10n.text("取消转写")) { meeting.cancel() }.buttonStyle(SecondaryButtonStyle())
                     case .transcribing:
-                        ProgressView().controlSize(.small)
+                        LoadingCircularProgress(size: 20, color: Theme.ink)
                         Text(L10n.text("正在转写 {0} 的录音，已用 {1}", MeetingFormat.clock(meeting.seconds), MeetingFormat.clock(meeting.elapsed)))
                             .font(.system(size: 14, weight: .medium)).monospacedDigit()
                         Spacer()

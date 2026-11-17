@@ -265,10 +265,12 @@ struct SettingsPage: View {
             }
             SettingRow(title: L10n.text("开机启动"), detail: loginDetail) {
                 HStack(spacing: 8) {
-                    if loginItemStatus.isLoading { ProgressView().controlSize(.small) }
-                    Toggle("", isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
-                        .toggleStyle(StateSwitchStyle()).labelsHidden()
-                        .disabled(loginItemStatus.isLoading)
+                    if loginItemStatus.isLoading {
+                        SkeletonWave(width: 38, height: 22, radius: 11)
+                    } else {
+                        Toggle("", isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
+                            .toggleStyle(StateSwitchStyle()).labelsHidden()
+                    }
                 }
             }
             ToggleRow(title: L10n.text("在 Dock 中显示"), detail: nil,
@@ -402,13 +404,16 @@ struct SettingsSection<Content: View>: View {
 struct SettingRow<Trailing: View>: View {
     let title: String
     let detail: String?
+    var loading = false
     @ViewBuilder var trailing: Trailing
 
     private var labels: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title).font(Theme.rowFont)
                 .fixedSize(horizontal: false, vertical: true)
-            if let detail = detail, !detail.isEmpty {
+            if loading {
+                SkeletonWave(width: 97, height: 12)
+            } else if let detail = detail, !detail.isEmpty {
                 Text(detail).font(Theme.captionFont).lineSpacing(4).foregroundColor(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -683,7 +688,7 @@ struct ModelSection: View {
                         .frame(width: 300)
                 }
                 if preset.needsKey {
-                    SettingRow(title: "API Key", detail: keyLoading ? L10n.text("正在读取钥匙串状态…") : (keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试")))) {
+                    SettingRow(title: "API Key", detail: keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试")), loading: keyLoading) {
                         HStack(spacing: 8) {
                             SecureField(keySaved ? L10n.text("已保存，留空保持不变") : "sk-…", text: $keyDraft)
                                 .textFieldStyle(.plain).capsuleInput()
@@ -717,6 +722,7 @@ struct ModelSection: View {
                 }
                 ToggleRow(title: L10n.text("服务故障时自动切换"), detail: L10n.text("当前服务不可用时，自动尝试已保存的备用 Key，不弹出密码框。本次文字会发给备用服务商；系统拒绝静默访问的 Key 会被跳过。"), isOn: model.setting(\.automaticProviderFallback))
                 HStack(spacing: 10) {
+                    if busy { LoadingCircularProgress(size: 20) }
                     Button(busy ? L10n.text("测试中…") : L10n.text("测试连接")) { test() }
                         .buttonStyle(PrimaryButtonStyle())
                         .disabled(busy || !canTestRoute)

@@ -1,15 +1,13 @@
 import AppKit
 import SwiftUI
 
-// UpdateProgressWindow.swift - a small window while an in-app update runs, so it never looks
-// stuck: a ring that fills with the download (percentage and MB in the middle), then turns
-// while the update is checked, signed and installed, with the four steps
-// underneath. The ring always moves; the steps say where it is.
+// Update checks use dual travelling bars; downloads use their measured fraction.
 
 final class UpdateProgressModel: ObservableObject {
     @Published var version = ""
     @Published var summary = ""
     @Published var stage: UpdateStage = .preparing
+    @Published var checking = false
 }
 
 final class UpdateProgressWindow {
@@ -20,6 +18,17 @@ final class UpdateProgressWindow {
         model.version = version
         model.summary = summary
         model.stage = .preparing
+        model.checking = false
+        present()
+    }
+
+    func showChecking() {
+        model.checking = true
+        model.summary = ""
+        present()
+    }
+
+    private func present() {
         let w: NSWindow
         if let existing = window {
             w = existing
@@ -46,7 +55,13 @@ final class UpdateProgressWindow {
 
     func update(_ stage: UpdateStage) { model.stage = stage }
 
-    func close() { window?.orderOut(nil) }
+    func bringToFront() { window?.makeKeyAndOrderFront(nil) }
+
+    func close() {
+        window?.orderOut(nil)
+        window?.contentView = nil
+        window = nil
+    }
 }
 
 struct UpdateProgressView: View {
@@ -55,19 +70,29 @@ struct UpdateProgressView: View {
     var body: some View {
         HubScrollView(showsChrome: false) {
         VStack(spacing: 18) {
-            UpdateRing(stage: model.stage)
-                .frame(width: 136, height: 136)
+            AppMarkView(size: 64)
                 .padding(.top, 8)
             VStack(spacing: 5) {
-                Text(L10n.text("正在更新到 {0}", model.version))
+                Text(model.checking ? L10n.text("正在检查更新…") : L10n.text("正在更新到 {0}", model.version))
                     .font(.system(size: 14, weight: .semibold))
-                Text(model.stage.label)
+                Text(model.checking ? L10n.text("当前版本 ") + Updater.currentVersion : model.stage.label)
                     .font(.system(size: 12))
                     .foregroundColor(Theme.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            UpdateStepTrail(current: model.stage.step)
+            LoadingLinearProgress(value: model.checking ? nil : model.stage.fraction)
+            if !model.checking {
+                if let fraction = model.stage.fraction {
+                    HStack {
+                        Text("\(Int((fraction * 100).rounded(.down)))%")
+                        Spacer()
+                        if let amount = model.stage.amount { Text(amount) }
+                    }
+                    .font(.system(size: 12)).foregroundColor(Theme.secondary).monospacedDigit()
+                }
+                UpdateStepTrail(current: model.stage.step)
+            }
             if !model.summary.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.text("更新内容")).font(.system(size: 12, weight: .semibold))
@@ -80,50 +105,6 @@ struct UpdateProgressView: View {
         }
         .frame(width: 350, height: 500)
         .background(Theme.window)
-    }
-}
-
-/// The ring: filled by the download, a turning arc for the steps without a size.
-struct UpdateRing: View {
-    let stage: UpdateStage
-    private let width: CGFloat = 10
-
-    var body: some View {
-        ZStack {
-            Circle().stroke(Theme.accent.opacity(0.13), lineWidth: width)
-            if let fraction = stage.fraction {
-                Circle()
-                    .trim(from: 0, to: max(0.004, fraction))
-                    .stroke(AngularGradient(colors: [Theme.accent.opacity(0.45), Theme.accent],
-                                            center: .center, startAngle: .degrees(0), endAngle: .degrees(360 * max(0.004, fraction))),
-                            style: StrokeStyle(lineWidth: width, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeOut(duration: 0.3), value: fraction)
-                VStack(spacing: 2) {
-                    Text("\(Int((fraction * 100).rounded(.down)))%")
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                    if let amount = stage.amount {
-                        Text(amount).font(.system(size: 11)).foregroundColor(Theme.secondary).monospacedDigit()
-                    }
-                }
-            } else {
-                // Always moving, so an update that takes a while never looks stuck.
-                TimelineView(.animation) { context in
-                    let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
-                    Circle()
-                        .trim(from: 0, to: 0.24)
-                        .stroke(AngularGradient(colors: [Theme.accent.opacity(0.05), Theme.accent],
-                                                center: .center, startAngle: .degrees(0), endAngle: .degrees(86)),
-                                style: StrokeStyle(lineWidth: width, lineCap: .round))
-                        .rotationEffect(.degrees(turn * 360 - 90))
-                }
-                Image(systemName: stage.symbol)
-                    .font(.system(size: 30, weight: .medium))
-                    .foregroundColor(Theme.accent)
-            }
-        }
-        .padding(width / 2)
     }
 }
 

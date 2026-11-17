@@ -126,3 +126,28 @@ main thread. Models shows a pending saved-key status; General shows a spinner ne
 to the login-item control while its status loads. These operations do not block
 navigation, dragging, closing or scrolling. The Settings scroll surface keeps its
 native scrollbar and position memory without the blue top progress strip.
+
+## Loading and window motion
+
+`LoadingMotion.swift` supplies local drawing timelines, separate from app state:
+
+- Skeleton blocks use 10% grey in light mode and 40% grey in dark mode. After a
+  500ms initial delay, their highlight travels left to right during the first
+  second of each 2s cycle and stays offscreen during the second second.
+- Login-item status uses a control-sized skeleton; saved-key status uses a 97pt
+  text skeleton. A history retry replaces only the working row's text with a
+  full-width, 24pt skeleton until the dictation phase returns to idle.
+- Update checks show an 8pt pill track and two travelling blue bars on a 2.1s
+  cycle, with the second delayed by 1.15s. Downloads show their actual percentage
+  and byte counts. Quiet automatic checks do not open the progress window.
+- Model requests, advice and meeting processing use 20pt circular indicators:
+  1.4s rotation plus a growing/shrinking arc and dash offset. Determinate circular
+  indicators draw a measured foreground ring over a grey full ring.
+- Reduce Motion stops all loading loops and makes measured progress updates
+  immediate. Completed tasks remove their indicators; the update window releases
+  its loading view when hidden.
+
+Settings fades in over 225ms and out over 195ms, changing only window opacity.
+It renders content immediately; the fade is not a loading state. Rapid reopening
+reverses a pending fade-out. The independent window does not add a modal mask.
+No account, organization, embedded browser or cloud-sync module is simulated.

@@ -709,6 +709,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
         guard phase == .idle else { return }
         // A retry from the window copies the result rather than pasting into the window.
+        model.retryingHistoryID = id
         dictation.sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
                      strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false,
                      translateTo: e.translated)
