@@ -36,6 +36,9 @@ scroll observers or display link at all. Position memory remains scoped to page
 keys. Scrollbars use the native overlay style, without changing content width
 when they appear.
 
+Settings hides the blue top progress strip. Its native scrollbar, position memory,
+bottom fade and back-to-top button remain available.
+
 ## Navigation without fighting the reader
 
 Command search caches its results until the query, history or command inputs

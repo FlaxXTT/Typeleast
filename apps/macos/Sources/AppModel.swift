@@ -94,6 +94,9 @@ final class AppModel: ObservableObject {
 
     /// Bumped whenever a Settings value changes so bindings re-read.
     @Published private var settingsRevision = 0
+    @Published private var savedKeyPresence: [String: Bool] = [:]
+    private var pendingKeyPresence: Set<String> = []
+    private var permissionsLoading = false
 
     let settings = Settings.shared
     let meeting = MeetingController()
@@ -102,6 +105,7 @@ final class AppModel: ObservableObject {
     init() {
         reloadHistory()
         refreshPermissions()
+        refreshLLMKeyPresence()
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: HistoryStore.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.reloadHistory()
@@ -112,10 +116,12 @@ final class AppModel: ObservableObject {
         })
         observers.append(center.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.settingsRevision += 1
+            self?.refreshLLMKeyPresence()
         })
         observers.append(center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             KeychainStore.invalidatePresence()
             self?.settingsRevision += 1
+            self?.refreshLLMKeyPresence()
         })
         for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -138,10 +144,34 @@ final class AppModel: ObservableObject {
     }
 
     func refreshPermissions() {
-        let trusted = AXIsProcessTrusted()
-        let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
-        if accessibilityTrusted != trusted { accessibilityTrusted = trusted }
-        if micStatus != microphone { micStatus = microphone }
+        guard !permissionsLoading else { return }
+        permissionsLoading = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let trusted = AXIsProcessTrusted()
+            let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.permissionsLoading = false
+                if self.accessibilityTrusted != trusted { self.accessibilityTrusted = trusted }
+                if self.micStatus != microphone { self.micStatus = microphone }
+            }
+        }
+    }
+
+    /// Display metadata is read off the main thread; views never contact Keychain services.
+    var llmKeyPresence: Bool? { savedKeyPresence[settings.llmPresetID] }
+
+    func refreshLLMKeyPresence() {
+        let account = settings.llmPresetID
+        guard LLMPreset.find(account).needsKey, pendingKeyPresence.insert(account).inserted else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let present = KeychainStore.exists(account: account)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.pendingKeyPresence.remove(account)
+                if self.savedKeyPresence[account] != present { self.savedKeyPresence[account] = present }
+            }
+        }
     }
 
     /// A two-way binding onto a Settings property.
@@ -179,12 +209,15 @@ final class AppModel: ObservableObject {
 
     var modelSummary: String {
         let preset = LLMPreset.find(settings.llmPresetID)
-        guard settings.llmRouteReady else { return L10n.text("没有整理模型（只去口头禅）") }
+        guard llmConfigured else { return L10n.text("没有整理模型（只去口头禅）") }
         return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（你的 Key）"))
     }
 
     /// Whether cleanup is configured: a model and (except for local servers) a key.
-    var llmConfigured: Bool { settings.llmRouteReady }
+    var llmConfigured: Bool {
+        !settings.llmModel.isEmpty && LLMPreset.isAllowedBaseURL(settings.llmBaseURL)
+            && (!LLMPreset.find(settings.llmPresetID).needsKey || llmKeyPresence == true)
+    }
 
     var speech: SpeechStatus? { health?.speech }
     var modelsMissing: Bool { speech?.modelsMissing ?? false }

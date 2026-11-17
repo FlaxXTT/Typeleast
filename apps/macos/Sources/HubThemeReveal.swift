@@ -5,7 +5,8 @@ import QuartzCore
 enum HubThemeReveal {
     private static var activeOverlays: [ThemeMosaicOverlay] = []
 
-    static func apply(_ appearance: NSAppearance?, in preferredWindow: NSWindow? = nil) {
+    static func apply(_ appearance: NSAppearance?, in preferredWindow: NSWindow? = nil,
+                      additionalWindows: [NSWindow] = []) {
         guard NSApp.appearance?.name != appearance?.name else { return }
         let previous = activeOverlays
         activeOverlays.removeAll()
@@ -18,13 +19,17 @@ enum HubThemeReveal {
         } else if let window = NSApp.keyWindow ?? NSApp.mainWindow, window.isVisible {
             windows.append(window)
         }
+        for window in additionalWindows where window.isVisible && !windows.contains(where: { $0 === window }) {
+            windows.append(window)
+        }
 
         var prepared: [(window: NSWindow, content: NSView, overlay: ThemeMosaicOverlay, oldTheme: NSAppearance.Name?)] = []
         for window in windows {
             guard let content = window.contentView, let container = content.superview,
                   let oldImage = snapshot(content) else { continue }
             let overlay = ThemeMosaicOverlay(frame: container.convert(content.bounds, from: content), oldImage: oldImage,
-                                             cornerRadius: window.sheetParent == nil ? Theme.panelRadius : Theme.settingsRadius)
+                                             cornerRadius: window.identifier == SettingsWindowController.identifier || window.sheetParent != nil
+                                                ? Theme.settingsRadius : Theme.panelRadius)
             overlay.autoresizingMask = [.width, .height]
             // NSHostingView can rebuild its managed subviews during a theme change.
             // Its native frame keeps the old snapshot and animation above that work.
@@ -39,7 +44,7 @@ enum HubThemeReveal {
         for item in prepared { item.window.appearance = appearance }
 
         // Setting appearance is not a completed SwiftUI render. Both the main
-        // window and an attached Settings sheet wait for the new display frames.
+        // window and separate Settings window wait for the new display frames.
         for item in prepared {
             let oldTheme = item.oldTheme
             item.overlay.afterAppearanceRender { [weak content = item.content, weak overlay = item.overlay] in

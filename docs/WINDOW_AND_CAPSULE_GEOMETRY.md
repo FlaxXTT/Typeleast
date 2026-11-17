@@ -22,14 +22,17 @@ Titled windows retain the native zoom traffic light, shown grey and disabled.
 Equal minimum and maximum frame sizes prevent resizing; the Window menu keeps
 Zoom visible and disabled too. The main window has an explicit 44pt native drag
 strip across its top and a second drag target over the sidebar brand row. These
-regions show a hand cursor and use AppKit window dragging. Native window buttons
-remain above the strip; navigation, forms and scroll content keep their own input.
+regions retain the normal arrow and use AppKit window dragging. The strip excludes
+the native traffic lights. The fixed bottom-right corner shows a grey diagonal
+cursor without changing the frame. Navigation, forms and scroll content keep their
+own input. Settings is an independent window with its own 44pt top drag strip;
+its close button and scroll view start below the strip.
 
 ## Surface geometry
 
 The interface uses tiered circular corners: 8pt base controls, 6pt small controls,
-12pt cards, 10pt history groups, 20pt Home cards and sidebar, 16pt generic panels,
-and 12pt Settings sheets. Only actual pills, switches and the voice bar use
+12pt cards, 10pt history groups, 20pt Home cards and sidebar, and 24pt window panels
+including Settings. Only actual pills, switches and the voice bar use
 capsule geometry. Native text editors use an 8pt clip. Main-window traffic lights
 sit at the regular 14pt inset; panel rounding does not affect brand artwork.
 

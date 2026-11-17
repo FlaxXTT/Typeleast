@@ -10,20 +10,46 @@ import ServiceManagement
 /// or a Binding getter: SwiftUI can evaluate those repeatedly while laying out rows.
 final class LoginItemStatus: ObservableObject {
     @Published private(set) var status: SMAppService.Status = .notRegistered
+    @Published private(set) var isLoading = false
     private let readStatus: () -> SMAppService.Status
+    private let queue = DispatchQueue(label: "typeleast.settings.login-item", qos: .userInitiated)
 
     init(readStatus: @escaping () -> SMAppService.Status = { SMAppService.mainApp.status }) {
         self.readStatus = readStatus
     }
 
     func refresh() {
-        let next = readStatus()
-        if status != next { status = next }
+        guard !isLoading else { return }
+        isLoading = true
+        queue.async { [self] in
+            let next = readStatus()
+            DispatchQueue.main.async {
+                if self.status != next { self.status = next }
+                self.isLoading = false
+            }
+        }
+    }
+
+    func setEnabled(_ enabled: Bool, completion: @escaping (Result<SMAppService.Status, Error>) -> Void) {
+        guard !isLoading else { return }
+        isLoading = true
+        queue.async { [self] in
+            let result = Result { () throws -> SMAppService.Status in
+                if enabled { try SMAppService.mainApp.register() }
+                else { try SMAppService.mainApp.unregister() }
+                return readStatus()
+            }
+            DispatchQueue.main.async {
+                if case .success(let next) = result { self.status = next }
+                self.isLoading = false
+                completion(result)
+            }
+        }
     }
 }
 
 struct SettingsPage: View {
-    @Environment(\.dismiss) private var dismiss
+    var onClose: () -> Void = {}
     @EnvironmentObject var model: AppModel
     @StateObject private var meter = MicMeter()
     @StateObject private var loginItemStatus: LoginItemStatus
@@ -32,8 +58,9 @@ struct SettingsPage: View {
 
     private let categories = ["听写", "模型", "通用"]
 
-    init(loginItemStatus: LoginItemStatus = LoginItemStatus()) {
+    init(loginItemStatus: LoginItemStatus = LoginItemStatus(), onClose: @escaping () -> Void = {}) {
         _loginItemStatus = StateObject(wrappedValue: loginItemStatus)
+        self.onClose = onClose
     }
 
     var body: some View {
@@ -59,17 +86,17 @@ struct SettingsPage: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 12).padding(.vertical, 20)
+            .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 20)
             .frame(width: 202).background(Theme.sidebar)
             Divider().overlay(Theme.border)
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text(L10n.text(categories[model.settingsCategory])).font(Theme.sectionTitleFont)
                     Spacer()
-                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24) { dismiss() }
+                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24) { onClose() }
                 }
-                .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 16)
-                HubScrollView(key: "settings-" + String(model.settingsCategory)) {
+                .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
+                HubScrollView(key: "settings-" + String(model.settingsCategory), showsProgress: false) {
                     VStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
                         case 0: shortcuts; language; translatePrompt; audio; cleanup
@@ -87,13 +114,18 @@ struct SettingsPage: View {
         .font(Theme.bodyFont).foregroundColor(Theme.ink).tint(Theme.accent).controlSize(.large)
         .background(Theme.tile)
         .background(RoundedWindowMarker(radius: Theme.settingsRadius))
-        .onExitCommand { dismiss() }
+        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44) }
+        .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
+        .onExitCommand { onClose() }
         .onChange(of: model.settingsCategory) { _ in
-            meter.stop()
+            if meter.running { meter.stop() }
             refreshLoginStatus()
         }
         .onAppear {
-            devices = AudioDevices.inputs()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let inputs = AudioDevices.inputs()
+                DispatchQueue.main.async { devices = inputs }
+            }
             model.refreshPermissions()
             refreshLoginStatus()
         }
@@ -231,8 +263,14 @@ struct SettingsPage: View {
                 }.padding(3).background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
                     .frame(width: 220)
             }
-            ToggleRow(title: L10n.text("开机启动"), detail: loginDetail,
-                      isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
+            SettingRow(title: L10n.text("开机启动"), detail: loginDetail) {
+                HStack(spacing: 8) {
+                    if loginItemStatus.isLoading { ProgressView().controlSize(.small) }
+                    Toggle("", isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
+                        .toggleStyle(StateSwitchStyle()).labelsHidden()
+                        .disabled(loginItemStatus.isLoading)
+                }
+            }
             ToggleRow(title: L10n.text("在 Dock 中显示"), detail: nil,
                       isOn: model.setting(\.showInDock, then: { model.actions?.applyGeneralSettings() }))
             ToggleRow(title: L10n.text("显示语音条"), detail: nil,
@@ -330,18 +368,15 @@ struct SettingsPage: View {
     }
 
     private func setLogin(_ on: Bool) {
-        do {
-            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            model.settings.launchAtLogin = on
-            loginError = ""
-        } catch {
-            loginError = L10n.text("无法修改：") + error.localizedDescription
-        }
-        loginItemStatus.refresh()
-        // Registering again does not undo the user's switch in System Settings: send them there.
-        if on, loginItemStatus.status == .requiresApproval {
-            loginError = ""
-            SMAppService.openSystemSettingsLoginItems()
+        loginItemStatus.setEnabled(on) { result in
+            switch result {
+            case .success(let status):
+                model.settings.launchAtLogin = on
+                loginError = ""
+                if on, status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+            case .failure(let error):
+                loginError = L10n.text("无法修改：") + error.localizedDescription
+            }
         }
     }
 }
@@ -624,7 +659,8 @@ struct ModelSection: View {
     @State private var requests = FormRequest<[String]>()
 
     private var settings: Settings { model.settings }
-    private var keySaved: Bool { KeychainStore.exists(account: settings.llmPresetID) }
+    private var keySaved: Bool { model.llmKeyPresence == true }
+    private var keyLoading: Bool { preset.needsKey && model.llmKeyPresence == nil }
     private var preset: LLMPreset { LLMPreset.find(settings.llmPresetID) }
     private var normalizedKeyDraft: String { keyDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var requestContext: [String] { [settings.llmPresetID, settings.llmBaseURL, settings.llmModel, normalizedKeyDraft] }
@@ -647,7 +683,7 @@ struct ModelSection: View {
                         .frame(width: 300)
                 }
                 if preset.needsKey {
-                    SettingRow(title: "API Key", detail: keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试"))) {
+                    SettingRow(title: "API Key", detail: keyLoading ? L10n.text("正在读取钥匙串状态…") : (keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试")))) {
                         HStack(spacing: 8) {
                             SecureField(keySaved ? L10n.text("已保存，留空保持不变") : "sk-…", text: $keyDraft)
                                 .textFieldStyle(.plain).capsuleInput()
@@ -657,7 +693,7 @@ struct ModelSection: View {
                                 saveKey(deleting: normalizedKeyDraft.isEmpty && keySaved)
                             }
                             .buttonStyle(SecondaryButtonStyle())
-                            .disabled(normalizedKeyDraft.isEmpty && !keySaved)
+                            .disabled(keyLoading || (normalizedKeyDraft.isEmpty && !keySaved))
                         }
                     }
                 }
@@ -690,7 +726,7 @@ struct ModelSection: View {
                     }
                     Spacer()
                 }
-                if !settings.llmRouteReady {
+                if !keyLoading && !model.llmConfigured {
                     Text(missingParts() + L10n.text("。可以听写，但不整理。"))
                         .font(Theme.captionFont).foregroundColor(Theme.warning)
                 }
@@ -714,7 +750,7 @@ struct ModelSection: View {
         keyDraft = ""
         models = []
         status = ""
-        model.objectWillChange.send()
+        model.refreshLLMKeyPresence()
     }
 
     /// Rendering the page only uses saved-state metadata, never the key value.

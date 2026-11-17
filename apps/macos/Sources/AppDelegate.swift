@@ -460,7 +460,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         case .light: appearance = NSAppearance(named: .aqua)
         case .dark: appearance = NSAppearance(named: .darkAqua)
         }
-        HubThemeReveal.apply(appearance, in: hub.themeTransitionWindow)
+        HubThemeReveal.apply(appearance, in: hub.themeTransitionWindow,
+                             additionalWindows: [hub.settingsThemeTransitionWindow].compactMap { $0 })
         let policy: NSApplication.ActivationPolicy = settings.showInDock ? .regular : .accessory
         if NSApp.activationPolicy() != policy {
             NSApp.setActivationPolicy(policy)
