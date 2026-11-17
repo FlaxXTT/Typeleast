@@ -237,7 +237,7 @@ final class PillView: NSView {
     var model = RecordingBarModel() {
         didSet {
             if model.phase != oldValue.phase {
-                phaseChanged()
+                phaseChanged(from: oldValue)
             } else if model.phase == .recording, reduceMotion {
                 _ = waveform.advance(level: model.voice, delta: 0.05, reduceMotion: true)
             }
@@ -250,6 +250,14 @@ final class PillView: NSView {
     private let cancelButton = CancelButton()
     private let stopButton = CancelButton()
     private var waveform = VoiceWaveform()
+    private struct RecordingHandoff {
+        let model: RecordingBarModel
+        let waveform: VoiceWaveform
+        let width: CGFloat
+    }
+    private var recordingHandoff: RecordingHandoff?
+    private static let handoffHold: TimeInterval = 0.08
+    private static let handoffFade: TimeInterval = 0.15
     private var spinnerPhase: CGFloat = 0
     private var phaseElapsed: Double = 0
     private var lastAdvancedAt = ProcessInfo.processInfo.systemUptime
@@ -264,6 +272,16 @@ final class PillView: NSView {
     static let displayScale: CGFloat = 1
     /// Diameter of the cancel (left) and finish (right) buttons.
     static let buttonSize: CGFloat = 26
+
+    var holdsRecordingWidth: Bool {
+        recordingHandoff != nil && !reduceMotion && phaseElapsed < Self.handoffHold
+    }
+
+    /// Only presentation waits for the frozen frame. The model is already transcribing.
+    var presentationWidth: CGFloat {
+        if holdsRecordingWidth, let recordingHandoff { return recordingHandoff.width }
+        return Self.width(for: model, limit: limitSeconds)
+    }
     static func badgeWidth(_ text: String) -> CGFloat {
         guard !text.isEmpty else { return 0 }
         let font = NSFont.systemFont(ofSize: 10, weight: .bold)
@@ -371,7 +389,13 @@ final class PillView: NSView {
 
     @objc private func stopPressed() { onStop?() }
 
-    private func phaseChanged() {
+    private func phaseChanged(from previous: RecordingBarModel) {
+        if previous.phase == .recording, model.phase == .thinking,
+           !model.isStartingMicrophone, !reduceMotion {
+            recordingHandoff = RecordingHandoff(model: previous, waveform: waveform, width: bounds.width)
+        } else {
+            recordingHandoff = nil
+        }
         spinnerPhase = 0
         phaseElapsed = 0
         lastAdvancedAt = ProcessInfo.processInfo.systemUptime
@@ -392,6 +416,9 @@ final class PillView: NSView {
         let delta = max(0, min(0.1, now - lastAdvancedAt))
         lastAdvancedAt = now
         phaseElapsed += delta
+        if reduceMotion || phaseElapsed >= Self.handoffHold + Self.handoffFade {
+            recordingHandoff = nil
+        }
         let cancelTarget: CGFloat = cancelHover ? 1 : 0
         let stopTarget: CGFloat = stopHover ? 1 : 0
         if reduceMotion {
@@ -424,14 +451,22 @@ final class PillView: NSView {
         context.setLineWidth(1)
         context.addPath(capsule)
         context.drawPath(using: .fillStroke)
+        context.saveGState()
+        context.addPath(capsule)
+        context.clip()
+        defer { context.restoreGState() }
 
         switch model.phase {
         case .hidden:
             return
         case .recording:
-            drawRecording()
+            drawRecording(model, waveform: waveform, width: bounds.width)
         case .thinking:
-            drawThinking()
+            if let recordingHandoff {
+                drawHandoff(recordingHandoff, context: context)
+            } else {
+                drawThinking()
+            }
         case .result:
             drawResult()
         }
@@ -446,8 +481,36 @@ final class PillView: NSView {
         context.fillPath()
     }
 
-    private func drawRecording() {
+    private func drawHandoff(_ handoff: RecordingHandoff, context: CGContext) {
+        let progress = min(1, max(0, (phaseElapsed - Self.handoffHold) / Self.handoffFade))
+        let blend = CGFloat(progress * progress * (3 - 2 * progress))
+        // Keep the cancel control stable while the two content layers crossfade.
         drawCancel()
+        context.saveGState()
+        context.setAlpha(1 - blend)
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        drawRecording(handoff.model, waveform: handoff.waveform, width: handoff.width,
+                      showsCancel: false, collapse: blend)
+        context.endTransparencyLayer()
+        context.restoreGState()
+        if blend > 0 {
+            context.saveGState()
+            context.setAlpha(blend)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            drawThinking(showsCancel: false)
+            context.endTransparencyLayer()
+            context.restoreGState()
+        }
+    }
+
+    private func drawRecording(_ recording: RecordingBarModel, waveform: VoiceWaveform, width: CGFloat,
+                               showsCancel: Bool = true, collapse: CGFloat = 0) {
+        let content = NSRect(x: bounds.midX - width / 2, y: bounds.minY, width: width, height: bounds.height)
+        let stopRect = NSRect(x: content.maxX - Self.buttonSize - 4, y: content.midY - Self.buttonSize / 2,
+                              width: Self.buttonSize, height: Self.buttonSize)
+        let cancelRect = NSRect(x: content.minX + 4, y: content.midY - Self.buttonSize / 2,
+                                width: Self.buttonSize, height: Self.buttonSize)
+        if showsCancel { drawCancel() }
         // The supplied reference uses a white finish disc with a black check.
         VoiceBarPalette.finishSurface.setFill()
         let stopExpansion = reduceMotion ? 0 : stopHoverAmount * 1.8
@@ -463,7 +526,7 @@ final class PillView: NSView {
         VoiceBarPalette.finishInk.setStroke()
         check.stroke()
 
-        let remaining = limitSeconds - model.elapsed
+        let remaining = limitSeconds - recording.elapsed
         var waveRight = stopRect.minX - 10
         if remaining <= PillView.countdownSeconds {
             let label = RecordingBarFormat.elapsed(max(0, remaining))
@@ -472,27 +535,27 @@ final class PillView: NSView {
                      color: VoiceBarPalette.warning)
             waveRight = stopRect.minX - 46
         }
-        if !model.badge.isEmpty {
-            let badgeWidth = PillView.badgeWidth(model.badge)
+        if !recording.badge.isEmpty {
+            let badgeWidth = PillView.badgeWidth(recording.badge)
             let rect = NSRect(x: waveRight - badgeWidth, y: bounds.midY - 8, width: badgeWidth, height: 16)
             PillView.ink.withAlphaComponent(0.12).setFill()
             fillBadge(in: rect)
             let font = NSFont.systemFont(ofSize: 10, weight: .bold)
-            let textWidth = ceil((model.badge as NSString).size(withAttributes: [.font: font]).width)
-            drawText(model.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
+            let textWidth = ceil((recording.badge as NSString).size(withAttributes: [.font: font]).width)
+            drawText(recording.badge, x: rect.midX - textWidth / 2, centerY: rect.midY, width: textWidth + 1,
                      font: font, color: .white)
             waveRight = rect.minX - 6
         }
         let waveLeft = cancelRect.maxX + 10
         let waveHeight: CGFloat = 24
         drawWaveform(NSRect(x: waveLeft, y: bounds.midY - waveHeight / 2,
-                            width: waveRight - waveLeft, height: waveHeight))
+                            width: waveRight - waveLeft, height: waveHeight), waveform: waveform, collapse: collapse)
     }
 
-    private func drawThinking() {
+    private func drawThinking(showsCancel: Bool = true) {
         // three dots breathing in sequence
         let spacing: CGFloat = 10
-        drawCancel()
+        if showsCancel { drawCancel() }
         let centreX: CGFloat = 56
         for index in 0..<3 {
             let phase = spinnerPhase - CGFloat(index) * 0.9
@@ -574,7 +637,7 @@ final class PillView: NSView {
     }
 
     /// Stationary white bars change height around the centre line.
-    private func drawWaveform(_ rect: NSRect) {
+    private func drawWaveform(_ rect: NSRect, waveform: VoiceWaveform, collapse: CGFloat = 0) {
         guard rect.width > 4, let context = NSGraphicsContext.current?.cgContext else { return }
         let width: CGFloat = 2
         let gap: CGFloat = 2
@@ -583,7 +646,7 @@ final class PillView: NSView {
         context.saveGState()
         context.clip(to: rect)
         for index in 0..<Self.visibleBars {
-            let height = CGFloat(waveform.heights[index])
+            let height = 2 + (CGFloat(waveform.heights[index]) - 2) * (1 - collapse)
             let line = NSRect(x: origin + CGFloat(index) * (width + gap), y: rect.midY - height / 2,
                               width: width, height: height)
             PillView.ink.withAlphaComponent(waveform.opacities[index]).setFill()
@@ -913,7 +976,7 @@ final class RecordingBar {
     }
 
     private func capsuleSize() -> NSSize {
-        NSSize(width: (PillView.width(for: model, limit: limitSeconds) * PillView.displayScale).rounded(),
+        NSSize(width: (pill.presentationWidth * PillView.displayScale).rounded(),
                height: PillView.height * PillView.displayScale)
     }
 
@@ -925,8 +988,8 @@ final class RecordingBar {
         let frame = NSRect(x: (centreX - size.width / 2).rounded(), y: target.frame.minY,
                            width: size.width, height: size.height)
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.prefersReducedMotion ? 0 : 0.22
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.duration = Self.prefersReducedMotion ? 0 : 0.20
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.05, 0.6, 0.4, 0.95)
             target.animator().setFrame(frame, display: true)
         }
     }
@@ -1002,7 +1065,11 @@ final class RecordingBar {
                 positionOnMouseScreen()
             }
         }
+        let wasHoldingWidth = pill.holdsRecordingWidth
         pill.advance(at: now)
+        if wasHoldingWidth && !pill.holdsRecordingWidth, let panelBox {
+            resizeToCapsule(panelBox)
+        }
     }
 
     private func cancelPendingFade() {

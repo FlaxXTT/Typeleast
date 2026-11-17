@@ -138,10 +138,12 @@ struct VoiceWaveform {
         var due: Double
         var centre: Double
         var height: Double
+        var reach: Double
         var applied: UInt16 = 0
     }
     private(set) var heights = [Double](repeating: 2, count: count)
     private(set) var opacities = [Double](repeating: 0.5, count: count)
+    private var targets = [Double](repeating: 2, count: count)
     private var ages = [Double](repeating: 0, count: count)
     private var drawnHeights = [Double](repeating: 2, count: count)
     private var drawnOpacities = [Double](repeating: 0.5, count: count)
@@ -150,6 +152,10 @@ struct VoiceWaveform {
     private var injectionTime: Double = 0
     private var capturedFor: Double = 0
     private var currentHeight: Double = 2
+    private var active = false
+    private var quietFor: Double = 0
+    private var centreOffset: Double = 0
+    private var targetCentreOffset: Double = 0
     private var randomState: UInt64 = 0x746970656C656173
 
     mutating func reset() { self = VoiceWaveform() }
@@ -165,23 +171,44 @@ struct VoiceWaveform {
         time += dt
         capturedFor = level.hasAudio ? capturedFor + dt : 0
         let centre = Double(Self.count - 1) / 2
-        let active = level.hasAudio && level.signal > 0.012
+        // Separate entry/exit thresholds keep breaths and short pauses from flickering.
+        if !level.hasAudio {
+            active = false
+            quietFor = 0
+        } else if active {
+            quietFor = level.signal < 0.008 ? quietFor + dt : 0
+            if quietFor >= 0.15 { active = false }
+        } else if level.signal > 0.015 {
+            active = true
+            quietFor = 0
+        }
         let target = active ? 2 + 14 * Double(level.response) : 2
         let responseTime = target > currentHeight ? 0.10 : 0.24
         currentHeight += (target - currentHeight) * (1 - exp(-dt / responseTime))
+        // A new pulse picks a destination; the centre travels there instead of jumping.
+        if !active { targetCentreOffset = 0 }
+        centreOffset += (targetCentreOffset - centreOffset) * (1 - exp(-dt / 0.65))
+        let voiceCentre = centre + centreOffset
+        let reach = 2 + 3 * min(1, Double(level.signal) / 0.20)
 
         for index in heights.indices {
             let distance = abs(Double(index) - centre)
-            opacities[index] = level.hasAudio ? 0.5 + 0.5 * min(1, max(0, (capturedFor - distance * 0.05) / 0.12)) : 0.5
+            opacities[index] = !level.hasAudio ? 0.5 : reduceMotion ? 1
+                : 0.5 + 0.5 * min(1, max(0, (capturedFor - distance * 0.05) / 0.12))
             if reduceMotion {
-                heights[index] = 2 + (currentHeight - 2) * max(0.25, 1 - distance / (centre + 0.5) * 0.7)
+                targets[index] = 2 + (currentHeight - 2) * max(0, 1 - distance / reach)
                 continue
             }
             ages[index] += dt
             // The outer bars settle a little later than the centre bars.
             let release = 0.24 + distance / (centre + 0.5) * 0.08
-            heights[index] = 2 + (heights[index] - 2) * exp(-dt / release)
-            if ages[index] > 1.1 || heights[index] < 2.05 { heights[index] = 2 }
+            targets[index] = 2 + (targets[index] - 2) * exp(-dt / release)
+            if ages[index] > 1.1 || targets[index] < 2.05 { targets[index] = 2 }
+            if active {
+                // Quiet speech stays near the centre; stronger speech spreads wider.
+                let weight = max(0, 1 - abs(Double(index) - voiceCentre) / reach)
+                targets[index] = max(targets[index], 2 + (currentHeight - 2) * weight)
+            }
         }
         if reduceMotion {
             impulses.removeAll(keepingCapacity: true)
@@ -192,14 +219,9 @@ struct VoiceWaveform {
                 if active {
                     let variation = level.signal < 0.03 ? 0.01 : level.signal < 0.10 ? 0.04 : 0.06
                     let height = min(16, max(2, currentHeight + (random() * 2 - 1) * variation * 14))
-                    // A small continuous centre response keeps quiet speech visible.
-                    for index in [Self.count / 2 - 1, Self.count / 2] {
-                        heights[index] = max(heights[index], currentHeight)
-                        ages[index] = 0
-                    }
                     if level.signal >= 0.10 && random() < min(0.6, Double(level.signal) * 1.5) {
-                        let origin = centre + (random() * 2 - 1) * min(Double(Self.count) * 0.15, 3)
-                        impulses.append(Impulse(due: time + 0.08, centre: origin, height: height))
+                        targetCentreOffset = (random() * 2 - 1) * 1.2
+                        impulses.append(Impulse(due: time + 0.08, centre: voiceCentre, height: height, reach: reach))
                     }
                 }
             }
@@ -209,14 +231,21 @@ struct VoiceWaveform {
                     if impulses[eventIndex].applied & bit != 0 { continue }
                     let distance = abs(Double(bar) - impulses[eventIndex].centre)
                     if time < impulses[eventIndex].due + distance * 0.014 { continue }
-                    let decay = max(0.12, 1 - distance / (centre + 0.5) * 0.70)
-                    let target = min(16, max(2, impulses[eventIndex].height * decay * (0.95 + random() * 0.1)))
-                    heights[bar] = max(target, heights[bar] * 0.3 + target * 0.7)
+                    let decay = max(0, 1 - distance / impulses[eventIndex].reach)
+                    let target = min(16, 2 + (impulses[eventIndex].height - 2) * decay * (0.95 + random() * 0.1))
+                    targets[bar] = max(targets[bar], target)
                     ages[bar] = 0
                     impulses[eventIndex].applied |= bit
                 }
             }
             impulses.removeAll { $0.applied == (UInt16(1) << Self.count) - 1 }
+        }
+        // Events change envelopes, never the displayed height. Each bar follows smoothly.
+        for index in heights.indices {
+            let distance = abs(Double(index) - centre)
+            let response = targets[index] > heights[index] ? 0.045 : 0.18 + distance * 0.012
+            heights[index] += (targets[index] - heights[index]) * (1 - exp(-dt / response))
+            if targets[index] == 2 && heights[index] < 2.05 { heights[index] = 2 }
         }
         let dirty = zip(heights, drawnHeights).contains { abs($0 - $1) >= 0.05 }
             || zip(opacities, drawnOpacities).contains { abs($0 - $1) >= 0.01 }
