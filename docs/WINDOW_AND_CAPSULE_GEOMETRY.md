@@ -42,6 +42,7 @@ The app's press-once/press-again workflow uses hands-free recording, as confirme
 owner. It retains both 26-point discs: a grey cancel button and white finish button with
 a black check. Compact modes are explicit `RecordingBarMode` options. The existing final
 15-second countdown adds exactly 40 points to the recording width.
+Supplying `IdleBar.countdown` also gives the hover capsule a 40-point timer slot (110×34).
 
 The waveform always has 10 two-point columns, two-point gaps and a 38×24 drawing area.
 Heights are limited to 2–18 points. Real audio, visual gating and per-column smoothing
