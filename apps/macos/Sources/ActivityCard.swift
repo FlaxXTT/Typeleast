@@ -280,7 +280,7 @@ struct ActivityCard: View {
         let today = calendar.startOfDay(for: Date())
         let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
         let first = calendar.date(byAdding: .day, value: 7 * (weekOffset - weeks + 1), to: thisWeek) ?? thisWeek
-        let earliest = log.days.keys.min().flatMap { ActivityLog.parse($0) }
+        let earliest = log.days.keys.min().flatMap { ActivityLog.parse($0, calendar: calendar) }
         let step = cell + gap
         let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
