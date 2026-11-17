@@ -18,6 +18,13 @@ login-window footprint. The reference's 988×685 lower bound is not an interacti
 range: the main window's minimum and maximum frame sizes are both 1080×750. A separate
 frame-save key prevents restoration of an older resizable layout.
 
+Titled windows retain the native zoom traffic light, shown grey and disabled.
+Equal minimum and maximum frame sizes prevent resizing; the Window menu keeps
+Zoom visible and disabled too. The main window has an explicit 44pt native drag
+strip across its top and a second drag target over the sidebar brand row. These
+regions show a hand cursor and use AppKit window dragging. Native window buttons
+remain above the strip; navigation, forms and scroll content keep their own input.
+
 ## Surface geometry
 
 The interface uses tiered circular corners: 8pt base controls, 6pt small controls,

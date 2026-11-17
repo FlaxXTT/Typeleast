@@ -4,11 +4,20 @@ import SwiftUI
 /// Rounded native surfaces use the panel radius; the voice capsule has its own geometry.
 enum AppWindowStyle {
     static func fixSize(_ window: NSWindow, to size: NSSize) {
-        window.styleMask.remove(.resizable)
+        // AppKit needs this style to retain the native zoom traffic light.
+        // Equal size limits still prevent edge resizing and system tiling.
+        if window.styleMask.contains(.titled) { window.styleMask.insert(.resizable) }
         window.minSize = size
         window.maxSize = size
         window.setFrame(NSRect(origin: window.frame.origin, size: size), display: false)
-        window.standardWindowButton(.zoomButton)?.isEnabled = false
+        disableZoom(window)
+    }
+
+    private static func disableZoom(_ window: NSWindow) {
+        guard let button = window.standardWindowButton(.zoomButton) else { return }
+        button.isHidden = false
+        button.isTransparent = false
+        button.isEnabled = false
     }
 
     static func round(_ window: NSWindow, radius: CGFloat = Theme.panelRadius) {
@@ -38,6 +47,30 @@ enum AppWindowStyle {
                 }
             }
         }
+        if window.minSize == window.maxSize { disableZoom(window) }
+    }
+}
+
+/// Explicit native drag targets work even when SwiftUI consumes background clicks.
+struct WindowDragRegion: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowDragView { WindowDragView() }
+    func updateNSView(_ view: WindowDragView, context: Context) {
+        view.toolTip = L10n.text("拖动窗口")
+    }
+}
+
+final class WindowDragView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var mouseDownCanMoveWindow: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .openHand)
     }
 }
 

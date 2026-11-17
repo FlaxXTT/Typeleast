@@ -53,6 +53,7 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "拖动窗口": "Drag window",
         "错误": "Error",
         "洞察": "Insights",
         "尚无时长记录": "No duration recorded yet",
