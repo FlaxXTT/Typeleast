@@ -8,10 +8,14 @@ This project is applying for free code signing through SignPath Foundation.
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-macOS releases are not covered by the Windows signing policy. Starting with 2.1.6,
-the release workflow requires a persistent publisher certificate and stops if it
-is missing or invalid. A fixed self-signed publisher CA is supported without
-Developer ID; this does not provide Apple notarization.
+macOS releases are not covered by the Windows signing policy. The release
+workflow defaults to requiring a persistent publisher certificate and stops if it
+is missing or invalid. Version 2.1.6 has an explicitly approved temporary-signing
+exception, selected manually and restricted to that exact tag and source version.
+It remains ad-hoc signed and not notarized; authorization prompts may remain.
+The exception cannot be used for later versions and is never an automatic fallback.
+A fixed self-signed publisher CA is supported for a future persistent-signing
+release without Developer ID; this does not provide Apple notarization.
 
 ## Source code and build process
 

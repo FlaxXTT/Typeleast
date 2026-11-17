@@ -18,6 +18,13 @@ on:
         description: "Create the release as a draft"
         type: boolean
         default: false
+      signing_mode:
+        description: "Publisher signing, or the approved temporary-signing exception for v2.1.6 only"
+        type: choice
+        default: publisher
+        options:
+          - publisher
+          - legacy-2.1.6
 
 permissions:
   contents: write
@@ -39,7 +46,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Validate the requested signing mode
+        env:
+          SIGNING_MODE: ${{ inputs.signing_mode }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          case "$SIGNING_MODE" in
+            publisher) ;;
+            legacy-2.1.6)
+              test "$RELEASE_TAG" = v2.1.6 || { echo 'The temporary-signing exception is limited to v2.1.6.' >&2; exit 1; }
+              version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' apps/macos/Info.plist)
+              test "$version" = 2.1.6 || { echo 'The temporary-signing exception requires the 2.1.6 source.' >&2; exit 1; }
+              echo 'TYPELEAST_SIGN_IDENTITY=-' >> "$GITHUB_ENV"
+              echo 'v2.1.6 uses the explicitly approved temporary-signing exception. macOS authorization prompts may remain.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *) echo 'Unsupported signing mode.' >&2; exit 1 ;;
+          esac
       - name: Import persistent publisher signing identity
+        if: inputs.signing_mode != 'legacy-2.1.6'
         timeout-minutes: 2
         env:
           MACOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.MACOS_SIGNING_CERTIFICATE_BASE64 }}
