@@ -22,6 +22,9 @@ background queue before translation starts.
 `SelectionPanel.hide()` uses only an existing panel. It orders out a visible panel
 once and releases its content, without initializing the lazy window just to hide
 it. The completed translation stays until closed and never becomes key. Waiting
-uses the shared lightweight circular indicator; the drawn sun remains the offer's
-hover artwork. Text is sent only after an explicit click and is not inserted or
+uses the shared lightweight circular indicator. The offer is a 24×24pt transparent
+button: a filled, irregular hand-drawn circle and two pen lines, without material,
+card border or window shadow. The full square responds to clicks, including the
+circle center and gaps. Hover and press use a 120ms opacity/scale response with no
+repeating drawing clock. Text is sent only after an explicit click and is not inserted or
 saved by this feature.
