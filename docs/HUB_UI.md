@@ -19,14 +19,23 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 
 The supplied Home screenshot defines the insights area: system bold figures, grey labels,
 large white cards with 20-point corners, a soft grey-to-white dot-grid backdrop and a
-pill-shaped Share button. Figures use the default system design rather than rounded digits.
+pill-shaped Share button. The heading is `Insight`; no slogan is added above it.
+Figures use the default system design rather than rounded digits.
 The light heatmap colours sampled from the reference are `#F8F8F8` (empty), `#ECF0FE`,
 `#C6D2FC`, `#A0B4FB` and `#426AF6`. The screenshot's Display P3 colour space is retained
 for its coloured fills and backdrop. Large counts use the reference's K notation.
 
-Four metric cards sit in two columns above the active-day card. Engine status and model
-management occupy the top-right column, followed by Quick dictation; Recent is the final
+Four metric cards sit in two columns above the active-day card. The top-right column
+starts with a grey shortcut card for Dictation, Translation and Ask anything, using
+separate white keycaps from the actual configured bindings. Longer key combinations
+wrap within the card. Engine status follows, with version and Check for updates at
+the bottom-right. Recent is the final
 section beneath both columns. The main window is fixed at 1080×750 points. User resizing, zoom and full-screen entry are disabled; scrolling holds content that extends beyond the fixed viewport.
+
+The sidebar footer has an envelope and localized Contact Us label linking to the
+project's GitHub homepage, a Settings gear and a Help button linking to the README.
+Settings opens the independent window. The Home dot grid uses retained native
+layers, so normal scrolling and status refreshes do not rebuild all of its dots.
 
 Opening or restoring the hub replays the four metric figures from zero over 250ms. Units and
 final number widths are reserved, so counting does not move surrounding content. Active

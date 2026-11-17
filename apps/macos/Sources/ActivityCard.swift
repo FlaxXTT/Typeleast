@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import QuartzCore
 
 // Screenshot-matched Home insights. Only number and cell-effect views interpolate;
 // animation frames do not publish through AppModel or rebuild the activity log.
@@ -30,7 +31,7 @@ struct InsightsPanel: View {
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text(L10n.text("洞察")).font(Theme.homeTitleFont).tracking(-0.6)
+                Text("Insight").font(Theme.homeTitleFont).tracking(-0.6)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
@@ -160,22 +161,67 @@ private struct Figure: View {
 /// A faint grid of dots behind the insights.
 struct HomeDotGrid: View {
     var body: some View {
-        Canvas { context, size in
-            let step: CGFloat = 11
-            var y: CGFloat = step / 2
-            while y < size.height {
-                var x: CGFloat = step / 2
-                while x < size.width {
-                    context.opacity = 0.5 + 0.5 * (1 - x / max(1, size.width))
-                    context.fill(Path(ellipseIn: CGRect(x: x - 0.65, y: y - 0.65, width: 1.3, height: 1.3)), with: .color(Theme.homeDot))
-                    x += step
-                }
-                y += step
+        HomeDotPattern()
+            .background {
+                LinearGradient(colors: [Theme.homeBackdrop, Theme.window], startPoint: .bottomLeading, endPoint: .topTrailing)
+                    .overlay(LinearGradient(colors: [.clear, Theme.window.opacity(0.3)], startPoint: .top, endPoint: .bottom))
+            }
+    }
+}
+
+private struct HomeDotPattern: NSViewRepresentable {
+    func makeNSView(context: Context) -> HomeDotGridView { HomeDotGridView() }
+    func updateNSView(_ view: HomeDotGridView, context: Context) {}
+}
+
+/// Retain the backdrop geometry instead of creating thousands of dot paths on redraw.
+final class HomeDotGridView: NSView {
+    private let dots = CAShapeLayer()
+    private let dotOpacity = CAGradientLayer()
+    private var pathSize = NSSize.zero
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.addSublayer(dots)
+        dotOpacity.startPoint = CGPoint(x: 0, y: 0.5)
+        dotOpacity.endPoint = CGPoint(x: 1, y: 0.5)
+        dotOpacity.colors = [NSColor.white.cgColor, NSColor.white.withAlphaComponent(0.5).cgColor]
+        dots.mask = dotOpacity
+        updateColors()
+    }
+    required init?(coder: NSCoder) { fatalError("Created in code") }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateColors() }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+
+    override func layout() {
+        super.layout()
+        guard pathSize != bounds.size else { return }
+        pathSize = bounds.size
+        let path = CGMutablePath()
+        let step: CGFloat = 11
+        for y in stride(from: step / 2, to: bounds.height, by: step) {
+            for x in stride(from: step / 2, to: bounds.width, by: step) {
+                path.addEllipse(in: CGRect(x: x - 0.65, y: y - 0.65, width: 1.3, height: 1.3))
             }
         }
-        .background {
-            LinearGradient(colors: [Theme.homeBackdrop, Theme.window], startPoint: .bottomLeading, endPoint: .topTrailing)
-                .overlay(LinearGradient(colors: [.clear, Theme.window.opacity(0.3)], startPoint: .top, endPoint: .bottom))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dots.frame = bounds
+        dotOpacity.frame = bounds
+        dots.path = path
+        CATransaction.commit()
+    }
+
+    private func updateColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            dots.fillColor = NSColor(Theme.homeDot).cgColor
+            CATransaction.commit()
         }
     }
 }
