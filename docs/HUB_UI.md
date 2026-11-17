@@ -81,6 +81,10 @@ set its colours.
 
 ## Home corrections after 2.1.9
 
+The shared scrolling implementation also covers dialogs and editors. See
+[Native scrolling](SCROLLING.md) for display-frame coalescing, lazy lists,
+command navigation and meeting bottom-follow behaviour.
+
 Home totals now come from `ActivityLog` rather than retained transcript history.
 Each successful new dictation records numeric word counts, the recording duration,
 and estimated typing-time savings alongside its activity day. No transcript is

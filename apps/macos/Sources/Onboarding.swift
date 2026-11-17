@@ -82,7 +82,7 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 0) {
             progress.padding(.top, 34)
-            ScrollView {
+            HubScrollView(showsChrome: false) {
                 content.frame(maxWidth: 440).padding(.horizontal, 40).padding(.vertical, 20)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
             footer.padding(.horizontal, 40).padding(.bottom, 28)

@@ -9,6 +9,22 @@ struct HubCommandPalette: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var selected = 0
+    @State private var keyboardScrollRequest = 0
+    @State private var results: [Result] = []
+
+    private struct SearchInputs: Equatable {
+        let query: String
+        let historyRevision: Int
+        let canToggleDictation: Bool
+        let recording: Bool
+        let hotkey: String
+    }
+
+    private var searchInputs: SearchInputs {
+        SearchInputs(query: query, historyRevision: model.historyRevision,
+                     canToggleDictation: model.phase == .idle || model.phase == .recording,
+                     recording: model.phase == .recording, hotkey: model.hotkeyLabel)
+    }
 
     private struct Result: Identifiable {
         let id: String
@@ -18,7 +34,8 @@ struct HubCommandPalette: View {
         let run: () -> Void
     }
 
-    private var results: [Result] {
+    private func buildResults() -> [Result] {
+        let model = self.model
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         var commands = HubPage.allCases.map { page in
             Result(id: "page-" + page.rawValue, title: page.title, detail: L10n.text("打开页面"), symbol: page.symbol) {
@@ -60,8 +77,8 @@ struct HubCommandPalette: View {
             .padding(.horizontal, 40).padding(.vertical, 32)
             Divider().overlay(Theme.border)
             ScrollViewReader { scroll in
-                ScrollView {
-                    VStack(spacing: 4) {
+                HubScrollView(showsChrome: false) {
+                    LazyVStack(spacing: 4) {
                         if results.isEmpty {
                             Text(L10n.text("没有匹配的记录或命令"))
                                 .foregroundColor(Theme.secondary).frame(maxWidth: .infinity).padding(32)
@@ -86,7 +103,9 @@ struct HubCommandPalette: View {
                         }
                     }.padding(8)
                 }
-                .onChange(of: selected) { _, value in scroll.scrollTo(value) }
+                // Hovering a row while using the wheel must not issue a scrollTo.
+                .onChange(of: keyboardScrollRequest) { _, _ in scroll.scrollTo(selected) }
+                .onChange(of: query) { _, _ in scroll.scrollTo(0) }
             }
             Divider().overlay(Theme.border)
             HStack(spacing: 8) {
@@ -99,7 +118,10 @@ struct HubCommandPalette: View {
         .frame(width: 560, height: 420)
         .background(Theme.window).foregroundColor(Theme.ink)
         .background(RoundedWindowMarker()).buttonBorderShape(.capsule)
-        .onChange(of: query) { _, _ in selected = 0 }
+        .onChange(of: searchInputs, initial: true) { old, new in
+            results = buildResults()
+            selected = old.query == new.query ? min(selected, max(0, results.count - 1)) : 0
+        }
         .onMoveCommand { direction in
             switch direction {
             case .down: move(1)
@@ -118,6 +140,7 @@ struct HubCommandPalette: View {
 
     private func move(_ delta: Int) {
         selected = min(max(0, results.count - 1), max(0, selected + delta))
+        keyboardScrollRequest &+= 1
     }
 }
 
