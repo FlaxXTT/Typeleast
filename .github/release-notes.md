@@ -3,18 +3,24 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 应用图标内五根声波柱的整体宽、高均设为内部区域的 61.8%，保留暖白背景、四根暖黑柱、一根品牌蓝柱和 Apple 连续圆角；Dock 与应用内图标同步。
-- 首页使用量改为独立累计，不再因“不保留历史”或删除单条记录而归零；只保存字数、时长等统计数字，不保存听写文本。
-- 从已有活动日志恢复累计字数。后续听写按实际录音时长统计口述时间，并估算节省时间；旧活动缺失的时长显示为“—”，语速仅按有时长的听写计算。
-- 侧栏搜索框恢复为 40 点高度，分享按钮的图标与文字整体居中；主窗口显示后重新定位左上角原生按钮，使其留在 99 点圆角内。
-- 沿用固定发布签名。按要求跳过测试和冒烟测试。
+- 按新的分级规范调整界面：基础圆角 8、控件 6、列表组 10、卡片 12、首页和侧栏 20、普通面板 16；主侧栏宽 210，页面左右间距 24、顶部留出 44。
+- 随包加入 Prompt 标题字体：首页标题 48、其他页面标题 36、区块标题 24；历史正文 14/22、时间列宽 52，分组首尾圆角 10，中间项无分隔线。
+- 设置改为 940×652 独立弹窗，包含 202 宽分类栏、独立滚动内容和 24 点关闭按钮；保持设置入口和分类跳转。
+- 图标所有使用位置统一为底板宽高各 0.618；应用内和官网去掉画布透明外边距，Dock/Finder 保留系统画布边距。
+- 修正主题翻牌的过早退出路径：等待新外观完成显示帧再截帧；遮罩放到原生窗口容器，主窗口与设置弹窗同步执行对角线 3D 瓦片翻转。
+- 全部滚动界面统一使用原生滚动容器与原生滚动条；进度、渐隐和位置记忆按显示帧合并，缓存内容高度，空闲时停止回调；普通弹窗不增加滚动观察开销。
+- 命令搜索缓存查询结果并按需创建行，鼠标悬停不再触发自动定位；会议实时文字仅在停留底部时跟随新内容，向上阅读时保持当前位置。
+- 沿用长期发布签名；本次按要求跳过测试和冒烟测试。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Set the five-bar waveform to 61.8% of the app icon's inner width and height. Keep the warm-white background, four warm-black bars, one brand-blue bar and Apple continuous enclosure. Use the same artwork in the Dock and app.
-- Keep Home usage totals independent of transcript history. Disabling history retention or deleting one record no longer resets the totals. Store numeric counts and durations only, with no transcript text.
-- Recover cumulative words from existing activity data. Record actual speech duration for new dictations and estimate typing time saved. Show a dash for missing older durations; calculate speech speed only from dictations with a recorded duration.
-- Restore the sidebar search control to 40pt height. Centre the share icon and title together. Reposition native window buttons after presentation so they stay inside the 99pt corner.
+- Apply the new geometry: 8pt base corners, 6pt small controls, 10pt list groups, 12pt cards, 20pt Home/sidebar surfaces and 16pt panels. Use a 210pt main sidebar, 24pt horizontal page insets and a 44pt top region.
+- Bundle Prompt heading fonts at 48pt on Home, 36pt on other pages and 24pt for sections. History uses 14/22 text, a 52pt time column, 10pt group corners and no middle-row dividers.
+- Open Settings as a separate 940×652 dialog with a 202pt category pane, independent content scrolling and a 24pt close button. Keep existing Settings entry points and category navigation.
+- Use the same 0.618 waveform ratio for all icon surfaces. Remove transparent canvas margins from in-app and website marks; keep the system canvas margin for Dock/Finder icons.
+- Repair early exit in theme flipping. Wait for new-appearance display frames before capture, place covers above the SwiftUI hosting hierarchy, and run the diagonal 3D mosaic on both the main window and Settings dialog.
+- Use native scrolling across all pages and panels. Coalesce progress, fade and position updates to display frames, cache content height, and pause callbacks while idle. Plain popups add no scroll-observation work.
+- Cache command-search results and create rows as needed. Hover no longer requests scrolling. Live meeting text follows additions only while the reader stays near the bottom.
 - Retain the persistent publisher signature. Skip tests and runtime exercises as requested.
 <!-- /typeleast-update -->
 
