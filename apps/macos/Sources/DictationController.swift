@@ -57,6 +57,9 @@ final class DictationController {
 
     private var tickTimer: Timer?
     private var lastTickedSecond = -1
+    private var lastMicrophoneActivityAt: Date?
+    private var lastMicrophoneName = ""
+    private static let microphoneReminderInterval: TimeInterval = 5 * 60
 
     func toggleDictation() { toggleDictation(translateTo: nil) }
 
@@ -126,7 +129,7 @@ final class DictationController {
         recorder.onAutoStop = { [weak self] in self?.stopRecording(auto: true) }
         phase = .starting
         idleBar.hide()
-        recordingBar.showThinking(detail: L10n.text("正在打开麦克风…"))
+        recordingBar.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true)
         registerEscape()
         applyState()
         let token = progressID
@@ -159,9 +162,17 @@ final class DictationController {
         recordingStartedAt = recorder.startedAt ?? Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
+        let now = Date()
+        let microphone = recorder.microphoneName
+        let remindMicrophone = lastMicrophoneActivityAt.map { now.timeIntervalSince($0) >= Self.microphoneReminderInterval } ?? true
         recordingBar.showRecording(destination: pendingAppBundleId,
                                    badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
                                        ?? (pendingAssistant ? L10n.text("提示词模式") : ""))
+        if !microphone.isEmpty, remindMicrophone || microphone != lastMicrophoneName {
+            recordingBar.showMicrophoneHint(microphone)
+        }
+        lastMicrophoneName = microphone
+        lastMicrophoneActivityAt = now
         setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
         playSound(start: true)
         if settings.muteWhileDictating {
@@ -205,6 +216,7 @@ final class DictationController {
 
     func stopRecording(auto: Bool = false) {
         guard phase == .recording else { return }
+        lastMicrophoneActivityAt = Date()
         unregisterEscape()
         stopTick()
         OutputMuter.shared.restore()
@@ -263,6 +275,7 @@ final class DictationController {
             applyState()
             updateIdleBar()
         case .recording:
+            lastMicrophoneActivityAt = Date()
             unregisterEscape()
             stopTick()
             // A dictation can be taken back for a few seconds; an assistant answer cannot.

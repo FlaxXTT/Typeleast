@@ -35,6 +35,10 @@ enum AudioDevices {
         return inputs().first(where: { $0.uid == uid })?.id
     }
 
+    static func name(forDeviceID id: AudioDeviceID) -> String? {
+        string(id, kAudioObjectPropertyName)
+    }
+
     private static func inputChannels(_ id: AudioDeviceID) -> Int {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
                                                  mScope: kAudioDevicePropertyScopeInput,
@@ -62,6 +66,16 @@ enum AudioDevices {
 
 /// Point an engine's input node at a specific device before it starts.
 enum AudioInputSelector {
+    /// Read the device the engine actually opened, after the selected input was applied.
+    static func currentDeviceID(in engine: AVAudioEngine) -> AudioDeviceID? {
+        guard let unit = engine.inputNode.audioUnit else { return nil }
+        var id = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+                                   kAudioUnitScope_Global, 0, &id, &size) == noErr, id != 0 else { return nil }
+        return id
+    }
+
     @discardableResult
     static func apply(deviceID: AudioDeviceID?, to engine: AVAudioEngine) -> Bool {
         guard var id = deviceID, let unit = engine.inputNode.audioUnit else { return false }

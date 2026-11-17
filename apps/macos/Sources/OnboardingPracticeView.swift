@@ -55,7 +55,7 @@ private struct PracticePill: View {
                         .font(.system(size: 12, weight: .medium)).padding(.trailing, 12)
                 }
                 .foregroundColor(.white)
-                .padding(5)
+                .padding(3)
                 .background(Capsule().fill(LinearGradient(
                     colors: [Color(nsColor: VoiceBarPalette.surfaceTop), Color(nsColor: VoiceBarPalette.surfaceBottom)],
                     startPoint: .top, endPoint: .bottom)))
@@ -78,7 +78,7 @@ private struct PracticeVoiceBar: NSViewRepresentable {
 /// Audio ticks redraw the capsule without publishing frames through the onboarding tree.
 private final class PracticeVoiceBarHost: NSView {
     private weak var practice: OnboardingPracticeController?
-    private let pill = PillView(frame: NSRect(x: 0, y: 0, width: 124, height: PillView.height))
+    private let pill = PillView(frame: NSRect(x: 0, y: 0, width: 118, height: PillView.height))
     private var phase: AppPhase?
     private var model = RecordingBarModel()
     private var timer: Timer?
@@ -103,7 +103,7 @@ private final class PracticeVoiceBarHost: NSView {
         pill.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         switch practice.phase {
         case .recording: model.showRecording(destination: "tutorial")
-        case .starting: model.showThinking(detail: L10n.text("正在打开麦克风…"))
+        case .starting: model.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true)
         case .thinking: model.showThinking(detail: L10n.text("正在整理…"))
         case .idle: model.hide()
         }

@@ -111,6 +111,7 @@ struct RecordingBarModel {
     private(set) var badge = ""
     private(set) var resultText = ""
     private(set) var warning = false
+    private(set) var isStartingMicrophone = false
     private(set) var elapsed: Double = 0
     private(set) var level: Float = 0
     private(set) var voice = VoiceLevel()
@@ -128,6 +129,7 @@ struct RecordingBarModel {
         detail = ""
         resultText = ""
         warning = false
+        isStartingMicrophone = false
         elapsed = 0
         level = 0
         voice = VoiceLevel()
@@ -152,12 +154,14 @@ struct RecordingBarModel {
         self.voice = voice
     }
 
-    mutating func showThinking(detail: String) {
+    mutating func showThinking(detail: String, startingMicrophone: Bool = false) {
         self.detail = detail
+        isStartingMicrophone = startingMicrophone
         phase = .thinking
     }
 
     mutating func showResult(_ text: String, warning: Bool) {
+        isStartingMicrophone = false
         resultText = RecordingBarFormat.summary(text)
         self.warning = warning
         phase = .result
@@ -170,6 +174,7 @@ struct RecordingBarModel {
         badge = ""
         resultText = ""
         warning = false
+        isStartingMicrophone = false
         elapsed = 0
         level = 0
         voice = VoiceLevel()
@@ -207,12 +212,13 @@ final class CancelButton: NSButton {
 
 /// The desktop voice controls keep the same dark surface in either app appearance.
 enum VoiceBarPalette {
-    static let ink = NSColor(calibratedWhite: 0.97, alpha: 1)
-    static let surfaceTop = NSColor(calibratedWhite: 0.19, alpha: 1)
-    static let surfaceBottom = NSColor(calibratedWhite: 0.105, alpha: 1)
-    static let edge = NSColor.white.withAlphaComponent(0.22)
-    static let finishSurface = NSColor(calibratedWhite: 0.22, alpha: 1)
-    static let finishInk = ink
+    static let ink = NSColor.white
+    static let surfaceTop = NSColor.black
+    static let surfaceBottom = NSColor.black
+    static let edge = NSColor.white.withAlphaComponent(0.32)
+    static let card = NSColor(srgbRed: 29.0 / 255, green: 26.0 / 255, blue: 26.0 / 255, alpha: 1)
+    static let finishSurface = NSColor.white
+    static let finishInk = NSColor.black
     static let warning = NSColor(srgbRed: 240.0 / 255, green: 160.0 / 255, blue: 75.0 / 255, alpha: 1)
     static let appearance = NSAppearance(named: .darkAqua)!
 }
@@ -253,11 +259,11 @@ final class PillView: NSView {
     private var cancelHoverAmount: CGFloat = 0
     private var stopHoverAmount: CGFloat = 0
 
-    static let height: CGFloat = 38
+    static let height: CGFloat = 34
     /// Scale the existing geometry together, including the waveform and hit areas.
     static let displayScale: CGFloat = 1
     /// Diameter of the cancel (left) and finish (right) buttons.
-    static let buttonSize: CGFloat = 28
+    static let buttonSize: CGFloat = 26
     static func badgeWidth(_ text: String) -> CGFloat {
         guard !text.isEmpty else { return 0 }
         let font = NSFont.systemFont(ofSize: 10, weight: .bold)
@@ -271,7 +277,7 @@ final class PillView: NSView {
         switch model.phase {
         case .hidden: return 100
         case .recording:
-            return (limit - model.elapsed <= countdownSeconds ? 162 : 124) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 8)
+            return (limit - model.elapsed <= countdownSeconds ? 156 : 118) + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 8)
         case .thinking: return 94 + (model.badge.isEmpty ? 0 : badgeWidth(model.badge) + 10) + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:11)]).width))
         case .result:
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -348,11 +354,11 @@ final class PillView: NSView {
 
     private var cancelRect: NSRect {
         let size = PillView.buttonSize
-        return NSRect(x: 5, y: (bounds.height - size) / 2, width: size, height: size)
+        return NSRect(x: 4, y: (bounds.height - size) / 2, width: size, height: size)
     }
     private var stopRect: NSRect {
         let size = PillView.buttonSize
-        return NSRect(x: bounds.width - size - 5, y: (bounds.height - size) / 2, width: size, height: size)
+        return NSRect(x: bounds.width - size - 4, y: (bounds.height - size) / 2, width: size, height: size)
     }
 
     override func layout() {
@@ -408,23 +414,16 @@ final class PillView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let scale = drawingScale
-        let pixel = 1 / scale
         context.clear(bounds)
         context.setAllowsAntialiasing(true)
         context.setShouldAntialias(true)
         let capsule = RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .path(in: bounds.insetBy(dx: pixel / 2, dy: pixel / 2)).cgPath
-        context.saveGState()
-        context.addPath(capsule)
-        context.clip()
-        NSGradient(starting: VoiceBarPalette.surfaceBottom, ending: VoiceBarPalette.surfaceTop)?
-            .draw(in: bounds, angle: 90)
-        context.restoreGState()
+            .path(in: bounds.insetBy(dx: 0.5, dy: 0.5)).cgPath
+        NSColor.black.withAlphaComponent(model.isStartingMicrophone ? 0.5 : 1).setFill()
         VoiceBarPalette.edge.setStroke()
-        context.setLineWidth(pixel)
+        context.setLineWidth(1)
         context.addPath(capsule)
-        context.strokePath()
+        context.drawPath(using: .fillStroke)
 
         switch model.phase {
         case .hidden:
@@ -449,7 +448,7 @@ final class PillView: NSView {
 
     private func drawRecording() {
         drawCancel()
-        // Fixed dark finish button and white check in every app appearance.
+        // The supplied reference uses a white finish disc with a black check.
         VoiceBarPalette.finishSurface.setFill()
         let stopExpansion = reduceMotion ? 0 : stopHoverAmount * 1.8
         NSBezierPath(ovalIn: stopRect.insetBy(dx: -stopExpansion, dy: -stopExpansion)).fill()
@@ -557,7 +556,7 @@ final class PillView: NSView {
 
     /// A quiet grey disc with a dark ×.
     private func drawCancel() {
-        PillView.ink.withAlphaComponent(0.08 + cancelHoverAmount * 0.10).setFill()
+        NSColor(calibratedWhite: 0.28 + cancelHoverAmount * 0.06, alpha: 1).setFill()
         let expansion = reduceMotion ? 0 : cancelHoverAmount * 1.8
         NSBezierPath(ovalIn: cancelRect.insetBy(dx: -expansion, dy: -expansion)).fill()
         let c = NSPoint(x: cancelRect.midX, y: cancelRect.midY), r: CGFloat = 4.6
@@ -669,6 +668,8 @@ final class RecordingBar {
     private var fadeToken = 0
     private var screenCheckedAt: Double = 0
     private var mouseScreenNumber: NSNumber?
+    private var microphoneHintPanel: PillPanel?
+    private var microphoneHintDismissal: DispatchWorkItem?
 
     /// Nothing is allocated here on purpose: the panel is the expensive part and
     /// is only needed once dictation actually starts (or on an explicit warm-up).
@@ -805,11 +806,57 @@ final class RecordingBar {
         }
     }
 
+    /// A short reminder after cold/idle capture. It never takes keyboard or mouse focus.
+    func showMicrophoneHint(_ name: String) {
+        onMain { [self] in
+            self.hideMicrophoneHint()
+            let view = MicrophoneHintView(name: name)
+            let hint = PillPanel(contentRect: NSRect(origin: .zero, size: view.fittingSize),
+                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            hint.appearance = VoiceBarPalette.appearance
+            hint.contentView = view
+            hint.isFloatingPanel = true
+            hint.becomesKeyOnlyIfNeeded = true
+            hint.level = .statusBar
+            hint.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+            hint.hidesOnDeactivate = false
+            hint.isReleasedWhenClosed = false
+            hint.isOpaque = false
+            hint.backgroundColor = .clear
+            hint.hasShadow = true
+            hint.ignoresMouseEvents = true
+            hint.animationBehavior = .none
+            self.microphoneHintPanel = hint
+            self.positionMicrophoneHint()
+            hint.orderFrontRegardless()
+            let dismissal = DispatchWorkItem { [weak self, weak hint] in
+                guard let self, self.microphoneHintPanel === hint else { return }
+                self.hideMicrophoneHint()
+            }
+            self.microphoneHintDismissal = dismissal
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: dismissal)
+        }
+    }
+
+    private func positionMicrophoneHint() {
+        guard let hint = microphoneHintPanel, let bar = panelBox else { return }
+        hint.setFrameOrigin(NSPoint(x: (bar.frame.midX - hint.frame.width / 2).rounded(),
+                                    y: (bar.frame.maxY + 8).rounded()))
+    }
+
+    private func hideMicrophoneHint() {
+        microphoneHintDismissal?.cancel()
+        microphoneHintDismissal = nil
+        microphoneHintPanel?.orderOut(nil)
+        microphoneHintPanel = nil
+    }
+
     /// Transcription / cleanup in flight.
-    func showThinking(detail: String) {
+    func showThinking(detail: String, startingMicrophone: Bool = false) {
         onMain {
             self.cancelPendingFade()
-            self.model.showThinking(detail: detail.isEmpty ? "thinking" : detail)
+            self.hideMicrophoneHint()
+            self.model.showThinking(detail: detail.isEmpty ? "thinking" : detail, startingMicrophone: startingMicrophone)
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
             self.present()
@@ -821,6 +868,7 @@ final class RecordingBar {
     func showResult(_ text: String, warning: Bool) {
         onMain {
             self.cancelPendingFade()
+            self.hideMicrophoneHint()
             self.model.showResult(text, warning: warning)
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
@@ -915,6 +963,7 @@ final class RecordingBar {
         let size = capsuleSize()
         panel.setFrame(NSRect(x: (visible.midX - size.width / 2).rounded(), y: (visible.minY + 24).rounded(),
                               width: size.width, height: size.height), display: false)
+        positionMicrophoneHint()
     }
 
     private func startTimer() {
@@ -983,6 +1032,7 @@ final class RecordingBar {
     }
 
     private func dismiss() {
+        hideMicrophoneHint()
         stopTimer()
         cancelPendingFade()
         // Only touch an existing panel: hiding must not build one.
@@ -992,5 +1042,48 @@ final class RecordingBar {
         }
         model.hide()
         pushModel()
+    }
+}
+
+
+final class MicrophoneHintView: NSView {
+    private let name: String
+    private static let titleFont = NSFont.systemFont(ofSize: 10, weight: .medium)
+    private static let nameFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+
+    init(name: String) {
+        self.name = name
+        let width = min(300, max(160, ceil((name as NSString).size(withAttributes: [.font: Self.nameFont]).width) + 48))
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 46))
+        appearance = VoiceBarPalette.appearance
+    }
+    required init?(coder: NSCoder) { fatalError("Microphone hint is created in code") }
+    override var fittingSize: NSSize { frame.size }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let shape = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+        VoiceBarPalette.card.setFill()
+        shape.fill()
+        VoiceBarPalette.edge.setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+            .applying(.init(paletteColors: [VoiceBarPalette.ink]))
+        let symbol = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
+        if let symbol {
+            NSGraphicsContext.saveGraphicsState()
+            let iconRect = NSRect(x: 13, y: 14, width: 14, height: 18)
+            symbol.draw(in: iconRect)
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        (L10n.text("当前麦克风") as NSString).draw(at: NSPoint(x: 37, y: 27), withAttributes: [
+            .font: Self.titleFont, .foregroundColor: VoiceBarPalette.ink.withAlphaComponent(0.6)])
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        (name as NSString).draw(in: NSRect(x: 37, y: 8, width: bounds.width - 48, height: 17),
+                               withAttributes: [.font: Self.nameFont, .foregroundColor: VoiceBarPalette.ink,
+                                                .paragraphStyle: paragraph])
     }
 }

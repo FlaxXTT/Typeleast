@@ -4,7 +4,8 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 
 <!-- typeleast-update:zh -->
 - 新应用图标：深色圆角底、清晰声波和蓝色点缀，适合 Dock 与应用程序列表中的小尺寸显示。
-- 桌面语音条统一为固定黑底白勾的深色胶囊和更紧凑的波形区，待机时悬停可展开快捷键提示。
+- 桌面语音条按参考图调整为纯黑背景、灰色取消圆钮、白色结束圆钮和黑色勾；高度为 34，待机时悬停可展开快捷键提示。
+- 首次录音、麦克风变化，或超过 5 分钟未录音后，再次开始时会在语音条上方显示实际打开的麦克风名称，约 3 秒后收起。
 - 语音条单独使用固定配色，浅色、深色和跟随系统的外观设置只影响主界面。
 - 波形由真实录音的 FFT 人声频段能量驱动，加入自适应底噪、三段响应、平滑，以及从中心向两侧扩散和衰减的动画。
 - 首次使用中的语音练习复用桌面语音条；Mac 麦克风在后台打开，取消后不接受迟到的启动结果。
@@ -14,7 +15,8 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 
 <!-- typeleast-update:en -->
 - A new app icon with a dark rounded tile, clear sound bars and a blue accent, designed for the Dock and Applications list.
-- A fixed dark voice capsule with a white finish check, a compact waveform and an idle shortcut hint on hover.
+- A 34-point black voice capsule with a grey cancel button, a white finish button with a black check, a compact waveform and an idle shortcut hint on hover.
+- On the first recording, after a microphone change, or after more than five minutes without recording, the overlay shows the opened microphone name above the bar for about three seconds.
 - The voice bar keeps its own fixed colours in light, dark and system appearance; the main window still follows the selected appearance.
 - The waveform uses FFT energy from the recorded voice band, with an adaptive noise floor, three response ranges, smoothing, and outward propagation and decay.
 - Onboarding practice uses the desktop voice-bar renderer. Mac microphone startup runs in the background, and cancelled startup callbacks are discarded.
