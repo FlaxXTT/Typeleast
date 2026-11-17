@@ -106,6 +106,7 @@ final class AppModel: ObservableObject {
             self?.reloadHistory()
         })
         observers.append(center.addObserver(forName: ActivityLog.didChange, object: nil, queue: .main) { [weak self] _ in
+            self?.stats = ActivityLog.shared.stats
             self?.activityRevision += 1
         })
         observers.append(center.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -126,7 +127,7 @@ final class AppModel: ObservableObject {
 
     func reloadHistory() {
         history = HistoryStore.shared.entries
-        stats = HistoryStore.shared.stats
+        stats = ActivityLog.shared.stats
         historyRevision &+= 1
     }
 

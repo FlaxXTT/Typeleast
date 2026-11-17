@@ -1,12 +1,17 @@
 import Foundation
 
-// ActivityLog.swift - per-day usage for the Home heatmap (活动): dates and counts only,
+// ActivityLog.swift - per-day usage for Home: dates, counts and measured durations only,
 // never any text. It is kept apart from the history so that a short "保留历史" setting
 // does not erase the record of which days were active; "删除全部历史" clears it too.
 
 struct ActivityDay: Codable, Equatable {
     var dictations = 0
     var words = 0
+    // Optional fields keep existing count-only activity records readable.
+    var speakingSeconds: Double?
+    var savedSeconds: Double?
+    var timedWords: Int?
+    var timedDictations: Int?
 }
 
 final class ActivityLog {
@@ -18,10 +23,11 @@ final class ActivityLog {
     private let calendar: Calendar
     /// "yyyy-MM-dd" in the local calendar -> that day's counts.
     private(set) var days: [String: ActivityDay] = [:] {
-        didSet { cachedStreaks = nil; cachedActiveDays = nil }
+        didSet { cachedStreaks = nil; cachedActiveDays = nil; cachedStats = nil }
     }
     private var cachedStreaks: (day: Date, current: Int, longest: Int)?
     private var cachedActiveDays: Int?
+    private var cachedStats: DictationStats?
     /// Lets regression tests prove redraws do not rescan the full log.
     private(set) var streakBuildCount = 0
 
@@ -42,12 +48,38 @@ final class ActivityLog {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
-    func record(words: Int, at date: Date = Date()) {
+    func record(words: Int, seconds: Double? = nil, typingSeconds: Double? = nil, at date: Date = Date()) {
         var day = days[dayKey(date)] ?? ActivityDay()
         day.dictations += 1
         day.words += max(0, words)
+        if let seconds, let typingSeconds {
+            day.speakingSeconds = (day.speakingSeconds ?? 0) + seconds
+            day.savedSeconds = (day.savedSeconds ?? 0) + max(0, typingSeconds - seconds)
+            day.timedWords = (day.timedWords ?? 0) + max(0, words)
+            day.timedDictations = (day.timedDictations ?? 0) + 1
+        }
         days[dayKey(date)] = day
         save()
+    }
+
+    /// Home totals do not depend on whether transcript history is retained.
+    var stats: DictationStats {
+        if let cachedStats { return cachedStats }
+        var result = DictationStats()
+        var timedWords = 0
+        var timedDictations = 0
+        for day in days.values {
+            result.dictations += day.dictations
+            result.words += day.words
+            result.speakingSeconds += day.speakingSeconds ?? 0
+            result.savedSeconds += day.savedSeconds ?? 0
+            timedWords += day.timedWords ?? 0
+            timedDictations += day.timedDictations ?? 0
+        }
+        result.timedWords = timedWords
+        result.timedDictations = timedDictations
+        cachedStats = result
+        return result
     }
 
     /// First run after an update: rebuild the past from whatever history is still kept.
