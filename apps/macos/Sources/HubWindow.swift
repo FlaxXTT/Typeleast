@@ -160,7 +160,27 @@ private struct Sidebar: View {
                 .padding(.bottom, 8)
             ServiceBadge()
                 .padding(.bottom, 8)
-            SidebarItem(page: .settings)
+            Divider().overlay(Theme.border).padding(.vertical, 8)
+            HStack(spacing: 4) {
+                Button {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/FlaxXTT/Typeleast")!)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "envelope").font(.system(size: 16))
+                        Text(L10n.text("联系我们")).font(Theme.rowFont)
+                    }
+                    .frame(minHeight: 32)
+                }
+                .buttonStyle(.plain).foregroundColor(Theme.secondary).hoverInteraction()
+                .help(L10n.text("联系我们"))
+                Spacer(minLength: 0)
+                IconButton(symbol: "gearshape", help: L10n.text("设置"), size: 32) { model.navigate(to: .settings) }
+                    .background(RoundedRectangle(cornerRadius: Theme.radius)
+                        .fill(model.settingsPresented ? Theme.selection : Color.clear))
+                IconButton(symbol: "questionmark.circle", help: L10n.text("帮助"), size: 32) {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/FlaxXTT/Typeleast#readme")!)
+                }
+            }
         }
         .padding(EdgeInsets(top: 44, leading: 12, bottom: 8, trailing: 12))
     }

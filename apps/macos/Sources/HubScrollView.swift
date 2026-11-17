@@ -23,12 +23,61 @@ struct HubScrollView<Content: View>: View {
 /// Also used by the native text editors. No wheel-event interception or custom inertia.
 enum NativeScrollAppearance {
     static func apply(to scroll: NSScrollView) {
-        scroll.scrollerStyle = .overlay
-        scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = false
-        scroll.autohidesScrollers = true
-        scroll.verticalScroller?.controlSize = .small
+        if scroll.scrollerStyle != .overlay { scroll.scrollerStyle = .overlay }
+        if !scroll.hasVerticalScroller { scroll.hasVerticalScroller = true }
+        if scroll.hasHorizontalScroller { scroll.hasHorizontalScroller = false }
+        if !scroll.autohidesScrollers { scroll.autohidesScrollers = true }
+        if let current = scroll.verticalScroller, !(current is HoverScroller) {
+            let replacement = HoverScroller(frame: current.frame)
+            replacement.scrollerStyle = .overlay
+            replacement.knobStyle = current.knobStyle
+            replacement.target = current.target
+            replacement.action = current.action
+            replacement.isEnabled = current.isEnabled
+            replacement.doubleValue = current.doubleValue
+            replacement.knobProportion = current.knobProportion
+            scroll.verticalScroller = replacement
+        }
+        if scroll.verticalScroller?.controlSize != .small { scroll.verticalScroller?.controlSize = .small }
     }
+}
+
+/// Customize only native scroller drawing, retaining AppKit tracking and momentum.
+private final class HoverScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+    private var hoverTracking: NSTrackingArea?
+    private var hovering = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        hovering = true
+        setNeedsDisplay(rect(for: .knob))
+    }
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hovering = false
+        setNeedsDisplay(rect(for: .knob))
+    }
+
+    override func drawKnob() {
+        let knob = rect(for: .knob)
+        let highlighted = hovering || hitPart == .knob
+        let width: CGFloat = highlighted ? 6 : 4
+        let thumb = NSRect(x: knob.midX - width / 2, y: knob.minY, width: width, height: knob.height)
+        NSColor.labelColor.withAlphaComponent(highlighted ? 0.46 : 0.22).setFill()
+        NSBezierPath(roundedRect: thumb, xRadius: width / 2, yRadius: width / 2).fill()
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
 }
 
 private enum HubScrollMemory {
@@ -85,7 +134,6 @@ private final class HubScrollMarker: NSView {
     func use(key: String?, showsChrome: Bool, showsProgress: Bool, followsBottom: Bool) {
         if chrome.showsProgress != showsProgress {
             chrome.showsProgress = showsProgress
-            chrome.needsDisplay = true
         }
         if self.key != key || self.showsChrome != showsChrome || self.followsBottom != followsBottom {
             detach()
@@ -220,16 +268,25 @@ private final class HubScrollMarker: NSView {
 }
 
 private final class HubScrollChrome: NSView {
-    var showsProgress = true
+    var showsProgress = true { didSet { progressLayer.isHidden = !showsProgress } }
     weak var scroll: NSScrollView?
     private var progressWidth: CGFloat = 0
     private var showsFade = false
     private let topButton = NSButton()
+    private let progressLayer = CALayer()
+    private let fadeLayer = CAGradientLayer()
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.addSublayer(progressLayer)
+        layer?.addSublayer(fadeLayer)
+        fadeLayer.startPoint = CGPoint(x: 0.5, y: 0)
+        fadeLayer.endPoint = CGPoint(x: 0.5, y: 1)
+        fadeLayer.isHidden = true
         topButton.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: L10n.text("回到顶部"))
         topButton.bezelStyle = .regularSquare
         topButton.isBordered = false
@@ -249,6 +306,11 @@ private final class HubScrollChrome: NSView {
     override func layout() {
         super.layout()
         topButton.frame = NSRect(x: bounds.maxX - 52, y: bounds.maxY - 52, width: 32, height: 32)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        progressLayer.frame = NSRect(x: 0, y: 0, width: progressWidth, height: 2)
+        fadeLayer.frame = NSRect(x: 0, y: bounds.maxY - 24, width: bounds.width, height: 24)
+        CATransaction.commit()
     }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -257,7 +319,12 @@ private final class HubScrollChrome: NSView {
     private func updateColours() {
         topButton.contentTintColor = NSColor(Theme.accent)
         topButton.layer?.backgroundColor = NSColor(Theme.card).cgColor
-        needsDisplay = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        progressLayer.backgroundColor = NSColor(Theme.accent).withAlphaComponent(0.6).cgColor
+        let background = NSColor(Theme.window)
+        fadeLayer.colors = [background.withAlphaComponent(0).cgColor, background.cgColor]
+        CATransaction.commit()
     }
 
     func update(offset: CGFloat, extent: CGFloat) {
@@ -267,9 +334,13 @@ private final class HubScrollChrome: NSView {
         let hideButton = offset < 360
         if topButton.isHidden != hideButton { topButton.isHidden = hideButton }
         if progressWidth != width || showsFade != fade {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             progressWidth = width
             showsFade = fade
-            needsDisplay = true
+            progressLayer.frame.size.width = width
+            fadeLayer.isHidden = !fade
+            CATransaction.commit()
         }
     }
 
@@ -287,14 +358,4 @@ private final class HubScrollChrome: NSView {
         }
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        if showsProgress && progressWidth > 0 {
-            NSColor(Theme.accent).withAlphaComponent(0.6).setFill()
-            NSRect(x: 0, y: 0, width: progressWidth, height: 2).fill()
-        }
-        if showsFade {
-            NSGradient(starting: NSColor(Theme.window).withAlphaComponent(0), ending: NSColor(Theme.window))?
-                .draw(in: NSRect(x: 0, y: bounds.maxY - 24, width: bounds.width, height: 24), angle: 90)
-        }
-    }
 }

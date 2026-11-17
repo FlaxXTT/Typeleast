@@ -72,7 +72,7 @@ struct HomePage: View {
     var body: some View {
         GeometryReader { geometry in
             let wide = geometry.size.width >= 660
-            let sideWidth: CGFloat = geometry.size.width >= 850 ? 208 : 184
+            let sideWidth: CGFloat = geometry.size.width >= 850 ? 228 : 212
             let mainWidth = geometry.size.width - 48 - (wide ? sideWidth + 24 : 0)
             let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
                               : AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
@@ -82,10 +82,13 @@ struct HomePage: View {
                         InsightsPanel(compact: mainWidth < 560)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                         VStack(alignment: .leading, spacing: 20) {
+                            ShortcutReferenceCard()
                             EngineCard()
-                            HeroCard()
+                            Spacer(minLength: 24)
+                            HomeVersionFooter()
                         }
                         .frame(width: wide ? sideWidth : nil, alignment: .topLeading)
+                        .frame(minHeight: wide ? max(0, geometry.size.height - 64) : nil, alignment: .topLeading)
                         .padding(.top, 4)
                     }
                     if SetupCard.pending(model) { SetupCard() }
@@ -98,22 +101,93 @@ struct HomePage: View {
     }
 }
 
-private struct HeroCard: View {
+private struct ShortcutReferenceCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.text("快捷听写")).font(Theme.sectionTitleFont)
-            HStack(spacing: 8) {
-                Keycap(label: model.hotkeyLabel)
-                Text(L10n.text("说话，再按一次结束")).font(.system(size: 12)).foregroundColor(Theme.homeLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
-                .buttonStyle(PrimaryButtonStyle()).disabled(model.phase == .thinking)
+        VStack(alignment: .leading, spacing: 24) {
+            shortcut(L10n.text("口述"), binding: model.settings.hotkeyMain)
+            shortcut(L10n.text("翻译"), binding: model.settings.hotkeyTranslate)
+            shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
         }
         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius).fill(Theme.sidebar))
+    }
+
+    private func shortcut(_ title: String, binding: HotKeyBinding) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(Theme.rowFont).foregroundColor(Theme.secondary)
+            if binding.enabled {
+                ShortcutKeyLayout(spacing: 6) {
+                    ForEach(Array(keys(binding).enumerated()), id: \.offset) { _, key in
+                        Text(key).font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 8).frame(minWidth: 28, minHeight: 30)
+                            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.window))
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.border, lineWidth: 1))
+                    }
+                }
+            } else {
+                Button(L10n.text("设置快捷键")) {
+                    model.settingsCategory = 0
+                    model.navigate(to: .settings)
+                }.buttonStyle(.plain).font(Theme.rowFont).foregroundColor(Theme.accent)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func keys(_ binding: HotKeyBinding) -> [String] {
+        if binding.isFn { return ["Fn"] }
+        var result: [String] = []
+        if binding.modifiers & 4096 != 0 { result.append("Control") }
+        if binding.modifiers & 2048 != 0 { result.append("Option") }
+        if binding.modifiers & 512 != 0 { result.append("Shift") }
+        if binding.modifiers & 256 != 0 { result.append("Command") }
+        result.append(HotKeyCentre.keyName(binding.keyCode))
+        return result
+    }
+}
+
+private struct ShortcutKeyLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        positions(width: proposal.width ?? .infinity, subviews: subviews).size
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = positions(width: bounds.width, subviews: subviews)
+        for (index, point) in result.origins.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y),
+                                  anchor: .topLeading, proposal: .unspecified)
+        }
+    }
+    private func positions(width: CGFloat, subviews: Subviews) -> (size: CGSize, origins: [CGPoint]) {
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, usedWidth: CGFloat = 0
+        var origins: [CGPoint] = []
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width { x = 0; y += rowHeight + spacing; rowHeight = 0 }
+            origins.append(CGPoint(x: x, y: y))
+            usedWidth = max(usedWidth, x + size.width)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return (CGSize(width: usedWidth, height: y + rowHeight), origins)
+    }
+}
+
+private struct HomeVersionFooter: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text(L10n.text("版本 {0}", "v" + Updater.currentVersion))
+                .font(Theme.captionFont).foregroundColor(Theme.tertiary)
+            Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }
+                .buttonStyle(.plain).font(Theme.rowFont).foregroundColor(Theme.secondary)
+                .hoverInteraction()
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 

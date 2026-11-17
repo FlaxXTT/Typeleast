@@ -54,6 +54,12 @@ enum L10n {
     }
     static let english: [String: String] = [
         "拖动窗口": "Drag window",
+        "口述": "Dictation",
+        "问任何问题": "Ask anything",
+        "设置快捷键": "Set shortcut",
+        "联系我们": "Contact Us",
+        "帮助": "Help",
+        "版本 {0}": "Version {0}",
         "进度": "Progress",
         "正在加载…": "Loading…",
         "正在读取钥匙串状态…": "Loading saved-key status…",

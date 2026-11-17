@@ -4,7 +4,8 @@ Every vertical SwiftUI scroll surface uses `HubScrollView`: Home, all Settings
 categories, History and its detail panel, meeting transcripts, command search,
 onboarding, prompt questions, recognition/quantity review, translation results,
 model recommendations, and update progress. Native review editors use the same
-`NativeScrollAppearance`; SwiftUI text editors keep their system scroll indicators.
+`NativeScrollAppearance`; SwiftUI text editors keep their system indicators and
+native hover feedback.
 
 ## Input and rendering
 
@@ -28,13 +29,21 @@ Scroll notifications only request one display callback. A view-bound
 `CADisplayLink` coalesces updates to the display cadence; it pauses after the
 pending frame and is invalidated when detached. Document height is cached and
 updated on document-frame or viewport-size changes, not measured in the scroll
-notification. Only the small progress/fade/back-to-top overlay redraws, and only
-when its visible state changes at physical-pixel precision.
+notification. Progress and bottom fade use retained layers: offset changes update
+only the progress layer's width or fade visibility, without invalidating the full
+viewport overlay or constructing a new gradient. The back-to-top button changes
+visibility only when its threshold is crossed. Home retains its dot geometry and
+rebuilds it only when viewport dimensions change.
 
 Plain popups with no chrome, position memory or bottom following install no
 scroll observers or display link at all. Position memory remains scoped to page
 keys. Scrollbars use the native overlay style, without changing content width
 when they appear.
+
+`HoverScroller` changes only `drawKnob` and `drawKnobSlot`, preserving AppKit's
+separate overlay fade handling and native drag action. Hover/drag raises the thumb
+opacity from 22% to 46% and width from 4pt to 6pt; leaving restores its quiet state.
+Native appearance properties are assigned only when they change.
 
 Settings hides the blue top progress strip. Its native scrollbar, position memory,
 bottom fade and back-to-top button remain available.
