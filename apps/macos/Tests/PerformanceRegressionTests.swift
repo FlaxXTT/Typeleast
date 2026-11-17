@@ -24,6 +24,11 @@ func performanceRegressionTests() {
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
         _ = KeychainStore.exists(account: "presence-fixture")
         checkEq("app activation invalidates display metadata", queries, 3)
+        let activityRevision = model.activityRevision
+        NotificationCenter.default.post(name: .NSCalendarDayChanged, object: nil)
+        checkEq("midnight refreshes the activity view without new dictation", model.activityRevision, activityRevision + 1)
+        NotificationCenter.default.post(name: .NSSystemTimeZoneDidChange, object: nil)
+        checkEq("timezone changes refresh the activity view", model.activityRevision, activityRevision + 2)
         _ = model.hint // retain the observer through activation
         KeychainStore.write("fictional-new-key", account: "missing-fixture")
         check("saving a key invalidates missing-key metadata", KeychainStore.exists(account: "missing-fixture"))
