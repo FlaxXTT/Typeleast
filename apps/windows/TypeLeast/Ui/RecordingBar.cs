@@ -148,11 +148,12 @@ internal sealed class RecordingBar : Window
 /// <summary>Shared dark surface for the idle and live voice bars.</summary>
 internal static class VoiceBarPalette
 {
-    public static readonly Brush Surface = new LinearGradientBrush(Color.FromRgb(49, 49, 49), Color.FromRgb(27, 27, 27), 90);
-    public static readonly Pen Edge = new(new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)), 1);
+    public static readonly Brush Surface = Brushes.Black;
+    public static readonly Pen Edge = new(new SolidColorBrush(Color.FromArgb(82, 255, 255, 255)), 1);
+    public static readonly Brush StartingSurface = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0));
     public static readonly Brush Foreground = new SolidColorBrush(Color.FromRgb(247, 247, 247));
-    public static readonly Brush FinishSurface = new SolidColorBrush(Color.FromRgb(56, 56, 56));
-    public static readonly Brush FinishHover = new SolidColorBrush(Color.FromRgb(72, 72, 72));
+    public static readonly Brush FinishSurface = Brushes.White;
+    public static readonly Brush FinishHover = Brushes.White;
 }
 
 /// <summary>The capsule itself. Body clicks do nothing; only the two button discs act.</summary>
@@ -160,13 +161,13 @@ internal sealed class PillView : FrameworkElement
 {
     private enum Look { Recording, Thinking, Result }
 
-    private const double PillHeight = 38, Button = 28, Inset = 5, BarCount = VoiceWaveform.Count, BarWidth = 2, BarGap = 2;
+    private const double PillHeight = 34, Button = 26, Inset = 4, BarCount = VoiceWaveform.Count, BarWidth = 2, BarGap = 2;
     private static readonly Brush Capsule = VoiceBarPalette.Surface;
     private static readonly Pen Edge = VoiceBarPalette.Edge;
     private static readonly Brush White = Brushes.White;
-    private static readonly Brush SoftWhite = Theme.Hex("#14FFFFFF");
-    private static readonly Brush HoverWhite = Theme.Hex("#2EFFFFFF");
-    private static readonly Brush FinishGlyph = VoiceBarPalette.Foreground;
+    private static readonly Brush SoftWhite = Theme.Hex("#474747");
+    private static readonly Brush HoverWhite = Theme.Hex("#575757");
+    private static readonly Brush FinishGlyph = Brushes.Black;
     private static readonly Brush Badge = Theme.Hex("#20FFFFFF");
     private static readonly Brush Orange = Theme.Hex("#F0A04B");
     private static readonly Brush StopDisc = VoiceBarPalette.FinishSurface;
@@ -182,6 +183,7 @@ internal sealed class PillView : FrameworkElement
     private string badge = "";
     private string text = "";
     private bool warning;
+    private bool openingMicrophone;
     private int? countdown;
     private double phase;
     private Geometry? processingText;
@@ -200,14 +202,16 @@ internal sealed class PillView : FrameworkElement
     public void SetRecording(string tag)
     {
         displayWidth = 0;
+        openingMicrophone = false;
         look = Look.Recording; badge = tag; countdown = null; phase = 0; waveform.Reset();
         Refresh();
     }
 
-    public void SetThinking(string? label) { look = Look.Thinking; text = label ?? ""; phase = 0; processingText = null; Refresh(); }
+    public void SetThinking(string? label, bool startingMicrophone = false) { look = Look.Thinking; openingMicrophone = startingMicrophone; text = label ?? ""; phase = 0; processingText = null; Refresh(); }
 
     public void SetResult(string message, bool isWarning)
     {
+        openingMicrophone = false;
         look = Look.Result; warning = isWarning;
         var flat = string.Join(' ', (message ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         text = flat.Length > 40 ? flat[..40] + "…" : flat.Length == 0 ? L10n.T("（无内容）") : flat;
@@ -256,7 +260,7 @@ internal sealed class PillView : FrameworkElement
     {
         var w = ActualWidth;
         var mid = PillHeight / 2;
-        dc.DrawRoundedRectangle(Capsule, Edge, new Rect(0.5, 0.5, w - 1, PillHeight - 1), mid - 0.5, mid - 0.5);
+        dc.DrawRoundedRectangle(openingMicrophone ? VoiceBarPalette.StartingSurface : Capsule, Edge, new Rect(0.5, 0.5, w - 1, PillHeight - 1), mid - 0.5, mid - 0.5);
         var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
         double Snap(double v) => Math.Round(v * scale) / scale;
 
@@ -269,7 +273,7 @@ internal sealed class PillView : FrameworkElement
                 cancelRect = new Rect(Inset, mid - Button / 2, Button, Button);
                 stopRect = new Rect(w - Inset - Button, mid - Button / 2, Button, Button);
                 DrawCancel(dc);
-                // Dark finish disc and white check, independent of the app palette.
+                // White finish disc and black check, matching the supplied reference in every appearance.
                 var stopCentre = Centre(stopRect);
                 dc.DrawEllipse(overStop ? VoiceBarPalette.FinishHover : StopDisc, null, stopCentre, Button / 2, Button / 2);
                 var tick = new StreamGeometry();

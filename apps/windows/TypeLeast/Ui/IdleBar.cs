@@ -86,7 +86,10 @@ internal sealed class IdleVoiceView : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         var mid = ActualHeight / 2;
-        dc.DrawRoundedRectangle(VoiceBarPalette.Surface, VoiceBarPalette.Edge,
+        dc.PushOpacity(0.5 + expansion * 0.5);
+        var shade = (byte)Math.Round(128 * (1 - expansion));
+        var surface = new SolidColorBrush(Color.FromRgb(shade, shade, shade));
+        dc.DrawRoundedRectangle(surface, VoiceBarPalette.Edge,
             new Rect(0.5, 0.5, ActualWidth - 1, ActualHeight - 1), mid - 0.5, mid - 0.5);
         var symbolX = ActualWidth / 2 + (28 - ActualWidth / 2) * expansion;
         double[] heights = { 6, 11, 16, 11, 6 };
@@ -110,6 +113,7 @@ internal sealed class IdleVoiceView : FrameworkElement
             dc.DrawText(label, new Point(labelX, mid - label.Height / 2));
             dc.Pop();
         }
+        dc.Pop();
     }
 
     private void SetHover(bool value)

@@ -41,6 +41,11 @@ final class Recorder {
     private var capTimer: Timer?
     private var smoothedLevel: Float = 0
     private var voice = VoiceLevel()
+    private var inputName = ""
+    var microphoneName: String {
+        lock.lock(); defer { lock.unlock() }
+        return inputName
+    }
 
     private(set) var isRecording = false
     var isStarting: Bool { startup.isPending }
@@ -228,7 +233,7 @@ final class Recorder {
     private func resetCapture() -> UInt64 {
         lock.lock(); defer { lock.unlock() }
         captureGeneration &+= 1
-        pcm = Data(); smoothedLevel = 0; voice = VoiceLevel()
+        pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); inputName = ""
         truncated = false
         return captureGeneration
     }
@@ -262,6 +267,10 @@ final class Recorder {
             engine.prepare()
             guard isCurrentCapture(token) else { throw RecorderError.cancelled }
             try engine.start()
+            let name = AudioInputSelector.currentDeviceID(in: engine).flatMap { AudioDevices.name(forDeviceID: $0) } ?? ""
+            lock.lock()
+            if captureGeneration == token { inputName = name }
+            lock.unlock()
         } catch {
             input.removeTap(onBus: 0)
             engine.stop()
@@ -331,13 +340,13 @@ final class Recorder {
         }
         isRecording = false
         startedAt = nil
-        lock.lock(); pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); lock.unlock()
+        lock.lock(); pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); inputName = ""; lock.unlock()
     }
 
     // MARK: demo input
 
     private func startDemo(_ demo: Data) {
-        lock.lock(); pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); lock.unlock()
+        lock.lock(); pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); inputName = ""; lock.unlock()
         truncated = false
         demoOffset = 0
         isRecording = true

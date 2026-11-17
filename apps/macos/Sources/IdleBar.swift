@@ -138,15 +138,14 @@ final class IdleBarView: NSView {
         context.setShouldAntialias(true)
         let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous).path(in: rect).cgPath
         context.saveGState()
-        context.addPath(path)
-        context.clip()
-        NSGradient(starting: VoiceBarPalette.surfaceBottom, ending: VoiceBarPalette.surfaceTop)?
-            .draw(in: bounds, angle: 90)
-        context.restoreGState()
+        context.setAlpha(0.5 + expansion * 0.5)
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        defer { context.endTransparencyLayer(); context.restoreGState() }
+        NSColor(calibratedWhite: (128.0 / 255) * (1 - expansion), alpha: 1).setFill()
         VoiceBarPalette.edge.setStroke()
-        context.setLineWidth(pixel)
+        context.setLineWidth(1)
         context.addPath(path)
-        context.strokePath()
+        context.drawPath(using: .fillStroke)
 
         // The resting dots become a small waveform as the capsule unfolds.
         // Stagger the heights without leaving an animation running while idle.
