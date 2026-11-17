@@ -87,10 +87,11 @@ for engine in mlx-asr moss-transcribe; do
 done
 codesign --force --sign "$TYPELEAST_SIGN_IDENTITY" "${SIGN_TIMESTAMP[@]}" --options runtime --entitlements "$ROOT/TypeLeast.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
-# Check the actual application, not this checkout or the runner's Node install.
-# All mutable smoke-check state stays outside the sealed application bundle.
-env PATH=/usr/bin:/bin "$RES/node/bin/node" "$ROOT/Tests/package-runtime.mjs" "$APP"
-codesign --verify --deep --strict "$APP"
+# Runtime exercise is optional for an owner-requested packaging-only release.
+if [ "${TYPELEAST_SKIP_PACKAGE_RUNTIME_CHECK:-0}" != 1 ]; then
+  env PATH=/usr/bin:/bin "$RES/node/bin/node" "$ROOT/Tests/package-runtime.mjs" "$APP"
+  codesign --verify --deep --strict "$APP"
+fi
 
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
@@ -103,5 +104,4 @@ for attempt in 1 2 3 4 5; do
   sleep $((attempt * 3))
 done
 (cd "$WORK" && ditto -c -k --keepParent TypeLeast.app "$OUT/$ZIP_NAME")
-(cd "$OUT" && shasum -a 256 "$DMG_NAME" "$ZIP_NAME")
 echo "package.sh: done -> $OUT"

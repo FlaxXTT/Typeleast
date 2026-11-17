@@ -5,15 +5,16 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace TypeLeast.Ui;
 
 /// <summary>
 /// The floating capsule at the bottom of the screen, drawn like the Mac pill: a small
-/// dark capsule with × (cancel), a red live dot, a waveform and a stop disc while
+/// dark capsule with × (cancel), a live waveform and a white finish disc while
 /// listening; three breathing dots while the service works; the result for a moment.
-/// Until the microphone delivers its first audio the dot is grey and the waveform dim,
+/// Until the microphone delivers its first audio the waveform stays dim,
 /// so the user can see when speech is really being captured.
 /// It never takes focus from the app being dictated into. Everything is drawn in code
 /// so the glyphs sit exactly in their circles at any DPI.
@@ -27,7 +28,8 @@ internal sealed class RecordingBar : Window
     private readonly DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(1800) };
     private AudioRecorder? recorder;
     private DateTime startedAt;
-    private readonly AudioLevel level = new();
+    private System.Windows.Forms.Screen? targetScreen;
+    private double screenCheckTime;
 
     public RecordingBar(AppHost host)
     {
@@ -50,12 +52,17 @@ internal sealed class RecordingBar : Window
         SizeChanged += (_, _) => Place();
     }
 
-    /// <summary>Bottom centre of the screen's work area.</summary>
-    private void Place()
+    /// <summary>Use physical pixels so mixed-DPI displays keep the capsule centred.</summary>
+    private void Place(bool followMouse = false)
     {
-        var area = SystemParameters.WorkArea;
-        Left = area.Left + (area.Width - ActualWidth) / 2;
-        Top = area.Bottom - ActualHeight - 16;
+        if (followMouse || targetScreen is null)
+            targetScreen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero || !Native.GetWindowRect(handle, out var rect)) return;
+        var area = targetScreen.WorkingArea;
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        Native.MoveWindow(handle, area.Left + (area.Width - (rect.Right - rect.Left)) / 2,
+            area.Bottom - (rect.Bottom - rect.Top) - (int)Math.Round(12 * scale));
     }
 
     /// <summary>Hide at once (a toast takes its place).</summary>
@@ -64,8 +71,13 @@ internal sealed class RecordingBar : Window
     private void ShowBar()
     {
         hideTimer.Stop();
-        if (!IsVisible) Show();
-        Place();
+        if (!IsVisible)
+        {
+            Show();
+            if (SystemParameters.ClientAreaAnimation)
+                BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+        }
+        Place(followMouse: true);
     }
 
     /// <param name="prefix">A short tag beside the waveform, e.g. "→EN " for 翻译模式.</param>
@@ -73,7 +85,6 @@ internal sealed class RecordingBar : Window
     {
         recorder = rec;
         startedAt = DateTime.UtcNow;
-        level.Reset();
         pill.SetRecording(prefix.Trim());
         StartAnimation();
         ShowBar();
@@ -90,8 +101,8 @@ internal sealed class RecordingBar : Window
     public void ShowResult(string text, bool warning)
     {
         recorder = null;
-        StopAnimation();
         pill.SetResult(text, warning);
+        StartAnimation();
         ShowBar();
         hideTimer.Interval = TimeSpan.FromMilliseconds(warning ? 3500 : 1600);
         hideTimer.Start();
@@ -118,13 +129,28 @@ internal sealed class RecordingBar : Window
         var dt = Math.Min(0.1, frameClock.Elapsed.TotalSeconds);
         frameClock.Restart();
         if (dt <= 0) return;
+        screenCheckTime += dt;
+        if (screenCheckTime >= 0.1)
+        {
+            screenCheckTime = 0;
+            var screen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            if (screen.DeviceName != targetScreen?.DeviceName) Place(followMouse: true);
+        }
         if (recorder is { } r)
         {
             var left = AudioRecorder.MaxSeconds - (DateTime.UtcNow - startedAt).TotalSeconds;
-            pill.Advance(level.Next(r.Level, dt), left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, r.HasAudio, dt);
+            pill.Advance(r.Voice, left <= 15 ? Math.Max(0, (int)Math.Ceiling(left)) : null, dt);
         }
-        else pill.Advance(0, null, true, dt);
+        else pill.Advance(VoiceLevel.Quiet, null, dt);
     }
+}
+
+/// <summary>Shared dark surface for the idle and live voice bars.</summary>
+internal static class VoiceBarPalette
+{
+    public static readonly Brush Surface = new LinearGradientBrush(Color.FromRgb(49, 49, 49), Color.FromRgb(27, 27, 27), 90);
+    public static readonly Pen Edge = new(new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)), 1);
+    public static readonly Brush Foreground = new SolidColorBrush(Color.FromRgb(247, 247, 247));
 }
 
 /// <summary>The capsule itself. Body clicks do nothing; only the two button discs act.</summary>
@@ -132,14 +158,14 @@ internal sealed class PillView : FrameworkElement
 {
     private enum Look { Recording, Thinking, Result }
 
-    private const double PillHeight = 36, Button = 28, Inset = 4, BarCount = 11, BarWidth = 2.2, BarGap = 3, WaveHeight = 20;
-    private static readonly Brush Capsule = Theme.Hex("#EB161616");
-    private static readonly Pen Edge = new(Theme.Hex("#26FFFFFF"), 1);
+    private const double PillHeight = 38, Button = 28, Inset = 5, BarCount = VoiceWaveform.Count, BarWidth = 2, BarGap = 2;
+    private static readonly Brush Capsule = VoiceBarPalette.Surface;
+    private static readonly Pen Edge = VoiceBarPalette.Edge;
     private static readonly Brush White = Brushes.White;
-    private static readonly Brush SoftWhite = Theme.Hex("#38FFFFFF");
-    private static readonly Brush HoverWhite = Theme.Hex("#4DFFFFFF");
+    private static readonly Brush SoftWhite = Theme.Hex("#14FFFFFF");
+    private static readonly Brush HoverWhite = Theme.Hex("#2EFFFFFF");
     private static readonly Brush Ink = Theme.Hex("#161616");
-    private static readonly Brush Badge = Theme.Hex("#3E9BE9");
+    private static readonly Brush Badge = Theme.Hex("#20FFFFFF");
     private static readonly Brush Orange = Theme.Hex("#F0A04B");
     private static readonly Brush Green = Theme.Hex("#4CC27A");
     private static readonly Brush StopDisc = Theme.Hex("#F2FFFFFF");
@@ -149,16 +175,15 @@ internal sealed class PillView : FrameworkElement
 
     private readonly Action onCancel;
     private readonly Action onStop;
-    private readonly double[] bars = new double[(int)BarCount];
-    private readonly double[] seeds = new double[(int)BarCount];
+    private readonly VoiceWaveform waveform = new();
+    private double displayWidth;
     private Look look = Look.Recording;
     private string badge = "";
     private string text = "";
     private bool warning;
     private int? countdown;
-    private double level;
-    private bool listening;
     private double phase;
+    private Geometry? processingText;
     private Rect cancelRect, stopRect;
     private bool overCancel, overStop;
 
@@ -168,17 +193,17 @@ internal sealed class PillView : FrameworkElement
         this.onStop = onStop;
         Focusable = false;
         SnapsToDevicePixels = true;
-        var random = new Random(7);
-        for (var i = 0; i < seeds.Length; i++) seeds[i] = random.NextDouble() * Math.PI * 2;
+
     }
 
     public void SetRecording(string tag)
     {
-        look = Look.Recording; badge = tag; countdown = null; level = 0; listening = false; Array.Clear(bars);
+        displayWidth = 0;
+        look = Look.Recording; badge = tag; countdown = null; phase = 0; waveform.Reset();
         Refresh();
     }
 
-    public void SetThinking(string? label) { look = Look.Thinking; text = label ?? ""; Refresh(); }
+    public void SetThinking(string? label) { look = Look.Thinking; text = label ?? ""; phase = 0; processingText = null; Refresh(); }
 
     public void SetResult(string message, bool isWarning)
     {
@@ -188,54 +213,43 @@ internal sealed class PillView : FrameworkElement
         Refresh();
     }
 
-    /// <summary>One frame, <paramref name="dt"/> seconds after the last. The bars follow the live level
-    /// (0..1, from AudioLevel) with one time-based smoothing: about 15 ms to rise and 60 ms to fall,
-    /// so they move with the voice instead of trailing it.</summary>
-    public void Advance(double loudness, int? secondsLeft, bool audio, double dt)
+    /// <summary>Rendering consumes the FFT snapshot; audio analysis stays on the capture callback.</summary>
+    public void Advance(VoiceLevel voice, int? secondsLeft, double dt)
     {
-        listening = audio;
-        phase += dt * 3.6;
-        if (phase > Math.PI * 2000) phase = 0;
-        level = loudness;
-        var rise = 1 - Math.Exp(-dt / 0.015);
-        var fall = 1 - Math.Exp(-dt / 0.060);
-        for (var i = 0; i < bars.Length; i++)
+        var animate = SystemParameters.ClientAreaAnimation;
+        if (animate) phase += dt;
+        var dirty = look == Look.Recording && waveform.Advance(voice, dt, !animate);
+        var resized = countdown != secondsLeft;
+        countdown = secondsLeft;
+        var targetWidth = ContentWidth;
+        if (displayWidth <= 0 || !animate) displayWidth = targetWidth;
+        else if (Math.Abs(displayWidth - targetWidth) > 0.1)
         {
-            var target = Target(i);
-            bars[i] += (target - bars[i]) * (target > bars[i] ? rise : fall);
+            displayWidth += (targetWidth - displayWidth) * (1 - Math.Exp(-dt / 0.07));
+            resized = true;
         }
-        if (countdown != secondsLeft) { countdown = secondsLeft; Refresh(); }
-        else InvalidateVisual();
+        else if (displayWidth != targetWidth) { displayWidth = targetWidth; resized = true; }
+        if (resized) InvalidateMeasure();
+        if (dirty || resized || look == Look.Thinking) InvalidateVisual();
     }
 
-    /// <summary>Taller in the middle, shorter at the ends, each bar moving a little on its own.</summary>
-    private double Target(int i)
-    {
-        var centre = (bars.Length - 1) / 2.0;
-        var distance = Math.Abs(i - centre) / centre;
-        var envelope = 0.35 + 0.65 * Math.Pow(Math.Cos(distance * Math.PI / 2), 1.5);
-        // A little life of its own per bar; small, so the height follows the voice.
-        var motion = 0.88 + 0.12 * Math.Sin(phase * (1.1 + (i % 5) * 0.23) + seeds[i]);
-        var shaped = level; // already scaled to the speaker by AudioLevel
-        return Math.Max(0.11, shaped * envelope * motion);
-    }
+    // Used by the existing media renderer for illustrative input levels.
+    public void Advance(double loudness, int? secondsLeft, bool audio, double dt) =>
+        Advance(new VoiceLevel(loudness, loudness, VoiceResponse.Height(loudness), audio), secondsLeft, dt);
 
     private void Refresh() { overCancel = overStop = false; Cursor = null; InvalidateMeasure(); InvalidateVisual(); }
 
     private double WaveWidth => BarCount * BarWidth + (BarCount - 1) * BarGap;
     private double BadgeWidth => badge.Length == 0 ? 0 : Text(badge, 10, Bold, White).Width + 12;
 
-    protected override Size MeasureOverride(Size available)
+    private double ContentWidth => look switch
     {
-        double width = look switch
-        {
-            // ×, gap, waveform, [badge], [countdown], gap, finish
-            Look.Recording => Inset + Button + 10 + WaveWidth + (badge.Length > 0 ? 8 + BadgeWidth : 0) + (countdown is null ? 0 : 8 + 22) + 12 + Button + Inset,
-            Look.Thinking => Inset + Button + 14 + 26 + (text.Length > 0 ? 10 + Math.Min(200, Text(text, 12, Face, White).Width) : 0) + 16,
-            _ => Math.Min(340, 36 + Text(text, 12, Face, White).Width + 16),
-        };
-        return new Size(Math.Ceiling(width), PillHeight);
-    }
+        Look.Recording => Inset + Button + 10 + WaveWidth + (badge.Length > 0 ? 8 + BadgeWidth : 0) + (countdown is null ? 0 : 8 + 30) + 10 + Button + Inset,
+        Look.Thinking => Inset + Button + 14 + 26 + (text.Length > 0 ? 10 + Math.Min(200, Text(text, 12, Face, White).Width) : 0) + 16,
+        _ => Math.Min(340, 36 + Text(text, 12, Face, White).Width + 16),
+    };
+
+    protected override Size MeasureOverride(Size available) => new(Math.Ceiling(displayWidth > 0 ? displayWidth : ContentWidth), PillHeight);
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -245,6 +259,7 @@ internal sealed class PillView : FrameworkElement
         var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
         double Snap(double v) => Math.Round(v * scale) / scale;
 
+        dc.PushClip(new RectangleGeometry(new Rect(1, 1, w - 2, PillHeight - 2), mid - 1, mid - 1));
         cancelRect = stopRect = Rect.Empty;
         switch (look)
         {
@@ -264,17 +279,17 @@ internal sealed class PillView : FrameworkElement
                     g.LineTo(new Point(stopCentre.X + 6.2, stopCentre.Y - 4.6), true, true);
                 }
                 dc.DrawGeometry(null, new Pen(Ink, 2.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, tick);
-                if (!listening) dc.PushOpacity(0.4);
                 // waveform: mirrored bars, one colour, snapped to whole device pixels
                 var x = cancelRect.Right + 10;
                 var barWidth = Math.Max(1 / scale, Snap(BarWidth));
-                for (var i = 0; i < bars.Length; i++)
+                for (var i = 0; i < VoiceWaveform.Count; i++)
                 {
-                    var h = Math.Max(barWidth, Snap(bars[i] * WaveHeight));
+                    var h = Math.Max(barWidth, Snap(waveform.Height(i)));
                     var left = Snap(x + i * (BarWidth + BarGap));
+                    dc.PushOpacity(waveform.Opacity(i));
                     dc.DrawRoundedRectangle(White, null, new Rect(left, Snap(mid - h / 2), barWidth, h), barWidth / 2, barWidth / 2);
+                    dc.Pop();
                 }
-                if (!listening) dc.Pop();
                 var right = x + WaveWidth + 8;
                 if (badge.Length > 0)
                 {
@@ -285,8 +300,8 @@ internal sealed class PillView : FrameworkElement
                 }
                 if (countdown is { } s)
                 {
-                    var label = Text(s.ToString(CultureInfo.InvariantCulture), 11, Bold, Orange);
-                    dc.DrawText(label, new Point(right + (22 - label.Width) / 2, mid - label.Height / 2));
+                    var label = Text("0:" + s.ToString("00", CultureInfo.InvariantCulture), 11, Bold, Orange);
+                    dc.DrawText(label, new Point(right + (30 - label.Width) / 2, mid - label.Height / 2));
                 }
                 break;
             }
@@ -297,15 +312,35 @@ internal sealed class PillView : FrameworkElement
                 var start = cancelRect.Right + 14 + 3;
                 for (var i = 0; i < 3; i++)
                 {
-                    var wave = 0.35 + 0.65 * (0.5 + 0.5 * Math.Sin(phase * 1.5 - i * 0.9));
+                    var wave = SystemParameters.ClientAreaAnimation ? 0.35 + 0.65 * (0.5 + 0.5 * Math.Sin(phase * 3.6 - i * 0.9)) : 0.7;
                     dc.PushOpacity(wave);
-                    dc.DrawEllipse(White, null, new Point(start + i * 10, mid), 2.6 + wave * 0.7, 2.6 + wave * 0.7);
+                    dc.DrawEllipse(White, null, new Point(start + i * 10, mid - (SystemParameters.ClientAreaAnimation ? Math.Sin(phase * 3.6 - i * 0.9) * 2 : 0)), 2.4, 2.4);
                     dc.Pop();
                 }
                 if (text.Length > 0)
                 {
                     var label = Text(text, 12, Face, Glyph, 200);
-                    dc.DrawText(label, new Point(start + 26 + 10 - 3, mid - label.Height / 2));
+                    var origin = new Point(start + 26 + 10 - 3, mid - label.Height / 2);
+                    if (!SystemParameters.ClientAreaAnimation) dc.DrawText(label, origin);
+                    else
+                    {
+                        processingText ??= label.BuildGeometry(new Point(0, 0));
+                        var textWidth = Math.Min(200, label.Width);
+                        var travel = textWidth + 70;
+                        var position = travel - ((phase * 55) % travel) - 35;
+                        var shimmer = new LinearGradientBrush
+                        {
+                            MappingMode = BrushMappingMode.Absolute,
+                            StartPoint = new Point(position - 35, 0), EndPoint = new Point(position + 35, 0),
+                            SpreadMethod = GradientSpreadMethod.Pad,
+                        };
+                        shimmer.GradientStops.Add(new GradientStop(Color.FromRgb(150, 150, 150), 0));
+                        shimmer.GradientStops.Add(new GradientStop(Colors.White, 0.5));
+                        shimmer.GradientStops.Add(new GradientStop(Color.FromRgb(150, 150, 150), 1));
+                        dc.PushTransform(new TranslateTransform(origin.X, origin.Y));
+                        dc.DrawGeometry(shimmer, null, processingText);
+                        dc.Pop();
+                    }
                 }
                 break;
             }
@@ -336,6 +371,7 @@ internal sealed class PillView : FrameworkElement
                 break;
             }
         }
+        dc.Pop();
     }
 
     /// <summary>A grey disc with a white × made of two strokes, both centred on the disc.</summary>
@@ -343,8 +379,8 @@ internal sealed class PillView : FrameworkElement
     {
         var c = Centre(cancelRect);
         dc.DrawEllipse(overCancel ? HoverWhite : SoftWhite, null, c, Button / 2, Button / 2);
-        var pen = new Pen(White, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-        const double arm = 5;
+        var pen = new Pen(White, 1.6) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        const double arm = 4.6;
         dc.DrawLine(pen, new Point(c.X - arm, c.Y - arm), new Point(c.X + arm, c.Y + arm));
         dc.DrawLine(pen, new Point(c.X - arm, c.Y + arm), new Point(c.X + arm, c.Y - arm));
     }

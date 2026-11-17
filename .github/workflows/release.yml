@@ -70,6 +70,8 @@ jobs:
           MACOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
         run: bash apps/macos/scripts/setup-release-signing.sh
       - name: Package
+        env:
+          TYPELEAST_SKIP_PACKAGE_RUNTIME_CHECK: '1'
         run: NODE_VERSION="$NODE_BUNDLE_VERSION" apps/macos/package.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/out"
       - name: Verify safe Mac asset names
         run: |

@@ -14,8 +14,9 @@ is missing or invalid. Version 2.1.6 has an explicitly approved temporary-signin
 exception, selected manually and restricted to that exact tag and source version.
 It remains ad-hoc signed and not notarized; authorization prompts may remain.
 The exception cannot be used for later versions and is never an automatic fallback.
-A fixed self-signed publisher CA is supported for a future persistent-signing
-release without Developer ID; this does not provide Apple notarization.
+Starting with version 2.1.7, macOS releases use a fixed self-signed publisher CA
+without Developer ID. The encrypted identity is configured in repository Actions
+Secrets and reused across releases. This does not provide Apple notarization.
 
 ## Source code and build process
 

@@ -20,6 +20,8 @@ internal sealed class AudioRecorder
 
     /// <summary>Latest loudness, 0..1.</summary>
     public double Level { get; private set; }
+    private VoiceLevel voice = VoiceLevel.Quiet;
+    public VoiceLevel Voice { get { lock (gate) return voice; } }
     public bool IsRecording => wave is not null;
     /// <summary>True once the device has delivered its first audio for this recording.</summary>
     public bool HasAudio { get; private set; }
@@ -40,10 +42,11 @@ internal sealed class AudioRecorder
     /// <exception cref="InvalidOperationException">when the microphone cannot be opened (privacy setting, no device).</exception>
     public void Start(int device)
     {
-        lock (gate) buffer.SetLength(0);
+        lock (gate) { buffer.SetLength(0); voice = VoiceLevel.Quiet; }
         Level = 0;
         HasAudio = false;
         var limitSignalled = false;
+        var spectrum = new VoiceSpectrum(Wav.SampleRate);
         var w = new WaveInEvent
         {
             DeviceNumber = device >= 0 && device < WaveInEvent.DeviceCount ? device : -1,
@@ -56,12 +59,15 @@ internal sealed class AudioRecorder
         w.DataAvailable += (_, e) =>
         {
             var chunk = e.Buffer.AsSpan(0, e.BytesRecorded);
-            Level = Wav.Level(chunk);
+            spectrum.Consume(chunk);
+            var level = Wav.Level(chunk);
             bool full;
             bool first;
             lock (gate)
             {
                 if (wave != w) return;
+                Level = level;
+                voice = spectrum.Latest;
                 first = !HasAudio && e.BytesRecorded > 0;
                 if (first) HasAudio = true;
                 var remaining = (int)Math.Max(0, (long)MaxSeconds * Wav.BytesPerSecond - buffer.Length);
@@ -99,6 +105,7 @@ internal sealed class AudioRecorder
         byte[] pcm;
         lock (gate)
         {
+            voice = VoiceLevel.Quiet;
             pcm = buffer.ToArray();
             if (buffer.TryGetBuffer(out var stored)) stored.AsSpan().Clear();
             buffer.SetLength(0);

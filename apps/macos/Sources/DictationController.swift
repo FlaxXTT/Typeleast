@@ -793,7 +793,7 @@ final class DictationController {
         stopTick()
         let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self = self, self.phase == .recording else { return }
-            self.recordingBar.update(level: self.recorder.level(), elapsed: self.recorder.elapsed)
+            self.recordingBar.update(voice: self.recorder.voiceLevel(), elapsed: self.recorder.elapsed)
             let second = Int(self.recorder.elapsed)
             if second != self.lastTickedSecond {
                 self.lastTickedSecond = second

@@ -23,6 +23,7 @@ internal sealed class OnboardingPracticeController
     public bool Recording { get; private set; }
     public bool Thinking { get; private set; }
     public bool Busy => Recording||Thinking;
+    public VoiceLevel Voice => recorder.Voice;
     public string Raw { get; private set; }="";
     public string Output { get; private set; }="";
     public string Status { get; private set; }="";
