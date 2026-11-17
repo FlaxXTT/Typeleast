@@ -23,11 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     lazy var updates = UpdateController(host: .init(
         busyReason: { [weak self] in
             guard let self else { return nil }
-            if self.onboarding.practice.busy { return (L10n.text("正在练习"), L10n.text("练习结束后再更新。")) }
-            if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
-            // Restarting would drop the questions and the answers given so far.
-            if self.betaPending != nil { return (L10n.text("提示词模式 未结束"), L10n.text("更新前，请先生成或取消提示词模式。")) }
-            return nil
+            return UpdateController.blockingReason(practiceBusy: self.onboarding.practice.busy,
+                phase: self.phase, promptPending: self.betaPending != nil, meetingBusy: self.model.meeting.busy)
         },
         setHint: { [weak self] in self?.setHint($0) },
         showAvailable: { [weak self] in self?.menuController.setUpdateAvailable($0) },

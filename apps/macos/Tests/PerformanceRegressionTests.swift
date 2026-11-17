@@ -103,6 +103,20 @@ func performanceRegressionTests() {
     }
 
     do {
+        check("idle app can update", UpdateController.blockingReason(practiceBusy: false, phase: .idle, promptPending: false, meetingBusy: false) == nil)
+        for phase: AppPhase in [.starting, .recording, .thinking] {
+            check("active dictation blocks update", UpdateController.blockingReason(practiceBusy: false, phase: phase, promptPending: false, meetingBusy: false) != nil)
+        }
+        check("meeting recording and transcription block update", UpdateController.blockingReason(practiceBusy: false, phase: .idle, promptPending: false, meetingBusy: true) != nil)
+        check("pending prompt blocks update", UpdateController.blockingReason(practiceBusy: false, phase: .idle, promptPending: true, meetingBusy: false) != nil)
+        check("practice blocks update", UpdateController.blockingReason(practiceBusy: true, phase: .idle, promptPending: false, meetingBusy: false) != nil)
+        let hugeSlot = "{" + String(repeating: "9", count: 100) + "}"
+        checkEq("oversized translation slot cannot crash the UI", L10n.render(hugeSlot, arguments: ["fixture"]), hugeSlot)
+        checkEq("missing translation slots remain literal", L10n.render("{1} {0}", arguments: ["a {1}"]), "{1} a {1}")
+        checkEq("cached numeric formatting preserves rounding", L10n.render("{0}", arguments: [12345.6789], language: "en"), "12,345.679")
+    }
+
+    do {
         let suite = "typeleast.tests.activity-cache." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
