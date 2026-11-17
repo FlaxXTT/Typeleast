@@ -33,9 +33,21 @@ remember offsets by page or settings category and draw a two-point progress indi
 bottom fade and Back to top control after 360 points. Offset changes do not publish into
 the SwiftUI page tree.
 
-Manual appearance changes reveal the new theme through a 320ms expanding circle. Only a
-temporary image of the old window is used; no second live page hierarchy is created.
-Reduce Motion switches appearance immediately.
+Light/dark appearance changes use a 3D mosaic flip. The grid adapts its rows and columns
+to the window aspect ratio, with 96–144 near-square tiles and 2-point gaps. Neighbouring
+tiles alternate X/Y rotation axes. The old-theme snapshot is the front face and the
+new-theme snapshot is the back face; hidden backfaces keep text upright. The backs are
+darkened by 8% and have a one-physical-pixel highlight. Perspective is 900 points.
+
+Equal row+column diagonals start together, from top-left to bottom-right. A tile rotates
+180 degrees over 420ms; the diagonal wave spans 320ms. After a 40ms settling interval,
+the mosaic fades out over 120ms, for a total of 900ms. Only transforms and opacity animate.
+The tiles share two snapshots rather than separate live page hierarchies. Content input
+is held while the snapshots are shown. Reduce Motion uses a 180ms crossfade. Changing a
+preference without changing the effective light/dark appearance does not animate.
+
+The implementation uses native [Core Animation layers](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreAnimation_guide/CoreAnimationBasics/CoreAnimationBasics.html)
+and [perspective transforms](https://developer.apple.com/documentation/quartzcore/calayer/sublayertransform).
 
 The recording overlay keeps its own `VoiceBarPalette`, fixed black-and-white appearance,
 configured shortcuts and microphone-driven animation. Main-window theme tokens do not
