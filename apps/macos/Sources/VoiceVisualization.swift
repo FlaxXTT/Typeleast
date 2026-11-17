@@ -12,10 +12,11 @@ struct VoiceLevel: Equatable {
 
 enum VoiceResponse {
     static func height(_ signal: Float) -> Float {
-        if signal < 0.03 { return 0.12 + signal / 0.03 * 0.18 }
-        if signal < 0.10 { return 0.36 + 0.42 * (signal - 0.03) / 0.07 }
+        // Continuous joins keep small changes in voice level from causing a jump.
+        if signal < 0.03 { return 0.12 + signal / 0.03 * 0.08 }
+        if signal < 0.10 { return 0.20 + 0.26 * (signal - 0.03) / 0.07 }
         let t = min(1, (signal - 0.10) / 0.90)
-        return min(1, (0.55 + 0.40 * pow(t, 0.25)) * (t > 0.4 ? 1.4 : 1))
+        return 0.46 + 0.46 * pow(t, 0.65)
     }
 }
 
@@ -164,20 +165,21 @@ struct VoiceWaveform {
         time += dt
         capturedFor = level.hasAudio ? capturedFor + dt : 0
         let centre = Double(Self.count - 1) / 2
-        let active = level.hasAudio && level.signal > 0.003
-        let target = active ? 2 + 16 * Double(level.response) : 2
-        currentHeight += (target - currentHeight) * (1 - pow(0.15, dt * 60))
+        let active = level.hasAudio && level.signal > 0.012
+        let target = active ? 2 + 14 * Double(level.response) : 2
+        let responseTime = target > currentHeight ? 0.10 : 0.24
+        currentHeight += (target - currentHeight) * (1 - exp(-dt / responseTime))
 
         for index in heights.indices {
             let distance = abs(Double(index) - centre)
             opacities[index] = level.hasAudio ? 0.5 + 0.5 * min(1, max(0, (capturedFor - distance * 0.05) / 0.12)) : 0.5
             if reduceMotion {
-                heights[index] = active ? 2 + (target - 2) * max(0.25, 1 - distance / (centre + 0.5) * 0.7) : 2
+                heights[index] = 2 + (currentHeight - 2) * max(0.25, 1 - distance / (centre + 0.5) * 0.7)
                 continue
             }
             ages[index] += dt
             // The outer bars settle a little later than the centre bars.
-            let release = 0.15 + distance / (centre + 0.5) * 0.06
+            let release = 0.24 + distance / (centre + 0.5) * 0.08
             heights[index] = 2 + (heights[index] - 2) * exp(-dt / release)
             if ages[index] > 1.1 || heights[index] < 2.05 { heights[index] = 2 }
         }
@@ -188,14 +190,14 @@ struct VoiceWaveform {
             if injectionTime >= 0.05 {
                 injectionTime.formTruncatingRemainder(dividingBy: 0.05)
                 if active {
-                    let variation = level.signal < 0.03 ? 0.02 : level.signal < 0.10 ? 0.10 : 0.15
-                    let height = min(20, max(2, currentHeight + (random() * 2 - 1) * variation * 16))
+                    let variation = level.signal < 0.03 ? 0.01 : level.signal < 0.10 ? 0.04 : 0.06
+                    let height = min(16, max(2, currentHeight + (random() * 2 - 1) * variation * 14))
                     // A small continuous centre response keeps quiet speech visible.
                     for index in [Self.count / 2 - 1, Self.count / 2] {
                         heights[index] = max(heights[index], currentHeight)
                         ages[index] = 0
                     }
-                    if level.signal >= 0.07 && random() < min(0.8, Double(level.signal) * 2) {
+                    if level.signal >= 0.10 && random() < min(0.6, Double(level.signal) * 1.5) {
                         let origin = centre + (random() * 2 - 1) * min(Double(Self.count) * 0.15, 3)
                         impulses.append(Impulse(due: time + 0.08, centre: origin, height: height))
                     }
@@ -208,7 +210,7 @@ struct VoiceWaveform {
                     let distance = abs(Double(bar) - impulses[eventIndex].centre)
                     if time < impulses[eventIndex].due + distance * 0.014 { continue }
                     let decay = max(0.12, 1 - distance / (centre + 0.5) * 0.70)
-                    let target = min(20, max(2, impulses[eventIndex].height * decay * (0.9 + random() * 0.2)))
+                    let target = min(16, max(2, impulses[eventIndex].height * decay * (0.95 + random() * 0.1)))
                     heights[bar] = max(target, heights[bar] * 0.3 + target * 0.7)
                     ages[bar] = 0
                     impulses[eventIndex].applied |= bit

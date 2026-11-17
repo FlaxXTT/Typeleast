@@ -239,8 +239,7 @@ struct LevelBars: View {
     }
 }
 
-/// The app mark: a dark rounded square with five sound bars. Used for the Dock icon,
-/// the sidebar and onboarding; drawn in code so no image asset is needed.
+/// The full-resolution artwork used for the Dock icon.
 enum AppMark {
     static func image(size: CGFloat) -> NSImage {
         if let url = Bundle.main.url(forResource: "BrandIcon", withExtension: "png"),
@@ -277,9 +276,26 @@ enum AppMark {
 
 struct AppMarkView: View {
     var size: CGFloat = 28
+
+    /// Native shapes keep the small sidebar mark smooth at any display scale.
     var body: some View {
-        Image(nsImage: AppMark.image(size: size * 2))
-            .resizable()
-            .frame(width: size, height: size)
+        let heights: [CGFloat] = [0.136, 0.273, 0.438, 0.273, 0.136]
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.19, style: .continuous)
+                .fill(LinearGradient(colors: [Color(red: 0.24, green: 0.24, blue: 0.27),
+                                              Color(red: 0.065, green: 0.065, blue: 0.08)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            RoundedRectangle(cornerRadius: size * 0.19, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: size * 0.008)
+            HStack(spacing: size * 0.034) {
+                ForEach(heights.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(index == 4 ? Color(red: 0.29, green: 0.69, blue: 0.97) : Color(white: 0.98))
+                        .frame(width: size * 0.073, height: size * heights[index])
+                }
+            }
+        }
+        .frame(width: size * 0.78, height: size * 0.78)
+        .frame(width: size, height: size)
     }
 }
