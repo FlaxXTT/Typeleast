@@ -17,7 +17,9 @@ struct OnboardingPracticeView: View {
                 .padding(.horizontal, 18).padding(.vertical, 12)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
                 .fixedSize(horizontal: false, vertical: true)
-            PracticePill(practice: practice).padding(.top, 4)
+            PracticePill(practice: practice)
+                .environment(\.colorScheme, .dark)
+                .padding(.top, 4)
             if !practice.status.isEmpty {
                 Text(practice.status).font(.system(size: 13, weight: .medium))
                     .foregroundColor(practice.needsReview ? Theme.warning : (practice.complete ? Theme.success : Theme.secondary))

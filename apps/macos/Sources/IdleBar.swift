@@ -17,6 +17,16 @@ final class IdleBarView: NSView {
     private var animationTimer: Timer?
     private var delayedExit: DispatchWorkItem?
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        appearance = VoiceBarPalette.appearance
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        appearance = VoiceBarPalette.appearance
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var acceptsFirstResponder: Bool { false }
 
@@ -219,6 +229,7 @@ final class IdleBar {
         v.wantsLayer = true
         v.hint = hint
         v.onClick = { [weak self] in self?.onClick?() }
+        p.appearance = VoiceBarPalette.appearance
         p.contentView = v
         p.isFloatingPanel = true
         p.becomesKeyOnlyIfNeeded = true

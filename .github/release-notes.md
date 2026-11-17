@@ -4,7 +4,8 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 
 <!-- typeleast-update:zh -->
 - 新应用图标：深色圆角底、清晰声波和蓝色点缀，适合 Dock 与应用程序列表中的小尺寸显示。
-- 桌面语音条统一为深色胶囊、白色结束按钮和更紧凑的波形区，待机时悬停可展开快捷键提示。
+- 桌面语音条统一为固定黑底白勾的深色胶囊和更紧凑的波形区，待机时悬停可展开快捷键提示。
+- 语音条单独使用固定配色，浅色、深色和跟随系统的外观设置只影响主界面。
 - 波形由真实录音的 FFT 人声频段能量驱动，加入自适应底噪、三段响应、平滑，以及从中心向两侧扩散和衰减的动画。
 - 首次使用中的语音练习复用桌面语音条；Mac 麦克风在后台打开，取消后不接受迟到的启动结果。
 - 处理中加入文字高光；音频帧只更新语音条，跨屏时仅在鼠标所在屏幕变化后移动浮层。
@@ -13,7 +14,8 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 
 <!-- typeleast-update:en -->
 - A new app icon with a dark rounded tile, clear sound bars and a blue accent, designed for the Dock and Applications list.
-- A dark voice capsule with a white finish button, a compact waveform and an idle shortcut hint on hover.
+- A fixed dark voice capsule with a white finish check, a compact waveform and an idle shortcut hint on hover.
+- The voice bar keeps its own fixed colours in light, dark and system appearance; the main window still follows the selected appearance.
 - The waveform uses FFT energy from the recorded voice band, with an adaptive noise floor, three response ranges, smoothing, and outward propagation and decay.
 - Onboarding practice uses the desktop voice-bar renderer. Mac microphone startup runs in the background, and cancelled startup callbacks are discarded.
 - Processing text has a moving highlight. Audio frames redraw the voice bar, and the overlay moves between displays only when the pointer changes displays.
