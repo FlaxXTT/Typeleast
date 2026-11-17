@@ -151,6 +151,8 @@ internal static class VoiceBarPalette
     public static readonly Brush Surface = new LinearGradientBrush(Color.FromRgb(49, 49, 49), Color.FromRgb(27, 27, 27), 90);
     public static readonly Pen Edge = new(new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)), 1);
     public static readonly Brush Foreground = new SolidColorBrush(Color.FromRgb(247, 247, 247));
+    public static readonly Brush FinishSurface = new SolidColorBrush(Color.FromRgb(56, 56, 56));
+    public static readonly Brush FinishHover = new SolidColorBrush(Color.FromRgb(72, 72, 72));
 }
 
 /// <summary>The capsule itself. Body clicks do nothing; only the two button discs act.</summary>
@@ -164,11 +166,10 @@ internal sealed class PillView : FrameworkElement
     private static readonly Brush White = Brushes.White;
     private static readonly Brush SoftWhite = Theme.Hex("#14FFFFFF");
     private static readonly Brush HoverWhite = Theme.Hex("#2EFFFFFF");
-    private static readonly Brush Ink = Theme.Hex("#161616");
+    private static readonly Brush FinishGlyph = VoiceBarPalette.Foreground;
     private static readonly Brush Badge = Theme.Hex("#20FFFFFF");
     private static readonly Brush Orange = Theme.Hex("#F0A04B");
-    private static readonly Brush Green = Theme.Hex("#4CC27A");
-    private static readonly Brush StopDisc = Theme.Hex("#F2FFFFFF");
+    private static readonly Brush StopDisc = VoiceBarPalette.FinishSurface;
     private static readonly Brush Glyph = Theme.Hex("#D9FFFFFF");
     private static readonly Typeface Face = new(Theme.Font, FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
     private static readonly Typeface Bold = new(Theme.Font, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
@@ -268,9 +269,9 @@ internal sealed class PillView : FrameworkElement
                 cancelRect = new Rect(Inset, mid - Button / 2, Button, Button);
                 stopRect = new Rect(w - Inset - Button, mid - Button / 2, Button, Button);
                 DrawCancel(dc);
-                // finish: a white disc with a dark check mark, exactly centred
+                // Dark finish disc and white check, independent of the app palette.
                 var stopCentre = Centre(stopRect);
-                dc.DrawEllipse(overStop ? White : StopDisc, null, stopCentre, Button / 2, Button / 2);
+                dc.DrawEllipse(overStop ? VoiceBarPalette.FinishHover : StopDisc, null, stopCentre, Button / 2, Button / 2);
                 var tick = new StreamGeometry();
                 using (var g = tick.Open())
                 {
@@ -278,7 +279,7 @@ internal sealed class PillView : FrameworkElement
                     g.LineTo(new Point(stopCentre.X - 2, stopCentre.Y + 4), true, true);
                     g.LineTo(new Point(stopCentre.X + 6.2, stopCentre.Y - 4.6), true, true);
                 }
-                dc.DrawGeometry(null, new Pen(Ink, 2.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, tick);
+                dc.DrawGeometry(null, new Pen(FinishGlyph, 2.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, tick);
                 // waveform: mirrored bars, one colour, snapped to whole device pixels
                 var x = cancelRect.Right + 10;
                 var barWidth = Math.Max(1 / scale, Snap(BarWidth));
@@ -346,7 +347,7 @@ internal sealed class PillView : FrameworkElement
             }
             default:
             {
-                var tint = warning ? Orange : Green;
+                var tint = warning ? Orange : VoiceBarPalette.Foreground;
                 var c = new Point(18, mid);
                 dc.PushOpacity(0.22); dc.DrawEllipse(tint, null, c, 8, 8); dc.Pop();
                 var pen = new Pen(tint, 1.8) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };

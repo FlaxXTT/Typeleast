@@ -105,7 +105,13 @@ internal sealed class Onboarding : Window
         if (practice.Busy)
             content.Children.Add(new PracticeVoiceBar(practice) { HorizontalAlignment = HorizontalAlignment.Left });
         else
-            content.Children.Add(Theme.Primary(L10n.T(Complete ? "再试一次" : "点这里开始"), practice.Toggle));
+        {
+            var start = Theme.Primary(L10n.T(Complete ? "再试一次" : "点这里开始"), practice.Toggle);
+            start.Background = VoiceBarPalette.Surface;
+            start.Foreground = VoiceBarPalette.Foreground;
+            start.BorderBrush = VoiceBarPalette.Edge.Brush;
+            content.Children.Add(start);
+        }
         if(practice.Status.Length>0)content.Children.Add(Theme.Text(practice.Status,13,Complete?Theme.Success:Theme.Grey));
         if(practice.Output.Length>0){content.Children.Add(Theme.Text(L10n.T("整理结果"),12,Theme.Grey));content.Children.Add(Theme.Card(Theme.Text(practice.Output,14)));}
     }

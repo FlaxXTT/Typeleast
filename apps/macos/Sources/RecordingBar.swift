@@ -211,7 +211,10 @@ enum VoiceBarPalette {
     static let surfaceTop = NSColor(calibratedWhite: 0.19, alpha: 1)
     static let surfaceBottom = NSColor(calibratedWhite: 0.105, alpha: 1)
     static let edge = NSColor.white.withAlphaComponent(0.22)
-    static let finishInk = NSColor(calibratedWhite: 0.10, alpha: 1)
+    static let finishSurface = NSColor(calibratedWhite: 0.22, alpha: 1)
+    static let finishInk = ink
+    static let warning = NSColor(srgbRed: 240.0 / 255, green: 160.0 / 255, blue: 75.0 / 255, alpha: 1)
+    static let appearance = NSAppearance(named: .darkAqua)!
 }
 
 /// Draws the capsule in its three looks (a dark capsule, a live
@@ -279,6 +282,7 @@ final class PillView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        appearance = VoiceBarPalette.appearance
         setBoundsSize(NSSize(width: frameRect.width / Self.displayScale, height: frameRect.height / Self.displayScale))
         wantsLayer = true
         configure(cancelButton, glyph: "", tip: L10n.text("取消听写（Esc）"), action: #selector(cancelPressed))
@@ -445,8 +449,8 @@ final class PillView: NSView {
 
     private func drawRecording() {
         drawCancel()
-        // White finish disc, as in the supplied floating-bar reference.
-        PillView.ink.setFill()
+        // Fixed dark finish button and white check in every app appearance.
+        VoiceBarPalette.finishSurface.setFill()
         let stopExpansion = reduceMotion ? 0 : stopHoverAmount * 1.8
         NSBezierPath(ovalIn: stopRect.insetBy(dx: -stopExpansion, dy: -stopExpansion)).fill()
         let c = NSPoint(x: stopRect.midX, y: stopRect.midY)
@@ -466,7 +470,7 @@ final class PillView: NSView {
             let label = RecordingBarFormat.elapsed(max(0, remaining))
             drawText(label, x: stopRect.minX - 44, centerY: bounds.midY, width: 36,
                      font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
-                     color: NSColor.systemOrange)
+                     color: VoiceBarPalette.warning)
             waveRight = stopRect.minX - 46
         }
         if !model.badge.isEmpty {
@@ -519,7 +523,7 @@ final class PillView: NSView {
 
     private func drawResult() {
         let rowY = bounds.midY
-        let tint = model.warning ? NSColor.systemOrange : NSColor.systemGreen
+        let tint = model.warning ? VoiceBarPalette.warning : VoiceBarPalette.ink
         let centre = NSPoint(x: 18, y: rowY)
         tint.withAlphaComponent(0.22).setFill()
         NSBezierPath(ovalIn: NSRect(x: centre.x - 8, y: centre.y - 8, width: 16, height: 16)).fill()
@@ -697,6 +701,7 @@ final class RecordingBar {
                                 styleMask: [.borderless, .nonactivatingPanel],
                                 backing: .buffered,
                                 defer: false)
+        created.appearance = VoiceBarPalette.appearance
         created.contentView = pill
         created.isFloatingPanel = true
         created.becomesKeyOnlyIfNeeded = true
