@@ -1,87 +1,154 @@
 import SwiftUI
 import AppKit
 
-// ActivityCard.swift - the Home insights: four figures (字数, 节省时间, 速度, 口述时间), then
-// active days and streaks above a heatmap (one square per day, a column per week), on a
-// lightly dotted panel. ShareButton (on the Home hero) shares the website and GitHub links.
+// Screenshot-matched Home insights. Only number and cell-mask views interpolate;
+// animation frames do not publish through AppModel or rebuild the activity log.
 
 struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var compact = false
+    @State private var countProgress: Double = 0
+    @State private var heatmapProgress: Double = 0
 
     static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
     static let shareItems: [Any] = [shareText, URL(string: "https://typeleast.promptking.workers.dev")!, URL(string: "https://github.com/FlaxXTT/Typeleast")!]
 
     var body: some View {
         let stats = model.stats
-        VStack(alignment: .leading, spacing: 14) {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
-                Figure(parts: InsightsPanel.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"))
-                Figure(parts: InsightsPanel.duration(stats.savedSeconds), label: L10n.text("节省时间"))
-                Figure(parts: [(Formatters.number(stats.wordsPerMinute), L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"))
-                Figure(parts: InsightsPanel.duration(stats.speakingSeconds), label: L10n.text("总口述时间"))
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                Text(L10n.text("洞察")).font(.system(size: 28, weight: .bold)).tracking(-0.6)
+                    .foregroundColor(Theme.homeLabel)
+                Spacer()
+                ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
-            ActivityCard()
+            .frame(height: 40)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 20) {
+                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), progress: countProgress, compact: compact)
+                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), progress: countProgress, compact: compact)
+                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), progress: countProgress, compact: compact)
+                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), progress: countProgress, compact: compact)
+            }
+            ActivityCard(countProgress: countProgress, heatmapProgress: heatmapProgress, compact: compact)
         }
-        .padding(16)
-        .background(DotGrid().clipShape(RoundedRectangle(cornerRadius: Theme.radius + 4, style: .continuous)))
+        .onChange(of: model.homePresentationID, initial: true) { _, _ in replay() }
+        .onChange(of: reduceMotion) { _, reduced in
+            if reduced {
+                var transaction = Transaction(); transaction.disablesAnimations = true
+                withTransaction(transaction) { countProgress = 1; heatmapProgress = 1 }
+            }
+        }
     }
 
-    /// 34.9K 字 / 3.5万 字: large counts are shortened.
-    static func count(_ value: Int, unit: String) -> [(String, String)] {
-        if value >= 10_000 {
-            if L10n.language == "en" { return [(String(format: "%.1fK", locale: L10n.locale, Double(value) / 1000), unit)] }
-            return [(String(format: "%.1f", locale: L10n.locale, Double(value) / 10_000), L10n.text("万") + unit)]
+    private func replay() {
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            countProgress = reduceMotion ? 1 : 0
+            heatmapProgress = reduceMotion ? 1 : 0
         }
-        return [(Formatters.number(value), unit)]
+        guard !reduceMotion else { return }
+        DispatchQueue.main.async {
+            guard !reduceMotion else { return }
+            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 1.2)) { countProgress = 1 }
+            withAnimation(.linear(duration: 1.4).delay(0.15)) { heatmapProgress = 1 }
+        }
     }
 
-    /// 17 小时 47 分钟, 12 分钟, 40 秒.
-    static func duration(_ seconds: Double) -> [(String, String)] {
-        let total = Int(seconds.rounded())
-        if total < 60 { return [(String(total), L10n.text("秒"))] }
+    /// The reference uses K in both languages. Units stay fixed during count-up.
+    static func count(_ value: Int, unit: String) -> [InsightPart] {
+        if value >= 1000 { return [InsightPart(value: Double(value) / 1000, unit: unit, decimals: 1, numberSuffix: "K")] }
+        return [InsightPart(value: Double(value), unit: unit)]
+    }
+
+    static func duration(_ seconds: Double) -> [InsightPart] {
+        let total = max(0, Int(seconds.rounded()))
+        if total < 60 { return [InsightPart(value: Double(total), unit: L10n.text("秒"))] }
         let hours = total / 3600, minutes = (total % 3600) / 60
-        return hours == 0 ? [(String(minutes), L10n.text("分钟"))] : [(String(hours), L10n.text("小时")), (String(minutes), L10n.text("分钟"))]
+        if hours == 0 { return [InsightPart(value: Double(minutes), unit: L10n.text("分钟"))] }
+        return [InsightPart(value: Double(hours), unit: L10n.text("小时")), InsightPart(value: Double(minutes), unit: L10n.text("分钟"))]
+    }
+}
+
+struct InsightPart {
+    let value: Double
+    let unit: String
+    var decimals = 0
+    var numberSuffix = ""
+
+    func string(at progress: Double) -> String {
+        let value = value * min(1, max(0, progress))
+        if decimals == 1 { return String(format: "%.1f", locale: L10n.locale, value) + numberSuffix }
+        return Formatters.number(Int(value.rounded(.down))) + numberSuffix
+    }
+}
+
+private struct CountingNumber: View, Animatable {
+    let part: InsightPart
+    var progress: Double
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        // Reserve final width so a changing digit count cannot move its unit or label.
+        Text(part.string(at: 1)).hidden()
+            .overlay(alignment: .leading) {
+                Text(part.string(at: progress)).lineLimit(1).minimumScaleFactor(0.6)
+            }
+            .monospacedDigit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(part.string(at: 1))
     }
 }
 
 /// One white tile: a large number with its small unit, the label below.
 private struct Figure: View {
-    let parts: [(String, String)]
+    let parts: [InsightPart]
     let label: String
+    let progress: Double
+    let compact: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 ForEach(parts.indices, id: \.self) { index in
-                    Text(parts[index].0).font(.system(size: 30, weight: .bold, design: .rounded))
+                    CountingNumber(part: parts[index], progress: progress)
+                        .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
                         .lineLimit(1).minimumScaleFactor(0.6)
-                    Text(parts[index].1).font(.system(size: 13, weight: .semibold)).padding(.trailing, 4)
+                    Text(parts[index].unit).font(.system(size: compact ? 11 : 14, weight: .semibold))
+                        .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                 }
             }
-            Text(label).font(.system(size: 13)).foregroundColor(Theme.secondary)
+            Text(label).font(.system(size: compact ? 13 : 16)).foregroundColor(Theme.homeLabel)
         }
-        .padding(.horizontal, 20).padding(.vertical, 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.radius + 2, style: .continuous).fill(Theme.tile))
+        .padding(20)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
     }
 }
 
 /// A faint grid of dots behind the insights.
-private struct DotGrid: View {
+struct HomeDotGrid: View {
     var body: some View {
         Canvas { context, size in
-            let step: CGFloat = 12
+            let step: CGFloat = 11
             var y: CGFloat = step / 2
             while y < size.height {
                 var x: CGFloat = step / 2
                 while x < size.width {
-                    context.fill(Path(ellipseIn: CGRect(x: x - 0.9, y: y - 0.9, width: 1.8, height: 1.8)), with: .color(Theme.dot))
+                    context.opacity = 0.5 + 0.5 * (1 - x / max(1, size.width))
+                    context.fill(Path(ellipseIn: CGRect(x: x - 0.65, y: y - 0.65, width: 1.3, height: 1.3)), with: .color(Theme.homeDot))
                     x += step
                 }
                 y += step
             }
         }
-        .background(Theme.panel)
+        .background {
+            LinearGradient(colors: [Theme.homeBackdrop, Theme.window], startPoint: .bottomLeading, endPoint: .topTrailing)
+                .overlay(LinearGradient(colors: [.clear, Theme.window.opacity(0.3)], startPoint: .top, endPoint: .bottom))
+        }
     }
 }
 
@@ -94,12 +161,22 @@ struct ShareButton: NSViewRepresentable {
                               target: context.coordinator, action: #selector(Coordinator.share(_:)))
         button.imagePosition = .imageLeading
         button.bezelStyle = .rounded
+        button.isBordered = false
+        button.font = .systemFont(ofSize: 16, weight: .medium)
+        button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 20
+        button.layer?.borderWidth = 0.5
+        button.updateSurface()
         button.controlSize = .regular
         button.toolTip = L10n.text("分享官网和 GitHub 链接")
         return button
     }
 
-    func updateNSView(_ nsView: NSButton, context: Context) { context.coordinator.items = items }
+    func updateNSView(_ nsView: NSButton, context: Context) {
+        context.coordinator.items = items
+        (nsView as? HoverShareButton)?.updateSurface()
+    }
     func makeCoordinator() -> Coordinator { Coordinator(items: items) }
 
     final class Coordinator: NSObject {
@@ -113,6 +190,13 @@ struct ShareButton: NSViewRepresentable {
 
 private final class HoverShareButton: NSButton {
     private var hoverTracking: NSTrackingArea?
+    private var hovering = false
+    override var intrinsicContentSize: NSSize { NSSize(width: 94, height: 40) }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateSurface()
+    }
 
     override func updateTrackingAreas() {
         if let hoverTracking { removeTrackingArea(hoverTracking) }
@@ -126,73 +210,95 @@ private final class HoverShareButton: NSButton {
     override func mouseExited(with event: NSEvent) { setHovered(false) }
 
     private func setHovered(_ hovering: Bool) {
-        contentTintColor = hovering ? .controlAccentColor : nil
+        self.hovering = hovering
+        updateSurface()
+    }
+
+    func updateSurface() {
+        contentTintColor = NSColor(Theme.ink)
+        layer?.backgroundColor = NSColor(hovering ? Theme.cardHover : Theme.tile).cgColor
+        layer?.borderColor = NSColor(Theme.border).cgColor
     }
 }
 
 /// Active days and streaks above the heatmap: weekdays down the side, months along the bottom.
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
+    var countProgress: Double = 1
+    var heatmapProgress: Double = 1
+    var compact = false
+    @State private var weekOffset = 0
 
     private let cell: CGFloat = 18
-    private let gap: CGFloat = 6
-    private let dayColumn: CGFloat = 22
+    private let gap: CGFloat = 10
+    private let dayColumn: CGFloat = 44
 
     var body: some View {
         let log = ActivityLog.shared
         let streaks = log.streaks()
         let _ = model.activityRevision   // redraw when a dictation is recorded
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 32) {
             HStack(alignment: .top, spacing: 0) {
                 figure(log.activeDays, L10n.text("活跃天数"))
                 figure(streaks.current, L10n.text("当前连续天数"))
                 figure(streaks.longest, L10n.text("最长连续天数"))
             }
             GeometryReader { geo in
-                let weeks = max(8, min(53, Int((geo.size.width - dayColumn + gap) / (cell + gap))))
+                let weeks = max(6, min(53, Int((geo.size.width - dayColumn - 18 + gap) / (cell + gap))))
                 grid(weeks: weeks, log: log)
             }
-            .frame(height: 7 * (cell + gap) + 18)
+            .frame(height: 7 * (cell + gap) + 20)
             HStack(spacing: 6) {
-                Text(L10n.text("更少")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(L10n.text("更少")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
                 ForEach(1..<5) { level in square(level) }
-                Text(L10n.text("更多")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(L10n.text("更多")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.radius + 2, style: .continuous).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+        .onChange(of: model.homePresentationID) { _, _ in weekOffset = 0 }
     }
 
     private func figure(_ value: Int, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(Formatters.number(value)).font(.system(size: 30, weight: .bold, design: .rounded))
+                CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")), progress: countProgress)
+                    .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
                 Text(L10n.text("天")).font(.system(size: 13, weight: .semibold))
             }
-            Text(label).font(.system(size: 13)).foregroundColor(Theme.secondary)
+            Text(label).font(.system(size: compact ? 12 : 15)).foregroundColor(Theme.homeLabel)
+                .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func grid(weeks: Int, log: ActivityLog) -> some View {
-        let calendar = Calendar.current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = L10n.locale
+        calendar.firstWeekday = 1
         let today = calendar.startOfDay(for: Date())
         let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
-        let first = calendar.date(byAdding: .day, value: -7 * (weeks - 1), to: thisWeek) ?? thisWeek
+        let first = calendar.date(byAdding: .day, value: 7 * (weekOffset - weeks + 1), to: thisWeek) ?? thisWeek
+        let earliest = log.days.keys.min().flatMap { ActivityLog.parse($0) }
         let step = cell + gap
-        var symbols = calendar.veryShortStandaloneWeekdaySymbols
-        if L10n.language != "en" {
-            var zh = Calendar(identifier: .gregorian); zh.locale = Locale(identifier: "zh-Hans")
-            symbols = zh.veryShortStandaloneWeekdaySymbols
-        }
-        let shift = calendar.firstWeekday - 1
-        let weekdays = Array(symbols[shift...] + symbols[..<shift])
+        let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
             ForEach(0..<7, id: \.self) { row in
-                Text(weekdays[row]).font(.system(size: 11)).foregroundColor(Theme.secondary)
-                    .frame(width: dayColumn - 6, height: cell)
+                Text(weekdays[row]).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
+                    .frame(width: 16, height: cell)
                     .offset(x: 0, y: CGFloat(row) * step)
+                // A hatched leading edge marks the cropped range, not extra usage data.
+                Path { path in
+                    for y in stride(from: -cell, through: cell, by: 5) {
+                        path.move(to: CGPoint(x: 0, y: y + 10))
+                        path.addLine(to: CGPoint(x: 10, y: y))
+                    }
+                }
+                .stroke(Theme.border.opacity(0.6), lineWidth: 1)
+                .frame(width: 10, height: cell).clipped()
+                .offset(x: 24, y: CGFloat(row) * step)
+                .accessibilityHidden(true)
             }
             ForEach(0..<weeks, id: \.self) { column in
                 let weekStart = calendar.date(byAdding: .day, value: 7 * column, to: first) ?? first
@@ -202,7 +308,15 @@ struct ActivityCard: View {
                     Group {
                         if date <= today {
                             let day = log.day(date)
-                            square(ActivityLog.level(day.dictations)).help(tooltip(date, day))
+                            let level = ActivityLog.level(day.dictations)
+                            square(0)
+                                .overlay {
+                                    if level > 0 {
+                                        square(level).modifier(HeatmapColumnReveal(progress: heatmapProgress, column: column,
+                                                                                 columns: weeks, width: cell))
+                                    }
+                                }
+                                .help(tooltip(date, day)).accessibilityLabel(tooltip(date, day))
                         } else {
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
                                 .stroke(Theme.border, lineWidth: 1).frame(width: cell, height: cell)
@@ -210,12 +324,23 @@ struct ActivityCard: View {
                     }
                     .offset(x: x, y: CGFloat(row) * step)
                 }
-                if let label = monthLabel(weekStart: weekStart, calendar: calendar) {
-                    Text(label).font(.system(size: 11)).foregroundColor(Theme.secondary)
+                if let label = monthLabel(weekStart: weekStart, calendar: calendar, first: column == 0) {
+                    Text(label).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
                         .fixedSize()
-                        .offset(x: x, y: 7 * step + 2)
+                        .offset(x: x - (column == weeks - 1 ? 8 : 0), y: 7 * step + 2)
                 }
             }
+            HStack {
+                Button { weekOffset -= weeks } label: { Image(systemName: "chevron.left").frame(width: 18, height: 18) }
+                    .disabled(earliest.map { first <= $0 } ?? true)
+                    .help(L10n.text("较早的活动"))
+                Spacer()
+                Button { weekOffset = min(0, weekOffset + weeks) } label: { Image(systemName: "chevron.right").frame(width: 18, height: 18) }
+                    .disabled(weekOffset >= 0)
+                    .help(L10n.text("较新的活动"))
+            }
+            .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.homeLabel).buttonStyle(.plain)
+            .offset(y: 7 * step)
         }
     }
 
@@ -226,9 +351,13 @@ struct ActivityCard: View {
     }
 
     /// The month's name under the week that contains its 1st.
-    private func monthLabel(weekStart: Date, calendar: Calendar) -> String? {
+    private func monthLabel(weekStart: Date, calendar: Calendar, first: Bool) -> String? {
         let days = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: weekStart) }
-        guard let startsMonth = days.first(where: { calendar.component(.day, from: $0) == 1 }) else { return nil }
+        let monthStart = days.first(where: { calendar.component(.day, from: $0) == 1 })
+        guard let startsMonth = monthStart ?? (first ? weekStart : nil) else { return nil }
+        if L10n.language != "en" {
+            return ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"][calendar.component(.month, from: startsMonth) - 1]
+        }
         return startsMonth.formatted(.dateTime.locale(L10n.locale).month(.abbreviated))
     }
 
@@ -237,5 +366,22 @@ struct ActivityCard: View {
         return day.dictations == 0
             ? when + " · " + L10n.text("没有活动")
             : when + " · " + L10n.text("{0} 次 · {1} 字", day.dictations, day.words)
+    }
+}
+
+/// All grey day slots are visible immediately. Only active blue fills sweep in.
+private struct HeatmapColumnReveal: AnimatableModifier {
+    var progress: Double
+    let column: Int
+    let columns: Int
+    let width: CGFloat
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let fraction = min(1, max(0, progress * Double(columns) - Double(column)))
+        content.mask(alignment: .leading) { Rectangle().frame(width: width * CGFloat(fraction)) }
     }
 }

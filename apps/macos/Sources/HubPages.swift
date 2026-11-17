@@ -69,30 +69,32 @@ enum Formatters {
 struct HomePage: View {
     @EnvironmentObject var model: AppModel
 
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5..<12: return L10n.text("早上好")
-        case 12..<18: return L10n.text("下午好")
-        default: return L10n.text("晚上好")
-        }
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(title: greeting)
-            HubScrollView(key: "home") {
-                VStack(alignment: .leading, spacing: 16) {
-                    HeroCard()
-                    // Only what is not set up yet; nothing once everything works.
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 660
+            let sideWidth: CGFloat = geometry.size.width >= 850 ? 208 : 184
+            let mainWidth = geometry.size.width - 48 - (wide ? sideWidth + 24 : 0)
+            let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+                              : AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
+            HubScrollView(key: "home-" + String(model.homePresentationID)) {
+                VStack(alignment: .leading, spacing: 24) {
+                    layout {
+                        InsightsPanel(compact: mainWidth < 560)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        VStack(alignment: .leading, spacing: 20) {
+                            EngineCard()
+                            HeroCard()
+                        }
+                        .frame(width: wide ? sideWidth : nil, alignment: .topLeading)
+                        .padding(.top, 4)
+                    }
                     if SetupCard.pending(model) { SetupCard() }
-                    InsightsPanel()
                     RecentCard()
-                    EngineCard()
                 }
-                .padding(.horizontal, Theme.pageInset)
-                .padding(.bottom, 32)
+                .padding(24)
             }
         }
+        .background(HomeDotGrid())
     }
 }
 
@@ -100,19 +102,18 @@ private struct HeroCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        Card(padding: 16) {
-            HStack(alignment: .center, spacing: 10) {
-                Text(L10n.text("按")).font(.system(size: 15, weight: .semibold))
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L10n.text("快捷听写")).font(.system(size: 15, weight: .semibold))
+            HStack(spacing: 8) {
                 Keycap(label: model.hotkeyLabel)
-                Text(L10n.text("说话，再按一次结束")).font(.system(size: 15, weight: .semibold))
-                Spacer(minLength: 12)
-                ShareButton(items: InsightsPanel.shareItems).fixedSize()
-                Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.phase == .thinking)
+                Text(L10n.text("说话，再按一次结束")).font(.system(size: 12)).foregroundColor(Theme.homeLabel)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.leading, 6)
+            Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
+                .buttonStyle(PrimaryButtonStyle()).disabled(model.phase == .thinking)
         }
+        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
     }
 }
 
@@ -201,7 +202,7 @@ private struct RecentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(L10n.text("最近")).font(.system(size: 14, weight: .semibold))
+                Text(L10n.text("最近")).font(.system(size: 18, weight: .semibold)).foregroundColor(Theme.homeLabel)
                 Spacer()
                 if !model.history.isEmpty {
                     Button { model.page = .history } label: {
@@ -217,11 +218,11 @@ private struct RecentCard: View {
                 }
             }
             if model.history.isEmpty {
-                Card {
-                    Text(L10n.text("没有听写记录。按 {0} 说一句。", model.hotkeyLabel))
+                Text(L10n.text("没有听写记录。按 {0} 说一句。", model.hotkeyLabel))
                         .font(.system(size: 13))
-                        .foregroundColor(Theme.secondary)
-                }
+                        .foregroundColor(Theme.homeLabel)
+                        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
             } else {
                 VStack(spacing: 0) {
                     ForEach(model.history.prefix(4)) { entry in
@@ -229,7 +230,8 @@ private struct RecentCard: View {
                         if entry.id != model.history.prefix(4).last?.id { Divider().padding(.leading, 66) }
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+                .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             }
         }
     }
@@ -239,13 +241,23 @@ private struct EngineCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.text("引擎")).font(.system(size: 14, weight: .semibold))
+            VStack(alignment: .leading, spacing: 16) {
+                Text(L10n.text("引擎")).font(.system(size: 15, weight: .semibold))
+                HStack(spacing: 6) {
+                    Circle().fill(model.serviceUp ? Theme.success : Theme.tertiary).frame(width: 6, height: 6)
+                    Text(model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪"))
+                        .font(.system(size: 11)).foregroundColor(Theme.homeLabel)
+                }
                 EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: model.speechSummary)
+                Divider().overlay(Theme.border)
                 EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: model.modelSummary)
+                Button(L10n.text("管理模型")) {
+                    model.settingsCategory = 1
+                    model.page = .settings
+                }.buttonStyle(.plain).font(.system(size: 12)).foregroundColor(Theme.accent).hoverInteraction()
             }
-        }
+            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
     }
 }
 
@@ -255,11 +267,11 @@ private struct EngineRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol).frame(width: 18).foregroundColor(Theme.secondary)
-            Text(title).font(.system(size: 13))
-            Spacer()
-            Text(value).font(.system(size: 12.5)).foregroundColor(Theme.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
+            Text(value).font(.system(size: 13, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

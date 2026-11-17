@@ -69,6 +69,8 @@ final class AppModel: ObservableObject {
     @Published var page: HubPage = .home
     @Published var settingsCategory = 0
     @Published var selectedHistoryID: String?
+    /// Opening the hub replays only the Home presentation, not changes to live stats.
+    @Published var homePresentationID = 0
     @Published private(set) var history: [LocalHistoryEntry] = []
     @Published private(set) var historyRevision = 0
     @Published private(set) var stats = DictationStats()

@@ -53,6 +53,11 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "洞察": "Insights",
+        "快捷听写": "Quick dictation",
+        "管理模型": "Manage models",
+        "较早的活动": "Earlier activity",
+        "较新的活动": "Later activity",
         "搜索与命令": "Search and commands",
         "搜索记录、页面或命令": "Search history, pages or commands",
         "没有匹配的记录或命令": "No matching records or commands",
