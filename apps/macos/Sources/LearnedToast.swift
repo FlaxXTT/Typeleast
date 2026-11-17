@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import QuartzCore
 
 // LearnedToast.swift - a short message with 撤销, shown for a few seconds: "转录已取消" after a
 // cancelled recording, "已把「DeepSeek」加入词典" after the edit learner adds a word. A
@@ -7,9 +8,11 @@ import SwiftUI
 
 final class LearnedToast {
     static let duration: TimeInterval = 6
+    private static let fadeDuration: TimeInterval = 1
 
     private var panel: NSPanel?
     private var hideTimer: Timer?
+    private var dismissalID = UUID()
     /// Called when the toast goes away without 撤销 (timed out or replaced).
     private var expired: (() -> Void)?
 
@@ -50,7 +53,7 @@ final class LearnedToast {
             p.setFrameOrigin(NSPoint(x: f.midX - size.width / 2, y: f.minY + 110))
         }
         p.orderFrontRegardless()
-        let t = Timer(timeInterval: LearnedToast.duration, repeats: false) { [weak self] _ in self?.finish() }
+        let t = Timer(timeInterval: LearnedToast.duration, repeats: false) { [weak self] _ in self?.fadeOut() }
         RunLoop.main.add(t, forMode: .common)
         hideTimer = t
     }
@@ -64,9 +67,37 @@ final class LearnedToast {
     }
 
     private func hide() {
+        dismissalID = UUID()
         hideTimer?.invalidate()
         hideTimer = nil
         panel?.orderOut(nil)
+        if let panel {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                panel.animator().alphaValue = 1
+            }
+            panel.ignoresMouseEvents = false
+        }
+    }
+
+    /// Keep the six-second undo window, then fade the whole card over one second.
+    private func fadeOut() {
+        hideTimer = nil
+        let done = expired
+        expired = nil
+        done?()
+        guard let panel else { return }
+        panel.ignoresMouseEvents = true
+        let id = UUID()
+        dismissalID = id
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.fadeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            guard let self, self.dismissalID == id else { return }
+            self.hide()
+        }
     }
 }
 
