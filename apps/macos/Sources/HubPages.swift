@@ -607,7 +607,7 @@ private struct HistoryDetail: View {
                 IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
             }.padding(40)
             Divider().overlay(Theme.border)
-            ScrollView {
+            HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AppNames.name(for: entry.app)).font(.system(size: 13, weight: .medium))

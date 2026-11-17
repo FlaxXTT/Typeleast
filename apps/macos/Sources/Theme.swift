@@ -72,6 +72,7 @@ struct CapsuleTextEditor: View {
     var body: some View {
         TextEditor(text: $text)
             .scrollContentBackground(.hidden)
+            .scrollIndicators(.visible)
             .padding(32)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
             .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))

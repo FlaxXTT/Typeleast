@@ -147,7 +147,7 @@ struct BetaQuestionsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("提示词模式 · 第 {0} 轮", info.round ?? 1))
                 .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.accent)
-            ScrollView {
+            HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let goals = info.goals, !goals.isEmpty {
                         section(L10n.text("核心目的"), goals)

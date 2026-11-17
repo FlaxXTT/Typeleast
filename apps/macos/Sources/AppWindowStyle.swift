@@ -66,6 +66,11 @@ final class WindowRoundingView: NSView {
 }
 
 final class CapsuleEditorScrollView: NSScrollView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NativeScrollAppearance.apply(to: self)
+    }
+
     override func layout() {
         super.layout()
         wantsLayer = true

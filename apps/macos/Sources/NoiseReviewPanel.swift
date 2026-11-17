@@ -55,7 +55,7 @@ struct NoiseReviewView: View {
                 .font(.headline).foregroundColor(Theme.ink)
             Text(L10n.text("没有自动输入。继续后按当前设置处理；如使用联网整理模型，文字会发送给该服务。"))
                 .font(.subheadline).foregroundColor(Theme.secondary)
-            ScrollView {
+            HubScrollView(showsChrome: false) {
                 Text(candidate.isEmpty ? L10n.text("没有识别到文字") : candidate)
                     .textSelection(.enabled)
                     .foregroundColor(Theme.ink)
@@ -149,7 +149,7 @@ struct QuantityReviewView: View {
             Text(review.kind == "quantity" ? L10n.text("数量或单位可能发生变化") : L10n.text("整理结果需要核对")).font(.headline).foregroundColor(Theme.ink)
             Text(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"))
                 .font(.subheadline).foregroundColor(Theme.secondary)
-            ScrollView {
+            HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(L10n.text("原始识别")).font(.caption).foregroundColor(Theme.secondary)
                     highlighted(review.original, quotes: (review.issues ?? []).map(\.source)).textSelection(.enabled).foregroundColor(Theme.ink)

@@ -329,7 +329,7 @@ struct SelectionBubbleView: View {
                     Text(L10n.text("正在翻译…")).font(.system(size: 13))
                 }
             case .done(let text):
-                ScrollView {
+                HubScrollView(showsChrome: false) {
                     Text(text).font(.system(size: 13.5)).lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }

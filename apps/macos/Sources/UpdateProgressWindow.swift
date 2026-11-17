@@ -53,7 +53,7 @@ struct UpdateProgressView: View {
     @ObservedObject var model: UpdateProgressModel
 
     var body: some View {
-        ScrollView {
+        HubScrollView(showsChrome: false) {
         VStack(spacing: 18) {
             UpdateRing(stage: model.stage)
                 .frame(width: 136, height: 136)

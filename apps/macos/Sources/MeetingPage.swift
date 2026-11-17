@@ -50,19 +50,11 @@ private struct MeetingLiveTranscriptView: View {
                     .font(.system(size: 13)).foregroundColor(Theme.secondary)
                 Spacer()
             } else {
-                ScrollViewReader { scroll in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(meeting.liveTranscript)
-                                .font(.system(size: 13.5)).textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 4)
-                            Color.clear.frame(height: 1).id("meeting-live-end")
-                        }
-                    }
-                    .onChange(of: meeting.liveTranscript) { _, _ in
-                        scroll.scrollTo("meeting-live-end", anchor: .bottom)
-                    }
+                HubScrollView(showsChrome: false, followsBottom: true) {
+                    Text(meeting.liveTranscript)
+                        .font(.system(size: 13.5)).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
                 }
             }
         }
@@ -173,7 +165,7 @@ struct MeetingTranscriptView: View {
                 Spacer()
             } else {
                 Text(L10n.text("说话人标签只区分这一段录音里的声音，可能有误，不代表真实身份。")).font(.system(size: 11.5)).foregroundColor(Theme.secondary)
-                ScrollView {
+                HubScrollView(showsChrome: false) {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(result.segments) { turn in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {

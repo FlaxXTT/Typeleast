@@ -107,7 +107,7 @@ struct ModelRecommendationCard: View {
     let dragEnded: () -> Void
 
     var body: some View {
-        ScrollView {
+        HubScrollView(showsChrome: false) {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(heading).font(.system(size: 15, weight: .semibold)).foregroundColor(.secondary)
