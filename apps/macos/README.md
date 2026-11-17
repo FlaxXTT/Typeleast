@@ -127,6 +127,20 @@ and configure both secrets once, without using the Mac login Keychain:
 bash apps/macos/scripts/configure-publisher-signing.sh FlaxXTT/Typeleast "$HOME/.local/share/typeleast-publisher-signing"
 ```
 
+For a Mac without GitHub CLI or Homebrew, run the owner-side bootstrap instead:
+
+```bash
+bash apps/macos/scripts/setup-publisher-on-mac.sh
+```
+
+It downloads the official GitHub CLI into a private user directory, verifies the
+pinned archive checksum, and lets the owner sign in through their own browser when
+necessary. It then verifies and runs the fixed-version configuration helper above.
+No administrator access, shared desktop or credentials sent through chat are needed.
+The private signing backup remains on the owner's Mac. It refuses to overwrite an
+existing publisher identity. `Tests/publisher-setup.py` tests this path with mocked
+downloads, sign-in and Secrets writes; it never uses real credentials.
+
 The command requires `gh`, `openssl` and `git`, refuses to overwrite existing signing
 secrets, and keeps an encrypted root key and certificate backup outside the repository.
 It does not publish a release or print private values. Preserve that directory securely;

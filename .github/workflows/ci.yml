@@ -188,6 +188,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Test owner-side setup without real credentials
+        run: python3 apps/macos/Tests/publisher-setup.py
       - name: Import and validate the configured publisher identity
         timeout-minutes: 2
         env:
