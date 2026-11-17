@@ -15,9 +15,9 @@ struct FormRequest<Context: Equatable> {
     mutating func invalidate() { active = nil }
 
     mutating func finish(_ id: UUID, context: Context) -> Bool {
-        guard let active, active.id == id else { return false }
+        guard let active, active.id == id, active.context == context else { return false }
         self.active = nil
-        return active.context == context
+        return true
     }
 }
 

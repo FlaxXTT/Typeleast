@@ -601,6 +601,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         healthRefresh.invalidate()
         progressPoll?.cancel()
         progressPoll = nil
+        if serviceUp { serviceUp = false }
+        if model.health != nil { model.health = nil }
+        if model.speechCatalog != nil { model.speechCatalog = nil }
     }
 
     /// What to tell the user about the recogniser, or "" when it is ready.
@@ -638,7 +641,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let manager = ServiceManager.shared
         manager.nodePathOverride = settings.nodePath
         manager.modelMirror = settings.modelMirror
-        serviceUp = false
         setHint(L10n.text("正在重启本地服务…"))
         manager.restart()
         applyState()
