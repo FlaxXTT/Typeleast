@@ -76,7 +76,7 @@ final class UpdateController {
         alert.messageText = L10n.text("新版本 ") + version
         var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新后 TypeLeast 重启，权限和 Key 保留。")
         if !summary.isEmpty { detail = L10n.text("更新内容") + "\n" + summary + "\n\n" + detail }
-        if !Updater.hasSigningIdentity() {
+        if !Updater.hasStableRequirement(Updater.designatedRequirement(of: Bundle.main.bundleURL)), !Updater.hasSigningIdentity() {
             detail += "\n\n" + L10n.text("首次使用本机签名证书时，macOS 可能要求授权。")
         }
         alert.informativeText = detail

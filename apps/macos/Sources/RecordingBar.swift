@@ -213,8 +213,11 @@ final class PillView: NSView {
             } else if model.phase == .recording,
                       (model.elapsed != oldValue.elapsed || model.history.count != oldValue.history.count) {
                 sampleShiftStarted = ProcessInfo.processInfo.systemUptime
+                rebuildWaveform()
             }
-            needsDisplay = true
+            // The animation timer paints recording frames. Audio samples must
+            // not schedule another independent series of redraws between them.
+            if model.phase != .recording || reduceMotion { needsDisplay = true }
         }
     }
 
@@ -222,7 +225,7 @@ final class PillView: NSView {
     private let stopButton = CancelButton()
     private var bars: [Float] = []
     private var spinnerPhase: CGFloat = 0
-    private var pulse: CGFloat = 0
+    private var lastAdvancedAt = ProcessInfo.processInfo.systemUptime
     private var sampleShiftStarted = ProcessInfo.processInfo.systemUptime
     private static let ink = NSColor(calibratedWhite: 0.15, alpha: 1)
     private var cancelHover = false
@@ -231,6 +234,8 @@ final class PillView: NSView {
     private var stopHoverAmount: CGFloat = 0
 
     static let height: CGFloat = 40
+    /// Scale the existing geometry together, including the waveform and hit areas.
+    static let displayScale: CGFloat = 0.85
     /// Diameter of the cancel (left) and finish (right) buttons.
     static let buttonSize: CGFloat = 26
     static func badgeWidth(_ text: String) -> CGFloat {
@@ -257,8 +262,9 @@ final class PillView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        setBoundsSize(NSSize(width: frameRect.width / Self.displayScale, height: frameRect.height / Self.displayScale))
         wantsLayer = true
-        bars = Array(repeating: 0, count: LevelHistory.defaultCapacity)
+        bars = Array(repeating: 0, count: Self.visibleBars + 1)
         configure(cancelButton, glyph: "", tip: L10n.text("取消听写（Esc）"), action: #selector(cancelPressed))
         configure(stopButton, glyph: "", tip: L10n.text("结束并整理"), action: #selector(stopPressed))
         cancelButton.onHover = { [weak self] hovering in
@@ -291,6 +297,15 @@ final class PillView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { false }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        setBoundsSize(NSSize(width: newSize.width / Self.displayScale, height: newSize.height / Self.displayScale))
+    }
+
+    private var drawingScale: CGFloat {
+        max(0.5, (window?.backingScaleFactor ?? layer?.contentsScale ?? 2) * Self.displayScale)
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -331,48 +346,50 @@ final class PillView: NSView {
 
     private func phaseChanged() {
         spinnerPhase = 0
-        pulse = 0
         sampleShiftStarted = ProcessInfo.processInfo.systemUptime
+        lastAdvancedAt = sampleShiftStarted
         cancelHover = false
         stopHover = false
         cancelHoverAmount = 0
         stopHoverAmount = 0
         if model.phase == .recording {
-            bars = Array(repeating: 0, count: model.history.capacity)
+            rebuildWaveform()
         }
         cancelButton.isHidden = model.phase != .recording && model.phase != .thinking
         stopButton.isHidden = model.phase != .recording
         needsLayout = true
     }
 
+    private func rebuildWaveform() {
+        let targets = model.history.samples.suffix(Self.visibleBars + 1).map(RecordingBarFormat.barHeight(for:))
+        bars = Array(repeating: 0, count: max(0, Self.visibleBars + 1 - targets.count)) + targets
+    }
+
     /// Draw at 60 Hz while levels arrive at 20 Hz. Move the history as one strip,
     /// rather than blending neighbouring heights, to keep speech peaks distinct.
-    func advance() {
+    func advance(at now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        let delta = max(0, min(0.1, now - lastAdvancedAt))
+        lastAdvancedAt = now
         let cancelTarget: CGFloat = cancelHover ? 1 : 0
         let stopTarget: CGFloat = stopHover ? 1 : 0
         if reduceMotion {
             cancelHoverAmount = cancelTarget
             stopHoverAmount = stopTarget
         } else {
-            cancelHoverAmount += (cancelTarget - cancelHoverAmount) * 0.15
-            stopHoverAmount += (stopTarget - stopHoverAmount) * 0.15
+            let blend = CGFloat(1 - pow(0.85, delta * 60))
+            cancelHoverAmount += (cancelTarget - cancelHoverAmount) * blend
+            stopHoverAmount += (stopTarget - stopHoverAmount) * blend
         }
         if !reduceMotion {
-            spinnerPhase += 0.06
-            if spinnerPhase > 2 * .pi { spinnerPhase -= 2 * .pi }
+            spinnerPhase = (spinnerPhase + CGFloat(delta * 3.6)).truncatingRemainder(dividingBy: 2 * .pi)
         }
-        let slots = max(1, model.history.capacity)
-        let targets = model.history.heights()
-        let padding = max(0, slots - targets.count)
-        bars = [Float](repeating: 0, count: padding) + Array(targets.suffix(slots))
-        pulse += (CGFloat(model.level) - pulse) * 0.21
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let scale = max(1, window?.backingScaleFactor ?? layer?.contentsScale ?? 2)
+        let scale = drawingScale
         let pixel = 1 / scale
         context.clear(bounds)
         context.setAllowsAntialiasing(true)
@@ -536,10 +553,10 @@ final class PillView: NSView {
     private func drawWaveform(_ rect: NSRect) {
         guard !bars.isEmpty, rect.width > 4,
               let context = NSGraphicsContext.current?.cgContext else { return }
-        let shown = Array(bars.suffix(PillView.visibleBars + 1))
+        let shown = bars
         let slots = max(1, shown.count - 1)
         let slot = rect.width / CGFloat(slots)
-        let scale = max(1, window?.backingScaleFactor ?? layer?.contentsScale ?? 2)
+        let scale = drawingScale
         let pixel = 1 / scale
         let lineWidth = max(pixel * 2, (min(2.5, slot * 0.50) * scale).rounded() / scale)
         let progress = reduceMotion ? 1 : min(1, max(0, (ProcessInfo.processInfo.systemUptime - sampleShiftStarted) / 0.05))
@@ -588,7 +605,7 @@ final class RecordingBar {
     }
 
     /// Largest panel the capsule can need; the panel is resized to the capsule per look.
-    static let size = NSSize(width: 360, height: PillView.height)
+    static let size = NSSize(width: 360 * PillView.displayScale, height: PillView.height * PillView.displayScale)
     private static let tickInterval: TimeInterval = 1.0 / 60.0
     private static let resultHold: TimeInterval = 1.0
     private static let fadeDuration: TimeInterval = 1.0
@@ -603,7 +620,7 @@ final class RecordingBar {
     private var pillBox: PillView?
     private var model = RecordingBarModel()
     private var timer: Timer?
-    private var resultShownAt: Date?
+    private var timerPhase: RecordingBarModel.Phase?
     private var fadeToken = 0
 
     /// Nothing is allocated here on purpose: the panel is the expensive part and
@@ -751,8 +768,8 @@ final class RecordingBar {
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
             self.present()
+            self.stopTimer()
             self.startTimer()
-            self.resultShownAt = Date()
         }
     }
 
@@ -779,13 +796,20 @@ final class RecordingBar {
     }
 
     private func pushModel() {
+        let previous = pill.model
+        let wasCountingDown = limitSeconds - previous.elapsed <= PillView.countdownSeconds
+        let isCountingDown = limitSeconds - model.elapsed <= PillView.countdownSeconds
+        let widthChanged = previous.phase != model.phase || previous.badge != model.badge
+            || previous.detail != model.detail || previous.resultText != model.resultText
+            || wasCountingDown != isCountingDown
         pill.model = model
         // Resize only a panel that exists and is showing: sizing must not build one.
-        if let existing = panelBox, existing.isVisible { resizeToCapsule(existing) }
+        if widthChanged, let existing = panelBox, existing.isVisible { resizeToCapsule(existing) }
     }
 
     private func capsuleSize() -> NSSize {
-        NSSize(width: PillView.width(for: model, limit: limitSeconds), height: PillView.height)
+        NSSize(width: (PillView.width(for: model, limit: limitSeconds) * PillView.displayScale).rounded(),
+               height: PillView.height * PillView.displayScale)
     }
 
     /// Keep the capsule centred on the same bottom-centre point as its width changes.
@@ -823,17 +847,21 @@ final class RecordingBar {
     }
 
     private func startTimer() {
-        guard timer == nil else { return }
-        let ticker = Timer(timeInterval: RecordingBar.tickInterval, repeats: true) { [weak self] _ in
+        guard timer == nil || timerPhase != model.phase else { return }
+        stopTimer()
+        let interval = model.phase == .result ? Self.resultHold : pill.reduceMotion ? 0.05 : Self.tickInterval
+        let ticker = Timer(timeInterval: interval, repeats: model.phase != .result) { [weak self] _ in
             self?.tick()
         }
         RunLoop.main.add(ticker, forMode: .common)
         timer = ticker
+        timerPhase = model.phase
     }
 
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+        timerPhase = nil
     }
 
     private func tick() {
@@ -841,8 +869,7 @@ final class RecordingBar {
             stopTimer()
             return
         }
-        if model.phase == .result, let shown = resultShownAt,
-           Date().timeIntervalSince(shown) >= RecordingBar.resultHold {
+        if model.phase == .result {
             fadeOut()
             return
         }
@@ -850,12 +877,10 @@ final class RecordingBar {
     }
 
     private func cancelPendingFade() {
-        resultShownAt = nil
         fadeToken += 1
     }
 
     private func fadeOut() {
-        resultShownAt = nil
         stopTimer()
         guard model.phase == .result, panelBox?.isVisible == true else {
             dismiss()

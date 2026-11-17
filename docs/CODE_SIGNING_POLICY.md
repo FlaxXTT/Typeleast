@@ -8,7 +8,14 @@ This project is applying for free code signing through SignPath Foundation.
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-macOS releases are not covered by this policy (they are ad-hoc signed and not notarized).
+macOS releases are not covered by the Windows signing policy. The release
+workflow defaults to requiring a persistent publisher certificate and stops if it
+is missing or invalid. Version 2.1.6 has an explicitly approved temporary-signing
+exception, selected manually and restricted to that exact tag and source version.
+It remains ad-hoc signed and not notarized; authorization prompts may remain.
+The exception cannot be used for later versions and is never an automatic fallback.
+A fixed self-signed publisher CA is supported for a future persistent-signing
+release without Developer ID; this does not provide Apple notarization.
 
 ## Source code and build process
 
@@ -103,6 +110,19 @@ listens on `127.0.0.1`; the Mac app uses the port reported through its managed c
 an endpoint substituted in `runtime.json`. API keys are stored in the macOS Keychain (Windows: Credential Manager).
 
 ## macOS local signing and updates
+
+Publisher-signed updates with the same certificate-backed designated requirement
+retain their signature after validation of that requirement, nested code and sealed
+resources. They do not use a signing private key on the user's Mac. The fixed
+publisher root is trusted only on the disposable CI signing machine; the workflow
+clears that temporary trust afterward and does not install root trust on user Macs.
+Private publishing material is supplied through repository Actions Secrets, imported
+into a temporary CI Keychain and cleaned up after the job.
+
+Install the first publisher-signed baseline directly: old updaters re-sign downloaded
+apps. A first migration from an ad-hoc/local-signed installation may require one
+system authorization. Gatekeeper checks and macOS Keychain lock/reset/revocation
+policies still apply. Existing local-signed installations keep the fallback below.
 
 Local signing is not a publisher signature or Apple notarization. The updater keeps the existing local signing
 identity and its access settings. It does not revoke the user's previous authorization. macOS controls consent

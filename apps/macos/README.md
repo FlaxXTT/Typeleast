@@ -90,6 +90,83 @@ a model check.
   changes the ad-hoc signature, so macOS may ask again.
 - Nothing else: no screen recording, camera or input monitoring.
 
+### Update identity and Keychain prompts
+
+`package.sh` defaults to ad-hoc signing. For a release with a stable certificate, set
+`TYPELEAST_SIGN_IDENTITY` to its installed signing identity; the final package and both
+native workers retain that certificate and receive a secure timestamp. Certificate import
+and Apple notarization remain separate publisher setup steps. Do not commit private keys.
+
+When the installed app and the downloaded update have the same certificate-backed
+designated requirement, the updater verifies the update's signature, nested code and
+resources against that requirement and installs it without accessing a local signing key.
+Other updates retain the existing local-signing path and refuse to replace an existing
+certificate identity with a different one. Already saved API keys and history keys stay in
+the Keychain; this path does not export or reset them or broaden their access controls.
+
+This avoids update-induced signing prompts for releases that preserve the trusted identity.
+It cannot promise that macOS never requests authorization: a locked/reset Keychain, an
+ad-hoc installation moving to its first certificate identity, or a user changing access
+permissions can still require it. Stable certificate configuration is required for the
+default publisher-signing workflow. Ad-hoc packages do not meet that condition.
+
+The manual `release.yml` workflow now requires repository secrets
+`MACOS_SIGNING_CERTIFICATE_BASE64` (a persistent PKCS#12 identity and certificate chain,
+encoded as base64) and `MACOS_SIGNING_CERTIFICATE_PASSWORD`. It imports them into a temporary
+CI Keychain and stops publishing if they are missing or invalid; it never generates a new
+release identity or automatically falls back to ad-hoc signing. The explicitly approved
+`legacy-2.1.6` signing mode is restricted to the v2.1.6 tag and 2.1.6 source version;
+it keeps temporary signing and authorization prompts may remain. Future releases cannot
+use that exception. A publisher-controlled self-signed CA can
+also be used without Developer ID: its root is trusted only on the disposable CI build
+machine and removed afterward. No publisher root is installed on end users' Macs. This
+does not provide Apple notarization or bypass the first installation's Gatekeeper checks.
+Do not replace these secrets with freshly generated identities for each release.
+
+An owner with GitHub Actions Secrets permissions can create the fixed self-signed identity
+and configure both secrets once, without using the Mac login Keychain:
+
+```bash
+bash apps/macos/scripts/configure-publisher-signing.sh FlaxXTT/Typeleast "$HOME/.local/share/typeleast-publisher-signing"
+```
+
+For a Mac without GitHub CLI or Homebrew, run the owner-side bootstrap instead:
+
+```bash
+bash apps/macos/scripts/setup-publisher-on-mac.sh
+```
+
+It downloads the official GitHub CLI into a private user directory, verifies the
+pinned archive checksum, and lets the owner sign in through their own browser when
+necessary. It then verifies and runs the fixed-version configuration helper above.
+No administrator access, shared desktop or credentials sent through chat are needed.
+The private signing backup remains on the owner's Mac. It refuses to overwrite an
+existing publisher identity. `Tests/publisher-setup.py` tests this path with mocked
+downloads, sign-in and Secrets writes; it never uses real credentials.
+
+The command requires `gh`, `openssl` and `git`, refuses to overwrite existing signing
+secrets, and keeps an encrypted root key and certificate backup outside the repository.
+It does not publish a release or print private values. Preserve that directory securely;
+leaf renewal should keep the same root anchor. If only the first secret uploads, use the
+same local identity to configure the missing password secret rather than generating a new
+identity. The current connector may lack Secrets access even when it can push code.
+
+An existing ad-hoc/local-signed installation may still need a one-time authorization when
+moving to a publisher-signed baseline. An older updater re-signs downloaded apps, so install
+the first publisher-signed baseline directly; subsequent matching-identity updates use the
+signature-preserving path. The new code cannot prevent an old updater's password request
+before it has itself been replaced.
+
+The isolated macOS CI job runs `Tests/update-identity.sh` with a disposable certificate and Keychain.
+It checks silent credential access after a binary update with the same identity and
+rejects a changed identity or changed sealed resource. It neither reads user credentials
+nor enables authentication UI in the probe applications.
+Signing temporarily trusts only the disposable certificate on the CI build machine; that
+positive trust is cleared and ordinary certificate evaluation confirms the root is untrusted
+before the credential-access probes; temporary private material is cleaned
+up afterward. This integration check is skipped by default in `test.sh`; opt in on an
+isolated CI machine with `TYPELEAST_TEST_UPDATE_IDENTITY=1`.
+
 ## Demo mode
 
 `TYPELEAST_DEMO_WAV=<16 kHz mono PCM16 WAV>` (with `TYPELEAST_DEMO_DELAY`, seconds,

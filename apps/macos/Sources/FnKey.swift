@@ -50,6 +50,18 @@ enum FnTapGate {
     /// How long after a tap the input source gets to change before dictation starts.
     static let settleSeconds: TimeInterval = 0.25
 
+    /// macOS stores "Do Nothing" as 0. Only that explicit choice can skip
+    /// waiting for a possible system input-source switch; unknown stays cautious.
+    static func delay(systemUsageType: Int?) -> TimeInterval {
+        systemUsageType == 0 ? 0 : settleSeconds
+    }
+
+    static var currentDelay: TimeInterval {
+        let value = CFPreferencesCopyValue("AppleFnUsageType" as CFString, kCFPreferencesAnyApplication,
+                                          kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? NSNumber
+        return delay(systemUsageType: value?.intValue)
+    }
+
     /// True unless the input source demonstrably changed across the tap. An unknown
     /// source (nil) never blocks: the gate must not break Fn for people without one.
     static func shouldStart(sourceAtPress: String?, sourceAfter: String?) -> Bool {

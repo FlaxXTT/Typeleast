@@ -28,7 +28,7 @@ export function modelRoutes(primary, backups) {
 }
 
 /** A model call may be retried on the next user-configured provider, without duplicating output. */
-export function modelCompletion({ routes, hasDeferredBackups, rawText, complete, onSuccess }) {
+export function modelCompletion({ routes, hasDeferredBackups, rawText, task, complete, onSuccess }) {
   let activeIndex = 0;
   const originalChars = Array.from(rawText).length;
   return async (options) => {
@@ -43,7 +43,10 @@ export function modelCompletion({ routes, hasDeferredBackups, rawText, complete,
       try {
         const result = await complete({ ...options, route: routes[i],
           ...(alternatives ? { maxTransportAttempts: 1 } : {}),
-          ...(canContinue ? { timeoutMs: Math.min(options.timeoutMs, shortTimeout) } : {}),
+          // Translation has its own output budget. A backup must not turn a slow
+          // but healthy translation into an early timeout; its shared task clock
+          // still bounds all routes and batches.
+          ...(canContinue && task !== 'translation' ? { timeoutMs: Math.min(options.timeoutMs, shortTimeout) } : {}),
         });
         activeIndex = i;
         onSuccess(routes[i], i > 0);

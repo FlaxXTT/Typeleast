@@ -110,7 +110,7 @@ private struct HeroCard: View {
                 Text(L10n.text("说话，再按一次结束")).font(.system(size: 15, weight: .semibold))
                 Spacer(minLength: 12)
                 ShareButton(items: InsightsPanel.shareItems).fixedSize()
-                Button(model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
+                Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(model.phase == .thinking)
             }
@@ -276,6 +276,22 @@ struct HistoryPage: View {
     @State private var filter: HistoryFilter = .all
     @State private var query = ""
     @State private var confirmClear = false
+    @State private var day = Calendar.current.startOfDay(for: Date())
+    @State private var dayGroups: [DayGroup] = []
+
+    private struct CacheKey: Equatable {
+        let historyRevision: Int
+        let filter: HistoryFilter
+        let query: String
+        let day: Date
+        let language: String
+        let timeZone: String
+    }
+
+    private var cacheKey: CacheKey {
+        CacheKey(historyRevision: model.historyRevision, filter: filter, query: query, day: day,
+                 language: L10n.language, timeZone: TimeZone.current.identifier)
+    }
 
     private var filtered: [LocalHistoryEntry] {
         model.history.filter { entry in
@@ -308,8 +324,6 @@ struct HistoryPage: View {
     }
 
     var body: some View {
-        let visibleEntries = filtered
-        let dayGroups = groupedEntries(visibleEntries)
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: L10n.text("历史"), subtitle: "") {
                 HStack(spacing: 10) {
@@ -339,7 +353,7 @@ struct HistoryPage: View {
             .padding(.horizontal, 36)
             .padding(.bottom, 12)
 
-            if visibleEntries.isEmpty {
+            if dayGroups.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
                     Text(query.isEmpty ? L10n.text("没有听写记录") : L10n.text("没有匹配的记录")).foregroundColor(Theme.secondary)
@@ -384,6 +398,13 @@ struct HistoryPage: View {
         } message: {
             Text(L10n.text("删除全部历史和录音，无法恢复。"))
         }
+        .onChange(of: cacheKey, initial: true) { _, _ in dayGroups = groupedEntries(filtered) }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            day = Calendar.current.startOfDay(for: Date())
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            day = Calendar.current.startOfDay(for: Date())
+        }
     }
 }
 
@@ -394,11 +415,11 @@ struct HistoryRow: View {
     @State private var hovering = false
     @State private var expanded = false
     @State private var copied = false
+    @State private var retryAvailable = false
 
     private var canRetry: Bool {
         // A Prompt Beta record cannot be retried: it would start a new clarification from scratch.
-        guard entry.strength != "promptbeta", let path = entry.audioPath else { return false }
-        return FileManager.default.fileExists(atPath: path)
+        entry.strength != "promptbeta" && retryAvailable
     }
 
     private var mode: VoiceStrength? {
@@ -483,6 +504,15 @@ struct HistoryRow: View {
         .background(hovering ? Theme.cardHover.opacity(0.6) : Color.clear)
         .onHover { hovering = $0 }
         .onTapGesture { if !compact { expanded.toggle() } else { model.page = .history } }
+        .task(id: entry.audioPath) {
+            retryAvailable = false
+            guard !compact, entry.strength != "promptbeta", let path = entry.audioPath else { return }
+            let available = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: path)
+            }.value
+            guard !Task.isCancelled else { return }
+            retryAvailable = available
+        }
     }
 
     private func copy(raw: Bool) {

@@ -4,8 +4,9 @@ import SwiftUI
 
 // SelectionTranslator.swift - select text with the mouse in any app and a small 「翻译」 button
 // appears next to it; a click shows the translation in a bubble. The selection is read on this
-// Mac (Accessibility, or a ⌘C for browsers that hide it) and is sent to the model only after the
-// click. Nothing is inserted or recorded. TypeLeast's own windows and password fields are ignored.
+// Mac through Accessibility and is sent to the model only after the click. If the selection
+// cannot be confirmed, no button appears. Nothing is inserted or recorded. TypeLeast's own
+// windows and password fields are ignored.
 //
 // Both panels are non-activating and never become key, so the app the user is reading keeps
 // its focus and its selection.
@@ -23,6 +24,7 @@ final class SelectionTranslator {
     var preferredTarget: () -> String = { "en" }
 
     private var monitors: [Any] = []
+    private var activationObserver: NSObjectProtocol?
     private var dragged = false
     private let dot = SelectionPanel()
     private let bubble = SelectionPanel()
@@ -38,17 +40,22 @@ final class SelectionTranslator {
             (.leftMouseDown, { [weak self] _ in self?.dragged = false; self?.hideOffer() }),
             (.leftMouseDragged, { [weak self] _ in self?.dragged = true }),
             (.leftMouseUp, { [weak self] event in self?.mouseUp(event) }),
-            // A ⌘ shortcut does not withdraw it (the ⌘C that reads a browser's selection is one).
-            (.keyDown, { [weak self] event in if !event.modifierFlags.contains(.command) { self?.hideOffer() } }),
+            // Shortcuts can also clear or replace the selection.
+            (.keyDown, { [weak self] _ in self?.hideOffer() }),
         ]
         for (mask, handler) in events {
             if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler) { monitors.append(monitor) }
         }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.hideOffer() }
     }
 
     func stop() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+        activationObserver = nil
         hide()
     }
 
@@ -70,7 +77,7 @@ final class SelectionTranslator {
     }
 
     private func mouseUp(_ event: NSEvent) {
-        // A drag, or a double or triple click, selects text; a plain click does not.
+        // A drag or repeated click may select text; confirm the actual selection below.
         let selecting = dragged || event.clickCount >= 2
         dragged = false
         guard selecting, enabled(), AXIsProcessTrusted(),
@@ -80,38 +87,13 @@ final class SelectionTranslator {
         // The first time, a browser or Electron app (Claude, VS Code, Slack…) builds its
         // Accessibility tree only now: give it longer than the usual moment.
         let fresh = FieldContextReader.exposeContent(bundleId: bundle)
-        let copies = SelectionTranslator.readsByCopy(bundleId: bundle, bundleURL: app.bundleURL)
+        let token = offerToken
         DispatchQueue.main.asyncAfter(deadline: .now() + (fresh ? 0.6 : 0.15)) { [weak self] in
-            guard let self, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle else { return }
-            let text = SelectionTranslator.selectedText()
-            if let text, DictationController.hasText(text) {
-                self.offer(at: point) { $0(text) }
-            } else if copies, text?.isEmpty != false {
-                // An app that hides its selection: copy it, but only once the user asks.
-                self.offer(at: point) { done in Inserter.shared.copySelection { done($0) } }
-            }
+            guard let self, self.offerToken == token, self.enabled(), AXIsProcessTrusted(),
+                  NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle,
+                  let text = SelectionTranslator.selectedText(), DictationController.hasText(text) else { return }
+            self.offer(at: point, text: text, bundleId: bundle)
         }
-    }
-
-    /// AI tools that may hide their selection from Accessibility but are not recognisable as Electron.
-    static let agentApps = ["com.openai.chat", "com.openai.codex", "com.anthropic.claudefordesktop", "com.todesktop.",
-                            "com.exafunction.windsurf", "dev.zed.Zed", "com.trae.", "com.google.antigravity",
-                            "ai.opencode.", "com.claude-prism.", "com.deepseek.dsh", "com.microsoft.VSCode"]
-
-    /// Electron apps, recognised by what they ship: some rename the framework (ChatGPT's is
-    /// "Codex Framework"), but the app.asar stays.
-    static func isElectron(bundleURL url: URL) -> Bool {
-        let fm = FileManager.default
-        return fm.fileExists(atPath: url.appendingPathComponent("Contents/Frameworks/Electron Framework.framework").path)
-            || fm.fileExists(atPath: url.appendingPathComponent("Contents/Resources/app.asar").path)
-    }
-
-    /// Whether a drag in this app may be a selection that only a ⌘C can read: browsers, AI tools,
-    /// Electron apps and terminals (where Claude Code and Codex run). ⌘C is sent only after a click on the button.
-    static func readsByCopy(bundleId: String, bundleURL: URL?) -> Bool {
-        Inserter.readsSelectionByCopy(bundleId) || TerminalGuard.isTerminal(bundleId)
-            || agentApps.contains { bundleId == $0 || ($0.hasSuffix(".") && bundleId.hasPrefix($0)) }
-            || (bundleURL.map(isElectron(bundleURL:)) ?? false)
     }
 
     /// The focused element's selected text; nil when it cannot be read, and for password fields.
@@ -142,7 +124,7 @@ final class SelectionTranslator {
         return alreadyTarget ? "zh" : preferred
     }
 
-    private func offer(at point: NSPoint, read: @escaping (@escaping (String?) -> Void) -> Void) {
+    private func offer(at point: NSPoint, text: String, bundleId: String) {
         hideOffer()
         let token = offerToken
         dot.showDot(at: point, hoverChanged: { [weak self] hovering in
@@ -156,15 +138,15 @@ final class SelectionTranslator {
         }) { [weak self] in
             guard let self, self.offerToken == token else { return }
             self.hideOffer()
+            // A non-activating button keeps the source focused. Recheck it so a
+            // changed or cleared selection can never translate captured stale text.
+            guard self.enabled(), AXIsProcessTrusted(),
+                  NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleId,
+                  Self.selectedText() == text else { return }
             self.runToken += 1
             let run = self.runToken
             self.sourceCount = nil
-            self.showBubble(.loading, at: point)
-            read { [weak self] text in
-                guard let self, self.runToken == run else { return }
-                guard let text, DictationController.hasText(text) else { return self.closeBubble() }
-                self.run(String(text.prefix(SelectionTranslator.limit)), token: run, at: point)
-            }
+            self.run(String(text.prefix(SelectionTranslator.limit)), token: run, at: point)
         }
         scheduleOfferDismissal(token: token)
     }

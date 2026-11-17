@@ -89,6 +89,44 @@ if let index = CommandLine.arguments.firstIndex(of: "--history-ui-render"), Comm
     exit(0)
 }
 
+// Compact recording-bar fixture. Synthetic levels only: no microphone, service,
+// user credentials or global shortcuts. The reference is the same geometry at 100%.
+if let index = CommandLine.arguments.firstIndex(of: "--pill-ui-render"), CommandLine.arguments.count > index + 1 {
+    let output = CommandLine.arguments[index + 1]
+    guard output.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
+    try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+    _ = NSApplication.shared
+    for name in ["recording", "translation", "countdown", "starting", "result"] {
+        var model = RecordingBarModel()
+        model.showRecording(destination: "fixture", badge: name == "translation" ? "翻译 →EN" : "")
+        for (i, level) in [Float(0), 0.15, 0.42, 0.7, 0.4, 0.22, 0.8, 0.92, 0.5, 0.3, 0.1, 0.35, 0.6].enumerated() {
+            model.update(level: level, elapsed: Double(i) * 0.05 + (name == "countdown" ? 108 : 0))
+        }
+        if name == "starting" { model.showThinking(detail: L10n.text("正在打开麦克风…")) }
+        if name == "result" { model.showResult("报告周四发，控制在三页以内。", warning: false) }
+        let logical = NSSize(width: PillView.width(for: model, limit: 120), height: PillView.height)
+        for scale in [PillView.displayScale, CGFloat(1)] {
+            let size = NSSize(width: (logical.width * scale).rounded(), height: logical.height * scale)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+            let view = PillView(frame: NSRect(origin: .zero, size: size))
+            window.contentView = view
+            view.setBoundsSize(logical)
+            view.reduceMotion = true
+            view.model = model
+            view.advance()
+            view.layoutSubtreeIfNeeded()
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            guard let png = bitmap.representation(using: .png, properties: [:]) else { exit(1) }
+            let filename = name + (scale == 1 ? "-reference.png" : "-compact.png")
+            try png.write(to: URL(fileURLWithPath: output + "/" + filename))
+            print("RENDER \(filename): \(size.width) × \(size.height) points")
+            window.orderOut(nil)
+        }
+    }
+    exit(0)
+}
+
 // Developer-only UI fixture. No service, microphone, global shortcuts or real Keychain access.
 if let index = CommandLine.arguments.firstIndex(of: "--model-ui-render"), CommandLine.arguments.count > index + 1 {
     let output = CommandLine.arguments[index + 1]
@@ -399,6 +437,20 @@ do {
 }
 state.mode = "health"
 
+// A model failure is a completed local-service request, not a transport failure.
+do {
+    for reason in ["model-timeout", "model-error:NETWORK", "model-error:HTTP_401", "model-error:HTTP_429", "fact-review"] {
+        let error = ServiceError.translationFailed(reason: reason)
+        check("translation failure keeps the local service available: " + reason, !error.serviceUnavailable)
+        check("translation failure does not claim service unreachable: " + reason, !error.description.contains("service unreachable"))
+    }
+    checkEq("translation timeout is explained", ServiceError.translationFailed(reason: "model-timeout").description,
+            L10n.text("翻译模型响应超时，请稍后重试或更换模型。"))
+    check("translation timeout differs from provider authorization failure",
+          ServiceError.translationFailed(reason: "model-timeout").description != ServiceError.translationFailed(reason: "model-error:HTTP_401").description)
+    check("actual transport failure still marks the service unavailable", ServiceError.transport("fixture connection refused").serviceUnavailable)
+}
+
 // MARK: 7. the learned description rides with each dictation
 
 do {
@@ -547,6 +599,61 @@ do {
     model.hide()
 }
 
+// Slow device opening must not block UI events, and cancelling then starting
+// again must close the abandoned device before opening its replacement.
+do {
+    func pumpStartup(until condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while !condition(), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.005))
+        }
+        return condition()
+    }
+    let startup = RecordingStartup()
+    let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
+    let eventsLock = NSLock()
+    var events: [String] = []
+    func event(_ value: String) { eventsLock.lock(); events.append(value); eventsLock.unlock() }
+    var staleCompletions = 0, adopted = false, heartbeat = false
+    startup.begin(open: {
+        event(Thread.isMainThread ? "opened-on-main" : "worker-open")
+        entered.signal()
+        _ = release.wait(timeout: .now() + 3)
+        return "old"
+    }, discard: { event("discard-" + $0) }, completion: { _ in staleCompletions += 1 })
+    check("audio opening runs on a worker", entered.wait(timeout: .now() + 1) == .success)
+    DispatchQueue.main.async { heartbeat = true }
+    check("main events run while the device is still opening", pumpStartup { heartbeat })
+    startup.cancel()
+    check("cancelling clears the pending recording immediately", !startup.isPending)
+    startup.begin(open: { event("replacement-open"); return "new" }, discard: { event("discard-" + $0) }, completion: {
+        adopted = (try? $0.get()) == "new" && Thread.isMainThread && !startup.isPending
+    })
+    release.signal()
+    check("replacement capture is adopted on main", pumpStartup { adopted })
+    checkEq("cancelled capture cannot deliver a late ready callback", staleCompletions, 0)
+    eventsLock.lock(); let ordering = events; eventsLock.unlock()
+    checkEq("old input closes before a replacement opens", ordering, ["worker-open", "discard-old", "replacement-open"])
+
+    var failedOnMain = false
+    startup.begin(open: { () throws -> String in throw NSError(domain: "fixture", code: 1) }, discard: { _ in }, completion: {
+        if case .failure = $0 { failedOnMain = Thread.isMainThread && !startup.isPending }
+    })
+    check("audio startup failure returns to main and clears pending state", pumpStartup { failedOnMain })
+
+    let recorder = Recorder()
+    recorder.demoPCM = Data(repeating: 0, count: Recorder.bytesPerSecond)
+    var cancelledReady = 0, liveReady = false
+    recorder.startAsync { _ in cancelledReady += 1 }
+    recorder.cancel()
+    recorder.startAsync { liveReady = (try? $0.get()) != nil && recorder.isRecording }
+    check("demo capture follows async readiness without a microphone", pumpStartup { liveReady })
+    check("the adopted demo feeds audio on the main run loop", pumpStartup { recorder.byteCount > 0 })
+    checkEq("cancelled recorder startup never turns ready later", cancelledReady, 0)
+    recorder.cancel()
+    check("cancelled async recording releases its UI state and audio", !recorder.isStarting && !recorder.isRecording && recorder.byteCount == 0)
+}
+
 // MARK: 11. Recorder live level - smoothing, clamping and RMS without a microphone
 
 do {
@@ -674,6 +781,9 @@ do {
     check("fn gate never blocks when the source is unknown",
           FnTapGate.shouldStart(sourceAtPress: nil, sourceAfter: "x") && FnTapGate.shouldStart(sourceAtPress: "x", sourceAfter: nil))
     check("fn gate waits briefly, well under half a second", FnTapGate.settleSeconds > 0 && FnTapGate.settleSeconds < 0.5)
+    checkEq("Fn configured as Do Nothing has no artificial delay", FnTapGate.delay(systemUsageType: 0), 0)
+    checkEq("Fn input switching keeps its observation window", FnTapGate.delay(systemUsageType: 1), FnTapGate.settleSeconds)
+    checkEq("unknown Fn settings retain input-switch protection", FnTapGate.delay(systemUsageType: nil), FnTapGate.settleSeconds)
     var fn = FnTapDetector()
     fn.fnDown(at: t0, otherModifiersHeld: false)
     check("fn tap fires on a quick clean press", fn.fnUp(at: t0.addingTimeInterval(0.2)))
@@ -693,6 +803,17 @@ do {
 // MARK: 15. update offers and progress
 
 do {
+    let signed = "designated => identifier \"com.dsh.voice\" and certificate leaf = H\"0123456789abcdef\""
+    let other = "designated => identifier \"com.dsh.voice\" and certificate leaf = H\"fedcba9876543210\""
+    let adhoc = "designated => cdhash H\"0123456789abcdef\""
+    let selfSigned = "designated => identifier \"com.dsh.voice\" and anchor = H\"0123456789abcdef\""
+    check("same stable signing identity can bypass local re-signing", Updater.canKeepSignature(current: signed, update: signed))
+    check("same self-signed anchor can bypass local re-signing", Updater.canKeepSignature(current: selfSigned, update: selfSigned))
+    check("a different self-signed anchor cannot bypass local re-signing", !Updater.canKeepSignature(current: selfSigned, update: selfSigned + "00"))
+    check("an ad-hoc signature cannot bypass local re-signing", !Updater.canKeepSignature(current: adhoc, update: adhoc))
+    check("a different certificate cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: other))
+    check("a missing update identity cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: nil))
+    check("a missing current identity cannot bypass local re-signing", !Updater.canKeepSignature(current: nil, update: signed))
     // The update offer rule and the ring's steps.
     check("a quiet check offers a new version once", Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: false))
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
@@ -742,18 +863,6 @@ do {
     checkEq("selection: English with an English target comes back in Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "en"), "zh")
     checkEq("selection: with a Chinese target, Chinese goes to English", SelectionTranslator.target(for: "今天开会", preferred: "zh"), "en")
     checkEq("selection: with a Chinese target, English goes to Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "zh"), "zh")
-    check("selection: ChatGPT, Codex and terminals read by copy",
-          SelectionTranslator.readsByCopy(bundleId: "com.openai.chat", bundleURL: nil) && SelectionTranslator.readsByCopy(bundleId: "com.openai.codex", bundleURL: nil)
-          && SelectionTranslator.readsByCopy(bundleId: "com.todesktop.230313mzl4w4u92", bundleURL: nil) && SelectionTranslator.readsByCopy(bundleId: "com.googlecode.iterm2", bundleURL: nil))
-    check("selection: an ordinary app does not", !SelectionTranslator.readsByCopy(bundleId: "com.apple.Finder", bundleURL: nil))
-    do {
-        let app = FileManager.default.temporaryDirectory.appendingPathComponent("tl-" + UUID().uuidString + ".app")
-        try? FileManager.default.createDirectory(at: app.appendingPathComponent("Contents/Resources"), withIntermediateDirectories: true)
-        check("selection: a plain app is not Electron", !SelectionTranslator.isElectron(bundleURL: app))
-        FileManager.default.createFile(atPath: app.appendingPathComponent("Contents/Resources/app.asar").path, contents: Data())
-        check("selection: app.asar marks Electron even with a renamed framework", SelectionTranslator.isElectron(bundleURL: app))
-        try? FileManager.default.removeItem(at: app)
-    }
     checkEq("selection: other targets are kept", SelectionTranslator.target(for: "Ship it today", preferred: "ja"), "ja")
     checkEq("a rebuilt field: the cursor is found by the text around it", CaretAnchor.locate(before: "你好，", after: "世界", in: "前面的字你好，世界"), 7)
     checkEq("…and in an empty field there is one place", CaretAnchor.locate(before: "", after: "", in: ""), 0)
@@ -899,6 +1008,10 @@ do {
     checkEq("first restart after one second", ServiceLocator.restartDelay(attempt: 1), 1)
     checkEq("restarts back off", ServiceLocator.restartDelay(attempt: 4), 30)
     checkEq("then it gives up and says why", ServiceLocator.restartDelay(attempt: 5), nil)
+    var crashAttempt = 0
+    for _ in 0..<5 { crashAttempt = ServiceLocator.nextRestartAttempt(previous: crashAttempt, readyFor: 2) }
+    checkEq("five short-lived ready processes exhaust the restart allowance", ServiceLocator.restartDelay(attempt: crashAttempt), nil)
+    checkEq("a stable service gets a fresh restart allowance", ServiceLocator.nextRestartAttempt(previous: crashAttempt, readyFor: 60), 1)
 
     let downloading = Data(#"{"ok":false,"service":"typeleast","speech":{"providerId":"sensevoice-local","phase":"downloading","ready":false,"download":{"received":60000000,"total":240000000},"modelBytes":241357257}}"#.utf8)
     let h = try? JSONDecoder().decode(HealthResponse.self, from: downloading)

@@ -70,6 +70,7 @@ final class DictationController {
             pendingTranslate = translateTo
             startRecording()
         // Fn is for dictation only; 提示词模式 has its own key (⌥Space by default).
+        case .starting: cancelDictation()
         case .recording: stopRecording()
         case .thinking: NSSound.beep()
         }
@@ -108,6 +109,7 @@ final class DictationController {
     }
 
     func beginCapture() {
+        guard phase == .idle else { return }
         progressID = UUID()
         copiedSelection = nil
         cancelToast.finish()
@@ -116,22 +118,45 @@ final class DictationController {
         // Contract: frontmost bundle id is captured BEFORE recording starts.
         pendingAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         pendingField = nil
-        let deviceID = AudioDevices.deviceID(forUID: settings.inputDeviceUID)
-        recorder.prepareEngine = { engine in AudioInputSelector.apply(deviceID: deviceID, to: engine) }
+        let inputUID = settings.inputDeviceUID
+        recorder.prepareEngine = { engine in
+            AudioInputSelector.apply(deviceID: AudioDevices.deviceID(forUID: inputUID), to: engine)
+        }
         recorder.maxSeconds = max(5, min(600, settings.maxSeconds))
         recorder.onAutoStop = { [weak self] in self?.stopRecording(auto: true) }
-        do {
-            try recorder.start()
-        } catch {
-            let msg = (error as? RecorderError)?.description ?? error.localizedDescription
-            setHint(msg, warning: true)
-            applyState()
-            return
+        phase = .starting
+        idleBar.hide()
+        recordingBar.showThinking(detail: L10n.text("正在打开麦克风…"))
+        registerEscape()
+        applyState()
+        let token = progressID
+        let openingAt = ProcessInfo.processInfo.systemUptime
+        recorder.startAsync { [weak self] result in
+            guard let self, self.phase == .starting, self.progressID == token else { return }
+            let elapsed = String(Int((ProcessInfo.processInfo.systemUptime - openingAt) * 1000))
+            switch result {
+            case .success:
+                DiagnosticsLog.write("recording.device-ready", ["ms": elapsed])
+                self.captureDidStart()
+            case .failure(let error):
+                DiagnosticsLog.write("recording.device-failed", ["ms": elapsed])
+                self.phase = .idle
+                self.pendingAssistant = false
+                self.pendingTranslate = nil
+                self.unregisterEscape()
+                self.recordingBar.hide()
+                self.setHint((error as? RecorderError)?.description ?? error.localizedDescription, warning: true)
+                self.applyState()
+                self.updateIdleBar()
+            }
         }
+    }
+
+    private func captureDidStart() {
         phase = .recording
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
         if pendingAssistant && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", assistantKeyLabel)) }
-        recordingStartedAt = Date()
+        recordingStartedAt = recorder.startedAt ?? Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
         recordingBar.showRecording(destination: pendingAppBundleId,
@@ -225,6 +250,18 @@ final class DictationController {
 
     func cancelDictation() {
         switch phase {
+        case .starting:
+            progressID = UUID()
+            recorder.cancel()
+            unregisterEscape()
+            phase = .idle
+            pendingAssistant = false
+            pendingTranslate = nil
+            pendingField = nil
+            recordingBar.hide()
+            setHint(nil)
+            applyState()
+            updateIdleBar()
         case .recording:
             unregisterEscape()
             stopTick()

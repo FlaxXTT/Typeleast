@@ -110,6 +110,10 @@ final class MenuController: NSObject, NSMenuDelegate {
             statusLine.title = L10n.text("正在听 ") + format(s.elapsed)
             toggleItem.title = L10n.text("结束听写")
             setIcon("waveform.circle.fill")
+        case .starting:
+            statusLine.title = L10n.text("正在打开麦克风…")
+            toggleItem.title = L10n.text("取消听写")
+            setIcon("mic")
         case .thinking:
             statusLine.title = L10n.text("正在整理…")
             toggleItem.title = L10n.text("正在整理…")
@@ -121,7 +125,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         }
         toggleItem.keyEquivalent = ""
         toggleItem.isEnabled = s.phase != .thinking
-        cancelItem.isHidden = s.phase != .recording
+        cancelItem.isHidden = s.phase != .recording && s.phase != .starting
         pasteItem.title = L10n.text("粘贴上一条") + (s.pasteLastSummary.isEmpty ? "" : "  " + s.pasteLastSummary)
         pasteItem.isEnabled = s.hasLast && s.phase == .idle
         if let hint = s.hint, !hint.isEmpty {

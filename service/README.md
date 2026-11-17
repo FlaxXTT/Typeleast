@@ -43,13 +43,15 @@ npm start
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `timeoutMs` | 12000 | 整理的时限，超时退回原文 |
+| `timeoutMs` | 300000 | 单次模型请求的时限上限；每次整理或翻译任务有 5 分钟总预算，超时退回原文 |
 | `maxOutputTokens` | 800 | 整理结果的长度上限 |
 | `temperature` | 0.8 | 提示词按 0.8 调过 |
 | `strength` | `prompt` | `off` 不调模型；`conservative` / `prompt` / `maximal` 只影响校验的严格程度 |
 | `language` | `auto` | 识别语言：`auto`、`zh`、`en`、`yue`、`ja`、`ko` |
 | `numThreads` | 2 | 识别用的 CPU 线程数 |
 | `redactSecrets` | `true` | 发给模型前抹掉看起来像密钥、密码的内容 |
+
+翻译每批的默认时限为 `max(90000, 原文字符数 × 80)` 毫秒，同时受 `timeoutMs` 和任务剩余时间限制。配置备用服务商不会缩短这一时限；取消请求仍会立即停止等待。事实核对有单独的时限，也计入任务总预算。
 
 模型、接口地址和 API Key **不在**这里配置：App 每次请求时带过来，服务不保存。
 

@@ -399,7 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         selectionTranslator.preferredTarget = { [weak self] in self?.settings.translateTarget ?? "en" }
         selectionTranslator.translate = { [weak self] text, target, done in
             guard let self, let route = self.settings.activeLLMRoute else {
-                return done(.failure(ServiceError.transport(L10n.text("请先配置可用的整理模型。"))))
+                return done(.failure(ServiceError.translationFailed(reason: "no-api-key")))
             }
             let language = self.settings.language, variants = self.settings.variantsHeader, ownPrompt = self.settings.customTranslatePrompt
             DispatchQueue.global(qos: .userInitiated).async {
@@ -410,7 +410,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                     // A failed translation comes back as the original text: say so instead of showing it.
                     case .success(let response) where !response.fallback && !response.insertableText.isEmpty:
                         done(.success(response.insertableText))
-                    case .success: done(.failure(ServiceError.transport(L10n.text("翻译失败"))))
+                    case .success(let response):
+                        DiagnosticsLog.write("translation.fail", ["reason": response.fallbackReason ?? "empty-output"])
+                        done(.failure(ServiceError.translationFailed(reason: response.fallbackReason)))
                     case .failure(let error): done(.failure(error))
                     }
                 }
@@ -424,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// for the system and the microphone stays closed.
     func fnTapped(sourceAtPress: String?) {
         guard phase == .idle else { hotkeyPressed(); return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + FnTapGate.settleSeconds) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + FnTapGate.currentDelay) { [weak self] in
             guard let self = self, self.phase == .idle else { return }
             if FnTapGate.shouldStart(sourceAtPress: sourceAtPress, sourceAfter: InputSourceProbe.currentID()) {
                 self.hotkeyPressed()
