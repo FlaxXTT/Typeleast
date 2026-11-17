@@ -50,6 +50,11 @@ jobs:
         with:
           node-version: 24
       - run: apps/macos/test.sh
+      - name: Check General settings scrolling
+        run: |
+          render_dir="$(mktemp -d /private/tmp/typeleast-settings-render.XXXXXX)"
+          TYPELEAST_HOME="$(mktemp -d /private/tmp/typeleast-settings-home.XXXXXX)" \
+            apps/macos/build/typeleast-tests --settings-scroll-check "$render_dir"
       - name: Render compact recording bar with synthetic audio levels
         run: |
           render_dir="$(mktemp -d /private/tmp/typeleast-pill-render.XXXXXX)"

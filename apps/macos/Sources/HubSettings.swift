@@ -6,13 +6,34 @@ import ServiceManagement
 // options), 模型 (cleanup model, speech model) and 通用 (general, privacy, permissions, updates,
 // and 高级 for the local service and download sources), as titled sections of cards.
 
+/// ServiceManagement may contact a system service. Never query it from a view body
+/// or a Binding getter: SwiftUI can evaluate those repeatedly while laying out rows.
+final class LoginItemStatus: ObservableObject {
+    @Published private(set) var status: SMAppService.Status = .notRegistered
+    private let readStatus: () -> SMAppService.Status
+
+    init(readStatus: @escaping () -> SMAppService.Status = { SMAppService.mainApp.status }) {
+        self.readStatus = readStatus
+    }
+
+    func refresh() {
+        let next = readStatus()
+        if status != next { status = next }
+    }
+}
+
 struct SettingsPage: View {
     @EnvironmentObject var model: AppModel
     @StateObject private var meter = MicMeter()
+    @StateObject private var loginItemStatus: LoginItemStatus
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
 
     private let categories = ["听写", "模型", "通用"]
+
+    init(loginItemStatus: LoginItemStatus = LoginItemStatus()) {
+        _loginItemStatus = StateObject(wrappedValue: loginItemStatus)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,10 +58,18 @@ struct SettingsPage: View {
             }
             .id(model.settingsCategory)
         }
-        .onChange(of: model.settingsCategory) { _ in meter.stop() }
+        .onChange(of: model.settingsCategory) { _ in
+            meter.stop()
+            refreshLoginStatus()
+        }
         .onAppear {
             devices = AudioDevices.inputs()
             model.refreshPermissions()
+            refreshLoginStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Reflect changes made in System Settings when the user returns.
+            refreshLoginStatus()
         }
         .onDisappear { meter.stop() }
     }
@@ -173,7 +202,7 @@ struct SettingsPage: View {
                     .frame(width: 220)
             }
             ToggleRow(title: L10n.text("开机启动"), detail: loginDetail,
-                      isOn: Binding(get: { SMAppService.mainApp.status == .enabled }, set: { setLogin($0) }))
+                      isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
             ToggleRow(title: L10n.text("在 Dock 中显示"), detail: nil,
                       isOn: model.setting(\.showInDock, then: { model.actions?.applyGeneralSettings() }))
             ToggleRow(title: L10n.text("显示语音条"), detail: nil,
@@ -262,8 +291,12 @@ struct SettingsPage: View {
     private var loginDetail: String {
         if !loginError.isEmpty { return loginError }
         // Switched off under System Settings → Login Items: only the user can allow it again there.
-        if SMAppService.mainApp.status == .requiresApproval { return L10n.text("请在「系统设置 → 通用 → 登录项」允许 TypeLeast") }
+        if loginItemStatus.status == .requiresApproval { return L10n.text("请在「系统设置 → 通用 → 登录项」允许 TypeLeast") }
         return ""
+    }
+
+    private func refreshLoginStatus() {
+        if model.settingsCategory == 2 { loginItemStatus.refresh() }
     }
 
     private func setLogin(_ on: Bool) {
@@ -274,12 +307,12 @@ struct SettingsPage: View {
         } catch {
             loginError = L10n.text("无法修改：") + error.localizedDescription
         }
+        loginItemStatus.refresh()
         // Registering again does not undo the user's switch in System Settings: send them there.
-        if on, SMAppService.mainApp.status == .requiresApproval {
+        if on, loginItemStatus.status == .requiresApproval {
             loginError = ""
             SMAppService.openSystemSettingsLoginItems()
         }
-        model.objectWillChange.send()
     }
 }
 
