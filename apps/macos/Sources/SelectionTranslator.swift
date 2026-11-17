@@ -26,22 +26,44 @@ final class SelectionTranslator {
     private var monitors: [Any] = []
     private var activationObserver: NSObjectProtocol?
     private var dragged = false
+    private var dragOrigin = NSPoint.zero
+    private var lastKeyTime = -Double.infinity
     private let dot = SelectionPanel()
     private let bubble = SelectionPanel()
     private var hideTimer: Timer?
     private var offerToken = 0
     private var runToken = 0
     private var sourceCount: String?
+    private var offerActive = false
+    private let selectionQueue = DispatchQueue(label: "typeleast.translation.selection", qos: .utility)
+    private var readingSelection = false
+    private struct SelectionRead {
+        let pid: pid_t
+        let token: Int
+        let completion: (String?) -> Void
+    }
+    private var pendingRead: SelectionRead?
 
     func start() {
         guard monitors.isEmpty else { return }
         let events: [(NSEvent.EventTypeMask, (NSEvent) -> Void)] = [
             // A click elsewhere or typing withdraws the dot; the translation stays until its × is clicked.
-            (.leftMouseDown, { [weak self] _ in self?.dragged = false; self?.hideOffer() }),
-            (.leftMouseDragged, { [weak self] _ in self?.dragged = true }),
+            (.leftMouseDown, { [weak self] _ in
+                self?.dragged = false
+                self?.dragOrigin = NSEvent.mouseLocation
+                self?.hideOffer()
+            }),
+            (.leftMouseDragged, { [weak self] _ in
+                guard let self, !self.dragged else { return }
+                let point = NSEvent.mouseLocation
+                self.dragged = hypot(point.x - self.dragOrigin.x, point.y - self.dragOrigin.y) >= 5
+            }),
             (.leftMouseUp, { [weak self] event in self?.mouseUp(event) }),
             // Shortcuts can also clear or replace the selection.
-            (.keyDown, { [weak self] _ in self?.hideOffer() }),
+            (.keyDown, { [weak self] event in
+                self?.lastKeyTime = event.timestamp
+                self?.hideOffer()
+            }),
         ]
         for (mask, handler) in events {
             if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler) { monitors.append(monitor) }
@@ -65,7 +87,11 @@ final class SelectionTranslator {
     }
 
     private func hideOffer() {
-        offerToken += 1
+        // Typing cancels pending reads without touching AppKit/WindowServer when hidden.
+        offerToken &+= 1
+        pendingRead = nil
+        guard offerActive else { return }
+        offerActive = false
         hideTimer?.invalidate()
         hideTimer = nil
         dot.hide()
@@ -80,36 +106,70 @@ final class SelectionTranslator {
         // A drag or repeated click may select text; confirm the actual selection below.
         let selecting = dragged || event.clickCount >= 2
         dragged = false
-        guard selecting, enabled(), AXIsProcessTrusted(),
+        guard selecting, event.timestamp - lastKeyTime >= 0.25, enabled(),
               let app = NSWorkspace.shared.frontmostApplication, let bundle = app.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier, !FieldContextReader.isBlocked(bundleId: bundle) else { return }
         let point = NSEvent.mouseLocation
-        // The first time, a browser or Electron app (Claude, VS Code, Slack…) builds its
-        // Accessibility tree only now: give it longer than the usual moment.
-        let fresh = FieldContextReader.exposeContent(bundleId: bundle)
+        let pid = app.processIdentifier
+        offerActive = true
         let token = offerToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + (fresh ? 0.6 : 0.15)) { [weak self] in
-            guard let self, self.offerToken == token, self.enabled(), AXIsProcessTrusted(),
-                  NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle,
-                  let text = SelectionTranslator.selectedText(), DictationController.hasText(text) else { return }
-            self.offer(at: point, text: text, bundleId: bundle)
+        // Passive offers never force another app to build its full accessibility tree.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, self.offerActive, self.offerToken == token else { return }
+            guard self.enabled(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+                self.hideOffer(); return
+            }
+            self.readSelection(pid: pid, token: token) { [weak self] text in
+                guard let self, self.offerActive, self.offerToken == token else { return }
+                guard self.enabled(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+                      let text else { self.hideOffer(); return }
+                self.offer(at: point, text: text, pid: pid)
+            }
+        }
+    }
+
+    private func readSelection(pid: pid_t, token: Int, completion: @escaping (String?) -> Void) {
+        pendingRead = SelectionRead(pid: pid, token: token, completion: completion)
+        readNextSelection()
+    }
+
+    private func readNextSelection() {
+        guard !readingSelection, let request = pendingRead else { return }
+        pendingRead = nil
+        readingSelection = true
+        selectionQueue.async { [weak self] in
+            let text = Self.selectedText(in: request.pid)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.readingSelection = false
+                if self.offerToken == request.token { request.completion(text) }
+                self.readNextSelection()
+            }
         }
     }
 
     /// The focused element's selected text; nil when it cannot be read, and for password fields.
     static func selectedText() -> String? {
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 0.25)
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        return selectedText(in: app.processIdentifier)
+    }
+
+    private static func selectedText(in pid: pid_t) -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.08)
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
         let element = focused as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.08)
         var subrole: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
            (subrole as? String) == (kAXSecureTextFieldSubrole as String) { return nil }
         var selected: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selected) == .success else { return nil }
-        return selected as? String
+        guard let text = selected as? String, DictationController.hasText(text) else { return nil }
+        return text
     }
 
     /// Translations go to the target set for 翻译, except that text already in that language
@@ -124,8 +184,7 @@ final class SelectionTranslator {
         return alreadyTarget ? "zh" : preferred
     }
 
-    private func offer(at point: NSPoint, text: String, bundleId: String) {
-        hideOffer()
+    private func offer(at point: NSPoint, text: String, pid: pid_t) {
         let token = offerToken
         dot.showDot(at: point, hoverChanged: { [weak self] hovering in
             guard let self, self.offerToken == token else { return }
@@ -140,13 +199,18 @@ final class SelectionTranslator {
             self.hideOffer()
             // A non-activating button keeps the source focused. Recheck it so a
             // changed or cleared selection can never translate captured stale text.
-            guard self.enabled(), AXIsProcessTrusted(),
-                  NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleId,
-                  Self.selectedText() == text else { return }
-            self.runToken += 1
-            let run = self.runToken
-            self.sourceCount = nil
-            self.run(String(text.prefix(SelectionTranslator.limit)), token: run, at: point)
+            guard self.enabled(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+            self.offerActive = true
+            let validationToken = self.offerToken
+            self.readSelection(pid: pid, token: validationToken) { [weak self] selected in
+                guard let self, self.offerActive, self.offerToken == validationToken else { return }
+                self.offerActive = false
+                guard self.enabled(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+                      selected == text else { return }
+                self.runToken &+= 1
+                self.sourceCount = nil
+                self.run(String(text.prefix(SelectionTranslator.limit)), token: self.runToken, at: point)
+            }
         }
         scheduleOfferDismissal(token: token)
     }
@@ -202,7 +266,9 @@ final class SelectionPanel {
         override var canBecomeMain: Bool { false }
     }
 
-    private lazy var panel: Panel = {
+    private var existingPanel: Panel?
+    private var panel: Panel {
+        if let existingPanel { return existingPanel }
         let p = Panel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isFloatingPanel = true
         p.level = .popUpMenu
@@ -212,8 +278,9 @@ final class SelectionPanel {
         p.isOpaque = false
         p.hasShadow = true
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        existingPanel = p
         return p
-    }()
+    }
     private var anchor = NSPoint.zero
     private var dragOffset: NSPoint?
 
@@ -235,7 +302,9 @@ final class SelectionPanel {
     }
 
     func hide() {
-        panel.orderOut(nil)
+        guard let panel = existingPanel else { return }
+        if panel.isVisible { panel.orderOut(nil) }
+        guard panel.contentView != nil else { return }
         panel.contentView = nil
     }
 
@@ -325,7 +394,7 @@ struct SelectionBubbleView: View {
             switch state {
             case .loading:
                 HStack(spacing: 8) {
-                    TranslationSunset(working: true)
+                    LoadingCircularProgress(size: 20, color: Theme.ink)
                     Text(L10n.text("正在翻译…")).font(.system(size: 14))
                 }
             case .done(let text):
