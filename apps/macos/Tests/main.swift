@@ -34,6 +34,14 @@ func checkEq<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     check(name, got == want, "got=" + String(describing: got) + " want=" + String(describing: want))
 }
 
+if let index = CommandLine.arguments.firstIndex(of: "--settings-scroll-check"), CommandLine.arguments.count > index + 1 {
+    let output = CommandLine.arguments[index + 1]
+    guard output.hasPrefix("/private/tmp/"), let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"], home.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
+    try settingsScrollTests(output: output)
+    print("SETTINGS SCROLL: \(passed) passed, \(failed) failed")
+    exit(failed == 0 ? 0 : 1)
+}
+
 // Isolated visual regression fixture. It never loads the daily history or opens a service.
 if let index = CommandLine.arguments.firstIndex(of:"--unified-ui-render"), CommandLine.arguments.count > index+1 {
     let output = CommandLine.arguments[index+1]
@@ -2124,6 +2132,7 @@ do {
 
 contextPreferencesTests()
 meetingTests()
+performanceRegressionTests()
 
 server.stop()
 print("")

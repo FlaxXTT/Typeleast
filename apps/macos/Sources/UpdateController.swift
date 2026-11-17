@@ -6,6 +6,15 @@ import AppKit
 // not depend on the rest of AppDelegate.
 
 final class UpdateController {
+    static func blockingReason(practiceBusy: Bool, phase: AppPhase, promptPending: Bool,
+                               meetingBusy: Bool) -> (title: String, text: String)? {
+        if practiceBusy { return (L10n.text("正在练习"), L10n.text("练习结束后再更新。")) }
+        if phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
+        if promptPending { return (L10n.text("提示词模式 未结束"), L10n.text("更新前，请先生成或取消提示词模式。")) }
+        if meetingBusy { return (L10n.text("会议"), L10n.text("会议结束后再更新。")) }
+        return nil
+    }
+
     struct Host {
         /// Why an update cannot start now (dictating, Prompt Beta open), or nil.
         let busyReason: () -> (title: String, text: String)?
@@ -105,6 +114,14 @@ final class UpdateController {
                 guard let self else { return }
                 switch result {
                 case .success(let ready):
+                    // Recording may have started while the archive downloaded.
+                    if let reason = self.host.busyReason() {
+                        self.host.setHint(nil)
+                        self.progress.close()
+                        try? FileManager.default.removeItem(at: ready.work)
+                        self.alert(reason.title, reason.text)
+                        return
+                    }
                     do {
                         try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
                                                      newApp: ready.app, installed: Bundle.main.bundleURL, work: ready.work)

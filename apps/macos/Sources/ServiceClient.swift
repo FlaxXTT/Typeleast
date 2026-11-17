@@ -87,7 +87,7 @@ struct SpeechModelOperation: Codable, Equatable {
         }
     }
 }
-struct SpeechModelOption: Codable, Identifiable {
+struct SpeechModelOption: Codable, Equatable, Identifiable {
     var id: String
     var name: String
     var modelBytes: Double
@@ -101,7 +101,7 @@ struct SpeechModelOption: Codable, Identifiable {
     var registered: Bool?
     var downloadable: Bool?
 }
-struct SpeechStorageItem: Codable, Identifiable {
+struct SpeechStorageItem: Codable, Equatable, Identifiable {
     var id: String
     var name: String
     var bytes: Double
@@ -110,7 +110,7 @@ struct SpeechStorageItem: Codable, Identifiable {
     var legacy: Bool
 }
 
-struct SpeechModelCatalog: Codable {
+struct SpeechModelCatalog: Codable, Equatable {
     var activeModelId: String
     var models: [SpeechModelOption]
     var storage: [SpeechStorageItem]?

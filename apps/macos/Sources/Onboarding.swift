@@ -55,6 +55,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         practice.acceptsShortcut = false
         practice.cancel()
         model.refreshPermissions()
+        // A retained hosting view keeps its autoconnected permission timer alive.
+        window?.contentViewController = nil
+        window = nil
     }
 }
 
@@ -83,7 +86,9 @@ struct OnboardingView: View {
         }
         .frame(width: 600, height: 560)
         .background(Theme.window)
-        .onReceive(poll) { _ in model.refreshPermissions() }
+        .onReceive(poll) { _ in
+            if step == .microphone || step == .accessibility { model.refreshPermissions() }
+        }
         .onDisappear { meter.stop(); practice.cancel() }
     }
 

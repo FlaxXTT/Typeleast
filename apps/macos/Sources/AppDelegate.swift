@@ -23,11 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     lazy var updates = UpdateController(host: .init(
         busyReason: { [weak self] in
             guard let self else { return nil }
-            if self.onboarding.practice.busy { return (L10n.text("正在练习"), L10n.text("练习结束后再更新。")) }
-            if self.phase != .idle { return (L10n.text("正在听写"), L10n.text("听写结束后再更新。")) }
-            // Restarting would drop the questions and the answers given so far.
-            if self.betaPending != nil { return (L10n.text("提示词模式 未结束"), L10n.text("更新前，请先生成或取消提示词模式。")) }
-            return nil
+            return UpdateController.blockingReason(practiceBusy: self.onboarding.practice.busy,
+                phase: self.phase, promptPending: self.betaPending != nil, meetingBusy: self.model.meeting.busy)
         },
         setHint: { [weak self] in self?.setHint($0) },
         showAvailable: { [weak self] in self?.menuController.setUpdateAvailable($0) },
@@ -76,7 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// failed check at launch (the service still starting) is never final.
     var healthRetryTimer: Timer?
     /// Polls quickly while the speech model loads or downloads, for the progress bar.
-    var progressPollScheduled = false
+    private var progressPoll: DispatchWorkItem?
+    private let healthRefresh = CoalescingRefresh<(HealthResponse, SpeechModelCatalog?)>()
 
     // MARK: lifecycle
 
@@ -512,15 +510,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         s.hint = hint
         s.hintWarning = hintWarning
         s.serviceUp = serviceUp
-        s.accessibilityTrusted = AXIsProcessTrusted()
+        // Permission refresh happens at activation, window entry and explicit
+        // permission actions, not on the recording timer's menu redraws.
+        s.accessibilityTrusted = model.accessibilityTrusted
         s.hotkeySummary = model.hotkeyLabel
         let paste = settings.hotkeyPasteLast
         s.pasteLastSummary = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
         s.hasLast = HistoryStore.shared.last != nil
         menuController.apply(s)
-        if model.accessibilityTrusted != s.accessibilityTrusted {
-            model.accessibilityTrusted = s.accessibilityTrusted
-        }
     }
 
     func setHint(_ text: String?, warning: Bool = false) {
@@ -552,41 +549,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func refreshHealth() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            do {
-                let h = try self.client.healthSync()
-                let catalog = try? self.client.speechModelsSync()
-                DispatchQueue.main.async {
-                    self.serviceUp = h.ok
-                    if h.ok { self.refreshProfileOnce() }
-                    self.model.health = h
-                    self.model.speechCatalog = catalog
-                    self.model.serviceProblem = AppDelegate.speechProblem(h.speech)
-                    if h.ok, let hint = self.hint, hint.contains(L10n.text("语音模型")) { self.setHint(nil) }
-                    self.applyState()
-                    // While the model loads or downloads, follow its progress.
-                    let phase = h.speech?.phase ?? ""
-                    if (phase == "loading" || phase == "downloading" || h.speech?.operation?.running == true) && !self.progressPollScheduled {
-                        self.progressPollScheduled = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                            self.progressPollScheduled = false
-                            self.refreshHealth()
+        healthRefresh.request(work: { [client] in
+            let health = try client.healthSync()
+            return (health, try? client.speechModelsSync())
+        }) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let (h, catalog)):
+                if self.serviceUp != h.ok { self.serviceUp = h.ok }
+                if h.ok { self.refreshProfileOnce() }
+                if self.model.health != h { self.model.health = h }
+                if self.model.speechCatalog != catalog { self.model.speechCatalog = catalog }
+                let problem = AppDelegate.speechProblem(h.speech)
+                if self.model.serviceProblem != problem { self.model.serviceProblem = problem }
+                if h.ok, let hint = self.hint, hint.contains(L10n.text("语音模型")) { self.setHint(nil) }
+                self.applyState()
+                // While the model loads or downloads, follow its progress.
+                let phase = h.speech?.phase ?? ""
+                if phase == "loading" || phase == "downloading" || h.speech?.operation?.running == true {
+                    if self.progressPoll == nil {
+                        let poll = DispatchWorkItem { [weak self] in
+                            self?.progressPoll = nil
+                            self?.refreshHealth()
                         }
+                        self.progressPoll = poll
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: poll)
                     }
+                } else {
+                    self.progressPoll?.cancel()
+                    self.progressPoll = nil
                 }
-            } catch {
+            case .failure(let error):
                 let desc = (error as? ServiceError)?.description ?? error.localizedDescription
                 DiagnosticsLog.write("health.fail", ["error": desc, "url": self.client.baseURL.absoluteString])
-                DispatchQueue.main.async {
-                    self.serviceUp = false
-                    self.model.health = nil
-                    self.model.serviceProblem = self.model.serviceSummary
-                    self.applyState()
-                    self.scheduleHealthRetry()
-                }
+                self.serviceUp = false
+                self.model.health = nil
+                self.model.speechCatalog = nil
+                self.model.serviceProblem = self.model.serviceSummary
+                self.progressPoll?.cancel()
+                self.progressPoll = nil
+                self.applyState()
+                self.scheduleHealthRetry()
             }
         }
+    }
+
+    private func invalidateHealthRefresh() {
+        healthRefresh.invalidate()
+        progressPoll?.cancel()
+        progressPoll = nil
+        if serviceUp { serviceUp = false }
+        if model.health != nil { model.health = nil }
+        if model.speechCatalog != nil { model.speechCatalog = nil }
     }
 
     /// What to tell the user about the recogniser, or "" when it is ready.
@@ -610,6 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         manager.modelMirror = settings.modelMirror
         manager.onChange = { [weak self] state in
             guard let self = self else { return }
+            if !state.isRunning { self.invalidateHealthRefresh() }
             self.model.serviceState = state
             self.model.nodeDescription = manager.node.map { $0.version + " · " + $0.path } ?? ""
             if case .running = state { self.refreshHealth() } else { self.model.serviceProblem = self.model.serviceSummary }
@@ -619,10 +634,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func restartService() {
+        invalidateHealthRefresh()
         let manager = ServiceManager.shared
         manager.nodePathOverride = settings.nodePath
         manager.modelMirror = settings.modelMirror
-        serviceUp = false
         setHint(L10n.text("正在重启本地服务…"))
         manager.restart()
         applyState()

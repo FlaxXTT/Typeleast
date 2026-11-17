@@ -54,10 +54,7 @@ enum Formatters {
     }
 
     static func number(_ value: Int) -> String {
-        let f = NumberFormatter()
-        f.locale = L10n.locale
-        f.numberStyle = .decimal
-        return f.string(from: NSNumber(value: value)) ?? String(value)
+        L10n.formattedNumber(NSNumber(value: value))
     }
 
     static func duration(_ seconds: Double) -> (String, String) {

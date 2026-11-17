@@ -15,32 +15,45 @@ enum L10n {
     }
     static var language = resolve(UserDefaults.standard.string(forKey: preferenceKey))
     static var locale: Locale { Locale(identifier: language == "en" ? "en_US" : "zh_CN") }
+    private static let slots = try! NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
+    private static let englishNumbers = numberFormatter(locale: "en_US")
+    private static let chineseNumbers = numberFormatter(locale: "zh_CN")
+
+    private static func numberFormatter(locale: String) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: locale)
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 3
+        return formatter
+    }
+
+    static func formattedNumber(_ value: NSNumber, language selected: String? = nil) -> String {
+        let formatter = (selected ?? language) == "en" ? englishNumbers : chineseNumbers
+        return formatter.string(from: value) ?? value.stringValue
+    }
     static func text(_ key: String, _ arguments: Any...) -> String {
         render(key, arguments: arguments)
     }
     static func render(_ key: String, arguments: [Any], language selected: String? = nil) -> String {
         let current = selected ?? language
         let template = current == "en" ? (english[key] ?? key) : key
+        guard !arguments.isEmpty else { return template }
         // Replace all slots in a single pass so user text containing {1} stays verbatim.
-        let pattern = try! NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
         var result = template
         let ns = template as NSString
-        for match in pattern.matches(in: template, range: NSRange(location: 0, length: ns.length)).reversed() {
-            let index = Int(ns.substring(with: match.range(at: 1)))!
-            guard arguments.indices.contains(index), let range = Range(match.range, in: result) else { continue }
+        for match in slots.matches(in: template, range: NSRange(location: 0, length: ns.length)).reversed() {
+            guard let index = Int(ns.substring(with: match.range(at: 1))),
+                  arguments.indices.contains(index), let range = Range(match.range, in: result) else { continue }
             let value: String
             if let number = arguments[index] as? NSNumber {
-                let formatter = NumberFormatter()
-                formatter.locale = Locale(identifier: current == "en" ? "en_US" : "zh_CN")
-                formatter.numberStyle = .decimal
-                formatter.maximumFractionDigits = 3
-                value = formatter.string(from: number) ?? number.stringValue
+                value = formattedNumber(number, language: current)
             } else { value = String(describing: arguments[index]) }
             result.replaceSubrange(range, with: value)
         }
         return result
     }
     static let english: [String: String] = [
+        "会议结束后再更新。": "Finish the meeting recording or transcription before updating.",
         "正在打开麦克风…": "Opening microphone…",
         "当前麦克风": "Current microphone",
         "整理结果（可编辑）": "Cleaned text (editable)",
