@@ -14,13 +14,14 @@ on:
           - all
           - update-identity
           - signing-readiness
+          - macos-settings
 
 permissions:
   contents: read
 
 jobs:
   service:
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all'
     name: Service tests (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -41,7 +42,7 @@ jobs:
       - run: node scripts/check-localization.mjs
 
   macos:
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all' || inputs.scope == 'macos-settings'
     name: macOS app (tests and build)
     runs-on: macos-latest
     steps:
@@ -53,24 +54,36 @@ jobs:
       - name: Check General settings scrolling
         run: |
           render_dir="$(mktemp -d /private/tmp/typeleast-settings-render.XXXXXX)"
+          echo "TYPELEAST_SETTINGS_RENDER=$render_dir" >> "$GITHUB_ENV"
           TYPELEAST_HOME="$(mktemp -d /private/tmp/typeleast-settings-home.XXXXXX)" \
             apps/macos/build/typeleast-tests --settings-scroll-check "$render_dir"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-settings-scroll
+          path: ${{ env.TYPELEAST_SETTINGS_RENDER }}/*.png
+          if-no-files-found: warn
       - name: Render compact recording bar with synthetic audio levels
+        if: inputs.scope == 'all'
         run: |
           render_dir="$(mktemp -d /private/tmp/typeleast-pill-render.XXXXXX)"
           apps/macos/build/typeleast-tests --pill-ui-render "$render_dir"
           echo "TYPELEAST_PILL_RENDER=$render_dir" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
+        if: inputs.scope == 'all'
         with:
           name: macos-recording-bar
           path: ${{ env.TYPELEAST_PILL_RENDER }}/*.png
           if-no-files-found: error
       - run: bash apps/macos/Tests/package-names.sh
+        if: inputs.scope == 'all'
       - run: bash apps/macos/Tests/build-mlx.sh
+        if: inputs.scope == 'all'
       - run: apps/macos/build.sh --no-install
+        if: inputs.scope == 'all'
 
   speech-models-onnx:
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all'
     name: Real ASR models (${{ matrix.os }})
     timeout-minutes: 120
     strategy:
@@ -98,7 +111,7 @@ jobs:
         run: node scripts/check-asr-models.mjs --download --allow-resource-skip --models-dir "${{ runner.temp }}/typeleast-asr-models" --state-dir "${{ runner.temp }}/typeleast-asr-state"
 
   speech-models-mlx:
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all'
     name: MLX worker tests and build (macOS)
     runs-on: macos-latest
     timeout-minutes: 120
@@ -117,7 +130,7 @@ jobs:
           echo 'Real Fun-ASR and Qwen model loading and short recognition were tested separately on an Apple Silicon Mac; the cloud runner result does not replace that evidence.' >> "$GITHUB_STEP_SUMMARY"
 
   macos-update-identity:
-    if: inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all' || inputs.scope == 'update-identity'
     name: macOS update identity and Keychain
     runs-on: macos-latest
     timeout-minutes: 5
@@ -126,7 +139,7 @@ jobs:
       - run: bash apps/macos/Tests/update-identity.sh
 
   windows:
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all'
     name: Windows app (tests and build)
     runs-on: windows-latest
     defaults:
@@ -141,7 +154,7 @@ jobs:
       - run: dotnet build TypeLeast/TypeLeast.csproj -c Release
 
   windows-render:
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness'
+    if: inputs.scope == 'all'
     name: Windows UI renders (design review)
     runs-on: windows-latest
     steps:
@@ -163,7 +176,7 @@ jobs:
 
   release-package-macos:
     name: Release package (macOS)
-    if: inputs.scope != 'update-identity' && inputs.scope != 'signing-readiness' && startsWith(github.ref, 'refs/heads/release/')
+    if: inputs.scope == 'all' && startsWith(github.ref, 'refs/heads/release/')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
