@@ -255,6 +255,8 @@ final class SelectionPanel {
         let left = panel.frame.minX
         panel.contentView = host
         panel.setContentSize(size)
+        AppWindowStyle.fixSize(panel, to: size)
+        AppWindowStyle.round(panel)
         if let top {
             panel.setFrameOrigin(NSPoint(x: left, y: top - size.height))
         } else {
@@ -348,12 +350,11 @@ struct SelectionBubbleView: View {
                 }
             }
         }
-        .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 14)
-        .frame(width: 360, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(nsColor: .windowBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.primary.opacity(0.1)))
+        .padding(40)
+        .frame(width: 350, height: 500, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color(nsColor: .windowBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.primary.opacity(0.1)))
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
-        .padding(4)
     }
 }

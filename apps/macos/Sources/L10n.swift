@@ -53,6 +53,7 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "错误": "Error",
         "洞察": "Insights",
         "快捷听写": "Quick dictation",
         "管理模型": "Manage models",

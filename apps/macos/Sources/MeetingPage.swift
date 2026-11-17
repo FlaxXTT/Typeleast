@@ -74,7 +74,7 @@ private struct MeetingModelCard: View {
     @EnvironmentObject var meeting: MeetingController
 
     var body: some View {
-        Card(padding: 14) {
+        Card(padding: 32) {
             HStack(spacing: 12) {
                 Text(L10n.text("转写用 MOSS 模型，需要下载 0.65 GB。听写模型不变。")).font(.system(size: 13))
                 Spacer()
@@ -96,7 +96,7 @@ private struct MeetingControls: View {
     private var limit: Int { MeetingLimits.maxSeconds / 60 }
 
     var body: some View {
-        Card(padding: 14) {
+        Card(padding: 32) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
                     switch meeting.stage {

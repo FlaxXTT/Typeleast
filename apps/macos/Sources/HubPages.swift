@@ -112,8 +112,8 @@ private struct HeroCard: View {
             Button(model.phase == .starting ? L10n.text("取消听写") : model.phase == .recording ? L10n.text("结束听写") : L10n.text("试一下")) { model.actions?.toggleDictation() }
                 .buttonStyle(PrimaryButtonStyle()).disabled(model.phase == .thinking)
         }
-        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+        .padding(32).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
     }
 }
 
@@ -221,8 +221,8 @@ private struct RecentCard: View {
                 Text(L10n.text("没有听写记录。按 {0} 说一句。", model.hotkeyLabel))
                         .font(.system(size: 13))
                         .foregroundColor(Theme.homeLabel)
-                        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+                        .padding(32).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
             } else {
                 VStack(spacing: 0) {
                     ForEach(model.history.prefix(4)) { entry in
@@ -230,8 +230,9 @@ private struct RecentCard: View {
                         if entry.id != model.history.prefix(4).last?.id { Divider().padding(.leading, 66) }
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
-                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .padding(24)
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))
             }
         }
     }
@@ -256,8 +257,8 @@ private struct EngineCard: View {
                     model.page = .settings
                 }.buttonStyle(.plain).font(.system(size: 12)).foregroundColor(Theme.accent).hoverInteraction()
             }
-            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Theme.tile))
+            .padding(32).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
     }
 }
 
@@ -412,13 +413,16 @@ struct HistoryPage: View {
                                         topLeadingRadius: first ? Theme.radius : 0,
                                         bottomLeadingRadius: last ? Theme.radius : 0,
                                         bottomTrailingRadius: last ? Theme.radius : 0,
-                                        topTrailingRadius: first ? Theme.radius : 0, style: .continuous)
+                                        topTrailingRadius: first ? Theme.radius : 0, style: .circular)
                                     VStack(spacing: 0) {
                                         HistoryRow(entry: entry, compact: false, selected: model.selectedHistoryID == entry.id) {
                                             model.selectedHistoryID = entry.id
                                         }
                                         if !last { Divider().padding(.leading, 66) }
                                     }
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, first ? 32 : 0)
+                                    .padding(.bottom, last ? 32 : 0)
                                     .background(card.fill(Theme.card))
                                     .clipShape(card)
                                 }
@@ -601,7 +605,7 @@ private struct HistoryDetail: View {
                 Text(L10n.text("记录详情")).font(.system(size: 14, weight: .semibold))
                 Spacer()
                 IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
-            }.padding(24)
+            }.padding(40)
             Divider().overlay(Theme.border)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -617,7 +621,7 @@ private struct HistoryDetail: View {
                         detailText(L10n.text("待核对整理结果"), review.candidate)
                     }
                 }
-                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(40).frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider().overlay(Theme.border)
             HStack {
@@ -630,9 +634,10 @@ private struct HistoryDetail: View {
                 IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) {
                     model.actions?.deleteEntry(id: entry.id)
                 }
-            }.padding(24)
+            }.padding(40)
         }
         .foregroundColor(Theme.ink)
+        .background(RoundedWindowMarker()).buttonBorderShape(.capsule)
         .onExitCommand(perform: close)
     }
 

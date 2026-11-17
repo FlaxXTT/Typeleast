@@ -29,10 +29,13 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             w.titlebarAppearsTransparent = true
             w.titleVisibility = .hidden
             w.isMovableByWindowBackground = true
-            w.setContentSize(NSSize(width: 600, height: 560))
+            let size = NSSize(width: 940, height: 610)
+            w.setContentSize(size)
+            AppWindowStyle.fixSize(w, to: size)
             w.isReleasedWhenClosed = false
             w.center()
             w.delegate = self
+            AppWindowStyle.round(w)
             window = w
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -84,7 +87,7 @@ struct OnboardingView: View {
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
             footer.padding(.horizontal, 40).padding(.bottom, 28)
         }
-        .frame(width: 600, height: 560)
+        .frame(width: 940, height: 610)
         .background(Theme.window)
         .onReceive(poll) { _ in
             if step == .microphone || step == .accessibility { model.refreshPermissions() }
@@ -95,7 +98,7 @@ struct OnboardingView: View {
     private var progress: some View {
         HStack(spacing: 6) {
             ForEach(OnboardingStep.allCases, id: \.rawValue) { s in
-                Capsule(style: .continuous)
+                Capsule(style: .circular)
                     .fill(s.rawValue <= step.rawValue ? Theme.ink : Theme.border)
                     .frame(width: s == step ? 22 : 8, height: 6)
             }
@@ -332,7 +335,7 @@ private struct TranslatePracticeView: View {
             Text(practice.translateSample)
                 .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
             Button(practice.phase == .recording ? L10n.text("停止并翻译") : L10n.text("开始录音")) { practice.toggle() }
                 .buttonStyle(PrimaryButtonStyle()).disabled(practice.phase == .thinking)
             if !practice.status.isEmpty {
@@ -340,8 +343,8 @@ private struct TranslatePracticeView: View {
             }
             if !practice.output.isEmpty {
                 Text(practice.output).font(.system(size: 14)).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(14)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(32)
+                    .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.card))
             }
         }
         .onAppear { practice.translateTo = model.settings.translateTarget; practice.acceptsShortcut = true; practice.reset() }

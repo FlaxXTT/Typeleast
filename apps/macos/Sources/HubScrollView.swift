@@ -120,7 +120,7 @@ private final class HubScrollChrome: NSView {
         topButton.target = self
         topButton.action = #selector(backToTop)
         topButton.wantsLayer = true
-        topButton.layer?.cornerRadius = 8
+        topButton.layer?.cornerRadius = 16 // min(99, 32 / 2)
         topButton.isHidden = true
         addSubview(topButton)
     }

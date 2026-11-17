@@ -57,7 +57,7 @@ struct HubCommandPalette: View {
                     .frame(maxWidth: .infinity).frame(height: 24)
                 Button { dismiss() } label: { Keycap(label: "esc") }.buttonStyle(.plain)
             }
-            .padding(20)
+            .padding(.horizontal, 40).padding(.vertical, 32)
             Divider().overlay(Theme.border)
             ScrollViewReader { scroll in
                 ScrollView {
@@ -78,7 +78,7 @@ struct HubCommandPalette: View {
                                     if selected == index { Image(systemName: "return").foregroundColor(Theme.tertiary) }
                                 }
                                 .foregroundColor(Theme.ink).padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(selected == index ? Theme.selection : .clear))
+                                .background(RoundedRectangle(cornerRadius: Theme.radius).fill(selected == index ? Theme.selection : .clear))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain).id(index)
@@ -94,10 +94,11 @@ struct HubCommandPalette: View {
                 Spacer()
                 Text("⌘K")
             }
-            .font(.system(size: 11)).foregroundColor(Theme.tertiary).padding(12)
+            .font(.system(size: 11)).foregroundColor(Theme.tertiary).padding(.horizontal, 40).padding(.vertical, 24)
         }
         .frame(width: 560, height: 420)
         .background(Theme.window).foregroundColor(Theme.ink)
+        .background(RoundedWindowMarker()).buttonBorderShape(.capsule)
         .onChange(of: query) { _, _ in selected = 0 }
         .onMoveCommand { direction in
             switch direction {

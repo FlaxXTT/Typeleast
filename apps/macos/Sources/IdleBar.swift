@@ -11,8 +11,18 @@ import SwiftUI
 final class IdleBarView: NSView {
     var onClick: (() -> Void)?
     var hint = L10n.text("按 fn 听写")
+    var countdown: String? {
+        didSet {
+            if let panel = window as? IdleBarPanel, panel.countdownVisible != (countdown != nil) {
+                panel.countdownVisible = countdown != nil
+                panel.setExpansion(expansion, animated: true)
+            }
+            needsDisplay = true
+        }
+    }
     private(set) var hovering = false
     private var expansion: CGFloat = 0
+    private var opacityProgress: CGFloat = 0
     private var tracking: NSTrackingArea?
     private var animationTimer: Timer?
     private var delayedExit: DispatchWorkItem?
@@ -20,6 +30,7 @@ final class IdleBarView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         appearance = VoiceBarPalette.appearance
+        layerContentsRedrawPolicy = .duringViewResize
     }
 
     required init?(coder: NSCoder) {
@@ -86,11 +97,13 @@ final class IdleBarView: NSView {
         delayedExit?.cancel()
         delayedExit = nil
         hovering = false
+        opacityProgress = 0
         updateExpansion(0)
     }
 
     private func updateExpansion(_ value: CGFloat) {
         expansion = min(1, max(0, value))
+        if window?.hasShadow != (expansion > 0) { window?.hasShadow = expansion > 0 }
         (window as? IdleBarPanel)?.setExpansion(expansion)
         needsDisplay = true
     }
@@ -102,24 +115,29 @@ final class IdleBarView: NSView {
         animationTimer = nil
         let target: CGFloat = value ? 1 : 0
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            opacityProgress = target
             updateExpansion(target)
             return
         }
         let initial = expansion
+        let initialOpacity = opacityProgress
         let began = ProcessInfo.processInfo.systemUptime
-        let duration = 0.28 * max(0.45, Double(abs(target - initial)))
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 self.updateExpansion(target)
+                self.opacityProgress = target
                 timer.invalidate()
                 self.animationTimer = nil
                 return
             }
-            let t = min(1, (ProcessInfo.processInfo.systemUptime - began) / duration)
-            let eased = 1 - pow(1 - t, 3)
-            self.updateExpansion(initial + (target - initial) * CGFloat(eased))
-            if t >= 1 {
+            let elapsed = ProcessInfo.processInfo.systemUptime - began
+            let shape = VoiceBarGeometry.shapeProgress(elapsed / VoiceBarGeometry.shapeDuration)
+            let opacity = min(1, elapsed / VoiceBarGeometry.opacityDuration)
+            let easedOpacity = VoiceBarGeometry.opacityProgress(opacity)
+            self.opacityProgress = initialOpacity + (target - initialOpacity) * CGFloat(easedOpacity)
+            self.updateExpansion(initial + (target - initial) * CGFloat(shape))
+            if opacity >= 1 {
                 timer.invalidate()
                 self.animationTimer = nil
             }
@@ -136,9 +154,10 @@ final class IdleBarView: NSView {
         context.clear(bounds)
         context.setAllowsAntialiasing(true)
         context.setShouldAntialias(true)
-        let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous).path(in: rect).cgPath
+        let radius = min(VoiceBarGeometry.radius, min(rect.width, rect.height) / 2)
+        let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
         context.saveGState()
-        context.setAlpha(0.5 + expansion * 0.5)
+        context.setAlpha(0.5 + opacityProgress * 0.5)
         context.beginTransparencyLayer(auxiliaryInfo: nil)
         defer { context.endTransparencyLayer(); context.restoreGState() }
         NSColor(calibratedWhite: (128.0 / 255) * (1 - expansion), alpha: 1).setFill()
@@ -147,34 +166,21 @@ final class IdleBarView: NSView {
         context.addPath(path)
         context.drawPath(using: .fillStroke)
 
-        // The resting dots become a small waveform as the capsule unfolds.
-        // Stagger the heights without leaving an animation running while idle.
-        let symbolX = bounds.midX + (28 - bounds.midX) * expansion
-        let heights: [CGFloat] = [6, 11, 16, 11, 6]
-        for i in 0..<5 {
-            let delay = CGFloat(i) * 0.06
-            let progress = min(1, max(0, (expansion - delay) / (1 - delay)))
-            let height = 3.2 + (heights[i] - 3.2) * progress
-            let x = symbolX + CGFloat(i - 2) * 5
-            VoiceBarPalette.ink.withAlphaComponent(0.6 + expansion * 0.35).setFill()
-            let bar = NSRect(x: x - 1.6, y: bounds.midY - height / 2, width: 3.2, height: height)
-            NSBezierPath(roundedRect: bar, xRadius: 1.6, yRadius: 1.6).fill()
+        guard expansion > 0 else { return }
+        let heights: [CGFloat] = [4, 7, 11, 15, 18, 18, 15, 11, 7, 4]
+        for i in heights.indices {
+            let height = 2 + (heights[i] - 2) * expansion
+            let centre = min(bounds.midX, VoiceBarGeometry.hover.width / 2)
+            let x = centre - VoiceBarGeometry.waveform.width / 2 + CGFloat(i) * 4
+            VoiceBarPalette.ink.withAlphaComponent(opacityProgress).setFill()
+            NSBezierPath(roundedRect: NSRect(x: x, y: bounds.midY - height / 2, width: 2, height: height),
+                         xRadius: 1, yRadius: 1).fill()
         }
-        let labelOpacity = min(1, max(0, (expansion - 0.35) / 0.65))
-        guard labelOpacity > 0 else { return }
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
-            .foregroundColor: VoiceBarPalette.ink.withAlphaComponent(0.9 * labelOpacity),
-            .paragraphStyle: paragraph,
-        ]
-        let text = hint as NSString
-        let size = text.size(withAttributes: attributes)
-        let labelX = 48 + (1 - labelOpacity) * 5
-        text.draw(in: NSRect(x: labelX, y: bounds.midY - size.height / 2,
-                             width: max(0, bounds.width - labelX - 10), height: size.height),
-                  withAttributes: attributes)
+        if let countdown, bounds.width >= 100 {
+            (countdown as NSString).draw(in: NSRect(x: bounds.maxX - 38, y: bounds.midY - 7, width: 32, height: 14),
+                                        withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
+                                                         .foregroundColor: VoiceBarPalette.ink.withAlphaComponent(opacityProgress)])
+        }
     }
 }
 
@@ -182,30 +188,42 @@ final class IdleBarPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    static let restingSize = NSSize(width: 56, height: 16)
-    static let expandedSize = NSSize(width: 176, height: 34)
+    static let restingSize = VoiceBarGeometry.idle
+    static let expandedSize = VoiceBarGeometry.hover
+    var countdownVisible = false
 
     func resize(expanded: Bool) { setExpansion(expanded ? 1 : 0) }
 
-    func setExpansion(_ progress: CGFloat) {
+    func setExpansion(_ progress: CGFloat, animated: Bool = false) {
         let compact = Self.restingSize, expanded = Self.expandedSize
-        let size = NSSize(width: compact.width + (expanded.width - compact.width) * progress,
+        let width = expanded.width + (countdownVisible ? 40 : 0)
+        let size = NSSize(width: compact.width + (width - compact.width) * progress,
                           height: compact.height + (expanded.height - compact.height) * progress)
+        guard frame.size != size else { return }
         let centreX = frame.midX
         let bottom = frame.minY
-        setFrame(NSRect(x: centreX - size.width / 2, y: bottom, width: size.width, height: size.height),
-                 display: true, animate: false)
+        let target = NSRect(x: centreX - size.width / 2, y: bottom, width: size.width, height: size.height)
+        if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = VoiceBarGeometry.shapeDuration
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.05, 0.6, 0.4, 0.95)
+                animator().setFrame(target, display: true)
+            }
+        } else {
+            setFrame(target, display: true, animate: false)
+        }
     }
 }
 
 final class IdleBar {
     var onClick: (() -> Void)?
+    var countdown: String? { didSet { view?.countdown = countdown } }
     private var panel: IdleBarPanel?
     private var view: IdleBarView?
     private var screenObserver: NSObjectProtocol?
 
     var hint: String = L10n.text("按 fn 听写") {
-        didSet { view?.hint = hint; view?.needsDisplay = true }
+        didSet { view?.hint = hint; view?.toolTip = hint; view?.needsDisplay = true }
     }
 
     func show() {
@@ -227,6 +245,9 @@ final class IdleBar {
         let v = IdleBarView(frame: rect)
         v.wantsLayer = true
         v.hint = hint
+        v.countdown = countdown
+        p.countdownVisible = countdown != nil
+        v.toolTip = hint
         v.onClick = { [weak self] in self?.onClick?() }
         p.appearance = VoiceBarPalette.appearance
         p.contentView = v

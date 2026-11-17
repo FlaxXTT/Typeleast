@@ -24,7 +24,7 @@ final class UpdateProgressWindow {
         if let existing = window {
             w = existing
         } else {
-            w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 320),
+            w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 350, height: 500),
                          styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
             w.title = L10n.text("更新 TypeLeast")
             w.titlebarAppearsTransparent = true
@@ -35,7 +35,10 @@ final class UpdateProgressWindow {
             w.contentView = NSHostingView(rootView: UpdateProgressView(model: model))
             window = w
         }
-        w.setContentSize(NSHostingView(rootView: UpdateProgressView(model: model)).fittingSize)
+        let size = NSSize(width: 350, height: 500)
+        w.setContentSize(size)
+        AppWindowStyle.fixSize(w, to: size)
+        AppWindowStyle.round(w)
         w.center()
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
@@ -50,6 +53,7 @@ struct UpdateProgressView: View {
     @ObservedObject var model: UpdateProgressModel
 
     var body: some View {
+        ScrollView {
         VStack(spacing: 18) {
             UpdateRing(stage: model.stage)
                 .frame(width: 136, height: 136)
@@ -73,7 +77,8 @@ struct UpdateProgressView: View {
             }
         }
         .padding(EdgeInsets(top: 28, leading: 28, bottom: 24, trailing: 28))
-        .frame(width: 360)
+        }
+        .frame(width: 350, height: 500)
         .background(Theme.window)
     }
 }
