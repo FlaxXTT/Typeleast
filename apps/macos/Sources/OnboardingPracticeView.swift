@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import QuartzCore
 
 /// 试说一句: the same recording pill as in daily use. Click it or press the dictation key to
 /// start; ✓ finishes, ✕ cancels. The result is shown here only.
@@ -113,8 +114,15 @@ private final class PracticeVoiceBarHost: NSView {
 
     override func layout() {
         super.layout()
-        let width = PillView.width(for: model, limit: 40)
-        pill.frame = NSRect(x: (bounds.width - width) / 2, y: 0, width: width, height: PillView.height)
+        let width = pill.presentationWidth
+        let frame = NSRect(x: (bounds.width - width) / 2, y: 0, width: width, height: PillView.height)
+        guard pill.frame != frame else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = pill.reduceMotion || window == nil ? 0 : 0.20
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.05, 0.6, 0.4, 0.95)
+            pill.animator().setFrameOrigin(frame.origin)
+            pill.animator().setFrameSize(frame.size)
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -142,6 +150,8 @@ private final class PracticeVoiceBarHost: NSView {
             pill.model = model
             if oldWidth != PillView.width(for: model, limit: 40) { needsLayout = true }
         }
+        let wasHoldingWidth = pill.holdsRecordingWidth
         pill.advance(at: now)
+        if wasHoldingWidth && !pill.holdsRecordingWidth { needsLayout = true }
     }
 }
