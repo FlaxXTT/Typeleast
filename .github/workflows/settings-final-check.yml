@@ -1,0 +1,21 @@
+name: Final settings verification
+
+on:
+  push:
+    branches: [codex/settings-general-scroll-performance]
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: apps/macos/test.sh
+      - name: Verify settings scroll and lifecycle
+        run: |
+          render_dir="$(mktemp -d /private/tmp/typeleast-settings-render.XXXXXX)"
+          TYPELEAST_HOME="$(mktemp -d /private/tmp/typeleast-settings-home.XXXXXX)" \
+            apps/macos/build/typeleast-tests --settings-scroll-check "$render_dir"
