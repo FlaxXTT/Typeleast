@@ -43,9 +43,6 @@ final class OnboardingPracticeController: ObservableObject {
     @Published private(set) var output = ""
     @Published private(set) var needsReview = false
     @Published private(set) var status = ""
-    /// Recent microphone levels for the pill's waveform, newest last.
-    @Published private(set) var levels: [Float] = []
-    private var levelTimer: Timer?
     private let recorder = Recorder()
     private let settings: Settings
     private let client: ServiceClient
@@ -60,6 +57,8 @@ final class OnboardingPracticeController: ObservableObject {
         recorder.maxSeconds = 40
         recorder.onAutoStop = { [weak self] in self?.stop() }
     }
+    var voiceLevel: VoiceLevel { recorder.voiceLevel() }
+    var elapsed: Double { recorder.elapsed }
     var complete: Bool { progress.complete }
     var busy: Bool { phase != .idle }
     var translateSample: String { L10n.language == "en" ? "Let's meet tomorrow at three and bring the report." : "明天下午三点开会，记得带上报告。" }
@@ -84,29 +83,37 @@ final class OnboardingPracticeController: ObservableObject {
         guard settings.activeLLMRoute != nil else { status = L10n.text("请先配置可用的整理模型。"); return }
         switch Recorder.authorizationStatus() {
         case .notDetermined:
+            phase = .starting
+            generation += 1
+            let token = generation
             Recorder.requestMicrophoneAccess { [weak self] allowed in
-                guard let self else { return }; if allowed { self.toggle() } else { self.status = L10n.text("需要麦克风权限才能完成真实语音练习。") }
+                guard let self, self.generation == token, self.phase == .starting else { return }
+                self.phase = .idle
+                if allowed { self.toggle() } else { self.status = L10n.text("需要麦克风权限才能完成真实语音练习。") }
             }
             return
         case .authorized: break
         default: status = L10n.text("需要麦克风权限才能完成真实语音练习。"); return
         }
-        do {
-            raw = ""; output = ""; needsReview = false
-            recorder.demoPCM = nil
-            Self.configureInput(recorder, uid: settings.inputDeviceUID)
-            try recorder.start(); phase = .recording; status = ""
-            levels = Array(repeating: 0, count: 18)
-            let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-                guard let self, self.phase == .recording else { return }
-                self.levels = Array((self.levels + [RecordingBarFormat.clampLevel(self.recorder.level())]).suffix(18))
+        raw = ""; output = ""; needsReview = false; status = ""
+        recorder.demoPCM = nil
+        Self.configureInput(recorder, uid: settings.inputDeviceUID)
+        generation += 1
+        let token = generation
+        phase = .starting
+        recorder.startAsync { [weak self] result in
+            guard let self, self.generation == token, self.phase == .starting else { return }
+            switch result {
+            case .success: self.phase = .recording
+            case .failure:
+                self.status = L10n.text("打不开麦克风，请检查设备和权限。")
+                self.phase = .idle
             }
-            RunLoop.main.add(t, forMode: .common); levelTimer = t
-        } catch { status = L10n.text("打不开麦克风，请检查设备和权限。"); phase = .idle }
+        }
     }
+
     func stop() {
         guard phase == .recording else { return }
-        levelTimer?.invalidate(); levelTimer = nil
         do {
             let recording = try recorder.finish()
             guard let route = settings.activeLLMRoute else { try? FileManager.default.removeItem(at: recording.url); status = L10n.text("请先配置可用的整理模型。"); phase = .idle; return }
@@ -144,6 +151,6 @@ final class OnboardingPracticeController: ObservableObject {
             }
         } catch { phase = .idle; status = L10n.text("录音太短或设备异常，请重试。") }
     }
-    func cancel() { generation += 1; levelTimer?.invalidate(); levelTimer = nil; recorder.cancel(); if let pendingAudio { try? FileManager.default.removeItem(at: pendingAudio) }; pendingAudio = nil; phase = .idle; raw = ""; output = ""; needsReview = false }
+    func cancel() { generation += 1; recorder.cancel(); if let pendingAudio { try? FileManager.default.removeItem(at: pendingAudio) }; pendingAudio = nil; phase = .idle; raw = ""; output = ""; needsReview = false }
     func reset() { cancel(); progress = PracticeProgress(); status = "" }
 }

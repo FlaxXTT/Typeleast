@@ -77,4 +77,4 @@ gh secret set MACOS_SIGNING_CERTIFICATE_BASE64 --repo "$repository" < "$private_
 gh secret set MACOS_SIGNING_CERTIFICATE_PASSWORD --repo "$repository" < "$private_directory/password"
 echo 'Persistent publisher signing secrets configured. No release was published.'
 echo 'Keep the protected private directory and an offline backup; do not upload it to Git or chat.'
-openssl x509 -in "$private_directory/certificate.pem" -noout -fingerprint -sha256
+openssl x509 -in "$private_directory/certificate.pem" -noout -subject -issuer -dates

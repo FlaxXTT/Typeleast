@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Diagnostics;
 using TypeLeast.Core;
 
 namespace TypeLeast.Ui;
@@ -101,27 +102,41 @@ internal sealed class Onboarding : Window
     private void RenderPractice(string sample)
     {
         content.Children.Add(Theme.Card(Theme.Text(sample,14)));
-        // The same dark pill as in daily use: click or press the dictation key; ✓ finishes, ✕ cancels.
-        var pill=new Border {Background=Theme.Hex("#171717"),CornerRadius=new CornerRadius(20),Padding=new Thickness(4),HorizontalAlignment=HorizontalAlignment.Left,Cursor=System.Windows.Input.Cursors.Hand};
-        UIElement Circle(string glyph,bool filled,Action act){
-            var b=new Border {Width=30,Height=30,CornerRadius=new CornerRadius(15),Background=filled?Brushes.White:Theme.Hex("#38FFFFFF"),Cursor=System.Windows.Input.Cursors.Hand,
-                Child=new TextBlock {Text=glyph,Foreground=filled?Theme.Hex("#171717"):Brushes.White,FontWeight=FontWeights.Bold,FontSize=13,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center}};
-            b.MouseLeftButtonUp+=(_,e)=>{e.Handled=true;act();};return b;
-        }
-        var inner=new StackPanel {Orientation=Orientation.Horizontal};
-        if(practice.Recording){
-            inner.Children.Add(Circle("✕",false,practice.Cancel));
-            inner.Children.Add(new TextBlock {Text=L10n.T("正在听…"),Foreground=Brushes.White,FontSize=13,Margin=new Thickness(14,0,14,0),VerticalAlignment=VerticalAlignment.Center});
-            inner.Children.Add(Circle("✓",true,practice.Toggle));
-        } else if(practice.Thinking){
-            inner.Children.Add(new TextBlock {Text="• • •",Foreground=Brushes.White,FontSize=14,Margin=new Thickness(22,5,22,5),VerticalAlignment=VerticalAlignment.Center});
-        } else {
-            inner.Children.Add(Circle("🎤",false,practice.Toggle));
-            inner.Children.Add(new TextBlock {Text=L10n.T(Complete?"再试一次":"点这里开始"),Foreground=Brushes.White,FontWeight=FontWeights.SemiBold,FontSize=13,Margin=new Thickness(10,0,12,0),VerticalAlignment=VerticalAlignment.Center});
-            pill.MouseLeftButtonUp+=(_,_)=>practice.Toggle();
-        }
-        pill.Child=inner;content.Children.Add(pill);
+        if (practice.Busy)
+            content.Children.Add(new PracticeVoiceBar(practice) { HorizontalAlignment = HorizontalAlignment.Left });
+        else
+            content.Children.Add(Theme.Primary(L10n.T(Complete ? "再试一次" : "点这里开始"), practice.Toggle));
         if(practice.Status.Length>0)content.Children.Add(Theme.Text(practice.Status,13,Complete?Theme.Success:Theme.Grey));
         if(practice.Output.Length>0){content.Children.Add(Theme.Text(L10n.T("整理结果"),12,Theme.Grey));content.Children.Add(Theme.Card(Theme.Text(practice.Output,14)));}
+    }
+}
+
+/// <summary>The desktop renderer, hosted in onboarding without rebuilding the page on audio frames.</summary>
+internal sealed class PracticeVoiceBar : Border
+{
+    private readonly OnboardingPracticeController practice;
+    private readonly PillView pill;
+    private readonly Stopwatch clock = new();
+    private bool animating;
+
+    public PracticeVoiceBar(OnboardingPracticeController practice)
+    {
+        this.practice = practice;
+        pill = new PillView(practice.Cancel, practice.Toggle);
+        if (practice.Recording) pill.SetRecording(""); else pill.SetThinking(L10n.T("正在整理…"));
+        Child = pill;
+        Loaded += (_, _) => {
+            if (animating) return;
+            animating = true; clock.Restart(); CompositionTarget.Rendering += OnFrame;
+        };
+        Unloaded += (_, _) => {
+            if (!animating) return;
+            CompositionTarget.Rendering -= OnFrame; animating = false; clock.Stop();
+        };
+    }
+    private void OnFrame(object? sender, EventArgs e)
+    {
+        var dt = Math.Min(0.1, clock.Elapsed.TotalSeconds); clock.Restart();
+        pill.Advance(practice.Voice, null, dt);
     }
 }

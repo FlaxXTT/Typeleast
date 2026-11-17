@@ -40,6 +40,7 @@ final class Recorder {
     private var captureGeneration: UInt64 = 0
     private var capTimer: Timer?
     private var smoothedLevel: Float = 0
+    private var voice = VoiceLevel()
 
     private(set) var isRecording = false
     var isStarting: Bool { startup.isPending }
@@ -90,6 +91,12 @@ final class Recorder {
     func level() -> Float {
         lock.lock(); defer { lock.unlock() }
         return smoothedLevel
+    }
+
+    /// FFT-derived voice energy; the renderer only copies this small snapshot.
+    func voiceLevel() -> VoiceLevel {
+        lock.lock(); defer { lock.unlock() }
+        return voice
     }
 
     /// Weight of a louder buffer in smoothLevel(): rises fast so speech peaks show.
@@ -221,7 +228,7 @@ final class Recorder {
     private func resetCapture() -> UInt64 {
         lock.lock(); defer { lock.unlock() }
         captureGeneration &+= 1
-        pcm = Data(); smoothedLevel = 0
+        pcm = Data(); smoothedLevel = 0; voice = VoiceLevel()
         truncated = false
         return captureGeneration
     }
@@ -246,8 +253,9 @@ final class Recorder {
               let conv = AudioConvert.makeConverter(from: inFormat) else {
             throw RecorderError.converterUnavailable
         }
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
-            self?.consume(buffer, converter: conv, target: target, limit: limit, token: token)
+        let spectrum = VoiceSpectrum(sampleRate: inFormat.sampleRate)
+        input.installTap(onBus: 0, bufferSize: 1024, format: inFormat) { [weak self] buffer, _ in
+            self?.consume(buffer, converter: conv, target: target, limit: limit, token: token, spectrum: spectrum)
         }
         do {
             guard isCurrentCapture(token) else { throw RecorderError.cancelled }
@@ -323,18 +331,20 @@ final class Recorder {
         }
         isRecording = false
         startedAt = nil
-        lock.lock(); pcm = Data(); smoothedLevel = 0; lock.unlock()
+        lock.lock(); pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); lock.unlock()
     }
 
     // MARK: demo input
 
     private func startDemo(_ demo: Data) {
-        lock.lock(); pcm = Data(); smoothedLevel = 0; lock.unlock()
+        lock.lock(); pcm = Data(); smoothedLevel = 0; voice = VoiceLevel(); lock.unlock()
         truncated = false
         demoOffset = 0
         isRecording = true
         startedAt = Date()
         let chunkBytes = Recorder.bytesPerSecond / 20   // 50 ms
+        let spectrum = VoiceSpectrum(sampleRate: Self.targetSampleRate)
+        let quietChunk = Data(count: chunkBytes)
         var trailingTicks = 0
         demoTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] timer in
             guard let self = self, self.isRecording else { timer.invalidate(); return }
@@ -351,13 +361,16 @@ final class Recorder {
                     }
                 }
                 let rms = count > 0 ? Float((sum / Double(count)).squareRoot()) : 0
+                spectrum.consumePCM16(chunk)
                 self.lock.lock()
+                self.voice = spectrum.latest
                 self.pcm.append(chunk)
                 self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: Recorder.loudness(rms: rms))
                 self.lock.unlock()
             } else {
                 // A moment of quiet after the last word, like a person about to press stop.
-                self.lock.lock(); self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: 0); self.lock.unlock()
+                spectrum.consumePCM16(quietChunk)
+                self.lock.lock(); self.voice = spectrum.latest; self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: 0); self.lock.unlock()
                 trailingTicks += 1
                 if trailingTicks == 8 {
                     timer.invalidate()
@@ -370,12 +383,14 @@ final class Recorder {
     // MARK: capture
 
     private func consume(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter,
-                         target: AVAudioFormat, limit: Int, token: UInt64) {
+                         target: AVAudioFormat, limit: Int, token: UInt64, spectrum: VoiceSpectrum) {
         guard isCurrentCapture(token), let chunk = AudioConvert.convert(buffer, using: converter, to: target) else { return }
+        spectrum.consume(buffer)
         let sample = Recorder.rms(of: buffer)
         let maxBytes = Recorder.bytesPerSecond * limit
         lock.lock()
         guard captureGeneration == token else { lock.unlock(); return }
+        voice = spectrum.latest
         smoothedLevel = Recorder.smoothLevel(previous: smoothedLevel, sample: Recorder.loudness(rms: sample))
         if pcm.count < maxBytes {
             let room = min(chunk.count, maxBytes - pcm.count)

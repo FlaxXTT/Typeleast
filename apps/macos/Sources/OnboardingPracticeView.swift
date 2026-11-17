@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 试说一句: the same recording pill as in daily use. Click it or press the dictation key to
 /// start; ✓ finishes, ✕ cancels. The result is shown here only.
@@ -37,63 +38,108 @@ struct OnboardingPracticeView: View {
     }
 }
 
-/// The dark capsule: idle it invites a click; recording shows ✕, the live waveform and ✓;
-/// while cleaning up, three breathing dots.
+/// Practice and desktop dictation use the same native capsule and animation engine.
 private struct PracticePill: View {
     @ObservedObject var practice: OnboardingPracticeController
-    @State private var breathe = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            switch practice.phase {
-            case .idle:
-                Image(systemName: "mic.fill").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
-                    .frame(width: 28, height: 28).background(Circle().fill(Color.white.opacity(0.22)))
-                Text(practice.complete ? L10n.text("再试一次") : L10n.text("点这里开始"))
-                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.white).padding(.trailing, 10)
-            case .recording:
-                circleButton(symbol: "xmark", filled: false) { practice.cancel() }
-                    .help(L10n.text("取消"))
-                HStack(spacing: 3) {
-                    ForEach(Array(practice.levels.enumerated()), id: \.offset) { _, level in
-                        Capsule(style: .continuous).fill(Color.white)
-                            .frame(width: 2.4, height: max(3, CGFloat(level) * 22))
-                    }
+        if practice.phase == .idle {
+            Button(action: practice.toggle) {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform").font(.system(size: 13, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
+                    Text(practice.complete ? L10n.text("再试一次") : L10n.text("点这里开始"))
+                        .font(.system(size: 12, weight: .medium)).padding(.trailing, 12)
                 }
-                .frame(height: 24)
-                .animation(.linear(duration: 0.05), value: practice.levels)
-                circleButton(symbol: "checkmark", filled: true) { practice.stop() }
-                    .help(L10n.text("结束并整理"))
-            case .starting, .thinking:
-                HStack(spacing: 7) {
-                    ForEach(0..<3) { index in
-                        Circle().fill(Color.white).frame(width: 6, height: 6)
-                            .opacity(breathe ? 1 : 0.35)
-                            .animation(.easeInOut(duration: 0.6).repeatForever().delay(Double(index) * 0.2), value: breathe)
-                    }
-                }
-                .padding(.horizontal, 22).frame(height: 28)
-                .onAppear { breathe = true }.onDisappear { breathe = false }
+                .foregroundColor(.white)
+                .padding(5)
+                .background(Capsule().fill(LinearGradient(
+                    colors: [Color(nsColor: VoiceBarPalette.surfaceTop), Color(nsColor: VoiceBarPalette.surfaceBottom)],
+                    startPoint: .top, endPoint: .bottom)))
+                .overlay(Capsule().stroke(Color(nsColor: VoiceBarPalette.edge), lineWidth: 0.5))
             }
+            .buttonStyle(.plain)
+        } else {
+            PracticeVoiceBar(practice: practice).frame(width: 240, height: PillView.height)
         }
-        .padding(4)
-        .background(Capsule(style: .continuous).fill(Color(white: 0.09)))
-        .overlay(Capsule(style: .continuous).stroke(Color.white.opacity(0.12)))
-        .contentShape(Capsule(style: .continuous))
-        .onTapGesture { if practice.phase == .idle { practice.toggle() } }
-        .hoverInteraction()
-        .animation(.easeInOut(duration: 0.18), value: practice.phase)
+    }
+}
+
+private struct PracticeVoiceBar: NSViewRepresentable {
+    let practice: OnboardingPracticeController
+    func makeNSView(context: Context) -> PracticeVoiceBarHost { PracticeVoiceBarHost(practice: practice) }
+    func updateNSView(_ view: PracticeVoiceBarHost, context: Context) { view.applyPhase() }
+    static func dismantleNSView(_ view: PracticeVoiceBarHost, coordinator: ()) { view.stopAnimation() }
+}
+
+/// Audio ticks redraw the capsule without publishing frames through the onboarding tree.
+private final class PracticeVoiceBarHost: NSView {
+    private weak var practice: OnboardingPracticeController?
+    private let pill = PillView(frame: NSRect(x: 0, y: 0, width: 124, height: PillView.height))
+    private var phase: AppPhase?
+    private var model = RecordingBarModel()
+    private var timer: Timer?
+    private var lastFrame = ProcessInfo.processInfo.systemUptime
+    private var sampleTime: Double = 0
+
+    init(practice: OnboardingPracticeController) {
+        self.practice = practice
+        super.init(frame: NSRect(x: 0, y: 0, width: 240, height: PillView.height))
+        pill.limitSeconds = 40
+        pill.onCancel = { [weak practice] in practice?.cancel() }
+        pill.onStop = { [weak practice] in practice?.stop() }
+        addSubview(pill)
+        applyPhase()
+    }
+    required init?(coder: NSCoder) { fatalError("Practice voice bar is created in code") }
+    deinit { timer?.invalidate() }
+
+    func applyPhase() {
+        guard let practice, phase != practice.phase else { return }
+        phase = practice.phase
+        pill.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        switch practice.phase {
+        case .recording: model.showRecording(destination: "tutorial")
+        case .starting: model.showThinking(detail: L10n.text("正在打开麦克风…"))
+        case .thinking: model.showThinking(detail: L10n.text("正在整理…"))
+        case .idle: model.hide()
+        }
+        pill.model = model
+        needsLayout = true
     }
 
-    private func circleButton(symbol: String, filled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(filled ? Color(white: 0.09) : .white)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(filled ? Color.white : Color.white.opacity(0.22)))
+    override func layout() {
+        super.layout()
+        let width = PillView.width(for: model, limit: 40)
+        pill.frame = NSRect(x: (bounds.width - width) / 2, y: 0, width: width, height: PillView.height)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stopAnimation()
+        guard window != nil else { return }
+        lastFrame = ProcessInfo.processInfo.systemUptime
+        let interval = pill.reduceMotion ? 0.05 : 1.0 / 60.0
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stopAnimation() { timer?.invalidate(); timer = nil }
+
+    private func tick() {
+        guard let practice else { stopAnimation(); return }
+        let now = ProcessInfo.processInfo.systemUptime
+        sampleTime += min(0.1, max(0, now - lastFrame))
+        lastFrame = now
+        if practice.phase == .recording, sampleTime >= 0.05 {
+            sampleTime.formTruncatingRemainder(dividingBy: 0.05)
+            let oldWidth = PillView.width(for: model, limit: 40)
+            model.update(voice: practice.voiceLevel, elapsed: practice.elapsed)
+            pill.model = model
+            if oldWidth != PillView.width(for: model, limit: 40) { needsLayout = true }
         }
-        .buttonStyle(.plain)
-        .hoverInteraction()
+        pill.advance(at: now)
     }
 }

@@ -3,12 +3,12 @@ import SwiftUI
 
 // IdleBar.swift - the resting voice bar ("Show voice bar on desktop").
 //
-// A small, faint capsule at the bottom centre of the screen. Hovering widens it and
+// A small charcoal capsule at the bottom centre of the screen. Hovering widens it and
 // shows the shortcut; clicking it starts a dictation. Like the recording pill it is a
 // non-activating panel: it never takes focus from the app being typed into, so a
 // click on it still pastes into the field that had the cursor.
 
-private final class IdleBarView: NSView {
+final class IdleBarView: NSView {
     var onClick: (() -> Void)?
     var hint = L10n.text("按 fn 听写")
     private(set) var hovering = false
@@ -127,22 +127,27 @@ private final class IdleBarView: NSView {
         context.setAllowsAntialiasing(true)
         context.setShouldAntialias(true)
         let path = RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous).path(in: rect).cgPath
-        NSColor(calibratedRed: 0.91, green: 0.92, blue: 0.94, alpha: 0.94 + expansion * 0.05).setFill()
-        NSColor(calibratedWhite: 0.33, alpha: 0.14 + expansion * 0.03).setStroke()
+        context.saveGState()
+        context.addPath(path)
+        context.clip()
+        NSGradient(starting: VoiceBarPalette.surfaceBottom, ending: VoiceBarPalette.surfaceTop)?
+            .draw(in: bounds, angle: 90)
+        context.restoreGState()
+        VoiceBarPalette.edge.setStroke()
         context.setLineWidth(pixel)
         context.addPath(path)
-        context.drawPath(using: .fillStroke)
+        context.strokePath()
 
         // The resting dots become a small waveform as the capsule unfolds.
         // Stagger the heights without leaving an animation running while idle.
         let symbolX = bounds.midX + (28 - bounds.midX) * expansion
-        let heights: [CGFloat] = [8, 15, 11]
-        for i in 0..<3 {
-            let delay = CGFloat(i) * 0.10
+        let heights: [CGFloat] = [6, 11, 16, 11, 6]
+        for i in 0..<5 {
+            let delay = CGFloat(i) * 0.06
             let progress = min(1, max(0, (expansion - delay) / (1 - delay)))
             let height = 3.2 + (heights[i] - 3.2) * progress
-            let x = symbolX + CGFloat(i - 1) * 6
-            NSColor(calibratedWhite: 0.15, alpha: 0.65 + expansion * 0.25).setFill()
+            let x = symbolX + CGFloat(i - 2) * 5
+            VoiceBarPalette.ink.withAlphaComponent(0.6 + expansion * 0.35).setFill()
             let bar = NSRect(x: x - 1.6, y: bounds.midY - height / 2, width: 3.2, height: height)
             NSBezierPath(roundedRect: bar, xRadius: 1.6, yRadius: 1.6).fill()
         }
@@ -152,7 +157,7 @@ private final class IdleBarView: NSView {
         paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
-            .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 0.9 * labelOpacity),
+            .foregroundColor: VoiceBarPalette.ink.withAlphaComponent(0.9 * labelOpacity),
             .paragraphStyle: paragraph,
         ]
         let text = hint as NSString
@@ -168,8 +173,8 @@ final class IdleBarPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    static let restingSize = NSSize(width: 46, height: 12)
-    static let expandedSize = NSSize(width: 150, height: 28)
+    static let restingSize = NSSize(width: 56, height: 16)
+    static let expandedSize = NSSize(width: 176, height: 34)
 
     func resize(expanded: Bool) { setExpansion(expanded ? 1 : 0) }
 
@@ -242,6 +247,6 @@ final class IdleBar {
         guard let p = panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let visible = screen.visibleFrame
         let size = p.frame.size
-        p.setFrameOrigin(NSPoint(x: (visible.midX - size.width / 2).rounded(), y: (visible.minY + 8).rounded()))
+        p.setFrameOrigin(NSPoint(x: (visible.midX - size.width / 2).rounded(), y: (visible.minY + 24).rounded()))
     }
 }
