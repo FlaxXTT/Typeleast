@@ -78,3 +78,24 @@ and [perspective transforms](https://developer.apple.com/documentation/quartzcor
 The recording overlay uses a fixed transparent 750×500 carrier around its changing capsule. Detailed sizes are in [Window and capsule geometry](WINDOW_AND_CAPSULE_GEOMETRY.md). It keeps its own `VoiceBarPalette`, fixed black-and-white appearance,
 configured shortcuts and microphone-driven animation. Main-window theme tokens do not
 set its colours.
+
+## Home corrections after 2.1.9
+
+Home totals now come from `ActivityLog` rather than retained transcript history.
+Each successful new dictation records numeric word counts, the recording duration,
+and estimated typing-time savings alongside its activity day. No transcript is
+added to the activity log. History retention and single-record deletion do not
+change these cumulative totals; the existing explicit clear-all action still
+clears activity and statistics together.
+
+Old activity JSON retains its word counts. Its new duration fields are optional,
+so missing recording times are not invented. Before the first timed dictation,
+time and speed cards show a dash. Afterwards they use only measured dictations;
+the speed numerator excludes the old untimed word counts. An information hint
+explains partial time coverage. Totals are cached until activity changes.
+
+The sidebar search control is 40 points high. The native share button centres
+its symbol and localized title together. The main window reapplies its native
+traffic-light placement after AppKit's presentation layout, keeping the buttons
+inside the requested 99-point corner.
+

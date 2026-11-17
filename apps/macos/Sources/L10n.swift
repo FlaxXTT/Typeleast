@@ -55,6 +55,8 @@ enum L10n {
     static let english: [String: String] = [
         "错误": "Error",
         "洞察": "Insights",
+        "尚无时长记录": "No duration recorded yet",
+        "旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。": "Older activity contains word counts only. Time statistics include only dictations with a recorded duration.",
         "快捷听写": "Quick dictation",
         "管理模型": "Manage models",
         "较早的活动": "Earlier activity",

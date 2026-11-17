@@ -16,6 +16,9 @@ struct InsightsPanel: View {
 
     var body: some View {
         let stats = model.stats
+        let timingNote = stats.hasIncompleteTiming
+            ? L10n.text("旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。") : nil
+        let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 Text(L10n.text("洞察")).font(.system(size: 28, weight: .bold)).tracking(-0.6)
@@ -26,9 +29,12 @@ struct InsightsPanel: View {
             .frame(height: 40)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 20) {
                 Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), progress: countProgress, compact: compact)
-                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), progress: countProgress, compact: compact)
-                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), progress: countProgress, compact: compact)
-                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), progress: countProgress, compact: compact)
+                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), progress: countProgress, compact: compact,
+                       unavailable: timingUnavailable, note: timingNote)
+                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), progress: countProgress, compact: compact,
+                       unavailable: timingUnavailable, note: timingNote)
+                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), progress: countProgress, compact: compact,
+                       unavailable: timingUnavailable, note: timingNote)
             }
             ActivityCard(countProgress: countProgress, heatmapProgress: heatmapProgress, compact: compact)
         }
@@ -109,23 +115,38 @@ private struct Figure: View {
     let label: String
     let progress: Double
     let compact: Bool
+    var unavailable = false
+    var note: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                ForEach(parts.indices, id: \.self) { index in
-                    CountingNumber(part: parts[index], progress: progress)
-                        .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    Text(parts[index].unit).font(.system(size: compact ? 11 : 14, weight: .semibold))
-                        .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
+                if unavailable {
+                    Text("—").font(.system(size: compact ? 26 : 32, weight: .bold))
+                        .accessibilityLabel(L10n.text("尚无时长记录"))
+                } else {
+                    ForEach(parts.indices, id: \.self) { index in
+                        CountingNumber(part: parts[index], progress: progress)
+                            .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                        Text(parts[index].unit).font(.system(size: compact ? 11 : 14, weight: .semibold))
+                            .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
+                    }
                 }
             }
-            Text(label).font(.system(size: compact ? 13 : 16)).foregroundColor(Theme.homeLabel)
+            HStack(spacing: 5) {
+                Text(label)
+                if let note {
+                    Image(systemName: "info.circle").font(.system(size: 11))
+                        .help(note).accessibilityLabel(note)
+                }
+            }
+            .font(.system(size: compact ? 13 : 16)).foregroundColor(Theme.homeLabel)
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.tile))
+        .help(note ?? label)
     }
 }
 
@@ -218,6 +239,26 @@ private final class HoverShareButton: NSButton {
         contentTintColor = NSColor(Theme.ink)
         layer?.backgroundColor = NSColor(hovering ? Theme.cardHover : Theme.tile).cgColor
         layer?.borderColor = NSColor(Theme.border).cgColor
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // A borderless NSButton otherwise places its image against the leading edge.
+        // Centre the icon and title as one group inside the 94×40 capsule.
+        let ink = NSColor(Theme.ink)
+        let label = NSAttributedString(string: title.trimmingCharacters(in: .whitespaces),
+                                       attributes: [.font: font ?? .systemFont(ofSize: 16, weight: .medium),
+                                                    .foregroundColor: ink])
+        let labelSize = label.size()
+        let iconSize: CGFloat = 18
+        let gap: CGFloat = 8
+        let x = bounds.midX - (iconSize + gap + labelSize.width) / 2
+        let icon = image?.withSymbolConfiguration(.init(paletteColors: [ink]))
+        icon?.draw(in: NSRect(x: x, y: bounds.midY - iconSize / 2,
+                             width: iconSize, height: iconSize),
+                   from: .zero, operation: .sourceOver, fraction: isHighlighted ? 0.6 : 1,
+                   respectFlipped: true, hints: nil)
+        label.draw(at: NSPoint(x: x + iconSize + gap, y: bounds.midY - labelSize.height / 2))
     }
 }
 

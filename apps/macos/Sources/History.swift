@@ -50,10 +50,16 @@ struct DictationStats: Equatable {
     var speakingSeconds: Double = 0
     /// Typing the same text at 60 字/min (CJK) or 40 words/min, minus the time spent speaking.
     var savedSeconds: Double = 0
+    /// Activity recorded before duration tracking contributes words, but not speed.
+    var timedWords: Int?
+    var timedDictations: Int?
+
+    var hasTiming: Bool { (timedDictations ?? dictations) > 0 }
+    var hasIncompleteTiming: Bool { (timedDictations ?? dictations) < dictations }
 
     /// 字 per minute of speech.
     var wordsPerMinute: Int {
-        speakingSeconds > 1 ? Int((Double(words) / (speakingSeconds / 60)).rounded()) : 0
+        speakingSeconds > 1 ? Int((Double(timedWords ?? words) / (speakingSeconds / 60)).rounded()) : 0
     }
 
     static func countWords(_ text: String) -> (cjk: Int, latin: Int) {

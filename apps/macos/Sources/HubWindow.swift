@@ -24,6 +24,11 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         if window?.isMiniaturized == true { window?.deminiaturize(nil) }
         window?.makeKeyAndOrderFront(nil)
+        // AppKit lays out the title bar again on first presentation. Reposition the
+        // native buttons afterwards so they stay inside the 99-point window curve.
+        DispatchQueue.main.async { [weak window] in
+            if let window { AppWindowStyle.round(window) }
+        }
     }
 
     private func makeWindow() -> NSWindow {
@@ -49,6 +54,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        if let window { AppWindowStyle.round(window) }
         model.refreshPermissions()
         // The service may have restarted on a new port since the last check.
         model.actions?.recheckHealth()
@@ -122,8 +128,9 @@ private struct Sidebar: View {
                     Text("⌘K").font(.system(size: 11)).foregroundColor(Theme.tertiary)
                 }
                 .font(.system(size: 12)).foregroundColor(Theme.secondary)
-                .padding(32)
-                .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.cardHover))
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.cardHover))
             }
             .buttonStyle(.plain).hoverInteraction()
             .keyboardShortcut("k", modifiers: .command)

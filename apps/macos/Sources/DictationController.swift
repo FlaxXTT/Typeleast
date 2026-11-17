@@ -634,7 +634,8 @@ final class DictationController {
                     }
                     if insert {
                         let counts = DictationStats.countWords(selected)
-                        ActivityLog.shared.record(words: counts.cjk + counts.latin)
+                        ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
+                                                  typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
                         self.insertText(selected, fallback: original, entryId: entry.id, appBundleId: appBundleId, field: field)
                     } else {
                         Inserter.shared.setString(selected)
@@ -720,7 +721,8 @@ final class DictationController {
             setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)
-                ActivityLog.shared.record(words: counts.cjk + counts.latin)
+                ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
+                                          typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
                 insertText(text, fallback: resp.fallback, entryId: entry.id, appBundleId: appBundleId, field: field)
             } else {
                 Inserter.shared.setString(text)
