@@ -101,9 +101,11 @@ enum AppIconArtwork {
         context.strokePath()
         context.restoreGState()
 
-        let barWidth: CGFloat = 76
-        let gap: CGFloat = 36
-        let maximumHeight: CGFloat = 464
+        // Fill about 88% of the tile in both directions, keeping a narrow clear
+        // inset around the waveform and distinct gaps between its five capsules.
+        let barWidth: CGFloat = 120
+        let gap: CGFloat = 32
+        let maximumHeight: CGFloat = 720
         let totalWidth = CGFloat(barRatios.count) * barWidth + CGFloat(barRatios.count - 1) * gap
         for (index, ratio) in barRatios.enumerated() {
             let height = maximumHeight * ratio
