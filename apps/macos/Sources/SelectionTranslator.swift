@@ -286,7 +286,7 @@ final class SelectionPanel {
 
     func showDot(at point: NSPoint, hoverChanged: @escaping (Bool) -> Void = { _ in }, action: @escaping () -> Void) {
         anchor = point
-        show(SelectionDotView(action: action, hoverChanged: hoverChanged))
+        show(SelectionDotView(action: action, hoverChanged: hoverChanged), castsShadow: false)
     }
 
     func showBubble(_ state: SelectionBubble, sourceCount: String?, at point: NSPoint, close: @escaping () -> Void) {
@@ -316,7 +316,7 @@ final class SelectionPanel {
         panel.setFrameOrigin(NSPoint(x: mouse.x + offset.x, y: mouse.y + offset.y))
     }
 
-    private func show<V: View>(_ view: V) {
+    private func show<V: View>(_ view: V, castsShadow: Bool = true) {
         let host = FirstClickHostingView(rootView: view)
         let size = host.fittingSize
         // A panel already open stays where it is (the user may have moved it), its top edge fixed.
@@ -326,6 +326,7 @@ final class SelectionPanel {
         panel.setContentSize(size)
         AppWindowStyle.fixSize(panel, to: size)
         AppWindowStyle.round(panel)
+        panel.hasShadow = castsShadow
         if let top {
             panel.setFrameOrigin(NSPoint(x: left, y: top - size.height))
         } else {
@@ -346,7 +347,7 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// A pen-drawn sun with a full rectangular interaction area.
+/// The complete 24pt mark is clickable, including the solid circle and gaps.
 struct SelectionDotView: View {
     let action: () -> Void
     var hoverChanged: (Bool) -> Void = { _ in }
