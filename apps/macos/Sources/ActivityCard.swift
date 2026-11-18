@@ -45,22 +45,21 @@ struct InsightsPanel: View {
             let tileHeight = max(0, (contentHeight - activityHeight - tileGap) / 2)
             VStack(alignment: .leading, spacing: spacing) {
                 HStack {
-                    InitialHeading(title: "INstinct", initialSize: Theme.homeHeadingSize,
-                                   bodySize: Theme.homeHeadingSize * Theme.homeRatio)
+                    Text(verbatim: "Instinct")
+                        .font(.system(size: 36, weight: .medium, design: .serif))
+                        .tracking(-0.65)
                         .foregroundColor(Theme.homeLabel)
-                        .accessibilityLabel("INstinct")
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
                 }
                 .frame(height: headerHeight)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: tileGap), GridItem(.flexible())], spacing: tileGap) {
-                    Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: time, height: tileHeight)
-                    Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: time,
-                           height: tileHeight)
-                    Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))],
-                           label: L10n.text("平均口述速度"), elapsed: time, height: tileHeight)
-                    Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: time,
-                           height: tileHeight)
+                    Figure(parts: Self.count(stats.words), label: "Words dictated", elapsed: time, height: tileHeight)
+                    Figure(parts: Self.duration(stats.savedSeconds), label: "Time saved", elapsed: time, height: tileHeight)
+                    Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: "chars/min")],
+                           label: "Average speed", elapsed: time, height: tileHeight)
+                    Figure(parts: Self.duration(stats.speakingSeconds), label: "Total dictation time", elapsed: time, height: tileHeight)
                 }
                 ActivityCard(elapsed: time).frame(height: activityHeight)
             }
@@ -78,33 +77,35 @@ struct InsightsPanel: View {
         }
     }
 
-    /// The reference uses K in both languages. Units stay fixed during count-up.
-    private static func count(_ value: Int, unit: String) -> [InsightPart] {
-        if value >= 1000 { return [InsightPart(value: Double(value) / 1000, unit: unit, format: .thousands)] }
-        return [InsightPart(value: Double(value), unit: unit)]
+    private static func count(_ value: Int) -> [InsightPart] {
+        if value >= 1000 { return [InsightPart(value: Double(value) / 1000, unit: "chars", format: .thousands)] }
+        return [InsightPart(value: Double(value), unit: "chars")]
     }
 
     private static func duration(_ seconds: Double) -> [InsightPart] {
         let total = max(0, Int(seconds.rounded()))
-        if total < 60 { return [InsightPart(value: Double(total), unit: L10n.text("秒"))] }
+        if total < 60 { return [InsightPart(value: Double(total), unit: "s")] }
         let minutes = total / 60
-        if minutes < 60 { return [InsightPart(value: Double(minutes), unit: L10n.text("分钟"))] }
-        return [InsightPart(value: Double(minutes / 60), unit: L10n.text("小时")),
-                InsightPart(value: Double(minutes % 60), unit: L10n.text("分钟"))]
+        if minutes < 60 { return [InsightPart(value: Double(minutes), unit: "min")] }
+        return [InsightPart(value: Double(minutes / 60), unit: "h"),
+                InsightPart(value: Double(minutes % 60), unit: "min")]
     }
 }
 
 private struct InsightPart {
     enum Format { case whole, thousands }
+    private static let englishLocale = Locale(identifier: "en_US")
     let value: Double
     let unit: String
     var format: Format = .whole
 
-    func string(at progress: Double) -> String {
+    var suffix: String { format == .thousands ? "k" : "" }
+
+    func digits(at progress: Double, language: String?) -> String {
         let scaled = value * progress
         switch format {
-        case .whole: return Formatters.number(Int(scaled))
-        case .thousands: return String(format: "%.1f", locale: L10n.locale, scaled) + "K"
+        case .whole: return L10n.formattedNumber(NSNumber(value: Int(scaled)), language: language)
+        case .thousands: return String(format: "%.1f", locale: Self.englishLocale, scaled)
         }
     }
 }
@@ -112,7 +113,8 @@ private struct InsightPart {
 private struct CountingNumber: View, Animatable {
     let part: InsightPart
     var elapsed: Double
-    let size: CGFloat
+    let font: Font
+    var language: String? = nil
     var animatableData: Double {
         get { elapsed }
         set { elapsed = newValue }
@@ -120,19 +122,27 @@ private struct CountingNumber: View, Animatable {
 
     var body: some View {
         let progress = DashboardMotion.ease(elapsed / DashboardMotion.countDuration)
-        Text(part.string(at: 1)).hidden()
+        number(at: 1).hidden()
             .overlay(alignment: .trailing) {
-                Text(part.string(at: progress))
+                number(at: progress)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
-            .font(InterfaceTypography.figure(size))
+            .font(font)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(part.string(at: 1))
+            .accessibilityLabel(part.digits(at: 1, language: language) + part.suffix)
+    }
+
+    private func number(at progress: Double) -> Text {
+        let digits = Text(verbatim: part.digits(at: progress, language: language))
+        guard !part.suffix.isEmpty else { return digits }
+        let suffix = Text(verbatim: part.suffix).font(.system(size: 21, weight: .medium, design: .serif))
+        return Text("\(digits)\(suffix)")
     }
 }
 
 /// One metric tile with a large figure, a smaller unit and a label.
 private struct Figure: View {
+    private static let numberFont = Font.system(size: 32, weight: .medium, design: .serif).monospacedDigit()
     let parts: [InsightPart]
     let label: String
     let elapsed: Double
@@ -144,15 +154,18 @@ private struct Figure: View {
                 ForEach(parts.indices, id: \.self) { index in
                     let part = parts[index]
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        CountingNumber(part: part, elapsed: elapsed, size: Theme.homeFigureSize)
-                            .tracking(-0.6)
+                        CountingNumber(part: part, elapsed: elapsed, font: Self.numberFont, language: "en")
+                            .tracking(-0.9)
                             .lineLimit(1).minimumScaleFactor(0.6)
-                        InterfaceTypography.text(part.unit, size: Theme.homeSecondarySize, weight: .semibold)
+                        Text(verbatim: part.unit)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.ink.opacity(0.8))
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
                 }
             }
-            InterfaceTypography.text(label, size: Theme.homeSecondarySize)
+            Text(verbatim: label)
+                .font(.system(size: Theme.homeSecondarySize))
                 .lineLimit(1).minimumScaleFactor(0.85)
                 .foregroundColor(Theme.homeLabel)
         }
@@ -231,21 +244,21 @@ final class HomeDotGridView: NSView {
     }
 }
 
-/// 分享: the system share menu with the website and GitHub links.
+/// The system share menu with the website and GitHub links.
 struct ShareButton: NSViewRepresentable {
     let items: [Any]
 
     func makeNSView(context: Context) -> HoverShareButton {
-        let button = HoverShareButton(title: L10n.text("分享"), image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil) ?? NSImage(),
+        let button = HoverShareButton(title: "Share", image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil) ?? NSImage(),
                               target: context.coordinator, action: #selector(Coordinator.share(_:)))
         button.setButtonType(.momentaryChange)
         button.imagePosition = .imageLeading
         button.isBordered = false
-        button.font = InterfaceTypography.localizedAppKit(16, weight: .medium)
+        button.font = .systemFont(ofSize: 15, weight: .semibold)
         button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
         button.wantsLayer = true
         button.controlSize = .regular
-        button.toolTip = L10n.text("分享官网和 GitHub 链接")
+        button.toolTip = "Share the website and GitHub links"
         return button
     }
 
@@ -398,7 +411,7 @@ struct ActivityCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
-                               elapsed: elapsed, size: Theme.homeFigureSize)
+                               elapsed: elapsed, font: InterfaceTypography.figure(Theme.homeFigureSize))
                     .tracking(-0.6)
                 InterfaceTypography.text(L10n.text("天"), size: Theme.homeSecondarySize, weight: .semibold)
             }
