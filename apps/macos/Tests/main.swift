@@ -2141,6 +2141,20 @@ contextPreferencesTests()
 meetingTests()
 performanceRegressionTests()
 
+// Show the actual panel after the tests that observe application activation.
+do {
+    _ = NSApplication.shared
+    let bar = RecordingBar()
+    bar.showThinking(detail: "Opening microphone", startingMicrophone: true)
+    check("microphone startup shows the panel before capture starts", bar.isVisible)
+    bar.showRecording(destination: "fixture", badge: "Dictation")
+    checkEq("the visible startup panel enters recording", bar.phase, .recording)
+    check("the recording panel remains visible after resizing", bar.isVisible)
+    bar.hide()
+    RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.1))
+    check("the recording panel dismisses after the transition", !bar.isVisible)
+}
+
 server.stop()
 print("")
 print("TESTS: " + String(passed) + " passed, " + String(failed) + " failed")
