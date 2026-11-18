@@ -301,7 +301,9 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("隐私与数据")) {
             ToggleRow(title: L10n.text("保留录音 5 分钟"), detail: nil,
                       isOn: model.setting(\.keepAudio24h))
-            NoteRow(symbol: "lock", text: L10n.text("音频不出本机。只有文字发给模型，密码和密钥先去掉。"), action: nil, perform: nil)
+            NoteRow(symbol: "lock", text: model.settings.onlineASRProvider.recordingPrivacyText
+                    + " " + L10n.text("联网整理会发送文字，自动隐藏部分凭据。"),
+                    action: nil, perform: nil)
         }
     }
 

@@ -14,8 +14,9 @@ struct MeetingsPage: View {
             VStack(alignment: .leading, spacing: 14) {
                 if meeting.modelInstalled == false { MeetingModelCard() }
                 MeetingControls()
-                if let result = meeting.result {
-                    MeetingTranscriptView(result: result)
+                if let transcript = meeting.transcript {
+                    MeetingTranscriptView(result: transcript.result, seconds: transcript.seconds, elapsed: transcript.elapsed)
+                        .id(transcript.id)
                 } else if meeting.stage == .recording ||
                             ([.transcribing, .failed].contains(meeting.stage) && (!meeting.liveTranscript.isEmpty || meeting.liveWarning)) {
                     MeetingLiveTranscriptView()
@@ -136,8 +137,9 @@ private struct MeetingControls: View {
 }
 
 struct MeetingTranscriptView: View {
-    @EnvironmentObject var meeting: MeetingController
     let result: MeetingResult
+    let seconds: Double
+    let elapsed: Double
     @State private var copyFeedback: UUID?
 
     private static let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .brown, .indigo]
@@ -149,7 +151,7 @@ struct MeetingTranscriptView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(L10n.text("{0} 位说话人 · {1} 的录音，用时 {2}", result.speakers.count, MeetingFormat.clock(meeting.seconds), MeetingFormat.clock(meeting.elapsed)))
+                Text(L10n.text("{0} 位说话人 · {1} 的录音，用时 {2}", result.speakers.count, MeetingFormat.clock(seconds), MeetingFormat.clock(elapsed)))
                     .font(InterfaceTypography.localized(14, weight: .medium))
                 Spacer()
                 Button(L10n.text(copyFeedback == nil ? "复制" : "已复制")) {

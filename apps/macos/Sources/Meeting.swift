@@ -3,8 +3,8 @@ import Foundation
 import SwiftUI
 
 // Meeting.swift - record or import one meeting, send it to the service's MOSS job, and keep the
-// speaker-labelled transcript for copying or saving. The transcript lives in memory until the
-// next meeting: it is not added to History.
+// speaker-labelled transcript for copying or saving. The transcript lives in memory and
+// remains available while the app processes an imported file.
 
 struct MeetingSegment: Codable, Equatable, Identifiable {
     var start: Double
@@ -118,12 +118,19 @@ private final class MeetingPreviewToken {
 final class MeetingController: ObservableObject {
     enum Stage: Equatable { case idle, recording, converting, transcribing, done, failed }
 
+    struct Transcript: Identifiable {
+        let id: String
+        let result: MeetingResult
+        let seconds: Double
+        let elapsed: Double
+    }
+
     @Published private(set) var stage: Stage = .idle
     @Published private(set) var message = ""
     @Published private(set) var seconds: Double = 0
     @Published private(set) var elapsed: Double = 0
     @Published private(set) var level: Float = 0
-    @Published private(set) var result: MeetingResult?
+    @Published private(set) var transcript: Transcript?
     /// Provisional text has no speaker identity: chunk-local speaker IDs cannot be joined.
     @Published private(set) var liveTranscript = ""
     @Published private(set) var liveWarning = false
@@ -155,6 +162,7 @@ final class MeetingController: ObservableObject {
 
     var busy: Bool { [.recording, .converting, .transcribing].contains(stage) }
     var canRetry: Bool { stage == .failed && audio != nil }
+    var result: MeetingResult? { transcript?.result }
 
     // MARK: model
 
@@ -203,6 +211,7 @@ final class MeetingController: ObservableObject {
         recorder.onAutoStop = { [weak self] in self?.stopRecording() }
         do { try recorder.start() } catch { fail(String(describing: error)); return }
         reset()
+        transcript = nil
         stage = .recording
         liveToken = MeetingPreviewToken()
         meter = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -284,7 +293,7 @@ final class MeetingController: ObservableObject {
         audio = nil
         liveTranscript = ""
         liveWarning = false
-        stage = .idle
+        stage = transcript == nil ? .idle : .done
         message = ""
         if let id { DispatchQueue.global(qos: .utility).async { [client] in try? client.meetingCancelSync(id: id) } }
         if let previewID { DispatchQueue.global(qos: .utility).async { [client] in try? client.meetingCancelSync(id: previewID) } }
@@ -367,7 +376,6 @@ final class MeetingController: ObservableObject {
         seconds = Double(max(0, wav.count - 44)) / Double(Recorder.bytesPerSecond)
         elapsed = 0
         message = ""
-        result = nil
         stage = .transcribing
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -404,7 +412,11 @@ final class MeetingController: ObservableObject {
                     self.elapsed = status.elapsedMs / 1000
                     switch status.phase {
                     case "done":
-                        self.result = status.result
+                        guard let result = status.result else {
+                            self.fail(Self.explain(code: status.code))
+                            return
+                        }
+                        self.transcript = Transcript(id: id, result: result, seconds: self.seconds, elapsed: self.elapsed)
                         self.audio = nil
                         self.stage = .done
                     case "failed", "cancelled": self.fail(Self.explain(code: status.code))
@@ -438,8 +450,8 @@ final class MeetingController: ObservableObject {
         finalAfterPreview = nil
         liveTranscript = ""
         liveWarning = false
-        result = nil
         audio = nil
+        jobID = nil
         message = ""
         seconds = 0
         elapsed = 0

@@ -1,5 +1,5 @@
 /**
- * Context for one dictation, and what must never leave the machine with it.
+ * Context for one dictation and credential masking for provider requests.
  *
  * The app sends the text around the cursor in the box being dictated into
  * (`x-voice-context`); it helps the model choose spellings and names. Before
@@ -8,10 +8,25 @@
  * @module typeleast-service/context
  */
 
-/** Patterns that must not reach a model provider. */
+// Prefer a quoted value. An unquoted passphrase ends at the next clause or line break.
+const PASSWORD_VALUE = /"[^"\r\n]+"|“[^”\r\n]+”|'[^'\r\n]+'|‘[^’\r\n]+’|(?=\S)(?:[^.?!\r\n，,。；;！？]|[.?!](?!\s|$))+/.source;
+
+function redactPassword(_match, prefix, value) {
+  return prefix + "[redacted]" + value.slice(value.trimEnd().length);
+}
+
+/** Recognized credential patterns to mask before sending text. */
 const SECRET_PATTERNS = [
+  {
+    pattern: new RegExp(String.raw`((?:密码|口令)[^\S\r\n]*(?:(?:是|为)(?!否|了|为了|用于|用来)|[:：=＝])[^\S\r\n]*)(${PASSWORD_VALUE})`, "gu"),
+    replacement: redactPassword,
+  },
+  {
+    pattern: new RegExp(String.raw`\b((?:password|passwd|passcode|passphrase)\b(?:[ \t]+for[ \t]+(?:(?:the|my|our)[ \t]+)?[\w.-]+)?[ \t]*(?:(?:is|are|was|were)[ \t]+|[:：=＝][ \t]*))(?!\b(?:on|in|at|for|from|to|left|right|here|there|not|no|still|required|optional|protected|case-sensitive)\b)(${PASSWORD_VALUE})`, "gi"),
+    replacement: redactPassword,
+  },
   // Require an explicit connector and value; ordinary discussion stays unchanged.
-  { pattern: /((?:密码|口令|密钥|令牌)\s*(?:是|为|[:：=])\s*)(["“][^"”]+["”]|[^\s，。；！？,;!?]+)/g, replacement: "$1[redacted]" },
+  { pattern: /((?:密钥|令牌)[^\S\r\n]*(?:是|为|[:：=＝])[^\S\r\n]*)(["“][^"”]+["”]|[^\s，。；！？,;!?]+)/g, replacement: "$1[redacted]" },
   { pattern: /\bsk-[A-Za-z0-9_-]{12,}\b/g, replacement: "[redacted-key]" },
   { pattern: /\b(?:ghp|gho|ghu|github_pat)_[A-Za-z0-9_]{12,}\b/g, replacement: "[redacted-token]" },
   { pattern: /\bxox[baprs]-[A-Za-z0-9-]{8,}\b/g, replacement: "[redacted-token]" },
@@ -22,16 +37,16 @@ const SECRET_PATTERNS = [
   // three words may sit between them. Function words are excluded before AND
   // after the connector, because "the password field is on the left" is not a
   // credential and wrongly rewriting it would corrupt what the user said.
-  { pattern: /\b((?:password|passwd|passcode|secret|api[-_]?key|access[-_]?token|refresh[-_]?token|auth[-_]?token)\b(?:(?!\b(?:on|in|at|for|from|to|of|the|a|an|is|are|was|were|again|before|after|and|or|but|that|this|it|my|your|our|their)\b)\s+\w+){0,3}\s*(?:(?:is|are|was|were)\s+|[:=]\s*))("(?:[^"]*)"|'(?:[^']*)'|(?!\b(?:on|in|at|for|from|to|of|the|a|an|again|before|after|and|or|but|is|are|was|were|left|right|here|there|not|no|still)\b)[^\s,.;!?]+)/gi, replacement: "$1[redacted]" },
+  { pattern: /\b((?:password|passwd|passcode|secret|api[-_ \t　]*key|access[-_]?token|refresh[-_]?token|auth[-_]?token)\b(?:(?!\b(?:on|in|at|for|from|to|of|the|a|an|is|are|was|were|again|before|after|and|or|but|that|this|it|my|your|our|their)\b)\s+\w+){0,3}\s*(?:(?:is|are|was|were)\s+|[:：=＝][^\S\r\n]*))("[^"\r\n]*"|“[^”\r\n]*”|'[^'\r\n]*'|‘[^’\r\n]*’|(?!\b(?:on|in|at|for|from|to|of|the|a|an|again|before|after|and|or|but|is|are|was|were|left|right|here|there|not|no|still|required|optional|protected|case-sensitive)\b)(?:[^.\s，,。；;！？!?]|\.(?!\s|$))+)/gi, replacement: "$1[redacted]" },
   // A quoted value after a bare keyword is a secret even with no connector:
   // password "hunter2".
-  { pattern: /\b((?:password|passwd|passcode|secret|api[-_]?key|token)\s*)("(?:[^"]*)"|'(?:[^']*)')/gi, replacement: "$1[redacted]" },
+  { pattern: /\b((?:password|passwd|passcode|secret|api[-_ \t　]*key|token)[^\S\r\n]*)("[^"\r\n]*"|“[^”\r\n]*”|'[^'\r\n]*'|‘[^’\r\n]*’)/gi, replacement: "$1[redacted]" },
 ];
 
 /**
  * Replace credential-shaped strings with placeholders.
  * @param {string} text - candidate text.
- * @returns {string} text safe to send to a provider.
+ * @returns {string} text with matches masked.
  */
 export function redactSecrets(text) {
   let out = String(text ?? "");
