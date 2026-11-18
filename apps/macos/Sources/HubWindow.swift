@@ -179,9 +179,9 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 sidebarWaveform
-                Text("TYPELEAST")
-                    .font(InterfaceTypography.localized(Theme.homeHeadingSize * Theme.homeRatio * Theme.homeRatio, weight: .light))
-                    .tracking(1)
+                Text("TypeLeast")
+                    .font(InterfaceTypography.localized(Theme.homeHeadingSize * Theme.homeRatio * Theme.homeRatio, weight: .semibold))
+                    .tracking(-0.6)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .accessibilityLabel("TypeLeast")
                 Spacer(minLength: 0)

@@ -73,8 +73,6 @@ enum L10n {
         "正在读取钥匙串状态…": "Loading saved-key status…",
         "错误": "Error",
         "洞察": "Insights",
-        "{0}（估算）": "{0} (estimated)",
-        "旧记录只有字数。按每分钟口述 210 字估算时长，按每分钟打字 60 字估算节省时间。": "Older records contain word counts only. Estimates use 210 characters per minute for speaking and 60 for typing.",
         "快捷听写": "Quick dictation",
         "管理模型": "Manage models",
         "较早的活动": "Earlier activity",
