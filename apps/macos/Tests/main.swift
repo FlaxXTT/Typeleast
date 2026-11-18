@@ -2059,11 +2059,12 @@ do {
     check("every guide entry says where it is", entries.allSatisfy { !$0.place.isEmpty })
     checkEq("the API key lives under Settings › Models", entries.first { $0.title == L10n.text("API Key") }?.category, 1)
     checkEq("the speech model lives under Settings › Models", entries.first { $0.title == L10n.text("语音模型") }?.category, 1)
-    let model = AppModel.shared
-    let before = (model.page, model.settingsCategory)
+    let model = AppModel()
+    model.navigate(to: .history)
     SettingsGuide.open(entries[1], in: model)
-    check("opening an entry goes to its Settings tab", model.page == .settings && model.settingsCategory == 1)
-    model.page = before.0; model.settingsCategory = before.1
+    check("opening an entry presents the Settings window on its tab",
+          model.settingsPresented && model.settingsCategory == 1)
+    checkEq("the guide keeps the background page in place", model.page, .history)
     func speech(_ json: String) -> SpeechStatus { try! JSONDecoder().decode(SpeechStatus.self, from: Data(json.utf8)) }
     check("an unreachable host is a network failure", speech(#"{"phase":"error","error":"could not reach huggingface.co: fetch failed"}"#).networkFailure)
     check("a failed catalog download is a network failure", speech(#"{"phase":"ready","operation":{"modelId":"x","phase":"error","received":0,"total":0,"error":"download-failed"}}"#).networkFailure)
@@ -2140,6 +2141,20 @@ do {
 contextPreferencesTests()
 meetingTests()
 performanceRegressionTests()
+
+// Show the actual panel after the tests that observe application activation.
+do {
+    _ = NSApplication.shared
+    let bar = RecordingBar()
+    bar.showThinking(detail: "Opening microphone", startingMicrophone: true)
+    check("microphone startup shows the panel before capture starts", bar.isVisible)
+    bar.showRecording(destination: "fixture", badge: "Dictation")
+    checkEq("the visible startup panel enters recording", bar.phase, .recording)
+    check("the recording panel remains visible after resizing", bar.isVisible)
+    bar.hide()
+    RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.1))
+    check("the recording panel dismisses after the transition", !bar.isVisible)
+}
 
 server.stop()
 print("")

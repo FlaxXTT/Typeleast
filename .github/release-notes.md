@@ -3,19 +3,11 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 划词翻译窗口随内容调整高度，译文可选取。失败可重试，分批翻译保留已完成的段落。
-- 提示词模式保留待发送的补充，只询问会影响结果的问题。
-- 会议导入失败时保留上一份结果。扩展多词密码和 API Key 脱敏，按识别模式说明录音去向。
-- 听写支持接入豆包 ASR 2.0 和阿里云 Fun-ASR Realtime。API Key 保存在本机钥匙串。
-- 首页采用单屏布局，补齐节省时间等使用统计。打开或恢复主窗口时播放统计和热力图动画。
+- 修复 MLX 语音识别的发布构建。识别进程退出时不再生成可能破坏应用签名的覆盖率文件。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- The selection translation window fits its content. You can select the result, retry failures, and keep completed paragraphs from a partial translation.
-- Prompt mode keeps pending answers and asks only questions that affect the result.
-- A failed meeting import keeps the previous result. Redaction covers multiword passwords and more API keys. The privacy notice shows where audio goes for the selected recognition mode.
-- Dictation supports Doubao ASR 2.0 and Alibaba Cloud Fun-ASR Realtime. API keys are stored in the local Keychain.
-- Home fits on one screen and shows time saved and other usage metrics. Opening or restoring the main window plays the metric and heatmap animations.
+- The MLX speech recognition worker exits without writing a coverage file that can invalidate the app signature.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation
