@@ -183,6 +183,7 @@ struct IconButton: View {
                 .font(.system(size: symbolSize, weight: .medium))
                 .foregroundColor(role == .destructive && hovering ? .red : Theme.secondary)
                 .frame(width: size, height: size)
+                .contentShape(RoundedRectangle(cornerRadius: Theme.smallControlRadius, style: .circular))
         }
         .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
         .help(help)
