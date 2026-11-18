@@ -149,6 +149,7 @@ private struct ShortcutReferenceCard: View {
 
     private func keys(_ binding: HotKeyBinding) -> [String] {
         if binding.isFn { return ["Fn"] }
+        if let chord = binding.fnChord { return ["Fn", chord.keyLabel] }
         var result: [String] = []
         if binding.modifiers & 4096 != 0 { result.append("Control") }
         if binding.modifiers & 2048 != 0 { result.append("Option") }
@@ -636,6 +637,8 @@ struct HistoryRow: View {
                         IconButton(symbol: "text.quote", help: L10n.text("复制原话"), symbolSize: 14) { copy(raw: true) }
                         if canRetry {
                             IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试"), symbolSize: 14) { model.actions?.retryEntry(id: entry.id) }
+                        } else {
+                            Color.clear.frame(width: 32, height: 32).accessibilityHidden(true)
                         }
                         IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive, symbolSize: 14) { model.actions?.deleteEntry(id: entry.id) }
                     }

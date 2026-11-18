@@ -77,7 +77,6 @@ final class DictationController {
             pendingAssistant = assistant
             pendingTranslate = translateTo
             startRecording()
-        // Fn is for dictation only; 提示词模式 has its own key (⌥Space by default).
         case .starting: cancelDictation()
         case .recording: stopRecording()
         case .thinking: NSSound.beep()

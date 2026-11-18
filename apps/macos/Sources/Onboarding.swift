@@ -183,7 +183,6 @@ struct OnboardingView: View {
         case .translate:
             TranslatePracticeView(practice: practice)
         case .promptMode:
-            // fn only dictates; 提示词模式 has its own key (⌥Space unless the user changed it).
             StepView(symbol: "text.bubble", title: L10n.text("提示词模式"),
                      text: model.assistantLabel.isEmpty
                         ? L10n.text("在「设置 › 快捷键」给提示词模式设一个键：说出需求，它先问清范围，再生成完整提示词。")
