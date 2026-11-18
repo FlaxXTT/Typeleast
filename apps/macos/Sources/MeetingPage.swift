@@ -138,6 +138,7 @@ private struct MeetingControls: View {
 struct MeetingTranscriptView: View {
     @EnvironmentObject var meeting: MeetingController
     let result: MeetingResult
+    @State private var copyFeedback: UUID?
 
     private static let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .brown, .indigo]
 
@@ -151,9 +152,11 @@ struct MeetingTranscriptView: View {
                 Text(L10n.text("{0} 位说话人 · {1} 的录音，用时 {2}", result.speakers.count, MeetingFormat.clock(meeting.seconds), MeetingFormat.clock(meeting.elapsed)))
                     .font(InterfaceTypography.localized(14, weight: .medium))
                 Spacer()
-                Button(L10n.text("复制")) {
+                Button(L10n.text(copyFeedback == nil ? "复制" : "已复制")) {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(MeetingFormat.text(result), forType: .string)
+                    if NSPasteboard.general.setString(MeetingFormat.text(result), forType: .string) {
+                        copyFeedback = UUID()
+                    }
                 }.buttonStyle(SecondaryButtonStyle()).disabled(result.segments.isEmpty)
                 Button(L10n.text("保存")) { save() }.buttonStyle(SecondaryButtonStyle()).disabled(result.segments.isEmpty)
             }
@@ -179,6 +182,7 @@ struct MeetingTranscriptView: View {
                 }
             }
         }
+        .resetCopyFeedback($copyFeedback)
     }
 
     private func save() {
