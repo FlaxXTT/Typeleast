@@ -6,7 +6,7 @@ import Combine
 // sidebar (Home, History; Settings at the bottom left) and one page.
 
 final class HubWindowController: NSObject, NSWindowDelegate {
-    fileprivate static let size = NSSize(width: 988, height: 685)
+    fileprivate static let size = NSSize(width: 944, height: 656)
     private var window: NSWindow?
     private let settingsWindow: SettingsWindowController
     private var settingsPresentation: AnyCancellable?
@@ -71,13 +71,13 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
         AppWindowStyle.fixSize(window, to: Self.size)
         window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.center()
         // Keep this frame record separate from the old resizable window.
-        window.setFrameAutosaveName("typeleast.hub.988x685")
+        window.setFrameAutosaveName("typeleast.hub.944x656")
         window.delegate = self
         AppWindowStyle.round(window)
         return window

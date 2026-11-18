@@ -4,6 +4,7 @@ import SwiftUI
 /// Settings can be dragged independently and stays above its main window.
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let identifier = NSUserInterfaceItemIdentifier("typeleast.settings")
+    static let size = NSSize(width: 900, height: 624)
     private let model: AppModel
     private var window: SettingsDialogWindow?
 
@@ -13,14 +14,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func show(relativeTo parent: NSWindow?) {
         if window == nil {
-            let size = NSSize(width: 940, height: 652)
+            let size = Self.size
             let panel = SettingsDialogWindow(contentRect: NSRect(origin: .zero, size: size),
                                              styleMask: [.borderless, .closable], backing: .buffered, defer: false)
             panel.identifier = Self.identifier
             panel.title = L10n.settingTitle
-            panel.contentViewController = NSHostingController(rootView:
+            let host = NSHostingController(rootView:
                 SettingsPage(onClose: { [weak self] in self?.close() }).environmentObject(model))
-            panel.setContentSize(size)
+            host.sizingOptions = []
+            panel.contentViewController = host
             AppWindowStyle.fixSize(panel, to: size)
             panel.collectionBehavior.insert(.fullScreenNone)
             panel.isReleasedWhenClosed = false
