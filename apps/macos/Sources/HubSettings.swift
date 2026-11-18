@@ -114,7 +114,7 @@ struct SettingsPage: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 940, height: 652)
+        .frame(width: SettingsWindowController.size.width, height: SettingsWindowController.size.height)
         .font(Theme.bodyFont).foregroundColor(Theme.ink).tint(Theme.accent).controlSize(.large)
         .background(Theme.tile)
         .background(RoundedWindowMarker(radius: Theme.settingsRadius))
