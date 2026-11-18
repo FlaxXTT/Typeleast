@@ -112,6 +112,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
 struct HubRootView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsCommands = false
     @State private var pendingCommand: (() -> Void)?
 
@@ -139,6 +140,13 @@ struct HubRootView: View {
         .tint(Theme.accent)
         .overlay(alignment: .top) { WindowDragRegion().frame(height: 44).padding(.leading, 84) }
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
+        .overlay {
+            Color.black
+                .opacity(model.settingsPresented ? 0.30 : 0)
+                .animation(reduceMotion ? nil : Theme.standard, value: model.settingsPresented)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
         .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
         .sheet(isPresented: $showsCommands, onDismiss: {

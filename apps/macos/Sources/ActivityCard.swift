@@ -378,12 +378,11 @@ struct ActivityCard: View {
     let elapsed: Double
     @State private var weekOffset = 0
 
-    private let cell: CGFloat = 16.5
+    private let minimumCell: CGFloat = 16.5
     private let columnGap: CGFloat = 3
     private let dayColumn: CGFloat = 24
     private let navigationHeight: CGFloat = 18
     private let navigationGap: CGFloat = 6
-    private var columnStep: CGFloat { cell + columnGap }
 
     var body: some View {
         let log = ActivityLog.shared
@@ -397,11 +396,12 @@ struct ActivityCard: View {
             }
             .padding(.horizontal, 7)
             GeometryReader { geo in
-                let width = max(cell, geo.size.width - dayColumn)
-                let weeks = max(1, min(20, Int((width + columnGap) / columnStep)))
-                let gridWidth = dayColumn + CGFloat(weeks) * columnStep - columnGap
+                let width = max(minimumCell, geo.size.width - dayColumn)
+                let weeks = max(1, min(20, Int((width + columnGap) / (minimumCell + columnGap))))
+                let cell = (width - CGFloat(weeks - 1) * columnGap) / CGFloat(weeks)
+                let gridWidth = dayColumn + width
                 let rowStep = max(cell + 2, (geo.size.height - cell - navigationHeight - navigationGap) / 6)
-                grid(weeks: weeks, width: gridWidth, rowStep: rowStep, log: log)
+                grid(weeks: weeks, width: gridWidth, cell: cell, rowStep: rowStep, log: log)
                     .frame(width: gridWidth)
                     .frame(maxWidth: .infinity)
             }
@@ -435,7 +435,7 @@ struct ActivityCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func grid(weeks: Int, width: CGFloat, rowStep: CGFloat, log: ActivityLog) -> some View {
+    private func grid(weeks: Int, width: CGFloat, cell: CGFloat, rowStep: CGFloat, log: ActivityLog) -> some View {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = L10n.locale
         calendar.firstWeekday = 1
@@ -444,6 +444,7 @@ struct ActivityCard: View {
         let first = calendar.date(byAdding: .day, value: 7 * (weekOffset - weeks + 1), to: thisWeek) ?? thisWeek
         let earliest = log.days.keys.min().flatMap { ActivityLog.parse($0, calendar: calendar) }
         let hatchWidth: CGFloat = 7
+        let columnStep = cell + columnGap
         let navigationY = 6 * rowStep + cell + navigationGap
         let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
@@ -475,7 +476,7 @@ struct ActivityCard: View {
                             let level = ActivityLog.level(day.dictations)
                             let description = tooltip(date, day)
                             if weekOffset == 0 {
-                                outlinedCell.overlay {
+                                outlinedCell(size: cell).overlay {
                                     square(level, size: cell).modifier(HeatmapColumnReveal(
                                         elapsed: elapsed, start: revealStart))
                                 }
@@ -484,7 +485,7 @@ struct ActivityCard: View {
                                 square(level, size: cell).help(description).accessibilityLabel(description)
                             }
                         } else {
-                            outlinedCell.accessibilityHidden(true)
+                            outlinedCell(size: cell).accessibilityHidden(true)
                         }
                     }
                     .offset(x: x, y: CGFloat(row) * rowStep)
@@ -513,10 +514,10 @@ struct ActivityCard: View {
         }
     }
 
-    private var outlinedCell: some View {
+    private func outlinedCell(size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
             .strokeBorder(Theme.border, lineWidth: 1)
-            .frame(width: cell, height: cell)
+            .frame(width: size, height: size)
     }
 
     private func square(_ level: Int, size: CGFloat) -> some View {
