@@ -160,6 +160,11 @@ See our [Code signing policy](docs/CODE_SIGNING_POLICY.md).
 
 Windows code signing via SignPath Foundation is currently pending approval.
 
+## 问题报告贡献者
+
+- [pioneerAlone](https://github.com/pioneerAlone) 提供了 MLX worker 退出后生成覆盖率文件、导致本地服务无法启动的复现步骤和日志。也报告了冷启动时的健康检查问题。[#107](https://github.com/FlaxXTT/Typeleast/issues/107)
+- [tomcatcoffee](https://github.com/tomcatcoffee) 提供了开始录音时浮窗闪退的崩溃堆栈。[#179](https://github.com/FlaxXTT/Typeleast/issues/179)
+
 ## 更多
 
 <details>
