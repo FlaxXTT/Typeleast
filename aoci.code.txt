@@ -376,7 +376,7 @@ translation.js[AB7T]: F:用段落批次翻译口述或选区并呈现部分成�
 asr-test-policy.mjs[TQ3T]: F:为指定大模型提供显式内存预算跳过规则 | R:code:service/scripts/check-asr-models.mjs | A:skipForMemory | S:默认不跳过，测试预算不定义产品硬件要求
 check-asr-models.mjs[TB4S]: F:按公开样本和语言提示检查真实识别模型 | R:code:service/scripts/asr-test-policy.mjs,code:service/lib/speech-models.js | A:--models-dir、--state-dir、--download、--sample-file | S:每个模型用独立子进程，切换前释放原生内存
 check-localization.mjs[TL3T]: F:对照应用内置语言目录的翻译条目 | R:code:apps/macos/Sources/L10n.swift,code:apps/windows/TypeLeast.Core/L10n.cs | A:本地化目录检查入口 | S:-
-check-redaction.mjs[TS4T]: F:捕捉发给模型桩的请求体来覆盖脱敏 | R:code:service/lib/context.js,code:service/lib/service.js | A:本地请求捕捉入口 | S:无需连接真实提供方
+check-redaction.mjs[TS4T]: F:捕捉模型桩的请求体验证口述和上下文凭据脱敏 | R:code:service/lib/context.js,code:service/lib/service.js | A:本地请求捕捉入口 | S:无需连接真实提供方
 cleanup-acceptance.mjs[TB3T]: F:通过在运行服务执行整理规则的示例验收 | R:code:service/scripts/service-env.mjs,code:service/lib/prompts/cleanup.md | A:整理验收入口 | S:使用真实配置会消耗模型额度
 compare-qwen-formats.mjs[XB3T]: F:对比两种本机Qwen模型文件形态的识别 | R:code:service/lib/local-models.js,code:service/lib/local-recognizer.js | A:baseline-dir、candidate-dir、samples-dir | S:显式传路径，不读用户偏好或凭据
 live-acceptance.mjs[TB3T]: F:通过运行中的本机服务对照整理验收案例 | R:code:service/scripts/service-env.mjs,code:service/lib/service.js | A:真实服务验收入口 | S:使用真实模型额度
