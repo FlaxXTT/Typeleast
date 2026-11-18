@@ -259,7 +259,7 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启后生效。")) {
                 Picker("", selection: model.setting(\.interfaceLanguage)) {
                     Text(L10n.text("跟随系统")).tag("system")
-                    Text("简体中文").tag("zh-Hans")
+                    Text("繁體中文（小篆）").font(Theme.rowFont).tag("zh-Hant")
                     Text("English").tag("en")
                 }.labelsHidden().frame(width: 150)
             }
@@ -402,7 +402,7 @@ struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.secondary)
+            InterfaceTypography.text(title, size: 14, weight: .semibold).foregroundColor(Theme.secondary)
             VStack(alignment: .leading, spacing: 8) { content }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
