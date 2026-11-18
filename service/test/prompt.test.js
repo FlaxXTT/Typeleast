@@ -45,7 +45,7 @@ test("translation uses the maintainer's prompt and user template, in batches of 
   assert.match(prompt, /Smith et al\. \(2021\)`; translate only the surrounding prose\./);
   assert.doesNotMatch(prompt, /\{\{|"status"|# Profile/);
   assert.equal(translateUserMessage("zh", "Hello"), "Translate to 中文（简体中文）:\n\nHello");
-  assert.deepEqual(translateBatches("a\n\nb"), ["a\nb"]);
+  assert.deepEqual(translateBatches("a\n\nb"), ["a\n\nb"]);
   assert.equal(translateBatches(Array.from({ length: 17 }, (_, i) => "p" + i).join("\n")).length, 3);
 });
 

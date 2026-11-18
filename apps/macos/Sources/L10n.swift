@@ -147,6 +147,8 @@ enum L10n {
         "继续补充按钮": "Add more button",
 
         "正在翻译…": "Translating…",
+        "已翻译 {0}/{1} 批。请重试。": "{0} of {1} batches translated. Retry.",
+        "选区超过 {0} 字符，请分段翻译。": "Selection exceeds {0} characters. Translate it in sections.",
 
         "正在识别…": "Recognizing…",
         "本地模型": "On-device model",
@@ -550,8 +552,9 @@ enum L10n {
         "引擎": "Engine",
         "当前版本 ": "Version ",
         "安全输入已开启，已复制到剪贴板": "Secure input is on. Copied to clipboard",
-        "音频不出本机。只有文字发给模型，密码和密钥先去掉。": "Audio stays on this computer. Only text goes to the model. Passwords and keys are removed first.",
-        "音频不出本机。": "Audio stays on this computer.",
+        "录音在本机识别。": "Speech is recognized on this Mac.",
+        "录音发往 {0}。": "Recordings are sent to {0}.",
+        "联网整理会发送文字，自动隐藏部分凭据。": "Online cleanup sends text and masks some credentials.",
         "录音太短（%.2f 秒）": "Recording too short (%.2f s)",
         "按 Esc，或点语音条上的 ✕": "Press Esc, or click ✕ on the bar",
         "微信": "WeChat",

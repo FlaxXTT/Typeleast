@@ -11,6 +11,7 @@ struct SelectableText: NSViewRepresentable {
     /// 0 for no limit.
     let maxLines: Int
     var lineHeight: CGFloat? = nil
+    var acceptsInactiveClick = false
     let onPlainClick: () -> Void
 
     func makeNSView(context: Context) -> HistoryTextView {
@@ -42,6 +43,7 @@ struct SelectableText: NSViewRepresentable {
             if container.lineBreakMode != mode { container.lineBreakMode = mode; layoutChanged = true }
         }
         view.onPlainClick = onPlainClick
+        view.acceptsInactiveClick = acceptsInactiveClick
         if layoutChanged {
             let paragraph = NSMutableParagraphStyle()
             if let lineHeight { paragraph.minimumLineHeight = lineHeight; paragraph.maximumLineHeight = lineHeight }
@@ -60,6 +62,7 @@ struct SelectableText: NSViewRepresentable {
 final class HistoryTextView: NSTextView {
     var lineHeight: CGFloat?
     var onPlainClick: (() -> Void)?
+    var acceptsInactiveClick = false
     private var cachedMeasurement: CGSize?
 
     override var string: String {
@@ -100,6 +103,10 @@ final class HistoryTextView: NSTextView {
     override var intrinsicContentSize: NSSize {
         guard bounds.width > 0 else { return NSSize(width: NSView.noIntrinsicMetric, height: 20) }
         return NSSize(width: NSView.noIntrinsicMetric, height: measuredSize(width: bounds.width).height)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        acceptsInactiveClick || super.acceptsFirstMouse(for: event)
     }
 
     override func mouseDown(with event: NSEvent) {

@@ -9,7 +9,7 @@ import { cleanupParameters } from "../cleanup-task.js";
 import { failureReason, ModelCallError } from "../llm.js";
 import {
   BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
-  boundaryQuestions, cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply,
+  cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply,
 } from "../prompts/prompt-beta.js";
 import { unwrap } from "../validate.js";
 import { timing } from "./timing.js";
@@ -90,10 +90,8 @@ export class AssistantSessions {
           throw Object.assign(new Error("invalid clarification"), { code: "output-format" });
         }
         if (this.map.get(id) !== session) throw new DOMException("Cancelled", "AbortError");
-        const modelQuestions = normaliseQuestions(reply.questions);
-        if (reply.questions.length && !modelQuestions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
-        // The task's boundaries come first: what may be read or searched, and creative or routine work.
-        const questions = normaliseQuestions([...boundaryQuestions(session.request, turns, session.baseline), ...modelQuestions]);
+        const questions = normaliseQuestions(reply.questions);
+        if (reply.questions.length && !questions.length) throw Object.assign(new Error("invalid questions"), { code: "output-format" });
         session.turns = turns;
         session.spec = { goal: typeof reply.goal === "string" ? reply.goal.slice(0, 500) : "" };
         session.confirmed = reply.confirmed.filter(x => typeof x === "string").map(x => x.trim().slice(0, 240)).filter(Boolean).slice(0, session.selection ? 8 : 6);

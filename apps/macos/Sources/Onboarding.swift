@@ -144,7 +144,7 @@ struct OnboardingView: View {
             }
         case .microphone:
             StepView(symbol: "mic.fill", title: L10n.text("允许麦克风"),
-                     text: L10n.text("音频不出本机。")) {
+                     text: model.settings.onlineASRProvider.recordingPrivacyText) {
                 permissionState(granted: model.micStatus == .authorized,
                                 denied: model.micStatus == .denied || model.micStatus == .restricted,
                                 ask: { model.actions?.requestMicrophone() },

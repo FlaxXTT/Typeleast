@@ -409,14 +409,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             return self.settings.selectionTranslate && self.phase == .idle && !self.settings.needsPractice
         }
         selectionTranslator.preferredTarget = { [weak self] in self?.settings.translateTarget ?? "en" }
-        selectionTranslator.translate = { [weak self] text, target, done in
+        selectionTranslator.translate = { [weak self] text, target, cancellation, done in
             guard let self, let route = self.settings.activeLLMRoute else {
                 return done(.failure(ServiceError.translationFailed(reason: "no-api-key")))
             }
             let language = self.settings.language, variants = self.settings.variantsHeader, ownPrompt = self.settings.customTranslatePrompt
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = Result { try self.client.polishSync(text: text, language: language, strength: "prompt", llm: route,
-                                                                 translateTo: target, variants: variants, translatePrompt: ownPrompt) }
+                                                                 translateTo: target, variants: variants, translatePrompt: ownPrompt,
+                                                                 cancellation: cancellation) }
                 DispatchQueue.main.async {
                     switch result {
                     // A failed translation comes back as the original text: say so instead of showing it.
@@ -424,7 +425,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                         done(.success(response.insertableText))
                     case .success(let response):
                         DiagnosticsLog.write("translation.fail", ["reason": response.fallbackReason ?? "empty-output"])
-                        done(.failure(ServiceError.translationFailed(reason: response.fallbackReason)))
+                        if let partial = response.translationProgress {
+                            done(.failure(ServiceError.translationIncomplete(partial)))
+                        } else {
+                            done(.failure(ServiceError.translationFailed(reason: response.fallbackReason)))
+                        }
                     case .failure(let error): done(.failure(error))
                     }
                 }

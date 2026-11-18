@@ -284,6 +284,7 @@ export function createHandler(options) {
           ...(result.offerFailover ? { offerFailover: true } : {}),
           ms: result.ms,
           ...(result.translated ? { translated: result.translated } : {}),
+          ...(result.translationProgress ? { translationProgress: result.translationProgress } : {}),
           ...(result.corrections ? { corrections: result.corrections } : {}),
           ...(result.intention ? { intention: result.intention } : {}),
           ...(result.qualityReview ? { qualityReview: result.qualityReview } : {}),
