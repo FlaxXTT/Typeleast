@@ -1,172 +1,60 @@
-name: Release
+name: Sign local TypeLeast preview
 
-# Run this by hand to build and publish:
-#   TypeLeast-<v>-macOS-AppleSilicon.dmg
-#   TypeLeast-<v>-macOS14-AppleSilicon.zip
-#   SHA256SUMS.txt
-# Windows and Intel releases have been discontinued; existing releases stay available.
-# The UTC annotated tag must already exist on the selected main commit.
-# Manual only. With "draft" the release stays a draft
-# (the updaters do not see it) until it is published by hand after checking the files.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing UTC annotated tag on main, e.g. v1.2.0"
+        description: Existing release to use as the base bundle
         required: true
-      draft:
-        description: "Create the release as a draft"
-        type: boolean
-        default: false
-      signing_mode:
-        description: "Publisher signing, or the approved temporary-signing exception for v2.1.6 only"
-        type: choice
-        default: publisher
-        options:
-          - publisher
-          - legacy-2.1.6
 
 permissions:
-  contents: write
-
-env:
-  # The Node.js shipped inside the apps (an LTS release; checked against nodejs.org's SHA-256 list).
-  NODE_BUNDLE_VERSION: "24.21.0"
+  contents: read
 
 jobs:
-  macos:
-    name: macOS ${{ matrix.arch }}
-    strategy:
-      matrix:
-        # Intel Macs are no longer built (last Intel release: 1.17.1).
-        arch: [arm64]
+  preview:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Validate the requested signing mode
+      - name: Reuse the official app bundle
         env:
-          SIGNING_MODE: ${{ inputs.signing_mode }}
-          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
         run: |
-          case "$SIGNING_MODE" in
-            publisher) ;;
-            legacy-2.1.6)
-              test "$RELEASE_TAG" = v2.1.6 || { echo 'The temporary-signing exception is limited to v2.1.6.' >&2; exit 1; }
-              version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' apps/macos/Info.plist)
-              test "$version" = 2.1.6 || { echo 'The temporary-signing exception requires the 2.1.6 source.' >&2; exit 1; }
-              echo 'TYPELEAST_SIGN_IDENTITY=-' >> "$GITHUB_ENV"
-              echo 'v2.1.6 uses the explicitly approved temporary-signing exception. macOS authorization prompts may remain.' >> "$GITHUB_STEP_SUMMARY"
-              ;;
-            *) echo 'Unsupported signing mode.' >&2; exit 1 ;;
-          esac
+          set -euo pipefail
+          [ "$TAG" = v2.1.13 ]
+          mkdir -p "$RUNNER_TEMP/preview"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'TypeLeast-2.1.13-macOS14-AppleSilicon.zip' --dir "$RUNNER_TEMP/preview"
+          /usr/bin/ditto -x -k "$RUNNER_TEMP/preview/TypeLeast-2.1.13-macOS14-AppleSilicon.zip" "$RUNNER_TEMP/preview"
+      - name: Compile the updated app executable
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/preview/TypeLeast.app"
+          /usr/bin/swiftc -swift-version 5 -O -target arm64-apple-macosx14.0 \
+            -framework AppKit -framework SwiftUI -framework AVFoundation \
+            -framework CoreAudio -framework Carbon -framework ServiceManagement -framework Foundation \
+            -o "$RUNNER_TEMP/preview/TypeLeast" apps/macos/Sources/*.swift
+          cp "$RUNNER_TEMP/preview/TypeLeast" "$app/Contents/MacOS/TypeLeast"
+          /usr/bin/ditto apps/macos/Resources/Fonts "$app/Contents/Resources/Fonts"
       - name: Import persistent publisher signing identity
-        if: inputs.signing_mode != 'legacy-2.1.6'
-        timeout-minutes: 2
         env:
           MACOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.MACOS_SIGNING_CERTIFICATE_BASE64 }}
           MACOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
         run: bash apps/macos/scripts/setup-release-signing.sh
-      - name: Package
-        env:
-          TYPELEAST_SKIP_PACKAGE_RUNTIME_CHECK: '1'
-        run: NODE_VERSION="$NODE_BUNDLE_VERSION" apps/macos/package.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/out"
-      - name: Verify safe Mac asset names
+      - name: Sign the preview with the publisher
         run: |
-          source apps/macos/scripts/package-names.sh
-          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' apps/macos/Info.plist)
-          test -f "out/$(typeleast_macos_dmg_name "$version" AppleSilicon)"
-          test -f "out/$(typeleast_macos_zip_name "$version" AppleSilicon)"
-          test ! -e "out/$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
+          set -euo pipefail
+          app="$RUNNER_TEMP/preview/TypeLeast.app"
+          /usr/bin/codesign --force --sign "$TYPELEAST_SIGN_IDENTITY" --timestamp=none \
+            --options runtime --entitlements apps/macos/TypeLeast.entitlements "$app"
+          /usr/bin/codesign --verify --deep --strict "$app"
+          /usr/bin/ditto -c -k --keepParent "$app" "$RUNNER_TEMP/preview/TypeLeast-2.1.13-enlarged-heatmap-preview.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
-          path: |
-            out/*.dmg
-            out/*.zip
+          name: macos-enlarged-heatmap-preview
+          path: ${{ runner.temp }}/preview/TypeLeast-2.1.13-enlarged-heatmap-preview.zip
+          retention-days: 1
           if-no-files-found: error
       - name: Remove temporary signing material
         if: always()
-        timeout-minutes: 2
         run: bash apps/macos/scripts/cleanup-release-signing.sh
-
-  publish:
-    name: Publish release
-    needs: [macos]
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify the existing release tag and main commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use an exact vX.Y.Z tag.' >&2; exit 1; }
-          test "$GITHUB_REF" = refs/heads/main || { echo 'Run the release from main.' >&2; exit 1; }
-          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
-          test "$(git cat-file -t "refs/tags/$TAG")" = tag || { echo 'The tag must be annotated.' >&2; exit 1; }
-          test "$(git cat-file -p "refs/tags/$TAG" | awk '/^tagger / {print $NF; exit}')" = +0000 || { echo 'The tagger time must be UTC.' >&2; exit 1; }
-          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$GITHUB_SHA" || { echo 'The tag must point to the selected main commit.' >&2; exit 1; }
-          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA" || { echo 'Main has moved since this workflow started.' >&2; exit 1; }
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: Checksums
-        env:
-          TAG: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use an exact vX.Y.Z tag.' >&2; exit 1; }
-          source apps/macos/scripts/package-names.sh
-          version="${TAG#v}"
-          dmg="$(typeleast_macos_dmg_name "$version" AppleSilicon)"
-          zip="$(typeleast_macos_zip_name "$version" AppleSilicon)"
-          legacy="$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
-          cd dist
-          test -f "$dmg"
-          test -f "$zip"
-          test ! -e "$legacy"
-          sha256sum "$dmg" "$zip" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-      - name: Create the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.inputs.tag || github.ref_name }}
-          DRAFT: ${{ inputs.draft && '--draft' || '' }}
-        run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use an exact vX.Y.Z tag.' >&2; exit 1; }
-          source apps/macos/scripts/package-names.sh
-          version="${TAG#v}"
-          dmg="$(typeleast_macos_dmg_name "$version" AppleSilicon)"
-          zip="$(typeleast_macos_zip_name "$version" AppleSilicon)"
-          legacy="$(typeleast_macos_legacy_zip_name "$version" AppleSilicon)"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA" || { echo 'Main has moved since this workflow started.' >&2; exit 1; }
-          if existing_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
-            # A draft can be rebuilt before its first publication. Published releases are immutable.
-            if [ "$existing_draft" != true ] || [ -z "$DRAFT" ]; then
-              echo "Refusing to replace a published release or publish an existing draft without review." >&2
-              exit 1
-            fi
-            existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')" || exit 1
-            if printf '%s\n' "$existing_assets" | grep -Fxq "$legacy"; then
-              echo "The existing draft contains a legacy ZIP. Refusing to publish or remove it." >&2
-              exit 1
-            fi
-            for name in "$dmg" "$zip" SHA256SUMS.txt; do
-              if printf '%s\n' "$existing_assets" | grep -Fxq "$name"; then
-                echo "The existing draft already contains $name. Refusing to overwrite it." >&2
-                exit 1
-              fi
-            done
-            gh release upload "$TAG" "dist/$dmg" "dist/$zip" dist/SHA256SUMS.txt
-            gh release edit "$TAG" --draft --title "TypeLeast ${TAG#v}" \
-              --notes-file .github/release-notes.md --target "$GITHUB_SHA"
-          else
-            gh release create "$TAG" "dist/$dmg" "dist/$zip" dist/SHA256SUMS.txt --verify-tag \
-              --title "TypeLeast ${TAG#v}" \
-              --notes-file .github/release-notes.md \
-              --target "$GITHUB_SHA" $DRAFT
-          fi
