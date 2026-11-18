@@ -36,8 +36,6 @@ struct InsightsPanel: View {
     var body: some View {
         let stats = model.stats
         let time = reduceMotion ? DashboardMotion.duration : elapsed
-        let estimateNote = stats.hasEstimatedTiming
-            ? L10n.text("旧记录只有字数。按每分钟口述 210 字估算时长，按每分钟打字 60 字估算节省时间。") : nil
         GeometryReader { geometry in
             let headerHeight: CGFloat = 54
             let spacing: CGFloat = 14
@@ -47,9 +45,8 @@ struct InsightsPanel: View {
             let tileHeight = max(0, (contentHeight - activityHeight - tileGap) / 2)
             VStack(alignment: .leading, spacing: spacing) {
                 HStack {
-                    InitialHeading(title: "INSIGHT", initialSize: Theme.homeHeadingSize,
-                                   bodySize: Theme.homeHeadingSize * Theme.homeRatio,
-                                   weight: .light, tracking: 1.8)
+                    InitialHeading(title: "Insight", initialSize: Theme.homeHeadingSize,
+                                   bodySize: Theme.homeHeadingSize * Theme.homeRatio)
                         .foregroundColor(Theme.homeLabel)
                         .accessibilityLabel("Insight")
                     Spacer()
@@ -59,12 +56,11 @@ struct InsightsPanel: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: tileGap), GridItem(.flexible())], spacing: tileGap) {
                     Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: time, height: tileHeight)
                     Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: time,
-                           height: tileHeight, estimateNote: estimateNote)
+                           height: tileHeight)
                     Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))],
-                           label: L10n.text("平均口述速度"), elapsed: time, height: tileHeight,
-                           estimateNote: estimateNote)
+                           label: L10n.text("平均口述速度"), elapsed: time, height: tileHeight)
                     Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: time,
-                           height: tileHeight, estimateNote: estimateNote)
+                           height: tileHeight)
                 }
                 ActivityCard(elapsed: time).frame(height: activityHeight)
             }
@@ -148,7 +144,6 @@ private struct Figure: View {
     let label: String
     let elapsed: Double
     let height: CGFloat
-    var estimateNote: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -161,22 +156,14 @@ private struct Figure: View {
                         .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                 }
             }
-            HStack(spacing: 5) {
-                InterfaceTypography.text(estimateNote == nil ? label : L10n.text("{0}（估算）", label),
-                                         size: Theme.homeSecondarySize)
-                    .lineLimit(1).minimumScaleFactor(0.85)
-                if let estimateNote {
-                    Image(systemName: "info.circle").font(.system(size: 11))
-                        .help(estimateNote).accessibilityLabel(estimateNote)
-                }
-            }
-            .foregroundColor(Theme.homeLabel)
+            InterfaceTypography.text(label, size: Theme.homeSecondarySize)
+                .lineLimit(1).minimumScaleFactor(0.85)
+                .foregroundColor(Theme.homeLabel)
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: height)
         .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
-        .help(estimateNote ?? label)
     }
 }
 
