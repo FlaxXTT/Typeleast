@@ -317,14 +317,16 @@ private final class HubScrollChrome: NSView {
         updateColours()
     }
     private func updateColours() {
-        topButton.contentTintColor = NSColor(Theme.accent)
-        topButton.layer?.backgroundColor = NSColor(Theme.card).cgColor
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        progressLayer.backgroundColor = NSColor(Theme.accent).withAlphaComponent(0.6).cgColor
-        let background = NSColor(Theme.window)
-        fadeLayer.colors = [background.withAlphaComponent(0).cgColor, background.cgColor]
-        CATransaction.commit()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            topButton.contentTintColor = NSColor(Theme.accent)
+            topButton.layer?.backgroundColor = NSColor(Theme.card).cgColor
+            progressLayer.backgroundColor = NSColor(Theme.accent).withAlphaComponent(0.6).cgColor
+            let background = NSColor(Theme.window)
+            fadeLayer.colors = [background.withAlphaComponent(0).cgColor, background.cgColor]
+            CATransaction.commit()
+        }
     }
 
     func update(offset: CGFloat, extent: CGFloat) {

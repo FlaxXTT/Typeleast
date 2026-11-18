@@ -352,7 +352,9 @@ final class PillView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        setBoundsSize(NSSize(width: newSize.width / Self.displayScale, height: newSize.height / Self.displayScale))
+        if Self.displayScale != 1 {
+            setBoundsSize(NSSize(width: newSize.width / Self.displayScale, height: newSize.height / Self.displayScale))
+        }
         needsLayout = true
     }
 
@@ -710,7 +712,7 @@ final class RecordingBar {
         didSet { pillBox?.limitSeconds = limitSeconds }
     }
 
-    /// Largest panel the capsule can need; the panel is resized to the capsule per look.
+    /// The transparent panel stays fixed while the capsule changes size inside it.
     static let size = VoiceBarGeometry.overlay
     private static let tickInterval: TimeInterval = 1.0 / 60.0
     private static let resultHold: TimeInterval = 1.0
@@ -1000,23 +1002,19 @@ final class RecordingBar {
         if widthChanged, let existing = panelBox, existing.isVisible { resizeToCapsule(existing) }
     }
 
-    private func capsuleSize() -> NSSize {
-        NSSize(width: (pill.presentationWidth * PillView.displayScale).rounded(),
-               height: pill.presentationHeight * PillView.displayScale)
+    private func capsuleFrame() -> NSRect {
+        let width = (pill.presentationWidth * PillView.displayScale).rounded()
+        return NSRect(x: ((Self.size.width - width) / 2).rounded(), y: VoiceBarGeometry.bottomInset,
+                      width: width, height: pill.presentationHeight * PillView.displayScale)
     }
 
     /// Keep the capsule centred on the same bottom-centre point as its width changes.
     private func resizeToCapsule(_ target: PillPanel) {
-        let size = capsuleSize()
-        let frame = NSRect(x: ((Self.size.width - size.width) / 2).rounded(), y: VoiceBarGeometry.bottomInset,
-                           width: size.width, height: size.height)
+        let frame = capsuleFrame()
         guard pill.frame != frame else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.prefersReducedMotion ? 0 : VoiceBarGeometry.shapeDuration
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.05, 0.6, 0.4, 0.95)
-            pill.animator().setFrameOrigin(frame.origin)
-            pill.animator().setFrameSize(frame.size)
-        }
+        // Update the view and its button geometry together. AppKit's animated frame
+        // proxy can crash while invalidating visible rects on the recording handoff.
+        pill.frame = frame
         target.contentView?.needsLayout = true
         positionMicrophoneHint()
         updatePointerPassthrough()
@@ -1026,8 +1024,7 @@ final class RecordingBar {
         let entering = !panel.isVisible
         if entering || model.phase == .recording { positionOnMouseScreen() }
         if entering {
-            let size = capsuleSize()
-            pill.frame = NSRect(x: (Self.size.width - size.width) / 2, y: VoiceBarGeometry.bottomInset, width: size.width, height: size.height)
+            pill.frame = capsuleFrame()
             (panel.contentView as? RecordingOverlayHost)?.apply(model)
             panel.contentView?.needsLayout = true
         }
@@ -1070,8 +1067,7 @@ final class RecordingBar {
         guard let panelBox, let pillBox else { return }
         let interactive = (model.phase == .recording && model.mode == .handsFree)
             || (model.phase == .thinking && !model.isStartingMicrophone)
-        let rect = pillBox.layer?.presentation()?.frame ?? pillBox.frame
-        let inside = VoiceBarGeometry.contains(NSEvent.mouseLocation, in: panelBox.convertToScreen(rect))
+        let inside = VoiceBarGeometry.contains(NSEvent.mouseLocation, in: panelBox.convertToScreen(pillBox.frame))
         let ignore = isDismissing || !interactive || !inside
         if panelBox.ignoresMouseEvents != ignore { panelBox.ignoresMouseEvents = ignore }
     }
