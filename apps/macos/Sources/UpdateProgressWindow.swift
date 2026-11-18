@@ -110,7 +110,7 @@ struct UpdateProgressView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
-                    Text(title).font(.system(size: 20, weight: .semibold))
+                    Text(title).font(InterfaceTypography.localized(20, weight: .semibold))
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
                     IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24, action: close)
@@ -125,6 +125,7 @@ struct UpdateProgressView: View {
             .padding(20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .font(Theme.bodyFont)
         .foregroundColor(Theme.ink)
         .onExitCommand(perform: close)
         .accessibilityElement(children: .contain)

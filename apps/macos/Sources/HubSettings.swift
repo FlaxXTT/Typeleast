@@ -501,7 +501,7 @@ private struct NoteRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol).foregroundColor(Theme.secondary).padding(.top, 1)
-            Text(text).font(.system(size: 12)).foregroundColor(Theme.secondary)
+            Text(text).font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             if let action = action, let perform = perform {
@@ -526,7 +526,7 @@ private struct PermissionRow: View {
             Text(title).font(Theme.rowFont)
             Spacer()
             if granted {
-                Text(L10n.text("已允许")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(L10n.text("已允许")).font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
             } else {
                 Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
             }
@@ -579,10 +579,10 @@ struct HotkeyField: View {
             } label: {
                 HStack(spacing: 4) {
                     if recording {
-                        Text(L10n.text("按下新快捷键…")).font(.system(size: 12)).foregroundColor(Theme.accent)
+                        Text(L10n.text("按下新快捷键…")).font(InterfaceTypography.localized(12)).foregroundColor(Theme.accent)
                             .padding(.horizontal, 8).frame(minHeight: 24)
                     } else if !binding.enabled {
-                        Text(L10n.text("未设置")).font(.system(size: 12)).foregroundColor(Theme.tertiary)
+                        Text(L10n.text("未设置")).font(InterfaceTypography.localized(12)).foregroundColor(Theme.tertiary)
                             .padding(.horizontal, 8).frame(minHeight: 24)
                     } else {
                         ForEach(Array(labels.enumerated()), id: \.offset) { _, label in Keycap(label: label) }
@@ -781,7 +781,7 @@ struct ModelSection: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .disabled(busy || !canTestRoute)
                     if !status.isEmpty {
-                        Text(status).font(.system(size: 12)).foregroundColor(statusOK ? Theme.success : Theme.warning)
+                        Text(status).font(InterfaceTypography.localized(12)).foregroundColor(statusOK ? Theme.success : Theme.warning)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -969,7 +969,7 @@ struct TranslatePromptEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.text("说话翻译和选中翻译都用它。{{to}} 代表目标语言。"))
-                .font(.system(size: 12)).foregroundColor(.secondary)
+                .font(InterfaceTypography.localized(12)).foregroundColor(.secondary)
             CapsuleTextEditor(text: $draft)
                 .font(Theme.rowFont)
                 .frame(height: 150)
@@ -982,7 +982,7 @@ struct TranslatePromptEditor: View {
                     saved = true
                 }
                 Spacer()
-                if saved { Text(L10n.text("已保存")).font(.system(size: 12)).foregroundColor(.secondary) }
+                if saved { Text(L10n.text("已保存")).font(InterfaceTypography.localized(12)).foregroundColor(.secondary) }
                 Button(L10n.text("保存")) {
                     Settings.shared.translatePrompt = draft
                     draft = Settings.shared.translatePrompt

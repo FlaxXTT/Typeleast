@@ -381,7 +381,7 @@ struct SelectionBubbleView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if let sourceCount {
-                    Text(sourceCount).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(sourceCount).font(InterfaceTypography.localized(11)).foregroundColor(.secondary)
                 }
                 Spacer()
                 Button(action: close) {
@@ -395,11 +395,11 @@ struct SelectionBubbleView: View {
             case .loading:
                 HStack(spacing: 8) {
                     LoadingCircularProgress(size: 20, color: Theme.ink)
-                    Text(L10n.text("正在翻译…")).font(.system(size: 14))
+                    Text(L10n.text("正在翻译…")).font(InterfaceTypography.localized(14))
                 }
             case .done(let text):
                 HubScrollView(showsChrome: false) {
-                    Text(text).font(.system(size: 14)).lineSpacing(3)
+                    Text(text).font(InterfaceTypography.localized(14)).lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxHeight: 260)
@@ -415,7 +415,7 @@ struct SelectionBubbleView: View {
             case .failed(let message):
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle").foregroundColor(.orange)
-                    Text(message).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
+                    Text(message).font(InterfaceTypography.localized(14)).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
