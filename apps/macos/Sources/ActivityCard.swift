@@ -37,7 +37,7 @@ struct InsightsPanel: View {
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                InitialHeading(title: "Insight", initialSize: 50, bodySize: 29)
+                InitialHeading(title: "Insight", initialSize: 50, bodySize: 31, typeface: InterfaceTypography.blackletter)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
@@ -113,6 +113,7 @@ private struct InsightPart {
 private struct CountingNumber: View, Animatable {
     let part: InsightPart
     var elapsed: Double
+    let size: CGFloat
     var animatableData: Double {
         get { elapsed }
         set { elapsed = newValue }
@@ -120,11 +121,11 @@ private struct CountingNumber: View, Animatable {
 
     var body: some View {
         let progress = DashboardMotion.ease(elapsed / DashboardMotion.countDuration)
-        Text(part.widthSample).hidden()
+        InterfaceTypography.text(part.widthSample, size: size, weight: .semibold).hidden()
             .overlay(alignment: .trailing) {
-                Text(part.string(at: progress)).lineLimit(1).minimumScaleFactor(0.6)
+                InterfaceTypography.text(part.string(at: progress), size: size, weight: .semibold)
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
-            .monospacedDigit()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(part.string(at: 1))
     }
@@ -143,20 +144,20 @@ private struct Figure: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if unavailable {
-                    Text("—").font(.system(size: compact ? 23 : 26, weight: .bold))
+                    Text("—").font(InterfaceTypography.figure(compact ? 23 : 26))
                         .accessibilityLabel(L10n.text("尚无时长记录"))
                 } else {
                     ForEach(parts.indices, id: \.self) { index in
-                        CountingNumber(part: parts[index], elapsed: elapsed)
-                            .font(.system(size: compact ? 23 : 26, weight: .bold)).tracking(-0.6)
+                        CountingNumber(part: parts[index], elapsed: elapsed, size: compact ? 23 : 26)
+                            .tracking(-0.6)
                             .lineLimit(1).minimumScaleFactor(0.6)
-                        Text(parts[index].unit).font(.system(size: 12, weight: .semibold))
+                        InterfaceTypography.text(parts[index].unit, size: 12, weight: .semibold)
                             .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                     }
                 }
             }
             HStack(spacing: 5) {
-                Text(label)
+                InterfaceTypography.text(label, size: 14)
                 if let note {
                     Image(systemName: "info.circle").font(.system(size: 11))
                         .help(note).accessibilityLabel(note)
@@ -249,7 +250,8 @@ struct ShareButton: NSViewRepresentable {
         button.setButtonType(.momentaryChange)
         button.imagePosition = .imageLeading
         button.isBordered = false
-        button.font = .systemFont(ofSize: 16, weight: .medium)
+        button.font = L10n.language == "en" ? InterfaceTypography.englishAppKit(16, emphasized: true)
+            : .systemFont(ofSize: 16, weight: .medium)
         button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
         button.wantsLayer = true
         button.controlSize = .regular
@@ -400,9 +402,10 @@ struct ActivityCard: View {
     private func figure(_ value: Int, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")), elapsed: elapsed)
-                    .font(.system(size: compact ? 23 : 26, weight: .bold)).tracking(-0.6)
-                Text(L10n.text("天")).font(.system(size: 12, weight: .semibold))
+                CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
+                               elapsed: elapsed, size: compact ? 23 : 26)
+                    .tracking(-0.6)
+                InterfaceTypography.text(L10n.text("天"), size: 12, weight: .semibold)
             }
             Text(label).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
@@ -422,7 +425,7 @@ struct ActivityCard: View {
         let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
             ForEach(0..<7, id: \.self) { row in
-                Text(weekdays[row]).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
+                Text(weekdays[row]).font(InterfaceTypography.english(11)).foregroundColor(Theme.homeLabel)
                     .frame(width: 16, height: cell)
                     .offset(x: 0, y: CGFloat(row) * step)
                 // A hatched leading edge marks the cropped range, not extra usage data.
@@ -463,7 +466,7 @@ struct ActivityCard: View {
                     .offset(x: x, y: CGFloat(row) * step)
                 }
                 if let label = monthLabel(weekStart: weekStart, calendar: calendar, first: column == 0) {
-                    Text(label).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
+                    InterfaceTypography.text(label, size: 11).foregroundColor(Theme.homeLabel)
                         .fixedSize()
                         .offset(x: max(dayColumn, min(x, width - 56)), y: 7 * step + 2)
                 }
