@@ -259,7 +259,7 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启后生效。")) {
                 Picker("", selection: model.setting(\.interfaceLanguage)) {
                     Text(L10n.text("跟随系统")).tag("system")
-                    Text("繁體中文（小篆）").font(Theme.rowFont).tag("zh-Hant")
+                    Text("繁體中文").font(Theme.rowFont).tag("zh-Hant")
                     Text("English").tag("en")
                 }.labelsHidden().frame(width: 150)
             }
