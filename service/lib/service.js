@@ -282,6 +282,9 @@ export class VoicePolishService {
     if (request.variants) {
       const variants = parseVariants(request.variants);
       result.text = await applyVariants(result.text, variants, outputLanguage);
+      if (result.translationProgress) {
+        result.translationProgress.text = await applyVariants(result.translationProgress.text, variants, target);
+      }
       // The user chooses the actual final draft, including the configured
       // Chinese writing variant, rather than a version transformed later.
       if (result.qualityReview) {

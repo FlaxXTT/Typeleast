@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import NaturalLanguage
 import SwiftUI
 
 // SelectionTranslator.swift - select text with the mouse in any app and a small 「翻译」 button
@@ -19,7 +20,8 @@ final class SelectionTranslator {
 
     var enabled: () -> Bool = { true }
     /// Translate `text` into `target`; completes on the main queue.
-    var translate: ((_ text: String, _ target: String, _ completion: @escaping (Result<String, Error>) -> Void) -> Void)?
+    var translate: ((_ text: String, _ target: String, _ cancellation: ServiceRequestCancellation,
+                     _ completion: @escaping (Result<String, Error>) -> Void) -> Void)?
     /// The language translations go to (翻译's target in Settings).
     var preferredTarget: () -> String = { "en" }
 
@@ -33,7 +35,12 @@ final class SelectionTranslator {
     private var hideTimer: Timer?
     private var offerToken = 0
     private var runToken = 0
-    private var sourceCount: String?
+    private var request: ServiceRequestCancellation?
+    private struct Job {
+        let text: String
+        let target: String
+        let anchor: NSPoint
+    }
     private var offerActive = false
     private let selectionQueue = DispatchQueue(label: "typeleast.translation.selection", qos: .utility)
     private var readingSelection = false
@@ -63,6 +70,7 @@ final class SelectionTranslator {
             (.keyDown, { [weak self] event in
                 self?.lastKeyTime = event.timestamp
                 self?.hideOffer()
+                if event.keyCode == 53 { self?.closeBubble() }
             }),
         ]
         for (mask, handler) in events {
@@ -99,6 +107,8 @@ final class SelectionTranslator {
 
     private func closeBubble() {
         runToken += 1
+        request?.cancel()
+        request = nil
         bubble.hide()
     }
 
@@ -175,13 +185,11 @@ final class SelectionTranslator {
     /// Translations go to the target set for 翻译, except that text already in that language
     /// goes the other way: Chinese ⇄ the target (English when the target is Chinese).
     static func target(for text: String, preferred: String) -> String {
-        let letters = text.unicodeScalars.filter { CharacterSet.letters.contains($0) }
-        let han = letters.filter { (0x3400...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }.count
-        let mostlyChinese = !letters.isEmpty && han * 2 >= letters.count
-        if preferred == "zh" { return mostlyChinese ? "en" : "zh" }
-        let latin = letters.filter { $0.isASCII }.count
-        let alreadyTarget = preferred == "en" ? (!letters.isEmpty && latin * 2 > letters.count) : false
-        return alreadyTarget ? "zh" : preferred
+        guard text.unicodeScalars.contains(where: { CharacterSet.letters.contains($0) }) else { return preferred }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(String(text.prefix(1600)))
+        let source = recognizer.dominantLanguage?.rawValue.split(separator: "-").first.map(String.init)
+        return source == preferred ? (preferred == "zh" ? "en" : "zh") : preferred
     }
 
     private func offer(at point: NSPoint, text: String, pid: pid_t) {
@@ -207,9 +215,14 @@ final class SelectionTranslator {
                 self.offerActive = false
                 guard self.enabled(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
                       selected == text else { return }
-                self.runToken &+= 1
-                self.sourceCount = nil
-                self.run(String(text.prefix(SelectionTranslator.limit)), token: self.runToken, at: point)
+                self.closeBubble()
+                let job = Job(text: text, target: Self.target(for: text, preferred: self.preferredTarget()), anchor: point)
+                guard text.unicodeScalars.count <= Self.limit else {
+                    self.showBubble(.failed(L10n.text("选区超过 {0} 字符，请分段翻译。", Self.limit), partial: nil),
+                                    job: job, canRetry: false)
+                    return
+                }
+                self.run(job)
             }
         }
         scheduleOfferDismissal(token: token)
@@ -225,8 +238,10 @@ final class SelectionTranslator {
         hideTimer = timer
     }
 
-    private func showBubble(_ state: SelectionBubble, at point: NSPoint) {
-        bubble.showBubble(state, sourceCount: sourceCount, at: point) { [weak self] in self?.closeBubble() }
+    private func showBubble(_ state: SelectionBubble, job: Job, canRetry: Bool = false) {
+        let target = TranslateLanguage(rawValue: job.target)?.label ?? job.target
+        let retry: (() -> Void)? = canRetry ? { [weak self] in self?.run(job) } : nil
+        bubble.showBubble(state, target: target, at: job.anchor, retry: retry) { [weak self] in self?.closeBubble() }
     }
 
     /// Count the text actually sent for translation, without persisting it.
@@ -236,16 +251,27 @@ final class SelectionTranslator {
         return L10n.text("原文：{0} 字符 · {1} 词", text.count, words)
     }
 
-    private func run(_ text: String, token: Int, at point: NSPoint) {
-        sourceCount = Self.sourceCountLabel(text)
-        showBubble(.loading, at: point)
-        guard let translate else { return showBubble(.failed(L10n.text("请先配置可用的整理模型。")), at: point) }
-        translate(text, SelectionTranslator.target(for: text, preferred: preferredTarget())) { [weak self] result in
+    private func run(_ job: Job) {
+        runToken &+= 1
+        let token = runToken
+        request?.cancel()
+        guard let translate else {
+            return showBubble(.failed(L10n.text("请先配置可用的整理模型。"), partial: nil), job: job)
+        }
+        let cancellation = ServiceRequestCancellation()
+        request = cancellation
+        showBubble(.loading, job: job)
+        translate(job.text, job.target, cancellation) { [weak self] result in
             guard let self, self.runToken == token else { return }
+            self.request = nil
             switch result {
-            case .success(let translated): self.showBubble(.done(translated), at: point)
+            case .success(let translated): self.showBubble(.done(translated), job: job)
             case .failure(let error):
-                self.showBubble(.failed((error as? ServiceError)?.description ?? L10n.text("翻译失败")), at: point)
+                let service = error as? ServiceError
+                let partial: String?
+                if case .translationIncomplete(let progress)? = service { partial = progress.text }
+                else { partial = nil }
+                self.showBubble(.failed(service?.description ?? L10n.text("翻译失败"), partial: partial), job: job, canRetry: true)
             }
         }
     }
@@ -256,7 +282,7 @@ final class SelectionTranslator {
 enum SelectionBubble: Equatable {
     case loading
     case done(String)
-    case failed(String)
+    case failed(String, partial: String?)
 }
 
 /// A borderless, non-activating panel holding the dot or the translation.
@@ -289,9 +315,12 @@ final class SelectionPanel {
         show(SelectionDotView(action: action, hoverChanged: hoverChanged), castsShadow: false)
     }
 
-    func showBubble(_ state: SelectionBubble, sourceCount: String?, at point: NSPoint, close: @escaping () -> Void) {
+    func showBubble(_ state: SelectionBubble, target: String, at point: NSPoint,
+                    retry: (() -> Void)?, close: @escaping () -> Void) {
         anchor = point
-        show(SelectionBubbleView(state: state, sourceCount: sourceCount, close: close,
+        let screen = screenFrame(at: panel.isVisible ? NSPoint(x: panel.frame.midX, y: panel.frame.midY) : point)
+        show(SelectionBubbleView(state: state, target: target, maxTextHeight: min(300, screen.height * 0.4),
+                                 retry: retry, close: close,
                                  drag: { [weak self] in self?.drag() }, dragEnded: { [weak self] in self?.dragOffset = nil }))
     }
 
@@ -327,18 +356,19 @@ final class SelectionPanel {
         AppWindowStyle.fixSize(panel, to: size)
         AppWindowStyle.round(panel)
         panel.hasShadow = castsShadow
-        if let top {
-            panel.setFrameOrigin(NSPoint(x: left, y: top - size.height))
-        } else {
-            // Below and to the right of the mouse, kept on the screen it is on.
-            let screen = NSScreen.screens.first { $0.frame.contains(anchor) }?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-            var origin = NSPoint(x: anchor.x + 8, y: anchor.y - size.height - 12)
-            if origin.y < screen.minY { origin.y = anchor.y + 16 }
-            origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
-            origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
-            panel.setFrameOrigin(origin)
-        }
+        let screen = screenFrame(at: top.map { NSPoint(x: left + size.width / 2, y: $0 - 1) } ?? anchor)
+        var origin = top.map { NSPoint(x: left, y: $0 - size.height) }
+            ?? NSPoint(x: anchor.x + 8, y: anchor.y - size.height - 12)
+        if top == nil && origin.y < screen.minY { origin.y = anchor.y + 16 }
+        origin.x = max(screen.minX + 8, min(origin.x, screen.maxX - size.width - 8))
+        origin.y = max(screen.minY + 8, min(origin.y, screen.maxY - size.height - 8))
+        panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
+    }
+
+    private func screenFrame(at point: NSPoint) -> NSRect {
+        NSScreen.screens.first { $0.frame.contains(point) }?.visibleFrame
+            ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
     }
 }
 
@@ -368,63 +398,92 @@ private struct TranslationDotPressStyle: ButtonStyle {
     }
 }
 
-/// The translation: drag it anywhere; it stays until its × is clicked.
+/// A compact translation card with a selectable, height-limited body.
 struct SelectionBubbleView: View {
     let state: SelectionBubble
-    let sourceCount: String?
+    let target: String
+    let maxTextHeight: CGFloat
+    let retry: (() -> Void)?
     let close: () -> Void
     let drag: () -> Void
     let dragEnded: () -> Void
     @State private var copyFeedback: UUID?
 
+    private let contentWidth: CGFloat = 310
+    private let lineHeight: CGFloat = 21
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if let sourceCount {
-                    Text(sourceCount).font(InterfaceTypography.localized(11)).foregroundColor(.secondary)
-                }
-                Spacer()
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary).frame(width: 18, height: 18).contentShape(Rectangle())
-                }
-                .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
-                .help(L10n.text("关闭"))
-            }
-            switch state {
-            case .loading:
-                HStack(spacing: 8) {
-                    LoadingCircularProgress(size: 20, color: Theme.ink)
-                    Text(L10n.text("正在翻译…")).font(InterfaceTypography.localized(14))
-                }
-            case .done(let text):
-                HubScrollView(showsChrome: false) {
-                    Text(text).font(InterfaceTypography.localized(14)).lineSpacing(3)
-                        .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxHeight: 260)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
                 HStack {
-                    Spacer()
-                    Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
+                    Text(target).font(Theme.captionFont).foregroundColor(Theme.secondary)
+                    Spacer(minLength: 8)
+                }
+                .frame(minHeight: 28)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                    .onChanged { _ in drag() }.onEnded { _ in dragEnded() })
+                if case .done(let text) = state {
+                    Button(copyFeedback == nil ? L10n.text("复制") : L10n.text("已复制")) {
                         Inserter.shared.setString(text)
                         copyFeedback = UUID()
                     }
                     .buttonStyle(SecondaryButtonStyle())
                 }
-                .controlSize(.small)
-            case .failed(let message):
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle").foregroundColor(.orange)
-                    Text(message).font(InterfaceTypography.localized(14)).fixedSize(horizontal: false, vertical: true)
+                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, symbolSize: 12, action: close)
+                    .accessibilityLabel(L10n.text("关闭"))
+            }
+            switch state {
+            case .loading:
+                HStack(spacing: 8) {
+                    LoadingCircularProgress(size: 16, color: Theme.ink)
+                    Text(L10n.text("正在翻译…")).font(Theme.rowFont)
                 }
+            case .done(let text):
+                translationText(text)
+            case .failed(let message, let partial):
+                HStack(alignment: .center, spacing: 8) {
+                    Text(message).font(Theme.rowFont)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    if let retry {
+                        Button(L10n.text("重试"), action: retry).buttonStyle(SecondaryButtonStyle())
+                    }
+                }
+                if let partial { translationText(partial) }
             }
         }
-        .padding(24)
+        .frame(width: contentWidth, alignment: .leading)
+        .padding(16)
         .resetCopyFeedback($copyFeedback)
-        .frame(width: 350, height: 500, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular).fill(Color(nsColor: .windowBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular).stroke(Color.primary.opacity(0.1)))
-        .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global).onChanged { _ in drag() }.onEnded { _ in dragEnded() })
+        .background(RoundedRectangle(cornerRadius: Theme.cardRadius).fill(Theme.tile))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border).allowsHitTesting(false))
+    }
+
+    private func translationText(_ text: String) -> some View {
+        let font = InterfaceTypography.localizedAppKit(14)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = lineHeight
+        paragraph.maximumLineHeight = lineHeight
+        let size = (text as NSString).boundingRect(
+            with: CGSize(width: contentWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font, .paragraphStyle: paragraph]
+        )
+        let height = max(lineHeight, ceil(size.height))
+        return Group {
+            if height > maxTextHeight {
+                HubScrollView(showsChrome: false) { selectable(text, font: font) }
+                    .frame(height: maxTextHeight)
+            } else {
+                selectable(text, font: font)
+                    .frame(height: height)
+            }
+        }
+    }
+
+    private func selectable(_ text: String, font: NSFont) -> some View {
+        SelectableText(text: text, font: font, color: NSColor(Theme.ink), maxLines: 0,
+                       lineHeight: lineHeight, acceptsInactiveClick: true, onPlainClick: {})
     }
 }

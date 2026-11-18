@@ -171,7 +171,7 @@ if mode == "all" || mode == "selection" {
     if let e = freshDoc("Hello world from TypeLeast", caret: 0) {
         let translator = SelectionTranslator()
         var asked: (String, String)?
-        translator.translate = { text, target, done in asked = (text, target); done(.success("你好，世界")) }
+        translator.translate = { text, target, _, done in asked = (text, target); done(.success("你好，世界")) }
         translator.preferredTarget = { "en" }
         translator.start()
         var range = CFRange(location: 0, length: 11)

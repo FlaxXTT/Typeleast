@@ -44,10 +44,23 @@ export function translateUserMessage(target, text) {
   return `Translate to ${languageName(target)}:\n\n${text}`;
 }
 
-/** The text split into batches of at most TRANSLATE_BATCH non-empty paragraphs (lines). */
+/** Split at most TRANSLATE_BATCH non-empty lines per batch, retaining intervening blank lines. */
 export function translateBatches(text) {
-  const paragraphs = String(text ?? "").split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+  const paragraphs = String(text ?? "").trim().split(/\r\n?|\n/);
   const batches = [];
-  for (let i = 0; i < paragraphs.length; i += TRANSLATE_BATCH) batches.push(paragraphs.slice(i, i + TRANSLATE_BATCH).join("\n"));
+  let lines = [];
+  let count = 0;
+  for (const line of paragraphs) {
+    if (line.trim()) {
+      if (count === TRANSLATE_BATCH) {
+        batches.push(lines.join("\n"));
+        lines = [];
+        count = 0;
+      }
+      count += 1;
+    }
+    lines.push(line);
+  }
+  if (count) batches.push(lines.join("\n"));
   return batches;
 }
