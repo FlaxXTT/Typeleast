@@ -7,16 +7,15 @@ the user cannot drag a resize edge or zoom the main window.
 
 | Window | Size |
 | --- | --- |
-| Main | 1080 × 750 |
+| Main | 988 × 685 |
 | Transparent recording carrier | 750 × 500 |
 | First-run setup | 940 × 610 |
 | Settings dialog | 940 × 652 |
 | Prompt questions, recognition/quantity review, update progress and result/advice panels | 350 × 500 |
 
-The project has no separate account-login flow; its first-run setup uses the supplied
-login-window footprint. The reference's 988×685 lower bound is not an interactive resize
-range: the main window's minimum and maximum frame sizes are both 1080×750. A separate
-frame-save key prevents restoration of an older resizable layout.
+The first-run setup uses the supplied login-window footprint. The main window's
+minimum and maximum frame sizes are both 988×685. A separate frame-save key
+prevents restoration of the previous window size.
 
 Titled windows retain the native zoom traffic light, shown grey and disabled.
 Equal minimum and maximum frame sizes prevent resizing; the Window menu keeps
@@ -25,8 +24,9 @@ strip across its top and a second drag target over the sidebar brand row. These
 regions retain the normal arrow and use AppKit window dragging. The strip excludes
 the native traffic lights. The fixed bottom-right corner shows a grey diagonal
 cursor without changing the frame. Navigation, forms and scroll content keep their
-own input. Settings is an independent window with its own 44pt top drag strip;
-its close button and scroll view start below the strip.
+own input. Settings stays above its parent and has its own 44pt top drag strip.
+Its close button and scroll view start below the strip. Closing the main window
+or choosing Quit while Settings is visible dismisses Settings first.
 
 ## Surface geometry
 

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Settings is a movable window, not an attached sheet.
+/// Settings can be dragged independently and stays above its main window.
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let identifier = NSUserInterfaceItemIdentifier("typeleast.settings")
     private let model: AppModel
@@ -32,11 +32,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window = panel
             AppWindowStyle.round(panel, radius: Theme.settingsRadius)
         }
+        guard let window else { return }
         NSApp.activate(ignoringOtherApps: true)
-        window?.present()
+        window.present()
+        if let parent, parent.isVisible, !parent.isMiniaturized, window.parent !== parent {
+            parent.addChildWindow(window, ordered: .above)
+        }
     }
 
     func close() { window?.close() }
+    func closeIfVisible() -> Bool {
+        guard let window = visibleWindow else { return false }
+        window.close()
+        return true
+    }
     func closeForUpdate() { window?.finishClose() }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -45,7 +54,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        window?.contentViewController = nil
+        if let window {
+            window.parent?.removeChildWindow(window)
+            window.contentViewController = nil
+        }
         window = nil
         if model.settingsPresented { model.settingsPresented = false }
     }
@@ -56,6 +68,10 @@ private final class SettingsDialogWindow: NSWindow {
     private var closing = false
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func performClose(_ sender: Any?) {
+        close()
+    }
 
     func present() {
         fadeGeneration &+= 1

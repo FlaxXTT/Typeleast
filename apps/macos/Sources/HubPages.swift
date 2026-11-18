@@ -79,7 +79,7 @@ struct HomePage: View {
             let mainWidth = min(516, max(0, contentWidth - rightColumn))
             let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: columnGap))
                               : AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
-            HubScrollView(key: "home-" + String(model.homePresentationID)) {
+            HubScrollView(key: "home-" + String(model.homePresentationID), showsBottomFade: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     layout {
                         InsightsPanel(compact: mainWidth < 480)

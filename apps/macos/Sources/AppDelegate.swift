@@ -802,6 +802,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuCheckForUpdates() { checkForUpdates(interactive: true) }
 
     func menuQuit() {
+        if hub.dismissSettingsIfVisible() { return }
         recorder.cancel()
         NSApp.terminate(nil)
     }
