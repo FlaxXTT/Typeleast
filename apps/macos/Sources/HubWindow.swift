@@ -219,7 +219,7 @@ private struct Sidebar: View {
     private var sidebarWaveform: some View {
         let size: CGFloat = 26
         let ratios = AppIconArtwork.barRatios
-        HStack(spacing: size * 0.03) {
+        return HStack(spacing: size * 0.03) {
             ForEach(ratios.indices, id: \.self) { index in
                 Capsule()
                     .fill(index == ratios.count - 1 ? Theme.accent : Theme.ink)
