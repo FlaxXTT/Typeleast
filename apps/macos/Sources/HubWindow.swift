@@ -267,20 +267,19 @@ private struct ServiceBadge: View {
             Circle()
                 .fill(model.serviceUp ? Theme.success : Theme.warning)
                 .frame(width: 7, height: 7)
-            Text(badgeText)
-                .font(.system(size: 14, weight: .medium))
+            InterfaceTypography.text(badgeText, size: 14, weight: .medium)
                 .foregroundColor(Theme.secondary)
                 .lineLimit(1)
             Spacer()
             if model.modelsMissing {
                 Button(L10n.text("下载模型")) { model.actions?.downloadModels() }
                     .buttonStyle(FlatActionButtonStyle())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(InterfaceTypography.localized(12, weight: .semibold))
                     .foregroundColor(Theme.ink)
             } else if !model.serviceUp && !model.modelsDownloading {
                 Button(L10n.text("重启")) { model.actions?.restartService() }
                     .buttonStyle(FlatActionButtonStyle())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(InterfaceTypography.localized(12, weight: .semibold))
                     .foregroundColor(Theme.ink)
             }
         }
@@ -327,8 +326,12 @@ struct SidebarModes: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Button { model.actions?.startAssistant() } label: {
-                Label(L10n.text("提示词模式"), systemImage:"text.bubble")
-                    .font(.system(size: 14,weight:.medium)).padding(10)
+                Label {
+                    InterfaceTypography.text(L10n.text("提示词模式"), size: 14, weight: .medium)
+                } icon: {
+                    Image(systemName: "text.bubble").font(.system(size: 14, weight: .medium))
+                }
+                .padding(10)
             }.buttonStyle(FlatActionButtonStyle())
         }
         .disabled(model.phase != .idle)
