@@ -54,6 +54,7 @@ enum L10n {
         return result
     }
     static let english: [String: String] = [
+        "完成设置": "Finish setup",
         "Fn 单键用于听写": "Fn by itself is for dictation",
         "Fn 组合键仅支持左 Shift 或空格": "Fn chords support Left Shift or Space",
         "拖动窗口": "Drag window",

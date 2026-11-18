@@ -24,7 +24,6 @@ private enum DashboardMotion {
 struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var compact = false
     @State private var elapsed: Double = 0
 
     static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
@@ -35,24 +34,24 @@ struct InsightsPanel: View {
         let timingNote = stats.hasIncompleteTiming
             ? L10n.text("旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。") : nil
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 InitialHeading(title: "Insight", initialSize: 50, bodySize: 31, typeface: InterfaceTypography.blackletter)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
-            .frame(height: 52)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible())], spacing: 16) {
-                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, compact: compact)
-                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed, compact: compact,
+            .frame(height: 48)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())], spacing: 10) {
+                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed)
+                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed,
                        unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), elapsed: displayedElapsed, compact: compact,
+                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), elapsed: displayedElapsed,
                        unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed, compact: compact,
+                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed,
                        unavailable: timingUnavailable, note: timingNote)
             }
-            ActivityCard(elapsed: displayedElapsed, compact: compact)
+            ActivityCard(elapsed: displayedElapsed)
         }
         .task(id: reduceMotion) {
             if reduceMotion {
@@ -136,19 +135,18 @@ private struct Figure: View {
     let parts: [InsightPart]
     let label: String
     let elapsed: Double
-    let compact: Bool
     var unavailable = false
     var note: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if unavailable {
-                    Text("—").font(InterfaceTypography.figure(compact ? 23 : 26))
+                    Text("—").font(InterfaceTypography.figure(23))
                         .accessibilityLabel(L10n.text("尚无时长记录"))
                 } else {
                     ForEach(parts.indices, id: \.self) { index in
-                        CountingNumber(part: parts[index], elapsed: elapsed, size: compact ? 23 : 26)
+                        CountingNumber(part: parts[index], elapsed: elapsed, size: 23)
                             .tracking(-0.6)
                             .lineLimit(1).minimumScaleFactor(0.6)
                         InterfaceTypography.text(parts[index].unit, size: 12, weight: .semibold)
@@ -157,7 +155,8 @@ private struct Figure: View {
                 }
             }
             HStack(spacing: 5) {
-                InterfaceTypography.text(label, size: 14)
+                InterfaceTypography.text(label, size: 12)
+                    .lineLimit(1).minimumScaleFactor(0.85)
                 if let note {
                     Image(systemName: "info.circle").font(.system(size: 11))
                         .help(note).accessibilityLabel(note)
@@ -165,8 +164,8 @@ private struct Figure: View {
             }
             .font(Theme.rowFont).foregroundColor(Theme.homeLabel)
         }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
         .help(note ?? label)
     }
@@ -360,11 +359,10 @@ final class HoverShareButton: NSButton {
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
     let elapsed: Double
-    var compact = false
     @State private var weekOffset = 0
 
-    private let cell: CGFloat = 14
-    private let gap: CGFloat = 8
+    private let cell: CGFloat = 12
+    private let gap: CGFloat = 7
     private let dayColumn: CGFloat = 30
 
     var body: some View {
@@ -386,24 +384,24 @@ struct ActivityCard: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(height: 7 * (cell + gap) + 18)
-            .padding(.top, 18)
+            .padding(.top, 10)
             HStack(spacing: 6) {
                 Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-                ForEach(1..<5) { level in square(level, size: 12) }
+                ForEach(1..<5) { level in square(level, size: 10) }
                 Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
-            .padding(.top, 10)
+            .padding(.top, 6)
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
     }
 
     private func figure(_ value: Int, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
-                               elapsed: elapsed, size: compact ? 23 : 26)
+                               elapsed: elapsed, size: 22)
                     .tracking(-0.6)
                 InterfaceTypography.text(L10n.text("天"), size: 12, weight: .semibold)
             }
@@ -452,12 +450,12 @@ struct ActivityCard: View {
                             let description = tooltip(date, day)
                             if weekOffset == 0 {
                                 outlinedCell.overlay {
-                                    square(level).modifier(HeatmapColumnReveal(
+                                    square(level, size: cell).modifier(HeatmapColumnReveal(
                                         elapsed: elapsed, start: DashboardMotion.columnStart(column, weeks: weeks)))
                                 }
                                 .help(description).accessibilityLabel(description)
                             } else {
-                                square(level).help(description).accessibilityLabel(description)
+                                square(level, size: cell).help(description).accessibilityLabel(description)
                             }
                         } else {
                             outlinedCell.accessibilityHidden(true)
@@ -491,7 +489,7 @@ struct ActivityCard: View {
             .frame(width: cell, height: cell)
     }
 
-    private func square(_ level: Int, size: CGFloat = 14) -> some View {
+    private func square(_ level: Int, size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
             .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
             .frame(width: size, height: size)
