@@ -71,40 +71,36 @@ struct HomePage: View {
     @State private var showsSetup = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 16) {
-                InsightsPanel()
-                    .id(model.homePresentationID)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .background {
-                        HomeDotGrid()
-                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                            .padding(-6)
-                    }
-                VStack(alignment: .leading, spacing: 8) {
-                    ShortcutReferenceCard()
-                    EngineCard()
-                    if SetupCard.pending(model) {
-                        Button { showsSetup.toggle() } label: {
-                            Label(L10n.text("完成设置"), systemImage: "exclamationmark.circle")
-                                .font(Theme.captionFont)
-                                .foregroundColor(Theme.accent)
-                                .padding(.vertical, 4)
-                        }
-                        .buttonStyle(FlatActionButtonStyle())
-                        .popover(isPresented: $showsSetup, arrowEdge: .trailing) {
-                            SetupCard().frame(width: 420).padding(12)
-                        }
-                    }
-                    HomeVersionFooter()
+        HStack(alignment: .top, spacing: 18) {
+            InsightsPanel()
+                .id(model.homePresentationID)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background {
+                    HomeDotGrid()
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .padding(-6)
                 }
-                .frame(width: 210)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 12) {
+                ShortcutReferenceCard()
+                EngineCard()
+                if SetupCard.pending(model) {
+                    Button { showsSetup.toggle() } label: {
+                        Label(L10n.text("完成设置"), systemImage: "exclamationmark.circle")
+                            .font(Theme.captionFont)
+                            .foregroundColor(Theme.accent)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(FlatActionButtonStyle())
+                    .popover(isPresented: $showsSetup, arrowEdge: .trailing) {
+                        SetupCard().frame(width: 420).padding(12)
+                    }
+                }
+                HomeVersionFooter()
             }
-            Spacer(minLength: 0)
-            RecentCard()
+            .frame(width: 216)
+            .padding(.top, 4)
         }
-        .padding(EdgeInsets(top: 44, leading: 20, bottom: 16, trailing: 20))
+        .padding(EdgeInsets(top: 44, leading: 18, bottom: 20, trailing: 18))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.window)
     }
@@ -114,23 +110,23 @@ private struct ShortcutReferenceCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
             shortcut(L10n.text("口述"), binding: model.settings.hotkeyMain)
             shortcut(L10n.text("翻译"), binding: model.settings.hotkeyTranslate)
             shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.sidebar))
     }
 
     private func shortcut(_ title: String, binding: HotKeyBinding) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(Theme.captionFont).foregroundColor(Theme.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(Theme.rowFont).foregroundColor(Theme.secondary)
             if binding.enabled {
                 ShortcutKeyLayout(spacing: 4) {
                     ForEach(Array(keys(binding).enumerated()), id: \.offset) { _, key in
-                        InterfaceTypography.text(key, size: 12, weight: .semibold)
-                            .padding(.horizontal, 6).frame(minWidth: 23, minHeight: 23)
+                        InterfaceTypography.text(key, size: 13, weight: .semibold)
+                            .padding(.horizontal, 7).frame(minWidth: 27, minHeight: 27)
                             .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.window))
                             .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.border, lineWidth: 1))
                     }
@@ -286,57 +282,14 @@ private struct SetupRow: View {
     }
 }
 
-private struct RecentCard: View {
-    @EnvironmentObject var model: AppModel
-    @State private var hoveringAll = false
-
-    var body: some View {
-        let entries = model.history.prefix(2)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                InterfaceTypography.text(L10n.text("最近"), size: 17, weight: .medium)
-                    .foregroundColor(Theme.homeLabel)
-                Spacer()
-                if !entries.isEmpty {
-                    Button { model.page = .history } label: {
-                        HStack(spacing: 4) {
-                            Text(L10n.text("查看全部"))
-                            Image(systemName: "arrow.right")
-                        }
-                    }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundColor(hoveringAll ? Theme.accent : Theme.secondary)
-                        .transientHover($hoveringAll)
-                }
-            }
-            if entries.isEmpty {
-                Text(L10n.text("没有听写记录。按 {0} 说一句。", model.hotkeyLabel))
-                    .font(Theme.captionFont)
-                    .foregroundColor(Theme.homeLabel)
-                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(entries) { entry in
-                        HistoryRow(entry: entry, compact: true)
-                        if entry.id != entries.last?.id { Divider().padding(.leading, 66) }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
-    }
-}
-
 private struct EngineCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
         let serviceStatus = model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪")
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 5) {
-                InterfaceTypography.text(L10n.text("引擎"), size: 17, weight: .medium)
+                InterfaceTypography.text(L10n.text("引擎"), size: 20, weight: .medium)
                 Spacer(minLength: 2)
                 Circle().fill(model.serviceUp ? Theme.success : Theme.tertiary).frame(width: 5, height: 5)
                 InterfaceTypography.text(serviceStatus, size: 11)
@@ -350,7 +303,7 @@ private struct EngineCard: View {
                 model.navigate(to: .settings)
             }.buttonStyle(FlatActionButtonStyle()).font(Theme.captionFont).foregroundColor(Theme.accent)
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
     }
 }
@@ -361,9 +314,9 @@ private struct EngineRow: View {
     let value: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: symbol).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
-            InterfaceTypography.text(value, size: 12, weight: .medium)
+        VStack(alignment: .leading, spacing: 5) {
+            Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+            InterfaceTypography.text(value, size: 13, weight: .medium)
                 .lineLimit(2).help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
