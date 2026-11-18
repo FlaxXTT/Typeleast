@@ -47,8 +47,8 @@ enum Theme {
     static let cardRadius: CGFloat = 12
     static let listGroupRadius: CGFloat = 10
     static let homeCardRadius: CGFloat = 20
-    static let homeMetricRadius: CGFloat = 22
-    static let homeActivityRadius: CGFloat = 18
+    static let homeMetricRadius: CGFloat = 20
+    static let homeActivityRadius: CGFloat = 16
     static let panelRadius: CGFloat = 24
     static let sidebarRadius: CGFloat = 20
     static let settingsRadius: CGFloat = 24
