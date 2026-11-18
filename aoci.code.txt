@@ -130,7 +130,7 @@ RecordingHints.swift[DU7M]: F:管理首次就绪卡和短提示的独立悬浮�
 ContextPreferencesTests.swift[TS4T]: F:覆盖光标语境边界及偏好隔离 | R:code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/Settings.swift | A:contextPreferencesTests | S:-
 MeetingTests.swift[TB4T]: F:以短音频文件覆盖会议导入和格式处理 | R:code:apps/macos/Sources/Meeting.swift | A:meetingTests | S:-
 PerformanceRegressionTests.swift[TP4M]: F:覆盖异步刷新、启动窗口和首页动效回归 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/CoalescingRefresh.swift | A:performanceRegressionTests、dashboardMotionTests、dashboardWindowTests | S:窗口断言等待实际布局提交；动画测试用真实统计卡位图验证零值首帧和插值
-SettingsScrollTests.swift[TU4S]: F:用受控登录状态服务记录真实设置视图的滚动行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:隔离历史，不打开实际麦克风或注册登录项
+SettingsScrollTests.swift[TU4S]: F:用受控登录状态服务校验真实设置视图的滚动行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:等待后台登录状态提交后才断言，滚动和模型更新不得触发额外系统查询；隔离历史且不注册登录项
 StubServer.swift[TN4S]: F:给客户端契约测试提供最小回环HTTP桩 | R:code:apps/macos/Sources/ServiceClient.swift | A:StubServer、Request、Response | S:-
 build-mlx.sh[TV4T]: F:验证MLX构建脚本选择当前Xcode生成的Metal库 | R:code:apps/macos/scripts/build-mlx.sh | A:独立脚本入口 | S:-
 main.swift[TQ5L]: F:运行 Mac 服务契约、录音交接、窗口及数据回归用例 | R:code:apps/macos/test.sh,code:apps/macos/Tests/StubServer.swift,code:apps/macos/Tests/PerformanceRegressionTests.swift | A:测试入口 | S:原生窗口在应用激活观察之后显示，验证迟到录音回调、实际尺寸、进度封顶及一次性提示

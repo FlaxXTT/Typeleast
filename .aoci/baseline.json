@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-18T17:19:15Z",
-  "updated_at": "2026-11-18T21:16:57Z",
+  "updated_at": "2026-11-18T21:24:26Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -71,9 +71,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "e005aa47f4fc50089dd51240a5a3ea97383f100569f974b1720942192e6ea50a",
-      "size": 78887,
-      "normalized_sha256": "e005aa47f4fc50089dd51240a5a3ea97383f100569f974b1720942192e6ea50a"
+      "sha256": "c0873d87edda2fa537deff10188e496b2ce7aa74905ecbce5e7a69fb2d69728a",
+      "size": 78962,
+      "normalized_sha256": "c0873d87edda2fa537deff10188e496b2ce7aa74905ecbce5e7a69fb2d69728a"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -674,9 +674,9 @@
     },
     "apps/macos/Tests/SettingsScrollTests.swift": {
       "role": "index",
-      "sha256": "7600b7761a8cc5a54d2c5e59d718ecf05053395b276e959817b725fae2961da9",
-      "size": 6008,
-      "normalized_sha256": "7600b7761a8cc5a54d2c5e59d718ecf05053395b276e959817b725fae2961da9"
+      "sha256": "e757aa0c0800e08af65d5413180897133e105763d9a3a756c931ec6d8340e910",
+      "size": 6385,
+      "normalized_sha256": "e757aa0c0800e08af65d5413180897133e105763d9a3a756c931ec6d8340e910"
     },
     "apps/macos/Tests/StubServer.swift": {
       "role": "index",
