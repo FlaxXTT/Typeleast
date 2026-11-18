@@ -82,6 +82,8 @@ enum KeychainStore {
             if let hit { return hit }
             return readSilently(account: account)
         }
+        // An item the user already trusted should take the noninteractive path.
+        if let saved = readSilently(account: account) { return saved }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

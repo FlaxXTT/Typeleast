@@ -838,6 +838,12 @@ do {
     check("a different certificate cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: other))
     check("a missing update identity cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: nil))
     check("a missing current identity cannot bypass local re-signing", !Updater.canKeepSignature(current: nil, update: signed))
+    check("publisher-signed installs never ask for the local signing key",
+          !Updater.permitsLocalResigning(current: signed, certificateName: "TypeLeast Publisher Signing"))
+    check("legacy local-certificate installs can keep their local identity",
+          Updater.permitsLocalResigning(current: selfSigned, certificateName: Updater.signingIdentity))
+    check("ad-hoc installs can make their initial transition to a stable identity",
+          Updater.permitsLocalResigning(current: adhoc, certificateName: nil))
     // The update offer rule and the ring's steps.
     check("a quiet check offers a new version once", Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: false))
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
