@@ -13,12 +13,12 @@ enum InterfaceTypography {
     private static let sackersName = ["SackersGothicLightAT", "Sackers Gothic Light AT", "SackersGothicStd-Light"]
         .compactMap { NSFont(name: $0, size: 12)?.fontName }.first
     private static func chineseName(emphasized: Bool) -> String {
-        emphasized ? "PingFangTC-Medium" : "PingFangTC-Regular"
+        emphasized ? "PingFangSC-Medium" : "PingFangSC-Regular"
     }
 
     static func localized(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         switch L10n.language {
-        case "zh-Hant": return .custom(chineseName(emphasized: weight != .regular), size: size)
+        case "zh-Hans": return .custom(chineseName(emphasized: weight != .regular), size: size)
         case "en": return english(size, emphasized: weight != .regular)
         default: return .system(size: size, weight: weight)
         }
@@ -26,7 +26,7 @@ enum InterfaceTypography {
 
     static func localizedAppKit(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         switch L10n.language {
-        case "zh-Hant":
+        case "zh-Hans":
             return NSFont(name: chineseName(emphasized: weight != .regular), size: size)
                 ?? .systemFont(ofSize: size, weight: weight)
         case "en": return englishAppKit(size, emphasized: weight != .regular)
@@ -88,7 +88,7 @@ enum InterfaceTypography {
     }
 
     private static func face(for character: Character) -> Face {
-        if L10n.language == "zh-Hant", let scalar = character.unicodeScalars.first {
+        if L10n.language == "zh-Hans", let scalar = character.unicodeScalars.first {
             switch scalar.value {
             case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x323AF:
                 return .chinese
