@@ -225,9 +225,14 @@ final class AppModel: ObservableObject {
     }
 
     var modelSummary: String {
+        let cleanup = cleanupEngineSummary
+        return cleanup.detail.map { cleanup.name + " · " + $0 } ?? cleanup.name
+    }
+
+    var cleanupEngineSummary: (name: String, detail: String?) {
         let preset = LLMPreset.find(settings.llmPresetID)
-        guard llmConfigured else { return L10n.text("没有整理模型（只去口头禅）") }
-        return preset.name + " · " + settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（你的 Key）"))
+        guard llmConfigured else { return (L10n.text("没有整理模型（只去口头禅）"), nil) }
+        return (preset.name, settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（你的 Key）")))
     }
 
     /// Whether cleanup is configured: a model and (except for local servers) a key.
@@ -244,14 +249,20 @@ final class AppModel: ObservableObject {
         settings.onlineASRProvider == .local ? speech?.ready == true : onlineASRKeyPresence == true
     }
 
-    var speechSummary: String {
+    var speechEngineSummary: (name: String, detail: String) {
         let provider = settings.onlineASRProvider
         if provider != .local {
             let status = onlineASRKeyPresence == true ? L10n.text("已配置") : L10n.text("待配置 API Key")
-            return provider.label + " · " + status
+            return (provider.label, status)
         }
         let name = speech?.displayName ?? L10n.text("未选择语音模型")
-        return name + " · " + (speech?.ready == true ? L10n.text("就绪") : L10n.text("准备中"))
+        let status = speech?.ready == true ? L10n.text("就绪") : L10n.text("准备中")
+        // The MLX catalog includes its runtime and precision in a trailing qualifier.
+        if name.hasSuffix(")"), let qualifier = name.range(of: " (MLX ", options: .backwards) {
+            let variant = name[qualifier.lowerBound...].dropFirst(2).dropLast()
+            return (String(name[..<qualifier.lowerBound]), "\(variant) · \(status)")
+        }
+        return (name, status)
     }
 
     /// One line about the local service, for the window and settings.

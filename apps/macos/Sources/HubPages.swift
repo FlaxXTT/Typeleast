@@ -101,7 +101,7 @@ struct HomePage: View {
                     }
                     HomeVersionFooter()
                 }
-                .frame(width: width - insightsWidth)
+                .frame(width: width - insightsWidth, height: max(0, geometry.size.height - 4), alignment: .top)
                 .padding(.top, 4)
             }
         }
@@ -198,13 +198,18 @@ private struct HomeVersionFooter: View {
             Button {
                 model.actions?.checkForUpdates(interactive: true)
             } label: {
-                Text(L10n.text("检查更新")).underline()
-                    .padding(.vertical, 4)
+                Label(L10n.text("检查更新"), systemImage: "arrow.clockwise")
+                    .font(InterfaceTypography.localized(12, weight: .medium))
+                    .padding(.vertical, 8)
                     .contentShape(Rectangle())
             }
-                .buttonStyle(FlatActionButtonStyle()).font(Theme.captionFont).foregroundColor(Theme.secondary)
+            .buttonStyle(FlatActionButtonStyle())
+            .foregroundColor(Theme.accent)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 54)
+        .background(Theme.tile, in: RoundedRectangle(cornerRadius: Theme.homeActivityRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.homeActivityRadius).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 
@@ -299,7 +304,9 @@ private struct EngineCard: View {
 
     var body: some View {
         let serviceStatus = model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪")
-        VStack(alignment: .leading, spacing: 14) {
+        let speech = model.speechEngineSummary
+        let cleanup = model.cleanupEngineSummary
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 5) {
                 InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
                 Spacer(minLength: 2)
@@ -307,16 +314,38 @@ private struct EngineCard: View {
                 InterfaceTypography.text(serviceStatus, size: 11)
                     .foregroundColor(Theme.homeLabel).lineLimit(1).help(serviceStatus)
             }
-            EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: model.speechSummary)
-            Divider().overlay(Theme.border)
-            EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: model.modelSummary)
-            Button(L10n.text("管理模型")) {
+            Spacer(minLength: 4)
+            VStack(alignment: .leading, spacing: 9) {
+                EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: speech.name, detail: speech.detail)
+                Divider().overlay(Theme.border)
+                EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: cleanup.name, detail: cleanup.detail)
+            }
+            Spacer(minLength: 5)
+            Button {
                 model.settingsCategory = 1
                 model.navigate(to: .settings)
-            }.buttonStyle(FlatActionButtonStyle()).font(Theme.captionFont).foregroundColor(Theme.accent)
+            } label: {
+                HStack(spacing: 8) {
+                    Label(L10n.text("管理模型"), systemImage: "slider.horizontal.3")
+                        .font(InterfaceTypography.localized(13, weight: .medium))
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(Theme.selection, in: RoundedRectangle(cornerRadius: Theme.listGroupRadius))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.listGroupRadius))
+            .foregroundColor(Theme.accent)
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
+        .overlay(RoundedRectangle(cornerRadius: Theme.homeCardRadius).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 
@@ -324,14 +353,23 @@ private struct EngineRow: View {
     let symbol: String
     let title: String
     let value: String
+    let detail: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-            InterfaceTypography.text(value, size: Theme.homeSecondarySize, weight: .medium)
-                .lineSpacing(3)
-                .lineLimit(2).help(value)
+            InterfaceTypography.text(value, size: 15, weight: .semibold)
+                .lineLimit(2).minimumScaleFactor(0.85).help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if let detail {
+                InterfaceTypography.text(detail, size: 11, weight: .medium)
+                    .foregroundColor(Theme.secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Theme.cardHover, in: Capsule())
+                    .help(detail)
+            }
         }
     }
 }
