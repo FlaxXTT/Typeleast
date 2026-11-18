@@ -36,6 +36,7 @@ jobs:
             -o "$RUNNER_TEMP/preview/TypeLeast" apps/macos/Sources/*.swift
           cp "$RUNNER_TEMP/preview/TypeLeast" "$app/Contents/MacOS/TypeLeast"
           /usr/bin/ditto apps/macos/Resources/Fonts "$app/Contents/Resources/Fonts"
+          cp service/lib/context.js "$app/Contents/Resources/service/lib/context.js"
       - name: Import persistent publisher signing identity
         env:
           MACOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.MACOS_SIGNING_CERTIFICATE_BASE64 }}
