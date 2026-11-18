@@ -5,20 +5,28 @@ import Foundation
 enum L10n {
     static let settingTitle = "Setting"
     static let preferenceKey = "ui.language"
-    static let choices = ["system", "zh-Hans", "en"]
+    static let choices = ["system", "zh-Hant", "en"]
     static func normalized(_ preference: String?) -> String {
-        choices.contains(preference ?? "") ? preference! : "system"
+        if preference == "zh-Hans" { return "zh-Hant" }
+        guard let preference, choices.contains(preference) else { return "system" }
+        return preference
     }
     static func resolve(_ preference: String?, preferred: [String] = Locale.preferredLanguages) -> String {
         let choice = normalized(preference)
         if choice != "system" { return choice }
-        return (preferred.first ?? "en").lowercased().hasPrefix("zh") ? "zh-Hans" : "en"
+        return (preferred.first ?? "en").lowercased().hasPrefix("zh") ? "zh-Hant" : "en"
     }
     static var language = resolve(UserDefaults.standard.string(forKey: preferenceKey))
-    static var locale: Locale { Locale(identifier: language == "en" ? "en_US" : "zh_CN") }
+    static var locale: Locale {
+        Locale(identifier: language == "en" ? "en_US" : language == "zh-Hant" ? "zh_TW" : "zh_CN")
+    }
     private static let slots = try! NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
     private static let englishNumbers = numberFormatter(locale: "en_US")
     private static let chineseNumbers = numberFormatter(locale: "zh_CN")
+    private static let traditionalTransform = StringTransform("Hans-Hant")
+    private static let traditionalTemplates = Dictionary(uniqueKeysWithValues: english.keys.map { key in
+        (key, key.applyingTransform(traditionalTransform, reverse: false) ?? key)
+    })
 
     private static func numberFormatter(locale: String) -> NumberFormatter {
         let formatter = NumberFormatter()
@@ -37,7 +45,13 @@ enum L10n {
     }
     static func render(_ key: String, arguments: [Any], language selected: String? = nil) -> String {
         let current = selected ?? language
-        let template = current == "en" ? (english[key] ?? key) : key
+        let template: String
+        switch current {
+        case "en": template = english[key] ?? key
+        case "zh-Hant":
+            template = traditionalTemplates[key] ?? key.applyingTransform(traditionalTransform, reverse: false) ?? key
+        default: template = key
+        }
         guard !arguments.isEmpty else { return template }
         // Replace all slots in a single pass so user text containing {1} stays verbatim.
         var result = template

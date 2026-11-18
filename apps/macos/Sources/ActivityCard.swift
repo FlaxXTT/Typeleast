@@ -38,26 +38,36 @@ struct InsightsPanel: View {
         let timingNote = stats.hasIncompleteTiming
             ? L10n.text("旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。") : nil
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                InitialHeading(title: "INSIGHT", initialSize: 45, bodySize: 31,
-                               typeface: InterfaceTypography.sackers, tracking: 1.8)
-                    .foregroundColor(Theme.homeLabel)
-                    .accessibilityLabel("Insight")
-                Spacer()
-                ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
+        GeometryReader { geometry in
+            let headerHeight: CGFloat = 54
+            let spacing: CGFloat = 14
+            let tileGap: CGFloat = 12
+            let contentHeight = max(0, geometry.size.height - headerHeight - 2 * spacing)
+            let activityHeight = contentHeight * Theme.homeRatio
+            let tileHeight = max(0, (contentHeight - activityHeight - tileGap) / 2)
+            VStack(alignment: .leading, spacing: spacing) {
+                HStack {
+                    InitialHeading(title: "INSIGHT", initialSize: Theme.homeHeadingSize,
+                                   bodySize: Theme.homeHeadingSize * Theme.homeRatio,
+                                   typeface: InterfaceTypography.sackers, tracking: 1.8)
+                        .foregroundColor(Theme.homeLabel)
+                        .accessibilityLabel("Insight")
+                    Spacer()
+                    ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
+                }
+                .frame(height: headerHeight)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: tileGap), GridItem(.flexible())], spacing: tileGap) {
+                    Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, height: tileHeight)
+                    Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed,
+                           height: tileHeight, unavailable: timingUnavailable, note: timingNote)
+                    Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))],
+                           label: L10n.text("平均口述速度"), elapsed: displayedElapsed, height: tileHeight,
+                           unavailable: timingUnavailable, note: timingNote)
+                    Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed,
+                           height: tileHeight, unavailable: timingUnavailable, note: timingNote)
+                }
+                ActivityCard(elapsed: displayedElapsed).frame(height: activityHeight)
             }
-            .frame(height: 54)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed)
-                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed,
-                       unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), elapsed: displayedElapsed,
-                       unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed,
-                       unavailable: timingUnavailable, note: timingNote)
-            }
-            ActivityCard(elapsed: displayedElapsed)
         }
         .task(id: reduceMotion) {
             if reduceMotion {
@@ -141,6 +151,7 @@ private struct Figure: View {
     let parts: [InsightPart]
     let label: String
     let elapsed: Double
+    let height: CGFloat
     var unavailable = false
     var note: String?
 
@@ -148,20 +159,20 @@ private struct Figure: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if unavailable {
-                    Text("—").font(InterfaceTypography.figure(26))
+                    Text("—").font(InterfaceTypography.figure(Theme.homeFigureSize))
                         .accessibilityLabel(L10n.text("尚无时长记录"))
                 } else {
                     ForEach(parts.indices, id: \.self) { index in
-                        CountingNumber(part: parts[index], elapsed: elapsed, size: 26)
+                        CountingNumber(part: parts[index], elapsed: elapsed, size: Theme.homeFigureSize)
                             .tracking(-0.6)
                             .lineLimit(1).minimumScaleFactor(0.6)
-                        InterfaceTypography.text(parts[index].unit, size: 12, weight: .semibold)
+                        InterfaceTypography.text(parts[index].unit, size: Theme.homeFigureSize * Theme.homeRatio, weight: .semibold)
                             .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                     }
                 }
             }
             HStack(spacing: 5) {
-                InterfaceTypography.text(label, size: 13)
+                InterfaceTypography.text(label, size: Theme.homeFigureSize * Theme.homeRatio)
                     .lineLimit(1).minimumScaleFactor(0.85)
                 if let note {
                     Image(systemName: "info.circle").font(.system(size: 11))
@@ -171,7 +182,8 @@ private struct Figure: View {
             .font(Theme.rowFont).foregroundColor(Theme.homeLabel)
         }
         .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: height)
         .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
         .help(note ?? label)
     }
@@ -255,8 +267,7 @@ struct ShareButton: NSViewRepresentable {
         button.setButtonType(.momentaryChange)
         button.imagePosition = .imageLeading
         button.isBordered = false
-        button.font = L10n.language == "en" ? InterfaceTypography.englishAppKit(16, emphasized: true)
-            : .systemFont(ofSize: 16, weight: .medium)
+        button.font = InterfaceTypography.localizedAppKit(16, weight: .medium)
         button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
         button.wantsLayer = true
         button.controlSize = .regular
@@ -367,14 +378,12 @@ struct ActivityCard: View {
     let elapsed: Double
     @State private var weekOffset = 0
 
-    private let cell: CGFloat = 18
+    private let cell: CGFloat = 16.5
     private let columnGap: CGFloat = 3
-    private let rowGap: CGFloat = 8
     private let dayColumn: CGFloat = 24
     private let navigationHeight: CGFloat = 18
+    private let navigationGap: CGFloat = 6
     private var columnStep: CGFloat { cell + columnGap }
-    private var rowStep: CGFloat { cell + rowGap }
-    private var navigationY: CGFloat { 6 * rowStep + cell + 6 }
 
     var body: some View {
         let log = ActivityLog.shared
@@ -386,27 +395,27 @@ struct ActivityCard: View {
                 figure(streaks.current, L10n.text("当前连续天数"))
                 figure(streaks.longest, L10n.text("最长连续天数"))
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 7)
             GeometryReader { geo in
                 let width = max(cell, geo.size.width - dayColumn)
                 let weeks = max(1, min(20, Int((width + columnGap) / columnStep)))
                 let gridWidth = dayColumn + CGFloat(weeks) * columnStep - columnGap
-                grid(weeks: weeks, width: gridWidth, log: log)
+                let rowStep = max(cell + 2, (geo.size.height - cell - navigationHeight - navigationGap) / 6)
+                grid(weeks: weeks, width: gridWidth, rowStep: rowStep, log: log)
                     .frame(width: gridWidth)
                     .frame(maxWidth: .infinity)
             }
-            .frame(height: navigationY + navigationHeight)
-            .padding(.top, 16)
+            .padding(.top, 12)
             HStack(spacing: 6) {
                 Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
                 ForEach(1..<5) { level in square(level, size: 13) }
                 Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
-            .padding(.horizontal, 6)
-            .padding(.top, 10)
+            .padding(.horizontal, 7)
+            .padding(.top, 8)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
     }
@@ -415,17 +424,18 @@ struct ActivityCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
-                               elapsed: elapsed, size: 26)
+                               elapsed: elapsed, size: Theme.homeFigureSize)
                     .tracking(-0.6)
-                InterfaceTypography.text(L10n.text("天"), size: 12, weight: .semibold)
+                InterfaceTypography.text(L10n.text("天"), size: Theme.homeFigureSize * Theme.homeRatio, weight: .semibold)
             }
-            Text(label).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+            InterfaceTypography.text(label, size: Theme.homeFigureSize * Theme.homeRatio)
+                .foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func grid(weeks: Int, width: CGFloat, log: ActivityLog) -> some View {
+    private func grid(weeks: Int, width: CGFloat, rowStep: CGFloat, log: ActivityLog) -> some View {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = L10n.locale
         calendar.firstWeekday = 1
@@ -434,6 +444,7 @@ struct ActivityCard: View {
         let first = calendar.date(byAdding: .day, value: 7 * (weekOffset - weeks + 1), to: thisWeek) ?? thisWeek
         let earliest = log.days.keys.min().flatMap { ActivityLog.parse($0, calendar: calendar) }
         let hatchWidth: CGFloat = 7
+        let navigationY = 6 * rowStep + cell + navigationGap
         let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
             ForEach(0..<7, id: \.self) { row in
