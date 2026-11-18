@@ -135,7 +135,7 @@ final class AppModel: ObservableObject {
 
     func navigate(to page: HubPage) {
         if page == .settings { settingsPresented = true }
-        else { self.page = page }
+        else if self.page != page { self.page = page }
     }
 
     func reloadHistory() {

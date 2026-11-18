@@ -2,16 +2,22 @@ import SwiftUI
 import AppKit
 import QuartzCore
 
-// Screenshot-matched Home insights. Only number and cell-effect views interpolate;
-// animation frames do not publish through AppModel or rebuild the activity log.
-
+/// A single elapsed-time animation drives the readouts and week columns.
 private enum DashboardMotion {
-    static let countDuration = 0.250
+    static let countDuration = 0.460
+    static let gridDelay = 0.260
     static let columnDuration = 0.300
-    static let columnStagger = 0.040
+    static let columnStagger = 0.052
+    static let maximumWave = 0.950
+    static let duration = gridDelay + maximumWave + columnDuration
 
-    static func heatmapDuration(weeks: Int) -> Double {
-        columnDuration + Double(max(0, weeks - 1)) * columnStagger
+    static func columnStart(_ column: Int, weeks: Int) -> Double {
+        gridDelay + Double(column) * min(columnStagger, maximumWave / Double(max(1, weeks - 1)))
+    }
+
+    static func ease(_ progress: Double) -> Double {
+        let t = min(1, max(0, progress))
+        return t * t * (3 - 2 * t)
     }
 }
 
@@ -19,7 +25,8 @@ struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var compact = false
-    @State private var countProgress: Double = 0
+    let metricHeight: CGFloat
+    @State private var elapsed: Double = 0
 
     static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
     static let shareItems: [Any] = [shareText, URL(string: "https://typeleast.promptking.workers.dev")!, URL(string: "https://github.com/FlaxXTT/Typeleast")!]
@@ -29,86 +36,93 @@ struct InsightsPanel: View {
         let timingNote = stats.hasIncompleteTiming
             ? L10n.text("旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。") : nil
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Insight").font(Theme.homeTitleFont).tracking(-0.6)
+                Text("Insight").font(Theme.titleFont).tracking(-0.6)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
-            .frame(height: 54)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 20) {
-                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), progress: countProgress, compact: compact)
-                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), progress: countProgress, compact: compact,
+            .frame(height: 44)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible())], spacing: 16) {
+                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, compact: compact, height: metricHeight)
+                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed, compact: compact, height: metricHeight,
                        unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), progress: countProgress, compact: compact,
+                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), elapsed: displayedElapsed, compact: compact, height: metricHeight,
                        unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), progress: countProgress, compact: compact,
+                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed, compact: compact, height: metricHeight,
                        unavailable: timingUnavailable, note: timingNote)
             }
-            ActivityCard(countProgress: countProgress, compact: compact)
+            ActivityCard(elapsed: displayedElapsed, compact: compact)
         }
-        .onChange(of: model.homePresentationID, initial: true) { _, _ in replay() }
-        .onChange(of: reduceMotion) { _, reduced in
-            if reduced {
-                var transaction = Transaction(); transaction.disablesAnimations = true
-                withTransaction(transaction) { countProgress = 1 }
+        .task(id: reduceMotion) {
+            if reduceMotion {
+                elapsed = DashboardMotion.duration
+                return
+            }
+            // Leave time for the initial zero values and outlined grid to render.
+            try? await Task.sleep(for: .milliseconds(60))
+            guard !Task.isCancelled, elapsed == 0 else { return }
+            withAnimation(.linear(duration: DashboardMotion.duration)) {
+                elapsed = DashboardMotion.duration
             }
         }
     }
 
-    private func replay() {
-        var transaction = Transaction(); transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            countProgress = reduceMotion ? 1 : 0
-        }
-        guard !reduceMotion else { return }
-        DispatchQueue.main.async {
-            guard !reduceMotion else { return }
-            withAnimation(.timingCurve(0.2, 0.8, 0.2, 1, duration: DashboardMotion.countDuration)) { countProgress = 1 }
-        }
+    private var displayedElapsed: Double {
+        reduceMotion ? DashboardMotion.duration : elapsed
     }
 
     /// The reference uses K in both languages. Units stay fixed during count-up.
-    static func count(_ value: Int, unit: String) -> [InsightPart] {
-        if value >= 1000 { return [InsightPart(value: Double(value) / 1000, unit: unit, decimals: 1, numberSuffix: "K")] }
+    private static func count(_ value: Int, unit: String) -> [InsightPart] {
+        if value >= 1000 { return [InsightPart(value: Double(value) / 1000, unit: unit, format: .thousands)] }
         return [InsightPart(value: Double(value), unit: unit)]
     }
 
-    static func duration(_ seconds: Double) -> [InsightPart] {
+    private static func duration(_ seconds: Double) -> [InsightPart] {
         let total = max(0, Int(seconds.rounded()))
         if total < 60 { return [InsightPart(value: Double(total), unit: L10n.text("秒"))] }
-        let hours = total / 3600, minutes = (total % 3600) / 60
-        if hours == 0 { return [InsightPart(value: Double(minutes), unit: L10n.text("分钟"))] }
-        return [InsightPart(value: Double(hours), unit: L10n.text("小时")), InsightPart(value: Double(minutes), unit: L10n.text("分钟"))]
+        let value = Double(total)
+        if total < 3600 { return [InsightPart(value: value, unit: L10n.text("分钟"), format: .minutes)] }
+        return [InsightPart(value: value, unit: L10n.text("小时"), format: .hours),
+                InsightPart(value: value, unit: L10n.text("分钟"), format: .minuteRemainder)]
     }
 }
 
-struct InsightPart {
+private struct InsightPart {
+    enum Format { case whole, thousands, hours, minutes, minuteRemainder }
     let value: Double
     let unit: String
-    var decimals = 0
-    var numberSuffix = ""
+    var format: Format = .whole
+
+    var widthSample: String {
+        format == .minuteRemainder ? Formatters.number(59) : string(at: 1)
+    }
 
     func string(at progress: Double) -> String {
-        let value = value * min(1, max(0, progress))
-        if decimals == 1 { return String(format: "%.1f", locale: L10n.locale, value) + numberSuffix }
-        return Formatters.number(Int(value.rounded(.down))) + numberSuffix
+        let scaled = value * progress
+        switch format {
+        case .whole: return Formatters.number(Int(scaled))
+        case .thousands: return String(format: "%.1f", locale: L10n.locale, scaled) + "K"
+        case .hours: return Formatters.number(Int(scaled) / 3600)
+        case .minutes: return Formatters.number(Int(scaled) / 60)
+        case .minuteRemainder: return Formatters.number((Int(scaled) / 60) % 60)
+        }
     }
 }
 
 private struct CountingNumber: View, Animatable {
     let part: InsightPart
-    var progress: Double
+    var elapsed: Double
     var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
+        get { elapsed }
+        set { elapsed = newValue }
     }
 
     var body: some View {
-        // Reserve final width so a changing digit count cannot move its unit or label.
-        Text(part.string(at: 1)).hidden()
-            .overlay(alignment: .leading) {
+        let progress = DashboardMotion.ease(elapsed / DashboardMotion.countDuration)
+        Text(part.widthSample).hidden()
+            .overlay(alignment: .trailing) {
                 Text(part.string(at: progress)).lineLimit(1).minimumScaleFactor(0.6)
             }
             .monospacedDigit()
@@ -117,12 +131,13 @@ private struct CountingNumber: View, Animatable {
     }
 }
 
-/// One white tile: a large number with its small unit, the label below.
+/// One metric tile with a large figure, a smaller unit and a label.
 private struct Figure: View {
     let parts: [InsightPart]
     let label: String
-    let progress: Double
+    let elapsed: Double
     let compact: Bool
+    let height: CGFloat
     var unavailable = false
     var note: String?
 
@@ -134,7 +149,7 @@ private struct Figure: View {
                         .accessibilityLabel(L10n.text("尚无时长记录"))
                 } else {
                     ForEach(parts.indices, id: \.self) { index in
-                        CountingNumber(part: parts[index], progress: progress)
+                        CountingNumber(part: parts[index], elapsed: elapsed)
                             .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
                             .lineLimit(1).minimumScaleFactor(0.6)
                         Text(parts[index].unit).font(.system(size: compact ? 11 : 14, weight: .semibold))
@@ -151,9 +166,9 @@ private struct Figure: View {
             }
             .font(.system(size: compact ? 13 : 16)).foregroundColor(Theme.homeLabel)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .continuous).fill(Theme.tile))
         .help(note ?? label)
     }
 }
@@ -318,15 +333,13 @@ private final class HoverShareButton: NSButton {
 /// Active days and streaks above the heatmap: weekdays down the side, months along the bottom.
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var countProgress: Double = 1
+    let elapsed: Double
     var compact = false
     @State private var weekOffset = 0
-    @State private var heatmapElapsed: Double = 0
 
-    private let cell: CGFloat = 16
+    private let cell: CGFloat = 14
     private let gap: CGFloat = 8
-    private let dayColumn: CGFloat = 32
+    private let dayColumn: CGFloat = 30
 
     var body: some View {
         let log = ActivityLog.shared
@@ -339,35 +352,27 @@ struct ActivityCard: View {
                 figure(streaks.longest, L10n.text("最长连续天数"))
             }
             GeometryReader { geo in
-                let weeks = max(6, min(53, Int((geo.size.width - dayColumn - 18 + gap) / (cell + gap))))
-                grid(weeks: weeks, log: log)
-                    .task(id: [model.homePresentationID, weeks, reduceMotion ? 1 : 0]) {
-                        let duration = DashboardMotion.heatmapDuration(weeks: weeks)
-                        var transaction = Transaction(); transaction.disablesAnimations = true
-                        withTransaction(transaction) { heatmapElapsed = reduceMotion ? duration : 0 }
-                        guard !reduceMotion else { return }
-                        await Task.yield()
-                        guard !Task.isCancelled else { return }
-                        withAnimation(.linear(duration: duration)) { heatmapElapsed = duration }
-                    }
+                let width = max(cell, geo.size.width - dayColumn)
+                let weeks = max(1, min(53, Int((width + gap) / (cell + gap))))
+                let columnStep = weeks > 1 ? (width - cell) / CGFloat(weeks - 1) : cell
+                grid(weeks: weeks, columnStep: columnStep, log: log)
             }
             .frame(height: 7 * (cell + gap) + 20)
             HStack(spacing: 6) {
                 Text(L10n.text("更少")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
-                ForEach(1..<5) { level in square(level) }
+                ForEach(1..<5) { level in square(level, size: 12) }
                 Text(L10n.text("更多")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
             }
         }
-        .padding(24)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
-        .onChange(of: model.homePresentationID) { _, _ in weekOffset = 0 }
+        .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .continuous).fill(Theme.tile))
     }
 
     private func figure(_ value: Int, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")), progress: countProgress)
+                CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")), elapsed: elapsed)
                     .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
                 Text(L10n.text("天")).font(.system(size: 14, weight: .semibold))
             }
@@ -377,7 +382,7 @@ struct ActivityCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func grid(weeks: Int, log: ActivityLog) -> some View {
+    private func grid(weeks: Int, columnStep: CGFloat, log: ActivityLog) -> some View {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = L10n.locale
         calendar.firstWeekday = 1
@@ -401,27 +406,30 @@ struct ActivityCard: View {
                 }
                 .stroke(Theme.border.opacity(0.6), lineWidth: 1)
                 .frame(width: 10, height: cell).clipped()
-                .offset(x: 24, y: CGFloat(row) * step)
+                .offset(x: 19, y: CGFloat(row) * step)
                 .accessibilityHidden(true)
             }
             ForEach(0..<weeks, id: \.self) { column in
                 let weekStart = calendar.date(byAdding: .day, value: 7 * column, to: first) ?? first
-                let x = dayColumn + CGFloat(column) * step
+                let x = dayColumn + CGFloat(column) * columnStep
                 ForEach(0..<7, id: \.self) { row in
                     let date = calendar.date(byAdding: .day, value: row, to: weekStart) ?? weekStart
                     Group {
                         if date <= today {
                             let day = log.day(date)
                             let level = ActivityLog.level(day.dictations)
-                            square(0)
-                                .overlay {
-                                    square(level).modifier(HeatmapColumnReveal(elapsed: heatmapElapsed, column: column))
+                            let description = tooltip(date, day)
+                            if weekOffset == 0 {
+                                outlinedCell.overlay {
+                                    square(level).modifier(HeatmapColumnReveal(
+                                        elapsed: elapsed, start: DashboardMotion.columnStart(column, weeks: weeks)))
                                 }
-                                .help(tooltip(date, day)).accessibilityLabel(tooltip(date, day))
+                                .help(description).accessibilityLabel(description)
+                            } else {
+                                square(level).help(description).accessibilityLabel(description)
+                            }
                         } else {
-                            RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
-                                .stroke(Theme.border, lineWidth: 1).frame(width: cell, height: cell)
-                                .modifier(HeatmapColumnReveal(elapsed: heatmapElapsed, column: column))
+                            outlinedCell.accessibilityHidden(true)
                         }
                     }
                     .offset(x: x, y: CGFloat(row) * step)
@@ -446,10 +454,16 @@ struct ActivityCard: View {
         }
     }
 
-    private func square(_ level: Int) -> some View {
+    private var outlinedCell: some View {
+        RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
+            .strokeBorder(Theme.border, lineWidth: 1)
+            .frame(width: cell, height: cell)
+    }
+
+    private func square(_ level: Int, size: CGFloat = 14) -> some View {
         RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
             .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
-            .frame(width: cell, height: cell)
+            .frame(width: size, height: size)
     }
 
     /// The month's name under the week that contains its 1st.
@@ -471,31 +485,19 @@ struct ActivityCard: View {
     }
 }
 
-/// One shared timeline drives every column; cells in the same week stay in phase.
+/// The slot stays fixed; only the fill fades and settles within it.
 private struct HeatmapColumnReveal: AnimatableModifier {
     var elapsed: Double
-    let column: Int
+    let start: Double
     var animatableData: Double {
         get { elapsed }
         set { elapsed = newValue }
     }
 
     func body(content: Content) -> some View {
-        let start = Double(column) * DashboardMotion.columnStagger
-        let fraction = min(1, max(0, (elapsed - start) / DashboardMotion.columnDuration))
-        let pulse = fraction < 0.45
-            ? 1 - pow(1 - fraction / 0.45, 3)
-            : pow((1 - fraction) / 0.55, 2)
-        let visible = fraction > 0 ? 1.0 : 0.0
+        let progress = DashboardMotion.ease((elapsed - start) / DashboardMotion.columnDuration)
         content
-            .opacity(visible)
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
-                    .fill(Color.white)
-                    .opacity(visible * pow(1 - fraction, 2))
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
-            }
-            .scaleEffect(1 + 0.2 * pulse)
+            .opacity(progress)
+            .scaleEffect(0.94 + 0.06 * progress + 0.07 * sin(.pi * progress))
     }
 }

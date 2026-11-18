@@ -72,15 +72,23 @@ struct HomePage: View {
     var body: some View {
         GeometryReader { geometry in
             let wide = geometry.size.width >= 660
-            let sideWidth: CGFloat = geometry.size.width >= 850 ? 228 : 212
-            let mainWidth = geometry.size.width - 48 - (wide ? sideWidth + 24 : 0)
+            let contentWidth = max(0, geometry.size.width - 48)
+            let sideWidth = min(228, max(184, contentWidth * 0.26))
+            let mainWidth = contentWidth - (wide ? sideWidth + 24 : 0)
+            let metricHeight = min(100, max(84, (mainWidth - 16) * 0.17))
             let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
                               : AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
             HubScrollView(key: "home-" + String(model.homePresentationID)) {
                 VStack(alignment: .leading, spacing: 24) {
                     layout {
-                        InsightsPanel(compact: mainWidth < 560)
+                        InsightsPanel(compact: mainWidth < 560, metricHeight: metricHeight)
+                            .id(model.homePresentationID)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .background {
+                                HomeDotGrid()
+                                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                                    .padding(-10)
+                            }
                         VStack(alignment: .leading, spacing: 20) {
                             ShortcutReferenceCard()
                             EngineCard()
@@ -97,7 +105,7 @@ struct HomePage: View {
                 .padding(EdgeInsets(top: 44, leading: 24, bottom: 16, trailing: 24))
             }
         }
-        .background(HomeDotGrid())
+        .background(Theme.window)
     }
 }
 
@@ -111,7 +119,7 @@ private struct ShortcutReferenceCard: View {
             shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
         }
         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius).fill(Theme.sidebar))
+        .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .continuous).fill(Theme.sidebar))
     }
 
     private func shortcut(_ title: String, binding: HotKeyBinding) -> some View {

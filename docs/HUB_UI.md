@@ -17,9 +17,10 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 
 ### Home insights
 
-The supplied Home screenshot defines the insights area: system bold figures, grey labels,
-large white cards with 20-point corners, a soft grey-to-white dot-grid backdrop and a
-pill-shaped Share button. The heading is `Insight`; no slogan is added above it.
+The insights area uses bold figures, grey labels, a dot-grid backdrop and a pill-shaped
+Share button beside the `Insight` heading. The four metric cards use 22-point continuous
+corners and 16-point gaps. Their height follows the column width within 84 to 100 points.
+The full-width activity card uses 18-point corners and 14-point cells.
 Figures use the default system design rather than rounded digits.
 The light heatmap colours sampled from the reference are `#F8F8F8` (empty), `#ECF0FE`,
 `#C6D2FC`, `#A0B4FB` and `#426AF6`. The screenshot's Display P3 colour space is retained
@@ -34,22 +35,17 @@ section beneath both columns. The main window is fixed at 1080×750 points. User
 
 The sidebar footer has an envelope and localized Contact Us label linking to the
 project's GitHub homepage, a Settings gear and a Help button linking to the README.
-Settings opens the independent window. The Home dot grid uses retained native
-layers, so normal scrolling and status refreshes do not rebuild all of its dots.
+Settings opens the independent window. The Insight backdrop uses retained native
+dot layers behind the metric and activity cards. The shortcut and engine column
+sits on the plain page background.
 
-Opening or restoring the hub replays the four metric figures from zero over 250ms. Units and
-final number widths are reserved, so counting does not move surrounding content. Active
-day and streak figures count up too. Grey day slots are visible at first. Week columns
-enter left to right, staggered by 40ms. Each column runs a 300ms scale pulse from 1 to
-1.2 and back to 1 while a white cover fades away; all seven cells share the column's
-phase. One local elapsed-time animation drives every cell, without per-cell timers.
-Reduce Motion displays the final values and grid immediately.
-Month arrows navigate actual activity history. No synthetic usage data is added.
-
-The animation is local to numeric text and cell effects, not a timer publishing through
-AppModel. Ordinary history/health refreshes do not restart it. Opening the hub starts
-Home at its insights; navigation within that opening retains the native scroll offset.
-Reduce Motion shows the final figures and cells immediately.
+Opening, restoring or navigating back to Home plays its entrance. The metrics, active
+days and streaks count from zero over 460ms with space reserved for their final values.
+The heatmap first shows outlines. Its week columns start filling after 260ms, from left
+to right, with up to 52ms between columns and a 300ms fade and settle per column. Future
+dates retain their outlines. Both effects share one elapsed-time animation local to the
+figure and cell views. Month arrows show actual activity history directly. Reduce Motion
+shows the final figures and cells immediately.
 
 ### History and commands
 
