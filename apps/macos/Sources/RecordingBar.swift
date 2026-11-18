@@ -287,11 +287,11 @@ final class PillView: NSView {
     var presentationHeight: CGFloat { model.isStartingMicrophone ? VoiceBarGeometry.starting.height : Self.height }
     static func badgeWidth(_ text: String) -> CGFloat {
         guard !text.isEmpty else { return 0 }
-        let font = NSFont.systemFont(ofSize: 10, weight: .bold)
+        let font = InterfaceTypography.localizedAppKit(10, weight: .bold)
         return max(34, ceil((text as NSString).size(withAttributes: [.font: font]).width) + 12)
     }
     /// Font of the result line.
-    static let resultFont = NSFont.systemFont(ofSize: 12, weight: .medium)
+    static let resultFont = InterfaceTypography.localizedAppKit(12, weight: .medium)
 
     /// Capsule width for the current look; the host sizes the panel to it.
     static func width(for model: RecordingBarModel, limit: Double) -> CGFloat {
@@ -301,7 +301,7 @@ final class PillView: NSView {
             return model.mode.width + (limit - model.elapsed <= countdownSeconds ? 40 : 0)
         case .thinking:
             if model.isStartingMicrophone { return VoiceBarGeometry.starting.width }
-            return 94 + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:11)]).width))
+            return 94 + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:InterfaceTypography.localizedAppKit(11)]).width))
         case .result:
             if model.warning { return 70 }
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -334,7 +334,7 @@ final class PillView: NSView {
         button.isBordered = false
         button.setButtonType(.momentaryChange)
         button.attributedTitle = NSAttributedString(string: glyph, attributes: [
-            .font: NSFont.systemFont(ofSize: 10, weight: .bold),
+            .font: InterfaceTypography.localizedAppKit(10, weight: .bold),
             .foregroundColor: PillView.ink.withAlphaComponent(0.78),
         ])
         button.target = self
@@ -547,7 +547,7 @@ final class PillView: NSView {
         if countingDown {
             let x = handsFree ? stop.minX - 40 : content.maxX - 36
             drawText(RecordingBarFormat.elapsed(max(0, remaining)), x: x, centerY: content.midY, width: 32,
-                     font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: VoiceBarPalette.warning)
+                     font: InterfaceTypography.localizedAppKit(11, weight: .semibold), color: VoiceBarPalette.warning)
         }
     }
 
@@ -611,7 +611,7 @@ final class PillView: NSView {
         }
         let text = model.warning ? L10n.text("错误") : (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText)
         drawText(text, x: model.warning ? 31 : 34, centerY: rowY, width: bounds.width - (model.warning ? 37 : 46),
-                 font: model.warning ? .systemFont(ofSize: 10, weight: .medium) : PillView.resultFont,
+                 font: model.warning ? InterfaceTypography.localizedAppKit(10, weight: .medium) : PillView.resultFont,
                  color: PillView.ink)
     }
 
@@ -657,7 +657,7 @@ final class PillView: NSView {
 
     /// Fixed travel speed keeps long and short processing labels equally calm.
     private func drawProcessingText(_ text: String, x: CGFloat, width: CGFloat) {
-        let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let font = InterfaceTypography.localizedAppKit(11, weight: .medium)
         guard !reduceMotion, let context = NSGraphicsContext.current?.cgContext else {
             drawText(text, x: x, centerY: bounds.midY, width: width, font: font, color: PillView.ink)
             return
@@ -1188,8 +1188,8 @@ final class RecordingBar {
 
 final class MicrophoneHintView: NSView {
     private let name: String
-    private static let titleFont = NSFont.systemFont(ofSize: 10, weight: .medium)
-    private static let nameFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    private static let titleFont = InterfaceTypography.localizedAppKit(10, weight: .medium)
+    private static let nameFont = InterfaceTypography.localizedAppKit(12, weight: .semibold)
 
     init(name: String) {
         self.name = name

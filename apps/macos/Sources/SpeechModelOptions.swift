@@ -7,16 +7,16 @@ struct SpeechModelOptions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.text("语音模型")).font(.headline)
+            Text(L10n.text("语音模型")).font(InterfaceTypography.localized(13, weight: .semibold))
             if let catalog = model.speechCatalog {
                 let dictationModels = catalog.models.filter { $0.category != "meeting" }
                 if dictationModels.contains(where: { $0.id.hasPrefix("mlx-") && !$0.installed }) {
                     Text(L10n.text("MLX 模型需重新下载。旧模型文件会保留，但不能用于 MLX 识别。"))
-                        .font(.caption).foregroundColor(Theme.secondary)
+                        .font(Theme.captionFont).foregroundColor(Theme.secondary)
                 }
                 if catalog.notice != nil {
                     Text(L10n.text("所选模型不可用，请重新选择。"))
-                        .foregroundColor(Theme.warning).font(.caption)
+                        .foregroundColor(Theme.warning).font(Theme.captionFont)
                 }
                 ForEach(dictationModels) { entry in
                     modelRow(entry, catalog: catalog)
@@ -44,9 +44,9 @@ struct SpeechModelOptions: View {
 
     @ViewBuilder private func storageSection(_ catalog: SpeechModelCatalog) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.text("模型与存储")).font(.headline)
+            Text(L10n.text("模型与存储")).font(InterfaceTypography.localized(13, weight: .semibold))
             Text(L10n.text("只显示应用管理的模型文件和未完成的下载。历史、录音、个人偏好、密钥和其他文件不会在这里删除。"))
-                .font(.caption).foregroundColor(Theme.secondary)
+                .font(Theme.captionFont).foregroundColor(Theme.secondary)
             if let items = catalog.storage, !items.isEmpty {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 5) {
@@ -54,10 +54,10 @@ struct SpeechModelOptions: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.name)
                                 Text(item.active ? L10n.text("当前使用中，请先切换模型") : item.legacy ? L10n.text("旧版模型，可删除；以后使用需重新下载") : L10n.text("模型文件，可重新下载"))
-                                    .font(.caption).foregroundColor(Theme.secondary)
+                                    .font(Theme.captionFont).foregroundColor(Theme.secondary)
                             }
                             Spacer()
-                            Text(ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)).font(.caption)
+                            Text(ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)).font(Theme.captionFont)
                             if item.bytes > 0 {
                                 Button(L10n.text("删除")) { partialOnly = false; deletion = item }
                                     .disabled(item.active || catalog.operation?.running == true || model.phase != .idle)
@@ -65,9 +65,9 @@ struct SpeechModelOptions: View {
                         }
                         if item.partialBytes > 0 {
                             HStack {
-                                Text(L10n.text("未完成的下载")).font(.caption)
+                                Text(L10n.text("未完成的下载")).font(Theme.captionFont)
                                 Spacer()
-                                Text(ByteCountFormatter.string(fromByteCount: Int64(item.partialBytes), countStyle: .file)).font(.caption)
+                                Text(ByteCountFormatter.string(fromByteCount: Int64(item.partialBytes), countStyle: .file)).font(Theme.captionFont)
                                 Button(L10n.text("清理")) { partialOnly = true; deletion = item }
                                     .disabled(catalog.operation?.running == true || model.phase != .idle)
                             }
@@ -75,10 +75,10 @@ struct SpeechModelOptions: View {
                     }
                 }
             } else {
-                Text(L10n.text("没有可管理的模型文件。")).font(.caption).foregroundColor(Theme.secondary)
+                Text(L10n.text("没有可管理的模型文件。")).font(Theme.captionFont).foregroundColor(Theme.secondary)
             }
             Text(L10n.text("会议模型和其他缓存未在此列出，不会被清理。"))
-                .font(.caption).foregroundColor(Theme.secondary)
+                .font(Theme.captionFont).foregroundColor(Theme.secondary)
         }
     }
 
@@ -96,14 +96,14 @@ struct SpeechModelOptions: View {
                 }
             }
             if entry.id == "mlx-fun-asr-nano-bf16" {
-                Text(L10n.text("中英日 · 混说 · 自动识别")).font(.caption)
+                Text(L10n.text("中英日 · 混说 · 自动识别")).font(Theme.captionFont)
             } else if entry.id == "mlx-qwen3-asr-0.6b-bf16" {
-                Text(L10n.text("多语种 · 中英混说 · 较小体积")).font(.caption)
+                Text(L10n.text("多语种 · 中英混说 · 较小体积")).font(Theme.captionFont)
             } else if entry.id == "mlx-qwen3-asr-1.7b-bf16" || entry.id == "mlx-qwen3-asr-1.7b-8bit" {
-                Text(L10n.text("多语种 · 中英混说 · 较大容量")).font(.caption)
+                Text(L10n.text("多语种 · 中英混说 · 较大容量")).font(Theme.captionFont)
             }
             if entry.id == "mlx-qwen3-asr-1.7b-8bit" {
-                Text(L10n.text("尚未经本机识别验证")).font(.caption).foregroundColor(Theme.secondary)
+                Text(L10n.text("尚未经本机识别验证")).font(Theme.captionFont).foregroundColor(Theme.secondary)
             }
             HStack(spacing: 10) {
                 if let precision = entry.precision { Text(precision.uppercased()) }
@@ -112,7 +112,7 @@ struct SpeechModelOptions: View {
                 if !entry.sourceUrl.isEmpty, let url = URL(string: entry.sourceUrl) {
                     Link(L10n.text("模型来源与下载"), destination: url)
                 }
-            }.font(.caption).foregroundColor(Theme.secondary)
+            }.font(Theme.captionFont).foregroundColor(Theme.secondary)
             if let op = operation {
                 if op.running {
                     HStack {
@@ -123,9 +123,9 @@ struct SpeechModelOptions: View {
                         if op.phase != "committing" {
                             Button(L10n.text("取消")) { model.actions?.manageSpeechModel(id: entry.id, download: false, cancel: true) }
                         }
-                    }.font(.caption)
+                    }.font(Theme.captionFont)
                 } else if op.phase == "error" {
-                    Text(op.problem).font(.caption).foregroundColor(Theme.warning)
+                    Text(op.problem).font(Theme.captionFont).foregroundColor(Theme.warning)
                 }
             }
             Divider()

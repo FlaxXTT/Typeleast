@@ -68,6 +68,7 @@ enum Formatters {
 
 struct HomePage: View {
     @EnvironmentObject var model: AppModel
+    let elapsed: Double
     @State private var showsSetup = false
 
     var body: some View {
@@ -76,8 +77,7 @@ struct HomePage: View {
             let width = max(0, geometry.size.width - gap)
             let insightsWidth = width * 0.67
             HStack(alignment: .top, spacing: gap) {
-                InsightsPanel()
-                    .id(model.homePresentationID)
+                InsightsPanel(elapsed: elapsed)
                     .frame(width: insightsWidth, height: geometry.size.height)
                     .background {
                         HomeDotGrid()
@@ -219,7 +219,7 @@ private struct SetupCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text(L10n.text("设置位置")).font(.system(size: 14, weight: .semibold))
+                Text(L10n.text("设置位置")).font(InterfaceTypography.localized(14, weight: .semibold))
                 SetupRow(done: model.micStatus == .authorized, title: L10n.text("麦克风"),
                          detail: "",
                          action: model.micStatus == .denied ? L10n.text("打开设置") : L10n.text("允许")) {
@@ -273,9 +273,9 @@ private struct SetupRow: View {
                 .font(.system(size: 16))
                 .foregroundColor(done ? Theme.success : Theme.tertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .medium))
+                Text(title).font(InterfaceTypography.localized(14, weight: .medium))
                 if !detail.isEmpty {
-                    Text(detail).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                    Text(detail).font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
                 }
             }
             Spacer()
@@ -334,7 +334,6 @@ enum HistoryFilter: Hashable { case all, polished, raw }
 struct HistoryPage: View {
     @EnvironmentObject var model: AppModel
     @State private var filter: HistoryFilter = .all
-    @State private var query = ""
     @State private var confirmClear = false
     @State private var day = Calendar.current.startOfDay(for: Date())
     @State private var dayGroups: [DayGroup] = []
@@ -342,26 +341,23 @@ struct HistoryPage: View {
     private struct CacheKey: Equatable {
         let historyRevision: Int
         let filter: HistoryFilter
-        let query: String
         let day: Date
         let language: String
         let timeZone: String
     }
 
     private var cacheKey: CacheKey {
-        CacheKey(historyRevision: model.historyRevision, filter: filter, query: query, day: day,
+        CacheKey(historyRevision: model.historyRevision, filter: filter, day: day,
                  language: L10n.language, timeZone: TimeZone.current.identifier)
     }
 
     private var filtered: [LocalHistoryEntry] {
         model.history.filter { entry in
             switch filter {
-            case .all: break
-            case .polished: if entry.fallback { return false }
-            case .raw: if !entry.fallback { return false }
+            case .all: return true
+            case .polished: return !entry.fallback
+            case .raw: return entry.fallback
             }
-            guard !query.isEmpty else { return true }
-            return entry.displayText.localizedCaseInsensitiveContains(query) || entry.raw.localizedCaseInsensitiveContains(query)
         }
     }
 
@@ -431,24 +427,14 @@ struct HistoryPage: View {
                     .frame(width: 32)
                 }
             }
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    historyChips.fixedSize()
-                    Spacer(minLength: 12)
-                    SearchField(text: $query, width: 180)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    historyChips
-                    SearchField(text: $query, width: 180)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, Theme.pageInset)
-            .padding(.bottom, 12)
+            historyChips
+                .padding(.horizontal, Theme.pageInset)
+                .padding(.bottom, 12)
 
             if dayGroups.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(query.isEmpty ? L10n.text("没有听写记录") : L10n.text("没有匹配的记录")).foregroundColor(Theme.secondary)
+                    Text(L10n.text("没有听写记录")).foregroundColor(Theme.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -476,7 +462,7 @@ struct HistoryPage: View {
                                 }
                             } header: {
                                 Text(group.title)
-                                    .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.secondary)
+                                    .font(InterfaceTypography.localized(12, weight: .semibold)).foregroundColor(Theme.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.vertical, 12)
                                     .background(Theme.window.opacity(0.96))
@@ -557,7 +543,7 @@ struct HistoryRow: View {
                             else if entry.qualityReview != nil { expanded.toggle() }
                         }
                 } else {
-                    SelectableText(text: entry.displayText, font: .systemFont(ofSize: 14), color: NSColor(Theme.ink),
+                    SelectableText(text: entry.displayText, font: InterfaceTypography.localizedAppKit(14), color: NSColor(Theme.ink),
                                    maxLines: expanded ? 0 : 4, lineHeight: 22,
                                    onPlainClick: { selectOrExpand() })
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -566,22 +552,22 @@ struct HistoryRow: View {
                 }
                 if expanded, !entry.raw.isEmpty, entry.raw != entry.displayText {
                     Text(L10n.text("原话：") + entry.raw)
-                        .font(.system(size: 12))
+                        .font(InterfaceTypography.localized(12))
                         .foregroundColor(Theme.secondary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if expanded, let review = entry.qualityReview {
                     Text(L10n.text("原始识别") + "：" + review.original)
-                        .font(.system(size: 12)).foregroundColor(Theme.secondary).textSelection(.enabled)
+                        .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(L10n.text("待核对整理结果") + "：" + review.candidate)
-                        .font(.system(size: 12)).foregroundColor(Theme.secondary).textSelection(.enabled)
+                        .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !compact && (expanded || entry.fallback) {
                 HStack(spacing: 6) {
-                    Text(AppNames.name(for: entry.app)).font(.system(size: 11)).foregroundColor(Theme.tertiary).lineLimit(1)
+                    Text(AppNames.name(for: entry.app)).font(InterfaceTypography.localized(11)).foregroundColor(Theme.tertiary).lineLimit(1)
                     if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "提示词模式" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
                     else if let mode { Badge(text: mode.label, tint: modeTint).fixedSize() }
                     if entry.fallback {
@@ -662,7 +648,7 @@ private struct HistoryDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(L10n.text("记录详情")).font(.system(size: 14, weight: .semibold))
+                Text(L10n.text("记录详情")).font(InterfaceTypography.localized(14, weight: .semibold))
                 Spacer()
                 IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
             }.padding(24)
@@ -670,9 +656,9 @@ private struct HistoryDetail: View {
             HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(AppNames.name(for: entry.app)).font(.system(size: 14, weight: .medium))
+                        Text(AppNames.name(for: entry.app)).font(InterfaceTypography.localized(14, weight: .medium))
                         Text(Formatters.dayTitle(entry.ts) + " · " + Formatters.time.string(from: entry.ts))
-                            .font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                            .font(InterfaceTypography.localized(11)).foregroundColor(Theme.tertiary)
                     }
                     detailText(L10n.text("听写结果"), entry.displayText)
                     if !entry.raw.isEmpty, entry.raw != entry.displayText { detailText(L10n.text("原始识别"), entry.raw) }
@@ -703,9 +689,9 @@ private struct HistoryDetail: View {
 
     private func detailText(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 11, weight: .medium)).foregroundColor(Theme.tertiary)
+            Text(title).font(InterfaceTypography.localized(11, weight: .medium)).foregroundColor(Theme.tertiary)
             Text(text.isEmpty ? L10n.text("（没有识别到内容）") : text)
-                .font(.system(size: 14)).lineSpacing(5).textSelection(.enabled)
+                .font(InterfaceTypography.localized(14)).lineSpacing(5).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -10,11 +10,11 @@ struct OnboardingPracticeView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Text(L10n.text("试说一句")).font(.system(size: 24, weight: .bold))
+            Text(L10n.text("试说一句")).font(InterfaceTypography.localized(24, weight: .bold))
             Text(L10n.text("按 {0} 或点下面的录音条，读这句话。", model.hotkeyLabel))
-                .font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                .font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
             Text(practice.sample)
-                .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
+                .font(InterfaceTypography.localized(15, weight: .medium)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 12)
                 .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
                 .fixedSize(horizontal: false, vertical: true)
@@ -22,14 +22,14 @@ struct OnboardingPracticeView: View {
                 .environment(\.colorScheme, .dark)
                 .padding(.top, 4)
             if !practice.status.isEmpty {
-                Text(practice.status).font(.system(size: 14, weight: .medium))
+                Text(practice.status).font(InterfaceTypography.localized(14, weight: .medium))
                     .foregroundColor(practice.needsReview ? Theme.warning : (practice.complete ? Theme.success : Theme.secondary))
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             }
             ForEach(Array(PracticeResultRow.rows(raw: practice.raw, output: practice.output, needsReview: practice.needsReview).enumerated()), id: \.offset) { _, row in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text(row.title)).font(.caption).foregroundColor(Theme.secondary)
-                    Text(row.text).font(.system(size: 14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(L10n.text(row.title)).font(Theme.captionFont).foregroundColor(Theme.secondary)
+                    Text(row.text).font(InterfaceTypography.localized(14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
@@ -53,7 +53,7 @@ private struct PracticePill: View {
                         .frame(width: 28, height: 28)
                         .background(Circle().fill(Color.white.opacity(0.08)))
                     Text(practice.complete ? L10n.text("再试一次") : L10n.text("点这里开始"))
-                        .font(.system(size: 12, weight: .medium)).padding(.trailing, 12)
+                        .font(InterfaceTypography.localized(12, weight: .medium)).padding(.trailing, 12)
                 }
                 .foregroundColor(.white)
                 .padding(3)

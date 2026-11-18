@@ -87,12 +87,12 @@ struct InitialHeading: View {
     let title: String
     let initialSize: CGFloat
     let bodySize: CGFloat
-    var typeface: (CGFloat) -> Font = { InterfaceTypography.english($0, emphasized: true) }
+    var weight: NSFont.Weight = .semibold
     var tracking: CGFloat = -0.6
 
     var body: some View {
-        let initial = Text(String(title.prefix(1))).font(typeface(initialSize))
-        let rest = Text(String(title.dropFirst())).font(typeface(bodySize))
+        let initial = Text(String(title.prefix(1))).font(InterfaceTypography.localized(initialSize, weight: weight))
+        let rest = Text(String(title.dropFirst())).font(InterfaceTypography.localized(bodySize, weight: weight))
         Text("\(initial)\(rest)")
             .tracking(tracking)
             .accessibilityAddTraits(.isHeader)
@@ -221,7 +221,7 @@ struct ChipPicker<Value: Hashable>: View {
                     selection = option.0
                 } label: {
                     Text(option.1)
-                        .font(.system(size: 14, weight: selected ? .medium : .regular))
+                        .font(InterfaceTypography.localized(14, weight: selected ? .medium : .regular))
                         .foregroundColor(selected ? Theme.accent : Theme.secondary)
                         .padding(.horizontal, 8)
                         .frame(minWidth: 40, minHeight: 32)
@@ -258,38 +258,11 @@ struct Badge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .medium))
+            .font(InterfaceTypography.localized(11, weight: .medium))
             .foregroundColor(tint)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(Capsule().fill(tint.opacity(0.12)))
-    }
-}
-
-/// Search box with a magnifier, as on the History and Dictionary pages.
-struct SearchField: View {
-    @Binding var text: String
-    var placeholder = L10n.text("搜索")
-    var width: CGFloat = 220
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12)).foregroundColor(Theme.tertiary)
-            TextField(placeholder, text: $text)
-                .textFieldStyle(.plain)
-                .font(Theme.rowFont)
-            if !text.isEmpty {
-                Button { text = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundColor(Theme.tertiary)
-                }.buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(width: width, height: 36)
-        .background(RoundedRectangle(cornerRadius: Theme.controlRadius).fill(Theme.card))
-        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border, lineWidth: 1))
     }
 }
 

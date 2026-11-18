@@ -146,7 +146,7 @@ struct BetaQuestionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("提示词模式 · 第 {0} 轮", info.round ?? 1))
-                .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.accent)
+                .font(InterfaceTypography.localized(14, weight: .semibold)).foregroundColor(Theme.accent)
             HubScrollView(showsChrome: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let goals = info.goals, !goals.isEmpty {
@@ -156,10 +156,10 @@ struct BetaQuestionsView: View {
                         section(info.goals?.isEmpty == false ? L10n.text("关键细节") : L10n.text("我的理解，请核对"), confirmed)
                     }
                     if let questions = info.questions, !questions.isEmpty {
-                        Text(L10n.text("需要你说明")).font(.system(size: 12, weight: .semibold)).padding(.top, 4)
+                        Text(L10n.text("需要你说明")).font(InterfaceTypography.localized(12, weight: .semibold)).padding(.top, 4)
                         ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(String(index + 1) + ". " + question).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
+                                Text(String(index + 1) + ". " + question).font(InterfaceTypography.localized(14)).fixedSize(horizontal: false, vertical: true)
                                 let options = BetaQuestionsView.choices(for: question)
                                 if !options.isEmpty {
                                     VStack(alignment: .leading, spacing: 6) {
@@ -176,11 +176,11 @@ struct BetaQuestionsView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: .infinity)
             if let notice = info.notice {
-                Text(BetaMessages.notice(notice)).font(.system(size: 12)).foregroundColor(Theme.warning)
+                Text(BetaMessages.notice(notice)).font(InterfaceTypography.localized(12)).foregroundColor(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(model.busy ?? L10n.text("点选或按 {0} 语音补充，点「生成」结束。", model.hotkey))
-                .font(.system(size: 12)).foregroundColor(model.busy == nil ? Theme.secondary : Theme.accent)
+                .font(InterfaceTypography.localized(12)).foregroundColor(model.busy == nil ? Theme.secondary : Theme.accent)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(L10n.text("取消"), action: cancel).buttonStyle(SecondaryButtonStyle())
@@ -203,14 +203,15 @@ struct BetaQuestionsView: View {
         }
         .padding(24)
         .frame(width: 350, height: 500, alignment: .leading)
+        .font(Theme.bodyFont)
         .background(Theme.window)
     }
 
     private func section(_ title: String, _ lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 12, weight: .semibold))
+            Text(title).font(InterfaceTypography.localized(12, weight: .semibold))
             ForEach(Array(lines.enumerated()), id: \.offset) { _, text in
-                Text("• " + text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                Text("• " + text).font(InterfaceTypography.localized(12)).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -221,7 +222,7 @@ private struct ChoiceChipStyle: ButtonStyle {
     let selected: Bool
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
+            .font(InterfaceTypography.localized(12, weight: .medium))
             .foregroundColor(selected ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(Capsule(style: .circular).fill(selected ? Theme.accent : Theme.card))
