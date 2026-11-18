@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
         skipGlobalHotkeys = isolatedTestRun
         if !isolatedTestRun { DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showHubNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.hub.show()
+            self?.hub.reopen()
         } }
         model.actions = self
         menuController.target = self
@@ -184,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // A demo recording shows only the voice bar over another app.
         if recorder.demoPCM != nil { return false }
-        hub.show()
+        hub.reopen()
         return false
     }
 
@@ -804,7 +804,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuToggleDictation() { toggleDictation() }
     func menuCancelDictation() { cancelDictation() }
     func menuPasteLast() { pasteLast() }
-    func menuOpenHub(_ page: HubPage) { hub.show(page: page) }
+    func menuOpenHub(_ page: HubPage) {
+        if page == .home { hub.reopen() }
+        else { hub.show(page: page) }
+    }
     func menuRequestAccessibility() { requestAccessibility() }
     func menuRestartService() { restartService() }
     func menuCheckForUpdates() { checkForUpdates(interactive: true) }

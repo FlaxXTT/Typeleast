@@ -44,6 +44,17 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         settingsWindow.closeImmediately()
     }
 
+    func reopen() {
+        guard let window, window.isVisible, !window.isMiniaturized, !NSApp.isHidden else {
+            show()
+            return
+        }
+        let frontWindow = settingsWindow.visibleWindow ?? window
+        if frontWindow.isKeyWindow && NSApp.isActive { return }
+        NSApp.activate(ignoringOtherApps: true)
+        frontWindow.makeKeyAndOrderFront(nil)
+    }
+
     func show(page: HubPage = .home) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
         if window == nil { window = makeWindow() }
@@ -115,41 +126,6 @@ struct HubRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        pageLayout
-        .frame(width: HubWindowController.size.width, height: HubWindowController.size.height)
-        .background(Theme.window)
-        .font(Theme.bodyFont)
-        .foregroundColor(Theme.ink)
-        .tint(Theme.accent)
-        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44).padding(.leading, 84) }
-        .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
-        .overlay {
-            Color.black
-                .opacity(model.settingsPresented ? 0.30 : 0)
-                .animation(reduceMotion ? nil : Theme.standard, value: model.settingsPresented)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
-        .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
-        .ignoresSafeArea()
-    }
-
-    @ViewBuilder private var pageLayout: some View {
-        switch model.page {
-        case .home, .settings:
-            DashboardEntrance { elapsed in
-                layout { HomePage(elapsed: elapsed) }
-            }
-            .id(model.homePresentationID)
-        case .history:
-            layout { HistoryPage() }
-        case .meetings:
-            layout { MeetingsPage().environmentObject(model.meeting) }
-        }
-    }
-
-    private func layout<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: 0) {
             Sidebar()
                 .frame(width: Theme.sidebarWidth - 8)
@@ -157,10 +133,42 @@ struct HubRootView: View {
                 .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
             ZStack {
                 Theme.window
-                content()
+                switch model.page {
+                case .home, .settings: HomePage()
+                case .history: HistoryPage()
+                case .meetings: MeetingsPage().environmentObject(model.meeting)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(width: HubWindowController.size.width, height: HubWindowController.size.height)
+        .background(Theme.window)
+        .font(Theme.bodyFont)
+        .foregroundColor(Theme.ink)
+        .tint(Theme.accent)
+        .accessibilityHidden(model.settingsPresented)
+        .overlay(alignment: .top) {
+            if !model.settingsPresented {
+                WindowDragRegion().frame(height: 44).padding(.leading, 84)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
+        .overlay {
+            Color.black
+                .opacity(model.settingsPresented ? 0.30 : 0)
+                .animation(reduceMotion ? nil : Theme.standard, value: model.settingsPresented)
+                .contentShape(Rectangle())
+                .onTapGesture { model.settingsPresented = false }
+                .allowsHitTesting(model.settingsPresented)
+                .accessibilityHidden(true)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
+        .overlay(alignment: .bottomTrailing) {
+            if !model.settingsPresented {
+                FixedWindowCornerRegion().frame(width: 16, height: 16)
+            }
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -179,7 +187,7 @@ private struct Sidebar: View {
                 Spacer(minLength: 0)
             }
             .padding(.bottom, 16)
-            .overlay { WindowDragRegion() }
+            .overlay { if !model.settingsPresented { WindowDragRegion() } }
 
             ForEach([HubPage.home, .history, .meetings]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)

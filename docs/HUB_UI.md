@@ -40,23 +40,18 @@ Settings opens the independent window. The Insight backdrop uses retained native
 dot layers behind the metric and activity cards. The shortcut and engine column
 sits on the plain page background.
 
-Opening, restoring or navigating back to Home plays its entrance. The metrics, active
-days and streaks count from zero over 460ms with space reserved for their final values.
-The heatmap first shows outlines. Its week columns start filling after 260ms, from left
-to right, with up to 52ms between columns and a 300ms fade and settle per column. Future
-dates retain their outlines. Both effects share one elapsed-time animation local to the
-figure and cell views. Month arrows show actual activity history directly. Reduce Motion
-shows the final figures and cells immediately.
+Opening a closed window, restoring it or navigating back to Home plays its entrance.
+Opening the app from the Dock while a window is visible brings that window to the front.
+Metrics, active days and streaks count from zero over 250ms. The heatmap first shows
+outlines and starts filling week columns from left to right after 400ms. Future dates
+retain their outlines. Reduce Motion shows the final state immediately.
 
-### History and commands
-
-`⌘K` opens one search field for pages, appearance commands and history text. The native
-field editor handles text input; arrow keys select results, Return opens them and Escape
-closes the panel. Input-method candidate selection takes priority over command navigation.
+### History
 
 History retains its header and filters while the list scrolls. Date headings pin at the
 top. Groups have 10pt corners at their first/last rows, with square middle rows and no dividers. Rows use 8×12pt insets, a 52pt time column and 14pt text on a 22pt line. Selecting a row opens a trailing detail column when the content area is at least
-760 points wide; narrower windows use a native detail sheet. Copies confirm with a check.
+760 points wide. Narrower windows use a trailing drawer that preserves the list's width
+and scroll position. Escape or the close button dismisses it. Copies confirm with a check.
 
 Single-record deletion removes the row immediately and provides a three-second Undo
 notice. Up to three notices are visible. Audio belonging to a pending deletion is removed
@@ -112,8 +107,7 @@ inside the window corner.
 
 ## Settings dialog
 
-Settings opens as an independent 940×652 window with 24pt corners. A 44pt top strip
-supports native dragging without covering the close button or scroll content. The 202pt left
+Settings opens as a fixed 900×624 window. The 202pt left
 classification pane uses 36pt navigation rows; the right pane has independent
 scrolling and 36pt horizontal/44pt top insets. Groups use 12pt corners with
 16pt internal padding. Regular rows have a 48pt minimum height, 14pt labels and
@@ -149,7 +143,5 @@ native scrollbar and position memory without the blue top progress strip.
   immediate. Completed tasks remove their indicators; the update window releases
   its loading view when hidden.
 
-Settings fades in over 225ms and out over 195ms, changing only window opacity.
-It renders content immediately; the fade is not a loading state. Rapid reopening
-reverses a pending fade-out. The independent window does not add a modal mask.
-No account, organization, embedded browser or cloud-sync module is simulated.
+Settings fades in over 225ms and out over 195ms. The backdrop dims the main window
+and captures clicks. A backdrop click, Escape or the close button dismisses Settings.

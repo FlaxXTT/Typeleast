@@ -37,6 +37,7 @@ final class UpdateController {
         if !interactive && progress.isVisible { return }
         if interactive {
             if restarting { return }
+            if progress.raiseIfVisible() { return }
             if let prepared {
                 present(.ready(prepared.version))
                 return
@@ -45,7 +46,6 @@ final class UpdateController {
                 present(downloadState)
                 return
             }
-            if progress.isVisible { return }
             if Updater.intelDiscontinued() {
                 present(.message(L10n.text("Intel Mac 不再更新"),
                                  L10n.text("Intel Mac 不再更新。1.17.1 是最终版，可继续使用。")))
