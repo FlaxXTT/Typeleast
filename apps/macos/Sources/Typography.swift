@@ -12,11 +12,13 @@ enum InterfaceTypography {
         .compactMap { NSFont(name: $0, size: 12)?.fontName }.first
     private static let sackersName = ["SackersGothicLightAT", "Sackers Gothic Light AT", "SackersGothicStd-Light"]
         .compactMap { NSFont(name: $0, size: 12)?.fontName }.first
-    private static let sealName = "ChongXiSmallSeal"
+    private static func chineseName(emphasized: Bool) -> String {
+        emphasized ? "PingFangTC-Medium" : "PingFangTC-Regular"
+    }
 
     static func localized(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         switch L10n.language {
-        case "zh-Hant": return .custom(sealName, size: size)
+        case "zh-Hant": return .custom(chineseName(emphasized: weight != .regular), size: size)
         case "en": return english(size, emphasized: weight != .regular)
         default: return .system(size: size, weight: weight)
         }
@@ -24,7 +26,9 @@ enum InterfaceTypography {
 
     static func localizedAppKit(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         switch L10n.language {
-        case "zh-Hant": return NSFont(name: sealName, size: size) ?? .systemFont(ofSize: size, weight: weight)
+        case "zh-Hant":
+            return NSFont(name: chineseName(emphasized: weight != .regular), size: size)
+                ?? .systemFont(ofSize: size, weight: weight)
         case "en": return englishAppKit(size, emphasized: weight != .regular)
         default: return .systemFont(ofSize: size, weight: weight)
         }
@@ -75,7 +79,7 @@ enum InterfaceTypography {
     private static func attributed(_ run: String, face: Face, size: CGFloat, weight: Font.Weight) -> AttributedString {
         var text = AttributedString(run)
         switch face {
-        case .chinese: text.font = .custom(sealName, size: size)
+        case .chinese: text.font = .custom(chineseName(emphasized: weight != .regular), size: size)
         case .english: text.font = english(size, emphasized: weight != .regular)
         case .figure: text.font = figure(size)
         case .system: text.font = .system(size: size, weight: weight)

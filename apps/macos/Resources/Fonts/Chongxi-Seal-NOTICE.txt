@@ -1,8 +1,0 @@
-崇羲篆體（Chong Xi Small Seal）1.00
-© 2022 中央研究院 Academia Sinica
-字形設計：王心怡
-
-TypeLeast distributes the original, unmodified font.
-Source: https://xiaoxue.iis.sinica.edu.tw/chongxi/download.htm
-License notice: https://xiaoxue.iis.sinica.edu.tw/chongxi/copyright.htm
-CC BY-ND 3.0 Taiwan or later: https://creativecommons.org/licenses/by-nd/3.0/tw/
