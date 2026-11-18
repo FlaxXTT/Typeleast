@@ -1830,7 +1830,9 @@ do {
     let upgraded = fresh { d in
         let legacy = try! JSONEncoder().encode(space)
         d.set(legacy, forKey: "hk.alt.v2")
-        d.set(legacy, forKey: "hk.assistant")
+        var recordedLegacy = space
+        recordedLegacy.name = "⌥Space"
+        d.set(try! JSONEncoder().encode(recordedLegacy), forKey: "hk.assistant")
     }
     check("an upgrade takes ⌥Space off dictation", !upgraded.hotkeyAlt.enabled)
     checkEq("…and moves the old assistant default to Fn + Space", upgraded.hotkeyAssistant, .assistantDefault)

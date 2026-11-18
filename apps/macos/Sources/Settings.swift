@@ -123,7 +123,11 @@ struct HotKeyBinding: Codable, Equatable {
 
     var isFn: Bool { keyCode == 63 && modifiers == 0 }
     var fnChord: FnChord? { modifiers == FnChord.modifier ? FnChord(rawValue: keyCode) : nil }
-    var wasDefaultTranslate: Bool { self == Self.previousTranslateDefault }
+    var wasDefaultTranslate: Bool { hasSameKeys(as: Self.previousTranslateDefault) }
+
+    func hasSameKeys(as other: HotKeyBinding) -> Bool {
+        enabled && other.enabled && keyCode == other.keyCode && modifiers == other.modifiers
+    }
 }
 
 final class Settings {
@@ -163,19 +167,18 @@ final class Settings {
         guard !d.bool(forKey: "hk.promptKey.v1") else { return }
         d.set(true, forKey: "hk.promptKey.v1")
         let space = HotKeyBinding.optionSpaceDefault
-        func isSpace(_ b: HotKeyBinding) -> Bool { b.enabled && b.keyCode == space.keyCode && b.modifiers == space.modifiers }
-        if isSpace(decodeBinding("hk.alt.v2") ?? space) { encodeBinding("hk.alt.v2", .unset) }
+        if (decodeBinding("hk.alt.v2") ?? space).hasSameKeys(as: space) { encodeBinding("hk.alt.v2", .unset) }
     }
 
     private func migrateFnChords() {
-        guard !d.bool(forKey: "hk.fnChords.v1") else { return }
-        if decodeBinding("hk.assistant") == .optionSpaceDefault {
+        guard !d.bool(forKey: "hk.fnChords.v2") else { return }
+        if decodeBinding("hk.assistant")?.hasSameKeys(as: .optionSpaceDefault) == true {
             encodeBinding("hk.assistant", .assistantDefault)
         }
         if decodeBinding("hk.translate")?.wasDefaultTranslate == true {
             encodeBinding("hk.translate", .translateDefault)
         }
-        d.set(true, forKey: "hk.fnChords.v1")
+        d.set(true, forKey: "hk.fnChords.v2")
     }
 
     private func changed() {
