@@ -38,7 +38,8 @@ struct HubCommandPalette: View {
         let model = self.model
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         var commands = HubPage.allCases.map { page in
-            Result(id: "page-" + page.rawValue, title: page.title, detail: L10n.text("打开页面"), symbol: page.symbol) {
+            Result(id: "page-" + page.rawValue, title: page.title,
+                   detail: L10n.text(page == .settings ? "打开设置" : "打开页面"), symbol: page.symbol) {
                 model.navigate(to: page)
             }
         }
@@ -72,7 +73,7 @@ struct HubCommandPalette: View {
                 Image(systemName: "magnifyingglass").foregroundColor(Theme.tertiary)
                 CommandSearchField(text: $query, move: move, submit: { activate(selected) }, cancel: { dismiss() })
                     .frame(maxWidth: .infinity).frame(height: 24)
-                Button { dismiss() } label: { Keycap(label: "esc") }.buttonStyle(.plain)
+                Button { dismiss() } label: { Keycap(label: "esc") }.buttonStyle(FlatActionButtonStyle())
             }
             .padding(.horizontal, 40).padding(.vertical, 32)
             Divider().overlay(Theme.border)
@@ -98,7 +99,7 @@ struct HubCommandPalette: View {
                                 .background(RoundedRectangle(cornerRadius: Theme.radius).fill(selected == index ? Theme.selection : .clear))
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain).id(index)
+                            .buttonStyle(FlatActionButtonStyle()).id(index)
                             .onHover { if $0 { selected = index } }
                         }
                     }.padding(8)

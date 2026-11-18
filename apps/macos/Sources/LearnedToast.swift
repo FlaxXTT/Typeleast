@@ -118,8 +118,7 @@ struct LearnedToastView: View {
                     .padding(.horizontal, 14).padding(.vertical, 7)
                     .background(Capsule(style: .circular).fill(Color.white.opacity(0.16)))
             }
-            .buttonStyle(.plain)
-            .hoverInteraction()
+            .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.capsuleRadius))
         }
         .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color(white: 0.1)))

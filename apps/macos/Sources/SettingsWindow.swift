@@ -17,7 +17,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let panel = SettingsDialogWindow(contentRect: NSRect(origin: .zero, size: size),
                                              styleMask: [.borderless, .closable], backing: .buffered, defer: false)
             panel.identifier = Self.identifier
-            panel.title = L10n.text("设置")
+            panel.title = L10n.settingTitle
             panel.contentViewController = NSHostingController(rootView:
                 SettingsPage(onClose: { [weak self] in self?.close() }).environmentObject(model))
             panel.setContentSize(size)

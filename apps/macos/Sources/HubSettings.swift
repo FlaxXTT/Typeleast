@@ -55,6 +55,7 @@ struct SettingsPage: View {
     @StateObject private var loginItemStatus: LoginItemStatus
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
+    @State private var activeHotkeySlot: HotkeySlot?
 
     private let categories = ["听写", "模型", "通用"]
 
@@ -66,7 +67,8 @@ struct SettingsPage: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.text("设置")).font(.system(size: 14, weight: .semibold))
+                InitialHeading(title: L10n.settingTitle, initialSize: 38, bodySize: 21)
+                    .foregroundColor(Theme.ink)
                     .padding(.horizontal, 8).padding(.bottom, 12)
                 ForEach(categories.indices, id: \.self) { index in
                     let selected = model.settingsCategory == index
@@ -86,7 +88,7 @@ struct SettingsPage: View {
                             .fill(selected ? Theme.selection : .clear))
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain).hoverInteraction()
+                    .buttonStyle(FlatActionButtonStyle())
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
                 Spacer()
@@ -95,12 +97,9 @@ struct SettingsPage: View {
             .frame(width: 202).background(Theme.sidebar)
             Divider().overlay(Theme.border)
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text(L10n.text(categories[model.settingsCategory])).font(Theme.sectionTitleFont)
-                    Spacer()
-                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24) { onClose() }
-                }
-                .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
+                Text(L10n.text(categories[model.settingsCategory])).font(Theme.sectionTitleFont)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
                 HubScrollView(key: "settings-" + String(model.settingsCategory), showsProgress: false) {
                     VStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
@@ -119,7 +118,13 @@ struct SettingsPage: View {
         .font(Theme.bodyFont).foregroundColor(Theme.ink).tint(Theme.accent).controlSize(.large)
         .background(Theme.tile)
         .background(RoundedWindowMarker(radius: Theme.settingsRadius))
-        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44) }
+        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44).padding(.leading, 48) }
+        .overlay(alignment: .topLeading) {
+            IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, action: onClose)
+                .accessibilityLabel(L10n.text("关闭"))
+                .padding(.leading, 14)
+                .padding(.top, 10)
+        }
         .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
         .onExitCommand { onClose() }
         .onChange(of: model.settingsCategory) { _ in
@@ -147,18 +152,18 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("快捷键")) {
             SettingRow(title: L10n.text("听写"), detail: L10n.text("按一下录音，再按一下结束并整理")) {
                 HStack(spacing: 8) {
-                    HotkeyField(slot: .main)
-                    HotkeyField(slot: .alt)
+                    HotkeyField(slot: .main, activeSlot: $activeHotkeySlot)
+                    HotkeyField(slot: .alt, activeSlot: $activeHotkeySlot)
                 }
             }
             SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文。选中文字时直接翻译选中内容。", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
-                HotkeyField(slot: .translate)
+                HotkeyField(slot: .translate, activeSlot: $activeHotkeySlot)
             }
             SettingRow(title:L10n.text("提示词模式"),detail:L10n.text("按一下开始说需求，它先问清范围再写提示词。选中文字时，以选中内容为底稿修改。")) {
-                HotkeyField(slot:.assistant)
+                HotkeyField(slot: .assistant, activeSlot: $activeHotkeySlot)
             }
             SettingRow(title: L10n.text("粘贴上一条"), detail: nil) {
-                HotkeyField(slot: .pasteLast)
+                HotkeyField(slot: .pasteLast, activeSlot: $activeHotkeySlot)
             }
             SettingRow(title: L10n.text("取消听写"), detail: L10n.text("按 Esc，或点语音条上的 ✕")) {
                 Keycap(label: "esc")
@@ -273,7 +278,7 @@ struct SettingsPage: View {
                     if loginItemStatus.isLoading {
                         SkeletonWave(width: 38, height: 22, radius: 11)
                     } else {
-                        Toggle("", isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
+                        Toggle(L10n.text("开机启动"), isOn: Binding(get: { loginItemStatus.status == .enabled }, set: { setLogin($0) }))
                             .toggleStyle(StateSwitchStyle()).labelsHidden()
                     }
                 }
@@ -430,11 +435,11 @@ struct SettingRow<Trailing: View>: View {
             HStack(alignment: .center, spacing: 16) {
                 labels.frame(minWidth: 140, alignment: .leading)
                 Spacer(minLength: 12)
-                trailing.fixedSize().hoverInteraction()
+                trailing.fixedSize()
             }
             VStack(alignment: .leading, spacing: 10) {
                 labels
-                trailing.hoverInteraction()
+                trailing
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 8).frame(minHeight: 48)
@@ -448,7 +453,7 @@ struct ToggleRow: View {
 
     var body: some View {
         SettingRow(title: title, detail: detail) {
-            Toggle("", isOn: $isOn).toggleStyle(StateSwitchStyle()).labelsHidden()
+            Toggle(title, isOn: $isOn).toggleStyle(StateSwitchStyle()).labelsHidden()
         }
     }
 }
@@ -460,25 +465,25 @@ struct StateSwitchStyle: ToggleStyle {
     static let offColor = Color(nsColor: .systemGray).opacity(0.45)
 
     func makeBody(configuration: Configuration) -> some View {
-        ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-            Capsule(style: .circular)
-                .fill(configuration.isOn ? Self.onColor : Self.offColor)
-                .frame(width: 38, height: 22)
-            Circle()
-                .fill(Color.white)
-                .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
-                .frame(width: 18, height: 18)
-                .padding(2)
-        }
-        .frame(width: 38, height: 22)
-        .contentShape(Capsule(style: .circular))
-        .onTapGesture {
+        Button {
             withAnimation(.easeOut(duration: 0.15)) { configuration.isOn.toggle() }
+        } label: {
+            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                Capsule(style: .circular)
+                    .fill(configuration.isOn ? Self.onColor : Self.offColor)
+                    .frame(width: 38, height: 22)
+                Circle()
+                    .fill(Color.white)
+                    .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                    .frame(width: 18, height: 18)
+                    .padding(2)
+            }
+            .contentShape(Capsule(style: .circular))
         }
-        .accessibilityElement()
-        .accessibilityAddTraits(.isButton)
-        .accessibilityValue(configuration.isOn ? L10n.text("开") : L10n.text("关"))
-        .accessibilityAction { configuration.isOn.toggle() }
+        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.capsuleRadius))
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+        }
     }
 }
 
@@ -555,9 +560,10 @@ enum HotkeySlot {
 struct HotkeyField: View {
     @EnvironmentObject var model: AppModel
     let slot: HotkeySlot
-    @State private var recording = false
+    @Binding var activeSlot: HotkeySlot?
     @State private var monitor: Any?
 
+    private var recording: Bool { activeSlot == slot }
     private var binding: HotKeyBinding { model.settings[keyPath: slot.keyPath] }
 
     var body: some View {
@@ -579,12 +585,17 @@ struct HotkeyField: View {
                 .padding(3)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(recording ? Theme.accent : Color.clear, lineWidth: 1.5))
             }
-            .buttonStyle(.plain)
-            .hoverInteraction()
+            .buttonStyle(FlatActionButtonStyle())
             .help(L10n.text("Esc 取消，Delete 清除。"))
             if let problem = model.hotkeyProblems[slot.name], !recording {
                 Text(problem).font(Theme.captionFont).foregroundColor(Theme.warning)
             }
+        }
+        .onChange(of: recording) { _, recording in
+            if !recording { removeMonitor() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notice in
+            if (notice.object as? NSWindow)?.identifier == SettingsWindowController.identifier { stop() }
         }
         .onDisappear { stop() }
     }
@@ -601,8 +612,10 @@ struct HotkeyField: View {
     }
 
     private func start() {
-        recording = true
+        removeMonitor()
+        activeSlot = slot
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            guard recording else { return event }
             if event.type == .flagsChanged {
                 // Fn alone is a dictation key only; 翻译 needs a real shortcut.
                 if event.keyCode == FnKeyMonitor.keyCode, !event.modifierFlags.contains(.function), slot != .translate && slot != .assistant {
@@ -649,7 +662,11 @@ struct HotkeyField: View {
     }
 
     private func stop() {
-        recording = false
+        if recording { activeSlot = nil }
+        removeMonitor()
+    }
+
+    private func removeMonitor() {
         if let m = monitor { NSEvent.removeMonitor(m) }
         monitor = nil
     }

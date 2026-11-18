@@ -375,7 +375,7 @@ struct SelectionBubbleView: View {
     let close: () -> Void
     let drag: () -> Void
     let dragEnded: () -> Void
-    @State private var copied = false
+    @State private var copyFeedback: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -388,8 +388,7 @@ struct SelectionBubbleView: View {
                     Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary).frame(width: 18, height: 18).contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .hoverInteraction()
+                .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
                 .help(L10n.text("关闭"))
             }
             switch state {
@@ -406,11 +405,11 @@ struct SelectionBubbleView: View {
                 .frame(maxHeight: 260)
                 HStack {
                     Spacer()
-                    Button(copied ? L10n.text("已复制") : L10n.text("复制")) {
+                    Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
                         Inserter.shared.setString(text)
-                        copied = true
+                        copyFeedback = UUID()
                     }
-                    .hoverInteraction()
+                    .buttonStyle(SecondaryButtonStyle())
                 }
                 .controlSize(.small)
             case .failed(let message):
@@ -421,6 +420,7 @@ struct SelectionBubbleView: View {
             }
         }
         .padding(24)
+        .resetCopyFeedback($copyFeedback)
         .frame(width: 350, height: 500, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular).fill(Color(nsColor: .windowBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular).stroke(Color.primary.opacity(0.1)))

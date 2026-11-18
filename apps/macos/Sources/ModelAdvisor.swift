@@ -116,8 +116,7 @@ struct ModelRecommendationCard: View {
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary).frame(width: 22, height: 22).contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .hoverInteraction()
+                .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
                 .help(L10n.text("关闭"))
             }
             switch state {
