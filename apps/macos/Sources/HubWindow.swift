@@ -13,7 +13,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     private var requestedRestorePage: HubPage?
     private var startupMask: NSView?
     private var maskTimeout: DispatchWorkItem?
-    private var shellCommitted = false
+    private(set) var shellCommitted = false
     let model: AppModel
 
     init(model: AppModel) {

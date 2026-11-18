@@ -34,6 +34,11 @@ func dashboardMotionTests() {
 
 func dashboardWindowTests() {
     func wait(_ seconds: TimeInterval) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+    func waitFor(_ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(4)
+        while !condition(), Date() < deadline { wait(0.01) }
+        return condition()
+    }
 
     let onboardingDone = Settings.shared.onboardingDone
     let activationPolicy = NSApp.activationPolicy()
@@ -56,15 +61,14 @@ func dashboardWindowTests() {
     }
     defer { window.close() }
     checkEq("the mask is initially the only content view", container.subviews.count, 1)
-    wait(0.10)
-    check("the shell mounts underneath while the cache is pending", container.subviews.count >= 2 && mask.superview != nil)
+    let shellReady = waitFor { hub.shellCommitted }
+    check("the shell mounts underneath while the cache is pending", shellReady && container.subviews.count >= 2 && mask.superview != nil)
     check("separate dashboard data remains unavailable during startup", model.stats == nil && !model.activityReady)
     model.finishUserCacheLoad()
     hub.userCacheDidLoad()
     check("the mask is removed once shell and cache are ready", mask.superview == nil)
     check("the shell is visible before its dashboard deliveries", model.stats == nil && !model.activityReady)
-    wait(0.10)
-    check("statistics and activity both reach the visible shell", model.stats != nil && model.activityReady)
+    check("statistics and activity both reach the visible shell", waitFor { model.stats != nil && model.activityReady })
 
     hub.show(page: .history)
     checkEq("explicit history navigation is preserved", model.page, .history)
@@ -88,8 +92,7 @@ func dashboardWindowTests() {
     check("the five-second fallback removes the mask with cache pending", slowMask.superview == nil && !pending.userCacheReady)
     pending.finishUserCacheLoad()
     slowHub.userCacheDidLoad()
-    wait(0.10)
-    check("a late cache completion still loads both dashboard sections", pending.stats != nil && pending.activityReady)
+    check("a late cache completion still loads both dashboard sections", waitFor { pending.stats != nil && pending.activityReady })
 }
 
 private func dashboardCountRenderingTests() {
