@@ -50,16 +50,22 @@ struct DictationStats: Equatable {
     var speakingSeconds: Double = 0
     /// Typing the same text at 60 字/min (CJK) or 40 words/min, minus the time spent speaking.
     var savedSeconds: Double = 0
-    /// Activity recorded before duration tracking contributes words, but not speed.
-    var timedWords: Int?
-    var timedDictations: Int?
-
-    var hasTiming: Bool { (timedDictations ?? dictations) > 0 }
-    var hasIncompleteTiming: Bool { (timedDictations ?? dictations) < dictations }
+    var hasEstimatedTiming = false
 
     /// 字 per minute of speech.
-    var wordsPerMinute: Int {
-        speakingSeconds > 1 ? Int((Double(timedWords ?? words) / (speakingSeconds / 60)).rounded()) : 0
+    var wordsPerMinute = 0
+
+    mutating func updateRate() {
+        let rate = speakingSeconds > 0 ? Double(words) * 60 / speakingSeconds : 0
+        wordsPerMinute = Int(exactly: rate.rounded()) ?? 0
+    }
+
+    static func estimatedSpeechSeconds(cjk: Int, latin: Int = 0) -> Double {
+        Double(cjk) / 3.5 + Double(latin) / 2.5
+    }
+
+    static func estimatedTypingSeconds(cjk: Int, latin: Int = 0) -> Double {
+        Double(cjk) + Double(latin) * 1.5
     }
 
     static func countWords(_ text: String) -> (cjk: Int, latin: Int) {
@@ -80,11 +86,13 @@ struct DictationStats: Equatable {
             let counts = countWords(entry.displayText)
             stats.dictations += 1
             stats.words += counts.cjk + counts.latin
-            let speaking = entry.seconds ?? Double(counts.cjk) / 3.5 + Double(counts.latin) / 2.5
+            let speaking = entry.seconds ?? estimatedSpeechSeconds(cjk: counts.cjk, latin: counts.latin)
+            if entry.seconds == nil { stats.hasEstimatedTiming = true }
             stats.speakingSeconds += speaking
-            let typing = Double(counts.cjk) / 60 * 60 + Double(counts.latin) / 40 * 60
+            let typing = estimatedTypingSeconds(cjk: counts.cjk, latin: counts.latin)
             stats.savedSeconds += max(0, typing - speaking)
         }
+        stats.updateRate()
         return stats
     }
 }

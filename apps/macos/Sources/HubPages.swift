@@ -68,7 +68,6 @@ enum Formatters {
 
 struct HomePage: View {
     @EnvironmentObject var model: AppModel
-    let elapsed: Double
     @State private var showsSetup = false
 
     var body: some View {
@@ -77,7 +76,8 @@ struct HomePage: View {
             let width = max(0, geometry.size.width - gap)
             let insightsWidth = width * 0.67
             HStack(alignment: .top, spacing: gap) {
-                InsightsPanel(elapsed: elapsed)
+                InsightsPanel()
+                    .id(model.homePresentationID)
                     .frame(width: insightsWidth, height: geometry.size.height)
                     .background {
                         HomeDotGrid()
@@ -213,7 +213,7 @@ private struct SetupCard: View {
 
     static func pending(_ model: AppModel) -> Bool {
         !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceState.isRunning
-            || model.speech?.ready != true || !model.llmConfigured
+            || !model.recognitionConfigured || !model.llmConfigured
     }
 
     var body: some View {
@@ -238,12 +238,20 @@ private struct SetupCard: View {
                         model.actions?.restartService()
                     }
                 }
-                SetupRow(done: model.speech?.ready == true, title: model.speech?.displayName ?? L10n.text("未选择语音模型"),
+                if model.settings.onlineASRProvider == .local {
+                    SetupRow(done: model.recognitionConfigured, title: model.speech?.displayName ?? L10n.text("未选择语音模型"),
                          detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("就绪，本机识别") : AppDelegate.speechProblem(model.speech),
                          action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("选择语音模型") : "") {
-                    model.actions?.downloadModels()
+                        model.actions?.downloadModels()
+                    }
+                    if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
+                } else {
+                    SetupRow(done: model.recognitionConfigured, title: model.settings.onlineASRProvider.label,
+                             detail: L10n.text("待配置 API Key"), action: L10n.text("打开设置")) {
+                        model.settingsCategory = 1
+                        model.navigate(to: .settings)
+                    }
                 }
-                if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
                 SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
                          detail: model.llmConfigured ? model.modelSummary : "",
                          action: L10n.text("打开设置")) {
@@ -291,7 +299,7 @@ private struct EngineCard: View {
 
     var body: some View {
         let serviceStatus = model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪")
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 5) {
                 InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
                 Spacer(minLength: 2)
@@ -318,9 +326,10 @@ private struct EngineRow: View {
     let value: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             InterfaceTypography.text(value, size: Theme.homeSecondarySize, weight: .medium)
+                .lineSpacing(3)
                 .lineLimit(2).help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -333,6 +342,7 @@ enum HistoryFilter: Hashable { case all, polished, raw }
 
 struct HistoryPage: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var filter: HistoryFilter = .all
     @State private var confirmClear = false
     @State private var day = Calendar.current.startOfDay(for: Date())
@@ -352,12 +362,14 @@ struct HistoryPage: View {
     }
 
     private var filtered: [LocalHistoryEntry] {
-        model.history.filter { entry in
-            switch filter {
-            case .all: return true
-            case .polished: return !entry.fallback
-            case .raw: return entry.fallback
-            }
+        model.history.filter(matchesFilter)
+    }
+
+    private func matchesFilter(_ entry: LocalHistoryEntry) -> Bool {
+        switch filter {
+        case .all: return true
+        case .polished: return !entry.fallback
+        case .raw: return entry.fallback
         }
     }
 
@@ -382,27 +394,43 @@ struct HistoryPage: View {
     var body: some View {
         GeometryReader { geometry in
             let wide = geometry.size.width >= 760
+            let entry = selectedEntry
             HStack(spacing: 0) {
                 historyList.frame(maxWidth: .infinity)
-                if wide, let entry = selectedEntry {
+                if wide, let entry {
                     Divider().overlay(Theme.border)
-                    HistoryDetail(entry: entry) { model.selectedHistoryID = nil }
+                    HistoryDetail(entry: entry, close: closeDetail)
                         .id(entry.id).frame(width: 300).background(Theme.detail)
                 }
             }
-            .sheet(isPresented: Binding(get: { !wide && selectedEntry != nil }, set: {
-                if !$0 { model.selectedHistoryID = nil }
-            })) {
-                if let entry = selectedEntry {
-                    HistoryDetail(entry: entry) { model.selectedHistoryID = nil }
-                        .id(entry.id).frame(width: 480, height: 540).background(Theme.detail)
+            .overlay(alignment: .trailing) {
+                ZStack(alignment: .trailing) {
+                    if !wide, let entry {
+                        let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
+                        HistoryDetail(entry: entry, close: closeDetail)
+                            .id(entry.id)
+                            .frame(width: min(360, max(0, geometry.size.width - 24)))
+                            .background(shape.fill(Theme.detail))
+                            .clipShape(shape)
+                            .overlay(shape.strokeBorder(Theme.border).allowsHitTesting(false))
+                            .shadow(color: .black.opacity(0.14), radius: 12, x: -3)
+                            .padding([.vertical, .trailing], 8)
+                            .transition(reduceMotion ? .identity : .move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
+                .animation(reduceMotion ? nil : Theme.standard, value: !wide && entry != nil)
             }
         }
+        .onDisappear(perform: closeDetail)
     }
 
     private var selectedEntry: LocalHistoryEntry? {
-        model.history.first { $0.id == model.selectedHistoryID }
+        guard let id = model.selectedHistoryID else { return nil }
+        return model.history.first { $0.id == id && matchesFilter($0) }
+    }
+
+    private func closeDetail() {
+        if model.selectedHistoryID != nil { model.selectedHistoryID = nil }
     }
 
     private var historyList: some View {
@@ -480,7 +508,13 @@ struct HistoryPage: View {
         } message: {
             Text(L10n.text("删除全部历史和录音，无法恢复。"))
         }
-        .onChange(of: cacheKey, initial: true) { _, _ in dayGroups = groupedEntries(filtered) }
+        .onChange(of: cacheKey, initial: true) { _, _ in
+            let entries = filtered
+            dayGroups = groupedEntries(entries)
+            if let id = model.selectedHistoryID, !entries.contains(where: { $0.id == id }) {
+                closeDetail()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             day = Calendar.current.startOfDay(for: Date())
         }
@@ -539,7 +573,7 @@ struct HistoryRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .clipped()
                         .onTapGesture {
-                            if compact { selectOrExpand() }
+                            if compact || onSelect != nil { selectOrExpand() }
                             else if entry.qualityReview != nil { expanded.toggle() }
                         }
                 } else {
@@ -651,6 +685,7 @@ private struct HistoryDetail: View {
                 Text(L10n.text("记录详情")).font(InterfaceTypography.localized(14, weight: .semibold))
                 Spacer()
                 IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
+                    .keyboardShortcut(.cancelAction)
             }.padding(24)
             Divider().overlay(Theme.border)
             HubScrollView(showsChrome: false) {
@@ -682,7 +717,6 @@ private struct HistoryDetail: View {
             }.padding(24)
         }
         .foregroundColor(Theme.ink)
-        .background(RoundedWindowMarker())
         .resetCopyFeedback($copyFeedback)
         .onExitCommand(perform: close)
     }

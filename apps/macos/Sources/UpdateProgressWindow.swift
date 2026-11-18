@@ -32,14 +32,18 @@ final class UpdateProgressWindow {
 
     var isVisible: Bool { host?.window?.isVisible == true }
 
+    @discardableResult
+    func raiseIfVisible() -> Bool {
+        guard let window = host?.window, window.isVisible else { return false }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        return true
+    }
+
     func present(in owner: NSWindow?, state: UpdateDialogState,
                  download: @escaping () -> Void, restart: @escaping () -> Void) {
         model.state = state
-        if isVisible {
-            NSApp.activate(ignoringOtherApps: true)
-            host?.window?.makeKeyAndOrderFront(nil)
-            return
-        }
+        if raiseIfVisible() { return }
         close()
         let view = UpdateProgressView(model: model, close: { [weak self] in self?.close() },
                                       download: download, restart: restart)
@@ -106,7 +110,7 @@ struct UpdateProgressView: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.34).contentShape(Rectangle())
-                .onTapGesture {}
+                .onTapGesture(perform: dismissFromBackdrop)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
@@ -129,6 +133,13 @@ struct UpdateProgressView: View {
         .foregroundColor(Theme.ink)
         .onExitCommand(perform: close)
         .accessibilityElement(children: .contain)
+    }
+
+    private func dismissFromBackdrop() {
+        switch model.state {
+        case .checking, .progress: break
+        default: close()
+        }
     }
 
     private var title: String {

@@ -22,7 +22,8 @@ enum HubThemeReveal {
             windows.append(window)
         }
 
-        var prepared: [(window: NSWindow, content: NSView, overlay: ThemeMosaicOverlay, oldTheme: NSAppearance.Name?)] = []
+        var prepared: [(content: NSView, overlay: ThemeMosaicOverlay, oldTheme: NSAppearance.Name?)] = []
+        let center = NotificationCenter.default
         for window in windows {
             guard let content = window.contentView, let container = content.superview,
                   let oldImage = snapshot(content) else { continue }
@@ -33,14 +34,25 @@ enum HubThemeReveal {
             // NSHostingView can rebuild its managed subviews during a theme change.
             // Its native frame keeps the old snapshot and animation above that work.
             container.addSubview(overlay, positioned: .above, relativeTo: content)
-            overlay.onFinish = { [weak overlay] in activeOverlays.removeAll { $0 === overlay } }
+            let minimizeObserver = center.addObserver(forName: NSWindow.willMiniaturizeNotification,
+                                                     object: window, queue: .main) { [weak overlay] _ in
+                overlay?.finish()
+            }
+            let hideObserver = center.addObserver(forName: NSApplication.willHideNotification,
+                                                 object: NSApp, queue: .main) { [weak overlay] _ in
+                overlay?.finish()
+            }
+            overlay.onFinish = { [weak overlay] in
+                center.removeObserver(minimizeObserver)
+                center.removeObserver(hideObserver)
+                activeOverlays.removeAll { $0 === overlay }
+            }
             activeOverlays.append(overlay)
             overlay.observeClose(of: window)
-            prepared.append((window, content, overlay,
+            prepared.append((content, overlay,
                              content.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])))
         }
         NSApp.appearance = appearance
-        for item in prepared { item.window.appearance = appearance }
 
         // Setting appearance is not a completed SwiftUI render. Both the main
         // window and separate Settings window wait for the new display frames.

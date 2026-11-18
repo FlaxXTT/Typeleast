@@ -104,7 +104,7 @@ struct SettingsPage: View {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
                         case 0: shortcuts; language; translatePrompt; audio; cleanup
-                        case 1: ModelSection(); speech
+                        case 1: OnlineASRSettings(); speech; ModelSection()
                         default: general; privacy; permissions; updates; advanced
                         }
                     }
@@ -118,16 +118,11 @@ struct SettingsPage: View {
         .font(Theme.bodyFont).foregroundColor(Theme.ink).tint(Theme.accent).controlSize(.large)
         .background(Theme.tile)
         .background(RoundedWindowMarker(radius: Theme.settingsRadius))
-        .overlay(alignment: .top) {
-            HStack(alignment: .top, spacing: 6) {
-                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, action: onClose)
-                    .accessibilityLabel(L10n.text("关闭"))
-                    .padding(.top, 10)
-                WindowDragRegion()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .padding(.leading, 14)
+        .overlay(alignment: .topLeading) {
+            IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, action: onClose)
+                .accessibilityLabel(L10n.text("关闭"))
+                .padding(.leading, 14)
+                .padding(.top, 10)
         }
         .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
         .onExitCommand { onClose() }
@@ -196,9 +191,10 @@ struct SettingsPage: View {
     private var dictationLanguage: Binding<String> {
         Binding(get: {
             let saved = Settings.shared.recognitionLanguage(for: model.speech?.modelId)
+            if model.settings.onlineASRProvider != .local { return saved }
             return model.speech?.languages?.contains(saved) == false || model.speech?.canSetLanguage == false ? "auto" : saved
         }, set: {
-            if model.speech?.modelId == "mlx-fun-asr-nano-bf16" {
+            if model.settings.onlineASRProvider == .local, model.speech?.modelId == "mlx-fun-asr-nano-bf16" {
                 model.setting(\.funRecognitionLanguage).wrappedValue = $0
             } else {
                 model.setting(\.language).wrappedValue = $0
@@ -206,12 +202,16 @@ struct SettingsPage: View {
         })
     }
     private var language: some View {
-        SettingsSection(title: L10n.text("语言")) {
+        let onDevice = model.settings.onlineASRProvider == .local
+        return SettingsSection(title: L10n.text("语言")) {
             SettingRow(title: L10n.text("听写语言"), detail: nil) {
                 Picker("", selection: dictationLanguage) {
-                    ForEach(VoiceLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue).disabled(model.speech?.languages?.contains($0.rawValue) == false) }
+                    ForEach(VoiceLanguage.allCases, id: \.self) {
+                        Text($0.label).tag($0.rawValue)
+                            .disabled(onDevice && model.speech?.languages?.contains($0.rawValue) == false)
+                    }
                 }
-                .disabled(model.speech?.canSetLanguage != true)
+                .disabled(onDevice && model.speech?.canSetLanguage != true)
                 .labelsHidden()
                 .frame(width: 150)
             }
@@ -223,7 +223,7 @@ struct SettingsPage: View {
             ToggleRow(title: L10n.text("选中即翻译"), detail: L10n.text("用鼠标选中文字，旁边出现「翻译」按钮，译文在气泡里显示。"),
                       isOn: model.setting(\.selectionTranslate))
             SettingRow(title: L10n.text("中文字形"),
-                       detail: model.speech?.modelId == "mlx-fun-asr-nano-bf16"
+                       detail: onDevice && model.speech?.modelId == "mlx-fun-asr-nano-bf16"
                         ? L10n.text("此模型不会确认听写语言。选择中文时应用繁体；听写日语请选日语，以免只有汉字的日文被转换。自动模式不转换。") : nil) {
                 Picker("", selection: model.setting(\.zhVariant)) {
                     ForEach(ChineseVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Settings can be dragged independently and stays above its main window.
+/// Settings stays fixed above its main window.
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let identifier = NSUserInterfaceItemIdentifier("typeleast.settings")
     static let size = NSSize(width: 900, height: 624)
@@ -19,6 +19,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                              styleMask: [.borderless, .closable], backing: .buffered, defer: false)
             panel.identifier = Self.identifier
             panel.title = L10n.settingTitle
+            panel.isMovable = false
+            panel.isMovableByWindowBackground = false
             let host = NSHostingController(rootView:
                 SettingsPage(onClose: { [weak self] in self?.close() }).environmentObject(model))
             host.sizingOptions = []

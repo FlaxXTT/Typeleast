@@ -234,6 +234,16 @@ final class Settings {
 
     // MARK: dictation
 
+    var onlineASRProvider: OnlineASRProvider {
+        get { OnlineASRProvider(rawValue: d.string(forKey: "voice.onlineASRProvider") ?? "") ?? .local }
+        set { d.set(newValue.rawValue, forKey: "voice.onlineASRProvider"); changed() }
+    }
+
+    var funASRWorkspaceID: String {
+        get { d.string(forKey: "voice.funASRWorkspaceID") ?? "" }
+        set { d.set(newValue, forKey: "voice.funASRWorkspaceID"); changed() }
+    }
+
     var interfaceLanguage: String {
         get { L10n.normalized(d.string(forKey: L10n.preferenceKey)) }
         set { d.set(L10n.normalized(newValue), forKey: L10n.preferenceKey); changed() }
@@ -259,6 +269,7 @@ final class Settings {
     }
 
     func recognitionLanguage(for modelId: String?) -> String {
+        if onlineASRProvider != .local { return language }
         guard let modelId, !modelId.isEmpty else { return "auto" }
         return modelId == "mlx-fun-asr-nano-bf16" ? funRecognitionLanguage : language
     }
