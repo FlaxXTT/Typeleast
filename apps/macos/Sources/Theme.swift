@@ -58,16 +58,19 @@ enum Theme {
     static let sidebarWidth: CGFloat = 210
     static let spacing: CGFloat = 8
     static let halfSpacing: CGFloat = 4
-    static let titleFont = L10n.language == "en" ? InterfaceTypography.english(36, emphasized: true) : .custom("Prompt-Medium", size: 36)
-    static let homeTitleFont = L10n.language == "en" ? InterfaceTypography.english(48, emphasized: true) : .custom("Prompt-Medium", size: 48)
-    static let sectionTitleFont = L10n.language == "en" ? InterfaceTypography.english(24, emphasized: true) : .custom("Prompt-Medium", size: 24)
-    static let bodyFont = L10n.language == "en" ? InterfaceTypography.english(16) : .system(size: 16)
-    static let rowFont = L10n.language == "en" ? InterfaceTypography.english(14) : .system(size: 14)
-    static let captionFont = L10n.language == "en" ? InterfaceTypography.english(12) : .system(size: 12)
+    static let titleFont = InterfaceTypography.localized(36, weight: .medium)
+    static let homeTitleFont = InterfaceTypography.localized(48, weight: .medium)
+    static let sectionTitleFont = InterfaceTypography.localized(24, weight: .medium)
+    static let bodyFont = InterfaceTypography.localized(16)
+    static let rowFont = InterfaceTypography.localized(14)
+    static let captionFont = InterfaceTypography.localized(12)
     static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12)
     static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
     /// The Home insights: white tiles on a lightly dotted panel, and the heatmap's blues.
+    static let homeRatio: CGFloat = 0.618
+    static let homeHeadingSize: CGFloat = 48
+    static let homeFigureSize: CGFloat = 26
     static let tile = dynamic(hex(0xFFFFFF), hex(0x3C3B3B))
     static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
@@ -152,7 +155,7 @@ private struct HoverPill: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 14, weight: primary ? .semibold : .medium))
+            .font(InterfaceTypography.localized(14, weight: primary ? .semibold : .medium))
             .foregroundColor(primary ? Theme.inkInverse : Theme.ink)
             .padding(.horizontal, primary ? 16 : 14)
             .padding(.vertical, primary ? 8 : 7)

@@ -71,37 +71,41 @@ struct HomePage: View {
     @State private var showsSetup = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            InsightsPanel()
-                .id(model.homePresentationID)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background {
-                    HomeDotGrid()
-                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                        .padding(-6)
-                }
-            VStack(alignment: .leading, spacing: 12) {
-                ShortcutReferenceCard()
-                EngineCard()
-                if SetupCard.pending(model) {
-                    Button { showsSetup.toggle() } label: {
-                        Label(L10n.text("完成设置"), systemImage: "exclamationmark.circle")
-                            .font(Theme.captionFont)
-                            .foregroundColor(Theme.accent)
-                            .padding(.vertical, 4)
+        GeometryReader { geometry in
+            let gap: CGFloat = 14
+            let width = max(0, geometry.size.width - gap)
+            let insightsWidth = width * Theme.homeRatio
+            HStack(alignment: .top, spacing: gap) {
+                InsightsPanel()
+                    .id(model.homePresentationID)
+                    .frame(width: insightsWidth, height: geometry.size.height)
+                    .background {
+                        HomeDotGrid()
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .padding(-6)
                     }
-                    .buttonStyle(FlatActionButtonStyle())
-                    .popover(isPresented: $showsSetup, arrowEdge: .trailing) {
-                        SetupCard().frame(width: 420).padding(12)
+                VStack(alignment: .leading, spacing: 12) {
+                    ShortcutReferenceCard()
+                    EngineCard()
+                    if SetupCard.pending(model) {
+                        Button { showsSetup.toggle() } label: {
+                            Label(L10n.text("完成设置"), systemImage: "exclamationmark.circle")
+                                .font(Theme.captionFont)
+                                .foregroundColor(Theme.accent)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(FlatActionButtonStyle())
+                        .popover(isPresented: $showsSetup, arrowEdge: .trailing) {
+                            SetupCard().frame(width: 420).padding(12)
+                        }
                     }
+                    HomeVersionFooter()
                 }
-                HomeVersionFooter()
+                .frame(width: width - insightsWidth)
+                .padding(.top, 4)
             }
-            .frame(width: 216)
-            .padding(.top, 4)
         }
-        .padding(EdgeInsets(top: 44, leading: 18, bottom: 20, trailing: 18))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(EdgeInsets(top: 44, leading: 12, bottom: 20, trailing: 12))
         .background(Theme.window)
     }
 }
@@ -289,7 +293,7 @@ private struct EngineCard: View {
         let serviceStatus = model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪")
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 5) {
-                InterfaceTypography.text(L10n.text("引擎"), size: 20, weight: .medium)
+                InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
                 Spacer(minLength: 2)
                 Circle().fill(model.serviceUp ? Theme.success : Theme.tertiary).frame(width: 5, height: 5)
                 InterfaceTypography.text(serviceStatus, size: 11)
@@ -316,7 +320,7 @@ private struct EngineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-            InterfaceTypography.text(value, size: 13, weight: .medium)
+            InterfaceTypography.text(value, size: Theme.homeFigureSize * Theme.homeRatio, weight: .medium)
                 .lineLimit(2).help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
