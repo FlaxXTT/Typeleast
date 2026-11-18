@@ -74,9 +74,8 @@ struct InsightsPanel: View {
 
     var body: some View {
         let stats = model.stats
-        let timingNote = stats.hasIncompleteTiming
-            ? L10n.text("旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。") : nil
-        let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
+        let estimateNote = stats.hasEstimatedTiming
+            ? L10n.text("旧记录只有字数。按每分钟口述 210 字估算时长，按每分钟打字 60 字估算节省时间。") : nil
         GeometryReader { geometry in
             let headerHeight: CGFloat = 54
             let spacing: CGFloat = 14
@@ -98,12 +97,12 @@ struct InsightsPanel: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: tileGap), GridItem(.flexible())], spacing: tileGap) {
                     Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: elapsed, height: tileHeight)
                     Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: elapsed,
-                           height: tileHeight, unavailable: timingUnavailable, note: timingNote)
+                           height: tileHeight, estimateNote: estimateNote)
                     Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))],
                            label: L10n.text("平均口述速度"), elapsed: elapsed, height: tileHeight,
-                           unavailable: timingUnavailable, note: timingNote)
+                           estimateNote: estimateNote)
                     Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: elapsed,
-                           height: tileHeight, unavailable: timingUnavailable, note: timingNote)
+                           height: tileHeight, estimateNote: estimateNote)
                 }
                 ActivityCard(elapsed: elapsed).frame(height: activityHeight)
             }
@@ -176,31 +175,26 @@ private struct Figure: View {
     let label: String
     let elapsed: Double
     let height: CGFloat
-    var unavailable = false
-    var note: String?
+    var estimateNote: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                if unavailable {
-                    Text("—").font(InterfaceTypography.figure(Theme.homeFigureSize))
-                        .accessibilityLabel(L10n.text("尚无时长记录"))
-                } else {
-                    ForEach(parts.indices, id: \.self) { index in
-                        CountingNumber(part: parts[index], elapsed: elapsed, size: Theme.homeFigureSize)
-                            .tracking(-0.6)
-                            .lineLimit(1).minimumScaleFactor(0.6)
-                        InterfaceTypography.text(parts[index].unit, size: Theme.homeSecondarySize, weight: .semibold)
-                            .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
-                    }
+                ForEach(parts.indices, id: \.self) { index in
+                    CountingNumber(part: parts[index], elapsed: elapsed, size: Theme.homeFigureSize)
+                        .tracking(-0.6)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                    InterfaceTypography.text(parts[index].unit, size: Theme.homeSecondarySize, weight: .semibold)
+                        .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                 }
             }
             HStack(spacing: 5) {
-                InterfaceTypography.text(label, size: Theme.homeSecondarySize)
+                InterfaceTypography.text(estimateNote == nil ? label : L10n.text("{0}（估算）", label),
+                                         size: Theme.homeSecondarySize)
                     .lineLimit(1).minimumScaleFactor(0.85)
-                if let note {
+                if let estimateNote {
                     Image(systemName: "info.circle").font(.system(size: 11))
-                        .help(note).accessibilityLabel(note)
+                        .help(estimateNote).accessibilityLabel(estimateNote)
                 }
             }
             .foregroundColor(Theme.homeLabel)
@@ -209,7 +203,7 @@ private struct Figure: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: height)
         .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
-        .help(note ?? label)
+        .help(estimateNote ?? label)
     }
 }
 

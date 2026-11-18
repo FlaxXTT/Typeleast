@@ -107,6 +107,7 @@ final class AppModel: ObservableObject {
         reloadHistory()
         refreshPermissions()
         refreshLLMKeyPresence()
+        refreshOnlineASRKeyPresence()
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: HistoryStore.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.reloadHistory()
@@ -118,11 +119,13 @@ final class AppModel: ObservableObject {
         observers.append(center.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.settingsRevision += 1
             self?.refreshLLMKeyPresence()
+            self?.refreshOnlineASRKeyPresence()
         })
         observers.append(center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             KeychainStore.invalidatePresence()
             self?.settingsRevision += 1
             self?.refreshLLMKeyPresence()
+            self?.refreshOnlineASRKeyPresence()
         })
         for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -164,7 +167,20 @@ final class AppModel: ObservableObject {
 
     func refreshLLMKeyPresence() {
         let account = settings.llmPresetID
-        guard LLMPreset.find(account).needsKey, pendingKeyPresence.insert(account).inserted else { return }
+        if LLMPreset.find(account).needsKey { refreshKeyPresence(account) }
+    }
+
+    var onlineASRKeyPresence: Bool? {
+        savedKeyPresence[settings.onlineASRProvider.keychainAccount]
+    }
+
+    func refreshOnlineASRKeyPresence() {
+        let provider = settings.onlineASRProvider
+        if provider != .local { refreshKeyPresence(provider.keychainAccount) }
+    }
+
+    private func refreshKeyPresence(_ account: String) {
+        guard pendingKeyPresence.insert(account).inserted else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let present = KeychainStore.exists(account: account)
             DispatchQueue.main.async {
@@ -224,7 +240,16 @@ final class AppModel: ObservableObject {
     var modelsMissing: Bool { speech?.modelsMissing ?? false }
     var modelsDownloading: Bool { speech?.downloading ?? false }
 
+    var recognitionConfigured: Bool {
+        settings.onlineASRProvider == .local ? speech?.ready == true : onlineASRKeyPresence == true
+    }
+
     var speechSummary: String {
+        let provider = settings.onlineASRProvider
+        if provider != .local {
+            let status = onlineASRKeyPresence == true ? L10n.text("已配置") : L10n.text("待配置 API Key")
+            return provider.label + " · " + status
+        }
         let name = speech?.displayName ?? L10n.text("未选择语音模型")
         return name + " · " + (speech?.ready == true ? L10n.text("就绪") : L10n.text("准备中"))
     }

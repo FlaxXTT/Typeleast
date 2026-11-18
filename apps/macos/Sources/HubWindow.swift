@@ -170,7 +170,7 @@ private struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
-                AppMarkView(size: 26).accessibilityHidden(true)
+                sidebarWaveform
                 Text("TYPELEAST")
                     .font(InterfaceTypography.localized(Theme.homeHeadingSize * Theme.homeRatio * Theme.homeRatio, weight: .light))
                     .tracking(1)
@@ -214,6 +214,20 @@ private struct Sidebar: View {
             }
         }
         .padding(EdgeInsets(top: 44, leading: 12, bottom: 8, trailing: 12))
+    }
+
+    private var sidebarWaveform: some View {
+        let size: CGFloat = 26
+        let ratios = AppIconArtwork.barRatios
+        HStack(spacing: size * 0.03) {
+            ForEach(ratios.indices, id: \.self) { index in
+                Capsule()
+                    .fill(index == ratios.count - 1 ? Theme.accent : Theme.ink)
+                    .frame(width: size * 0.10, height: size * AppIconArtwork.waveformOccupancy * ratios[index])
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 

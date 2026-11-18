@@ -213,7 +213,7 @@ private struct SetupCard: View {
 
     static func pending(_ model: AppModel) -> Bool {
         !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceState.isRunning
-            || model.speech?.ready != true || !model.llmConfigured
+            || !model.recognitionConfigured || !model.llmConfigured
     }
 
     var body: some View {
@@ -238,12 +238,20 @@ private struct SetupCard: View {
                         model.actions?.restartService()
                     }
                 }
-                SetupRow(done: model.speech?.ready == true, title: model.speech?.displayName ?? L10n.text("未选择语音模型"),
+                if model.settings.onlineASRProvider == .local {
+                    SetupRow(done: model.recognitionConfigured, title: model.speech?.displayName ?? L10n.text("未选择语音模型"),
                          detail: AppDelegate.speechProblem(model.speech).isEmpty ? L10n.text("就绪，本机识别") : AppDelegate.speechProblem(model.speech),
                          action: model.modelsMissing || model.speech?.phase == "error" ? L10n.text("选择语音模型") : "") {
-                    model.actions?.downloadModels()
+                        model.actions?.downloadModels()
+                    }
+                    if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
+                } else {
+                    SetupRow(done: model.recognitionConfigured, title: model.settings.onlineASRProvider.label,
+                             detail: L10n.text("待配置 API Key"), action: L10n.text("打开设置")) {
+                        model.settingsCategory = 1
+                        model.navigate(to: .settings)
+                    }
                 }
-                if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
                 SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
                          detail: model.llmConfigured ? model.modelSummary : "",
                          action: L10n.text("打开设置")) {
@@ -291,7 +299,7 @@ private struct EngineCard: View {
 
     var body: some View {
         let serviceStatus = model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪")
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 5) {
                 InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
                 Spacer(minLength: 2)
@@ -318,9 +326,10 @@ private struct EngineRow: View {
     let value: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             InterfaceTypography.text(value, size: Theme.homeSecondarySize, weight: .medium)
+                .lineSpacing(3)
                 .lineLimit(2).help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

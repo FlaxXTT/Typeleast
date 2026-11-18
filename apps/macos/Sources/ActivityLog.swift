@@ -12,6 +12,17 @@ struct ActivityDay: Codable, Equatable {
     var savedSeconds: Double?
     var timedWords: Int?
     var timedDictations: Int?
+
+    mutating func include(_ activity: ActivityDay) {
+        dictations += activity.dictations
+        words += activity.words
+        if let duration = activity.speakingSeconds {
+            speakingSeconds = (speakingSeconds ?? 0) + duration
+            savedSeconds = (savedSeconds ?? 0) + (activity.savedSeconds ?? 0)
+            timedWords = (timedWords ?? 0) + (activity.timedWords ?? 0)
+            timedDictations = (timedDictations ?? 0) + (activity.timedDictations ?? 0)
+        }
+    }
 }
 
 final class ActivityLog {
@@ -23,11 +34,13 @@ final class ActivityLog {
     private let calendar: Calendar
     /// "yyyy-MM-dd" in the local calendar -> that day's counts.
     private(set) var days: [String: ActivityDay] = [:] {
-        didSet { cachedStreaks = nil; cachedActiveDays = nil; cachedStats = nil }
+        didSet { cachedStreaks = nil; cachedActiveDays = nil }
     }
     private var cachedStreaks: (day: Date, current: Int, longest: Int)?
     private var cachedActiveDays: Int?
-    private var cachedStats: DictationStats?
+    private var totals = ActivityDay()
+    /// Updated incrementally on a completed dictation. Independent of retained transcript history.
+    private(set) var stats = DictationStats()
     /// Lets regression tests prove redraws do not rescan the full log.
     private(set) var streakBuildCount = 0
 
@@ -37,6 +50,8 @@ final class ActivityLog {
         if let data = d.data(forKey: key),
            let saved = try? JSONDecoder().decode([String: ActivityDay].self, from: data) {
             days = saved
+            for day in saved.values { totals.include(day) }
+            updateStats()
         }
     }
 
@@ -49,53 +64,48 @@ final class ActivityLog {
     }
 
     func record(words: Int, seconds: Double? = nil, typingSeconds: Double? = nil, at date: Date = Date()) {
-        var day = days[dayKey(date)] ?? ActivityDay()
-        day.dictations += 1
-        day.words += max(0, words)
+        let day = dayKey(date)
+        var activity = ActivityDay(dictations: 1, words: max(0, words))
         if let seconds, let typingSeconds {
-            day.speakingSeconds = (day.speakingSeconds ?? 0) + seconds
-            day.savedSeconds = (day.savedSeconds ?? 0) + max(0, typingSeconds - seconds)
-            day.timedWords = (day.timedWords ?? 0) + max(0, words)
-            day.timedDictations = (day.timedDictations ?? 0) + 1
+            activity.speakingSeconds = seconds
+            activity.savedSeconds = max(0, typingSeconds - seconds)
+            activity.timedWords = activity.words
+            activity.timedDictations = 1
         }
-        days[dayKey(date)] = day
+        days[day, default: ActivityDay()].include(activity)
+        totals.include(activity)
+        updateStats()
         save()
     }
 
-    /// Home totals do not depend on whether transcript history is retained.
-    var stats: DictationStats {
-        if let cachedStats { return cachedStats }
-        var result = DictationStats()
-        var timedWords = 0
-        var timedDictations = 0
-        for day in days.values {
-            result.dictations += day.dictations
-            result.words += day.words
-            result.speakingSeconds += day.speakingSeconds ?? 0
-            result.savedSeconds += day.savedSeconds ?? 0
-            timedWords += day.timedWords ?? 0
-            timedDictations += day.timedDictations ?? 0
-        }
-        result.timedWords = timedWords
-        result.timedDictations = timedDictations
-        cachedStats = result
-        return result
+    private func updateStats() {
+        // Count-only records do not contain the language mix. Use the existing CJK rates.
+        let estimatedWords = max(0, totals.words - (totals.timedWords ?? 0))
+        let estimatedSpeech = DictationStats.estimatedSpeechSeconds(cjk: estimatedWords)
+        let estimatedTyping = DictationStats.estimatedTypingSeconds(cjk: estimatedWords)
+        stats = DictationStats(dictations: totals.dictations, words: totals.words,
+                               speakingSeconds: (totals.speakingSeconds ?? 0) + estimatedSpeech,
+                               savedSeconds: (totals.savedSeconds ?? 0) + max(0, estimatedTyping - estimatedSpeech),
+                               hasEstimatedTiming: estimatedWords > 0)
+        stats.updateRate()
     }
 
     /// First run after an update: rebuild the past from whatever history is still kept.
     func seedIfNeeded(from items: [(date: Date, words: Int)]) {
         guard !isStarted else { return }
         for item in items {
-            var day = days[dayKey(item.date)] ?? ActivityDay()
-            day.dictations += 1
-            day.words += max(0, item.words)
-            days[dayKey(item.date)] = day
+            let activity = ActivityDay(dictations: 1, words: max(0, item.words))
+            days[dayKey(item.date), default: ActivityDay()].include(activity)
+            totals.include(activity)
         }
+        updateStats()
         save()
     }
 
     func clear() {
         days = [:]
+        totals = ActivityDay()
+        updateStats()
         save()
     }
 
