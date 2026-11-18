@@ -118,12 +118,16 @@ struct SettingsPage: View {
         .font(Theme.bodyFont).foregroundColor(Theme.ink).tint(Theme.accent).controlSize(.large)
         .background(Theme.tile)
         .background(RoundedWindowMarker(radius: Theme.settingsRadius))
-        .overlay(alignment: .top) { WindowDragRegion().frame(height: 44).padding(.leading, 48) }
-        .overlay(alignment: .topLeading) {
-            IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, action: onClose)
-                .accessibilityLabel(L10n.text("关闭"))
-                .padding(.leading, 14)
-                .padding(.top, 10)
+        .overlay(alignment: .top) {
+            HStack(alignment: .top, spacing: 6) {
+                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, action: onClose)
+                    .accessibilityLabel(L10n.text("关闭"))
+                    .padding(.top, 10)
+                WindowDragRegion()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .padding(.leading, 14)
         }
         .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
         .onExitCommand { onClose() }
