@@ -18,9 +18,10 @@ The main window adapts the supplied `Typeless_UI_范本` to native AppKit and Sw
 ### Home insights
 
 The insights area uses bold figures, grey labels, a dot-grid backdrop and a pill-shaped
-Share button beside the `Insight` heading. The four metric cards use 22-point continuous
-corners and 16-point gaps. Their height follows the column width within 84 to 100 points.
-The full-width activity card uses 18-point corners and 14-point cells.
+Share button beside the `Insight` heading. The Insight column is at most 516 points wide.
+The four metric cards have 20-point circular corners, 16-point gaps and an 84-point
+minimum height. The activity card uses 16-point corners and shows up to 20 weeks,
+with 14-point cells and 8-point gaps on both axes.
 Figures use the default system design rather than rounded digits.
 The light heatmap colours sampled from the reference are `#F8F8F8` (empty), `#ECF0FE`,
 `#C6D2FC`, `#A0B4FB` and `#426AF6`. The screenshot's Display P3 colour space is retained

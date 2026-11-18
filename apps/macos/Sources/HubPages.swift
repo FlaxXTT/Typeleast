@@ -73,17 +73,18 @@ struct HomePage: View {
         GeometryReader { geometry in
             let wide = geometry.size.width >= 660
             let contentWidth = max(0, geometry.size.width - 48)
-            let sideWidth = min(228, max(184, contentWidth * 0.26))
-            let mainWidth = contentWidth - (wide ? sideWidth + 24 : 0)
-            let metricHeight = min(100, max(84, (mainWidth - 16) * 0.17))
-            let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+            let sideWidth: CGFloat = 204
+            let columnGap: CGFloat = 28
+            let rightColumn = wide ? sideWidth + columnGap : 0
+            let mainWidth = min(516, max(0, contentWidth - rightColumn))
+            let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: columnGap))
                               : AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
             HubScrollView(key: "home-" + String(model.homePresentationID)) {
                 VStack(alignment: .leading, spacing: 24) {
                     layout {
-                        InsightsPanel(compact: mainWidth < 560, metricHeight: metricHeight)
+                        InsightsPanel(compact: mainWidth < 480)
                             .id(model.homePresentationID)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .frame(width: mainWidth, alignment: .topLeading)
                             .background {
                                 HomeDotGrid()
                                     .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
@@ -102,6 +103,8 @@ struct HomePage: View {
                     if SetupCard.pending(model) { SetupCard() }
                     RecentCard()
                 }
+                .frame(width: mainWidth + rightColumn, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(EdgeInsets(top: 44, leading: 24, bottom: 16, trailing: 24))
             }
         }
@@ -119,7 +122,7 @@ private struct ShortcutReferenceCard: View {
             shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
         }
         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .continuous).fill(Theme.sidebar))
+        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.sidebar))
     }
 
     private func shortcut(_ title: String, binding: HotKeyBinding) -> some View {

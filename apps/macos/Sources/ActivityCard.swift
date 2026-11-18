@@ -25,7 +25,6 @@ struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var compact = false
-    let metricHeight: CGFloat
     @State private var elapsed: Double = 0
 
     static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
@@ -45,12 +44,12 @@ struct InsightsPanel: View {
             }
             .frame(height: 44)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible())], spacing: 16) {
-                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, compact: compact, height: metricHeight)
-                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed, compact: compact, height: metricHeight,
+                Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, compact: compact)
+                Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed, compact: compact,
                        unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), elapsed: displayedElapsed, compact: compact, height: metricHeight,
+                Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))], label: L10n.text("平均口述速度"), elapsed: displayedElapsed, compact: compact,
                        unavailable: timingUnavailable, note: timingNote)
-                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed, compact: compact, height: metricHeight,
+                Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed, compact: compact,
                        unavailable: timingUnavailable, note: timingNote)
             }
             ActivityCard(elapsed: displayedElapsed, compact: compact)
@@ -137,7 +136,6 @@ private struct Figure: View {
     let label: String
     let elapsed: Double
     let compact: Bool
-    let height: CGFloat
     var unavailable = false
     var note: String?
 
@@ -145,14 +143,14 @@ private struct Figure: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if unavailable {
-                    Text("—").font(.system(size: compact ? 26 : 32, weight: .bold))
+                    Text("—").font(.system(size: compact ? 23 : 26, weight: .bold))
                         .accessibilityLabel(L10n.text("尚无时长记录"))
                 } else {
                     ForEach(parts.indices, id: \.self) { index in
                         CountingNumber(part: parts[index], elapsed: elapsed)
-                            .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
+                            .font(.system(size: compact ? 23 : 26, weight: .bold)).tracking(-0.6)
                             .lineLimit(1).minimumScaleFactor(0.6)
-                        Text(parts[index].unit).font(.system(size: compact ? 11 : 14, weight: .semibold))
+                        Text(parts[index].unit).font(.system(size: 12, weight: .semibold))
                             .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                     }
                 }
@@ -164,11 +162,11 @@ private struct Figure: View {
                         .help(note).accessibilityLabel(note)
                 }
             }
-            .font(.system(size: compact ? 13 : 16)).foregroundColor(Theme.homeLabel)
+            .font(Theme.rowFont).foregroundColor(Theme.homeLabel)
         }
         .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .continuous).fill(Theme.tile))
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
         .help(note ?? label)
     }
 }
@@ -345,7 +343,7 @@ struct ActivityCard: View {
         let log = ActivityLog.shared
         let streaks = log.streaks()
         let _ = model.activityRevision   // redraw when a dictation is recorded
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 0) {
                 figure(log.activeDays, L10n.text("活跃天数"))
                 figure(streaks.current, L10n.text("当前连续天数"))
@@ -353,28 +351,32 @@ struct ActivityCard: View {
             }
             GeometryReader { geo in
                 let width = max(cell, geo.size.width - dayColumn)
-                let weeks = max(1, min(53, Int((width + gap) / (cell + gap))))
-                let columnStep = weeks > 1 ? (width - cell) / CGFloat(weeks - 1) : cell
-                grid(weeks: weeks, columnStep: columnStep, log: log)
+                let weeks = max(1, min(20, Int((width + gap) / (cell + gap))))
+                let gridWidth = dayColumn + CGFloat(weeks) * (cell + gap) - gap
+                grid(weeks: weeks, width: gridWidth, log: log)
+                    .frame(width: gridWidth)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(height: 7 * (cell + gap) + 20)
+            .frame(height: 7 * (cell + gap) + 18)
+            .padding(.top, 18)
             HStack(spacing: 6) {
-                Text(L10n.text("更少")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
+                Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
                 ForEach(1..<5) { level in square(level, size: 12) }
-                Text(L10n.text("更多")).font(.system(size: 14)).foregroundColor(Theme.homeLabel)
+                Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
+            .padding(.top, 10)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .continuous).fill(Theme.tile))
+        .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
     }
 
     private func figure(_ value: Int, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")), elapsed: elapsed)
-                    .font(.system(size: compact ? 26 : 32, weight: .bold)).tracking(-0.8)
-                Text(L10n.text("天")).font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: compact ? 23 : 26, weight: .bold)).tracking(-0.6)
+                Text(L10n.text("天")).font(.system(size: 12, weight: .semibold))
             }
             Text(label).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
@@ -382,7 +384,7 @@ struct ActivityCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func grid(weeks: Int, columnStep: CGFloat, log: ActivityLog) -> some View {
+    private func grid(weeks: Int, width: CGFloat, log: ActivityLog) -> some View {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = L10n.locale
         calendar.firstWeekday = 1
@@ -411,7 +413,7 @@ struct ActivityCard: View {
             }
             ForEach(0..<weeks, id: \.self) { column in
                 let weekStart = calendar.date(byAdding: .day, value: 7 * column, to: first) ?? first
-                let x = dayColumn + CGFloat(column) * columnStep
+                let x = dayColumn + CGFloat(column) * step
                 ForEach(0..<7, id: \.self) { row in
                     let date = calendar.date(byAdding: .day, value: row, to: weekStart) ?? weekStart
                     Group {
@@ -437,7 +439,7 @@ struct ActivityCard: View {
                 if let label = monthLabel(weekStart: weekStart, calendar: calendar, first: column == 0) {
                     Text(label).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
                         .fixedSize()
-                        .offset(x: x - (column == weeks - 1 ? 8 : 0), y: 7 * step + 2)
+                        .offset(x: max(dayColumn, min(x, width - 56)), y: 7 * step + 2)
                 }
             }
             HStack {
