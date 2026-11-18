@@ -10,6 +10,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let settingsWindow: SettingsWindowController
     private var settingsPresentation: AnyCancellable?
+    private var requestedRestorePage: HubPage?
     let model: AppModel
 
     init(model: AppModel) {
@@ -40,22 +41,22 @@ final class HubWindowController: NSObject, NSWindowDelegate {
                 sheet.orderOut(nil)
             }
         }
-        settingsWindow.closeForUpdate()
+        settingsWindow.closeImmediately()
     }
 
-    func show(page: HubPage? = nil) {
+    func show(page: HubPage = .home) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
-        let opening = window?.isVisible != true || NSApp.isHidden
-        let restoring = window?.isMiniaturized == true
-        if let page = page { model.navigate(to: page) }
-        if opening && !restoring && model.page == .home && page != .settings {
-            model.homePresentationID &+= 1
-        }
         if window == nil { window = makeWindow() }
+        guard let window else { return }
+        if window.isMiniaturized {
+            requestedRestorePage = page
+        } else {
+            present(page)
+        }
         model.refreshPermissions()
         NSApp.activate(ignoringOtherApps: true)
-        if window?.isMiniaturized == true { window?.deminiaturize(nil) }
-        window?.makeKeyAndOrderFront(nil)
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
         // AppKit lays out the title bar again on first presentation. Reposition the
         // native buttons afterwards so they stay inside the window curve.
         DispatchQueue.main.async { [weak window] in
@@ -95,7 +96,17 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidDeminiaturize(_ notification: Notification) {
-        if model.page == .home { model.homePresentationID &+= 1 }
+        let page = requestedRestorePage ?? .home
+        requestedRestorePage = nil
+        present(page)
+    }
+
+    private func present(_ page: HubPage) {
+        if page == .home {
+            settingsWindow.closeImmediately()
+            model.homePresentationID &+= 1
+        }
+        model.navigate(to: page)
     }
 }
 
