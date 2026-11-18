@@ -25,6 +25,20 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     var isVisible: Bool { window?.isVisible ?? false }
     var themeTransitionWindow: NSWindow? { isVisible ? window : nil }
     var settingsThemeTransitionWindow: NSWindow? { settingsWindow.visibleWindow }
+    var updateDialogWindow: NSWindow? {
+        if let settings = settingsWindow.visibleWindow, settings.isKeyWindow { return settings }
+        return themeTransitionWindow ?? settingsWindow.visibleWindow
+    }
+
+    func prepareForUpdate() {
+        for parent in [window, settingsWindow.visibleWindow].compactMap({ $0 }) {
+            if let sheet = parent.attachedSheet {
+                parent.endSheet(sheet)
+                sheet.orderOut(nil)
+            }
+        }
+        settingsWindow.closeForUpdate()
+    }
 
     func show(page: HubPage? = nil) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }

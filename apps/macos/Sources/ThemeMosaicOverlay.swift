@@ -28,19 +28,15 @@ private struct ThemeMosaicGrid {
 
 final class ThemeMosaicOverlay: NSView {
     var onFinish: (() -> Void)?
-    private static let flipDuration: TimeInterval = 0.42
-    private static let waveDuration: TimeInterval = 0.32
-    private static let settleDuration: TimeInterval = 0.04
-    private static let fadeDuration: TimeInterval = 0.12
-    private static let gap: CGFloat = 2
+    private static let flightDuration: TimeInterval = 0.59
+    private static let waveDuration: TimeInterval = 0.28
+    private static let gap: CGFloat = 0.75
     private let oldImage: NSImage
     private let cover: NSImageView
-    private weak var previousResponder: NSResponder?
     private var appearanceLink: CADisplayLink?
     private var appearanceFrames = 0
     private var renderReady: (() -> Void)?
     private var windowCloseObserver: NSObjectProtocol?
-    override var acceptsFirstResponder: Bool { true }
 
     init(frame: NSRect, oldImage: NSImage, cornerRadius: CGFloat = Theme.panelRadius) {
         self.oldImage = oldImage
@@ -58,9 +54,7 @@ final class ThemeMosaicOverlay: NSView {
     }
     required init?(coder: NSCoder) { fatalError("Created in code") }
 
-    func lockContent(in window: NSWindow) {
-        previousResponder = window.firstResponder
-        window.makeFirstResponder(self)
+    func observeClose(of window: NSWindow) {
         windowCloseObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
                                                                       object: window, queue: .main) { [weak self] _ in
             self?.finish()
@@ -85,15 +79,8 @@ final class ThemeMosaicOverlay: NSView {
         ready?()
     }
 
-    // Consume content input while its two snapshots are on screen.
-    override func hitTest(_ point: NSPoint) -> NSView? { self }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {}
-    override func rightMouseDown(with event: NSEvent) {}
-    override func otherMouseDown(with event: NSEvent) {}
-    override func scrollWheel(with event: NSEvent) {}
-    override func keyDown(with event: NSEvent) {}
-    override func keyUp(with event: NSEvent) {}
+    // Theme transitions are visual. The underlying buttons retain focus and hit testing.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     func finish() {
         let completion = onFinish
@@ -104,9 +91,6 @@ final class ThemeMosaicOverlay: NSView {
         if let windowCloseObserver {
             NotificationCenter.default.removeObserver(windowCloseObserver)
             self.windowCloseObserver = nil
-        }
-        if let window, window.firstResponder === self {
-            window.makeFirstResponder(previousResponder)
         }
         removeFromSuperview()
         completion?()
@@ -120,23 +104,24 @@ final class ThemeMosaicOverlay: NSView {
         } completionHandler: { [weak self] in self?.finish() }
     }
 
-    func flip(to newImage: NSImage) {
+    func scatter() {
         guard let root = layer,
-              let old = oldImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
-              let new = newImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+              let image = oldImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             crossfade()
             return
         }
         let size = bounds.size
-        let grid = ThemeMosaicGrid(size: size)
+        guard size.width > 0, size.height > 0 else { finish(); return }
+        let originalGrid = ThemeMosaicGrid(size: size)
+        // Splitting each axis by sqrt(8) gives approximately one eighth the cell area.
+        let columns = Int((Double(originalGrid.columns) * sqrt(8)).rounded())
+        let rows = Int((Double(originalGrid.rows) * sqrt(8)).rounded())
         let scale = window?.backingScaleFactor ?? 2
-        let timing = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
         let start = CACurrentMediaTime()
         let scene = CALayer()
         scene.frame = bounds
-        scene.backgroundColor = NSColor(Theme.detail).cgColor
         var perspective = CATransform3DIdentity
-        perspective.m34 = -1 / 900
+        perspective.m34 = -1 / 850
         scene.sublayerTransform = perspective
 
         CATransaction.begin()
@@ -144,98 +129,58 @@ final class ThemeMosaicOverlay: NSView {
         CATransaction.setCompletionBlock { [weak self] in self?.finish() }
         root.addSublayer(scene)
 
-        for row in 0..<grid.rows {
-            for column in 0..<grid.columns {
-                // Rows count from the top; native layer coordinates grow from the bottom.
-                let left = (size.width * CGFloat(column) / CGFloat(grid.columns) * scale).rounded() / scale
-                let right = (size.width * CGFloat(column + 1) / CGFloat(grid.columns) * scale).rounded() / scale
-                let bottom = (size.height * CGFloat(grid.rows - row - 1) / CGFloat(grid.rows) * scale).rounded() / scale
-                let top = (size.height * CGFloat(grid.rows - row) / CGFloat(grid.rows) * scale).rounded() / scale
+        for row in 0..<rows {
+            for column in 0..<columns {
+                let left = size.width * CGFloat(column) / CGFloat(columns)
+                let right = size.width * CGFloat(column + 1) / CGFloat(columns)
+                let bottom = size.height * CGFloat(rows - row - 1) / CGFloat(rows)
+                let top = size.height * CGFloat(rows - row) / CGFloat(rows)
                 let rect = CGRect(x: left, y: bottom, width: right - left, height: top - bottom)
                     .insetBy(dx: Self.gap / 2, dy: Self.gap / 2)
-                // Image crops start at the top, while these layer positions start
-                // at the bottom. Keep each old/new image fragment in its own row.
-                let crop = CGRect(x: rect.minX / size.width, y: (size.height - rect.maxY) / size.height,
-                                  width: rect.width / size.width, height: rect.height / size.height)
-                let horizontal = (row + column).isMultiple(of: 2)
-                let x: CGFloat = horizontal ? 1 : 0
-                let y: CGFloat = horizontal ? 0 : 1
-                let rotation = CATransform3DMakeRotation(.pi, x, y, 0)
-                let tile = CATransformLayer()
+                let tile = CALayer()
                 tile.bounds = CGRect(origin: .zero, size: rect.size)
                 tile.position = CGPoint(x: rect.midX, y: rect.midY)
-                tile.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+                tile.contents = image
+                tile.contentsRect = CGRect(x: rect.minX / size.width, y: (size.height - rect.maxY) / size.height,
+                                           width: rect.width / size.width, height: rect.height / size.height)
+                tile.contentsScale = scale
                 scene.addSublayer(tile)
 
-                let front = face(old, crop: crop, size: rect.size, scale: scale)
-                let back = face(new, crop: crop, size: rect.size, scale: scale)
-                back.transform = rotation
-                back.zPosition = -0.1
-                let shade = CALayer()
-                shade.frame = back.bounds
-                shade.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
-                back.addSublayer(shade)
-                let highlight = CALayer()
-                highlight.frame = CGRect(x: 0, y: rect.height - 1 / scale, width: rect.width, height: 1 / scale)
-                highlight.backgroundColor = NSColor.white.withAlphaComponent(0.24).cgColor
-                back.addSublayer(highlight)
-                tile.addSublayer(front)
-                tile.addSublayer(back)
+                let horizontal = (row + column).isMultiple(of: 2)
+                let direction: CGFloat = (row * 3 + column * 5).isMultiple(of: 3) ? -1 : 1
+                let dx = (rect.midX / size.width - 0.5) * 172 + direction * 22
+                let dy = (rect.midY / size.height - 0.5) * 92 + 56
+                let destination = CGPoint(x: rect.midX + dx, y: rect.midY + dy)
+                let rotation = CATransform3DMakeRotation(direction * 1.15, horizontal ? 1 : 0, horizontal ? 0 : 1, 0)
+                let departure = CATransform3DConcat(rotation, CATransform3DMakeScale(0.65, 0.65, 1))
 
-                // Equal row+column diagonals start together, strictly top-left to bottom-right.
-                let delay = Double(row + column) / Double(grid.rows + grid.columns - 2) * Self.waveDuration
-                tile.transform = rotation
-                let flip = CABasicAnimation(keyPath: horizontal ? "transform.rotation.x" : "transform.rotation.y")
-                flip.fromValue = 0
-                flip.toValue = Double.pi
-                flip.beginTime = start + delay
-                flip.duration = Self.flipDuration
-                flip.timingFunction = timing
-                flip.fillMode = .backwards
-                tile.add(flip, forKey: "theme-flip")
+                let drift = CABasicAnimation(keyPath: "position")
+                drift.fromValue = tile.position
+                drift.toValue = destination
+                let spin = CABasicAnimation(keyPath: "transform")
+                spin.fromValue = CATransform3DIdentity
+                spin.toValue = departure
+                let fade = CAKeyframeAnimation(keyPath: "opacity")
+                fade.values = [1, 0.9, 0]
+                fade.keyTimes = [0, 0.22, 1]
+                let animations: [CAAnimation] = [drift, spin, fade]
+                for animation in animations { animation.duration = Self.flightDuration }
 
-                let lift = CAKeyframeAnimation(keyPath: "transform.translation.z")
-                lift.values = [0, 10, 0]
-                lift.keyTimes = [0, 0.45, 1]
-                lift.timingFunctions = [timing, timing]
-                lift.beginTime = start + delay
-                lift.duration = Self.flipDuration
-                lift.fillMode = .backwards
-                tile.add(lift, forKey: "theme-lift")
+                let flight = CAAnimationGroup()
+                flight.animations = animations
+                flight.duration = Self.flightDuration
+                flight.beginTime = start + Double(row + column) / Double(rows + columns - 2) * Self.waveDuration
+                flight.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.45, 0.4, 1)
+                flight.fillMode = .backwards
+
+                tile.position = destination
+                tile.transform = departure
+                tile.opacity = 0
+                tile.add(flight, forKey: "theme-scatter")
             }
         }
 
         cover.isHidden = true
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 1
-        fade.toValue = 0
-        fade.beginTime = start + Self.waveDuration + Self.flipDuration + Self.settleDuration
-        fade.duration = Self.fadeDuration
-        fade.fillMode = .backwards
-        fade.timingFunction = timing
-        scene.opacity = 0
-        scene.add(fade, forKey: "theme-finish")
         CATransaction.commit()
-    }
-
-    private func face(_ image: CGImage, crop: CGRect, size: CGSize, scale: CGFloat) -> CALayer {
-        let face = CALayer()
-        face.frame = CGRect(origin: .zero, size: size)
-        let pixels = CGRect(x: (crop.minX * CGFloat(image.width)).rounded(),
-                            y: (crop.minY * CGFloat(image.height)).rounded(),
-                            width: (crop.width * CGFloat(image.width)).rounded(),
-                            height: (crop.height * CGFloat(image.height)).rounded())
-        face.contents = image.cropping(to: pixels)
-        face.contentsGravity = .resize
-        face.contentsScale = scale
-        face.isDoubleSided = false
-        face.borderWidth = 1 / scale
-        face.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
-        face.shadowColor = NSColor.black.cgColor
-        face.shadowOpacity = 0.16
-        face.shadowRadius = 5
-        face.shadowOffset = CGSize(width: 0, height: -2)
-        face.shadowPath = CGPath(rect: face.bounds, transform: nil)
-        return face
     }
 }

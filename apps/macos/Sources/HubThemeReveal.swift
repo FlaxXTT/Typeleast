@@ -1,7 +1,6 @@
 import AppKit
-import QuartzCore
 
-/// Switch light/dark appearance with snapshots and a native 3D mosaic.
+/// Reveal the new appearance behind a mosaic of the previous appearance.
 enum HubThemeReveal {
     private static var activeOverlays: [ThemeMosaicOverlay] = []
 
@@ -36,7 +35,7 @@ enum HubThemeReveal {
             container.addSubview(overlay, positioned: .above, relativeTo: content)
             overlay.onFinish = { [weak overlay] in activeOverlays.removeAll { $0 === overlay } }
             activeOverlays.append(overlay)
-            overlay.lockContent(in: window)
+            overlay.observeClose(of: window)
             prepared.append((window, content, overlay,
                              content.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])))
         }
@@ -57,12 +56,8 @@ enum HubThemeReveal {
                 }
                 if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                     overlay.crossfade()
-                } else if let newImage = snapshot(content) {
-                    content.effectiveAppearance.performAsCurrentDrawingAppearance {
-                        overlay.flip(to: newImage)
-                    }
                 } else {
-                    overlay.crossfade()
+                    overlay.scatter()
                 }
             }
         }

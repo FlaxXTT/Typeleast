@@ -69,18 +69,13 @@ remember offsets by page or settings category and draw a two-point progress indi
 bottom fade and Back to top control after 360 points. Offset changes do not publish into
 the SwiftUI page tree.
 
-Light/dark appearance changes use a 3D mosaic flip. The grid adapts its rows and columns
-to the window aspect ratio, with 96–144 near-square tiles and 2-point gaps. Neighbouring
-tiles alternate X/Y rotation axes. The old-theme snapshot is the front face and the
-new-theme snapshot is the back face; hidden backfaces keep text upright. The backs are
-darkened by 8% and have a one-physical-pixel highlight. Perspective is 900 points.
-
-Equal row+column diagonals start together, from top-left to bottom-right. A tile rotates
-180 degrees over 420ms; the diagonal wave spans 320ms. After a 40ms settling interval,
-the mosaic fades out over 120ms, for a total of 900ms. Only transforms and opacity animate.
-Each window uses two snapshots, cropped into tile faces rather than separate live page hierarchies. Covers live above the SwiftUI hosting hierarchy; the main window and independent Settings window animate together. New-theme capture waits for display frames, and only then compares the effective appearances. Content input
-is held while the snapshots are shown. Reduce Motion uses a 180ms crossfade. Changing a
-preference without changing the effective light/dark appearance does not animate.
+Light and dark appearance changes use a mosaic of the previous theme. Both grid axes
+are divided by roughly the square root of eight for smaller near-square fragments.
+Diagonals start together from top left to bottom right. Each tile rotates, drifts
+outward, shrinks and fades over 590ms, revealing the live new theme underneath.
+The main and Settings windows animate together. Mouse and keyboard input stays with
+the current controls. Reduce Motion uses a 180ms crossfade. When the effective
+appearance stays the same, the cover is removed immediately.
 
 The implementation uses native [Core Animation layers](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreAnimation_guide/CoreAnimationBasics/CoreAnimationBasics.html)
 and [perspective transforms](https://developer.apple.com/documentation/quartzcore/calayer/sublayertransform).
@@ -144,7 +139,8 @@ native scrollbar and position memory without the blue top progress strip.
   full-width, 24pt skeleton until the dictation phase returns to idle.
 - Update checks show an 8pt pill track and two travelling blue bars on a 2.1s
   cycle, with the second delayed by 1.15s. Downloads show their actual percentage
-  and byte counts. Quiet automatic checks do not open the progress window.
+  and byte counts. Manual checks, results, downloads and restart use the same centered
+  dialog. Quiet automatic checks report availability through the menu only.
 - Model requests, advice and meeting processing use 20pt circular indicators:
   1.4s rotation plus a growing/shrinking arc and dash offset. Determinate circular
   indicators draw a measured foreground ring over a grey full ring.

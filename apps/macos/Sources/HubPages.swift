@@ -191,7 +191,13 @@ private struct HomeVersionFooter: View {
         VStack(alignment: .trailing, spacing: 6) {
             Text(L10n.text("版本 {0}", "v" + Updater.currentVersion))
                 .font(Theme.captionFont).foregroundColor(Theme.tertiary)
-            Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }
+            Button {
+                model.actions?.checkForUpdates(interactive: true)
+            } label: {
+                Text(L10n.text("检查更新")).underline()
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+            }
                 .buttonStyle(.plain).font(Theme.rowFont).foregroundColor(Theme.secondary)
                 .hoverInteraction()
         }

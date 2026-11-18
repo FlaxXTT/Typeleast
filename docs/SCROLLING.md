@@ -12,7 +12,7 @@ native hover feedback.
 Wheel input, trackpad inertia, scroller dragging, keyboard scrolling and elastic
 scrolling stay with AppKit/SwiftUI. The wrapper does not override wheel events,
 apply a global scrolling animation, or publish offsets through `AppModel`.
-The theme-transition overlay still blocks interaction during its own transition.
+The theme-transition overlay passes pointer input to the content.
 
 History and meeting results retain their lazy stacks; command results also use a
 lazy stack. SwiftUI creates and prefetches nearby rows as needed, rather than
