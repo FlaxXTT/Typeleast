@@ -367,9 +367,14 @@ struct ActivityCard: View {
     let elapsed: Double
     @State private var weekOffset = 0
 
-    private let cell: CGFloat = 14
-    private let gap: CGFloat = 6
-    private let dayColumn: CGFloat = 30
+    private let cell: CGFloat = 18
+    private let columnGap: CGFloat = 3
+    private let rowGap: CGFloat = 8
+    private let dayColumn: CGFloat = 24
+    private let navigationHeight: CGFloat = 18
+    private var columnStep: CGFloat { cell + columnGap }
+    private var rowStep: CGFloat { cell + rowGap }
+    private var navigationY: CGFloat { 6 * rowStep + cell + 6 }
 
     var body: some View {
         let log = ActivityLog.shared
@@ -381,24 +386,27 @@ struct ActivityCard: View {
                 figure(streaks.current, L10n.text("当前连续天数"))
                 figure(streaks.longest, L10n.text("最长连续天数"))
             }
+            .padding(.horizontal, 6)
             GeometryReader { geo in
                 let width = max(cell, geo.size.width - dayColumn)
-                let weeks = max(1, min(20, Int((width + gap) / (cell + gap))))
-                let gridWidth = dayColumn + CGFloat(weeks) * (cell + gap) - gap
+                let weeks = max(1, min(20, Int((width + columnGap) / columnStep)))
+                let gridWidth = dayColumn + CGFloat(weeks) * columnStep - columnGap
                 grid(weeks: weeks, width: gridWidth, log: log)
                     .frame(width: gridWidth)
                     .frame(maxWidth: .infinity)
             }
-            .frame(height: 7 * (cell + gap) + 18)
+            .frame(height: navigationY + navigationHeight)
             .padding(.top, 16)
             HStack(spacing: 6) {
                 Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-                ForEach(1..<5) { level in square(level, size: 12) }
+                ForEach(1..<5) { level in square(level, size: 13) }
                 Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
+            .padding(.horizontal, 6)
             .padding(.top, 10)
         }
-        .padding(16)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
     }
@@ -407,7 +415,7 @@ struct ActivityCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
-                               elapsed: elapsed, size: 24)
+                               elapsed: elapsed, size: 26)
                     .tracking(-0.6)
                 InterfaceTypography.text(L10n.text("天"), size: 12, weight: .semibold)
             }
@@ -425,28 +433,28 @@ struct ActivityCard: View {
         let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
         let first = calendar.date(byAdding: .day, value: 7 * (weekOffset - weeks + 1), to: thisWeek) ?? thisWeek
         let earliest = log.days.keys.min().flatMap { ActivityLog.parse($0, calendar: calendar) }
-        let step = cell + gap
+        let hatchWidth: CGFloat = 7
         let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
             ForEach(0..<7, id: \.self) { row in
                 Text(weekdays[row]).font(InterfaceTypography.english(11)).foregroundColor(Theme.homeLabel)
-                    .frame(width: 16, height: cell)
-                    .offset(x: 0, y: CGFloat(row) * step)
+                    .frame(width: 14, height: cell)
+                    .offset(y: CGFloat(row) * rowStep)
                 // A hatched leading edge marks the cropped range, not extra usage data.
                 Path { path in
                     for y in stride(from: -cell, through: cell, by: 5) {
-                        path.move(to: CGPoint(x: 0, y: y + 10))
-                        path.addLine(to: CGPoint(x: 10, y: y))
+                        path.move(to: CGPoint(x: 0, y: y + hatchWidth))
+                        path.addLine(to: CGPoint(x: hatchWidth, y: y))
                     }
                 }
                 .stroke(Theme.border.opacity(0.6), lineWidth: 1)
-                .frame(width: 10, height: cell).clipped()
-                .offset(x: 19, y: CGFloat(row) * step)
+                .frame(width: hatchWidth, height: cell).clipped()
+                .offset(x: 16, y: CGFloat(row) * rowStep)
                 .accessibilityHidden(true)
             }
             ForEach(0..<weeks, id: \.self) { column in
                 let weekStart = calendar.date(byAdding: .day, value: 7 * column, to: first) ?? first
-                let x = dayColumn + CGFloat(column) * step
+                let x = dayColumn + CGFloat(column) * columnStep
                 let revealStart = DashboardMotion.columnStart(column, weeks: weeks)
                 ForEach(0..<7, id: \.self) { row in
                     let date = calendar.date(byAdding: .day, value: row, to: weekStart) ?? weekStart
@@ -468,25 +476,29 @@ struct ActivityCard: View {
                             outlinedCell.accessibilityHidden(true)
                         }
                     }
-                    .offset(x: x, y: CGFloat(row) * step)
+                    .offset(x: x, y: CGFloat(row) * rowStep)
                 }
                 if let label = monthLabel(weekStart: weekStart, calendar: calendar, first: column == 0) {
                     InterfaceTypography.text(label, size: 11).foregroundColor(Theme.homeLabel)
                         .fixedSize()
-                        .offset(x: max(dayColumn, min(x, width - 56)), y: 7 * step + 2)
+                        .offset(x: max(dayColumn, min(x, width - 56)), y: navigationY + 2)
                 }
             }
             HStack {
-                Button { weekOffset -= weeks } label: { Image(systemName: "chevron.left").frame(width: 18, height: 18) }
+                Button { weekOffset -= weeks } label: {
+                    Image(systemName: "chevron.left").frame(width: navigationHeight, height: navigationHeight)
+                }
                     .disabled(earliest.map { first <= $0 } ?? true)
                     .help(L10n.text("较早的活动"))
                 Spacer()
-                Button { weekOffset = min(0, weekOffset + weeks) } label: { Image(systemName: "chevron.right").frame(width: 18, height: 18) }
+                Button { weekOffset = min(0, weekOffset + weeks) } label: {
+                    Image(systemName: "chevron.right").frame(width: navigationHeight, height: navigationHeight)
+                }
                     .disabled(weekOffset >= 0)
                     .help(L10n.text("较新的活动"))
             }
             .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.homeLabel).buttonStyle(.plain)
-            .offset(y: 7 * step)
+            .offset(y: navigationY)
         }
     }
 
