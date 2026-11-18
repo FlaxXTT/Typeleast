@@ -184,9 +184,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // A demo recording shows only the voice bar over another app.
         if recorder.demoPCM != nil { return false }
-        if settings.needsPractice { showOnboarding(); return true }
         hub.show()
-        return true
+        return false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
