@@ -28,8 +28,12 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     func show(page: HubPage? = nil) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
+        let opening = window?.isVisible != true || NSApp.isHidden
+        let restoring = window?.isMiniaturized == true
         if let page = page { model.navigate(to: page) }
-        model.homePresentationID &+= 1
+        if opening && !restoring && model.page == .home && page != .settings {
+            model.homePresentationID &+= 1
+        }
         if window == nil { window = makeWindow() }
         model.refreshPermissions()
         NSApp.activate(ignoringOtherApps: true)
@@ -71,7 +75,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidDeminiaturize(_ notification: Notification) {
-        model.homePresentationID &+= 1
+        if model.page == .home { model.homePresentationID &+= 1 }
     }
 }
 
