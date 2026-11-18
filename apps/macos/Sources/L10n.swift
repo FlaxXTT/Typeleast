@@ -3,6 +3,7 @@ import Foundation
 /// UI language is fixed for this process. Saving a preference takes effect on restart.
 /// Chinese source text is the stable lookup key; dynamic content is passed separately.
 enum L10n {
+    static let settingTitle = "Setting"
     static let preferenceKey = "ui.language"
     static let choices = ["system", "zh-Hans", "en"]
     static func normalized(_ preference: String?) -> String {

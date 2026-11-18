@@ -58,11 +58,8 @@ struct TranslationSunset: View {
         .contentShape(Rectangle())
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: pressed)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovering)
-        .onHover { inside in
-            guard hovering != inside else { return }
-            hovering = inside
-            hoverChanged(inside)
-        }
+        .transientHover($hovering)
+        .onChange(of: hovering) { _, inside in hoverChanged(inside) }
         .onDisappear { if hovering { hoverChanged(false) } }
     }
 }

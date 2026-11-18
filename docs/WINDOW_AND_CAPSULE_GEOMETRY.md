@@ -7,19 +7,19 @@ the user cannot drag a resize edge or zoom the main window.
 
 | Window | Size |
 | --- | --- |
-| Main | 988 × 685 |
+| Main | 944 × 656 |
 | Transparent recording carrier | 750 × 500 |
 | First-run setup | 940 × 610 |
-| Settings dialog | 940 × 652 |
+| Settings dialog | 900 × 624 |
 | Prompt questions, recognition/quantity review, update progress and result/advice panels | 350 × 500 |
 
 The first-run setup uses the supplied login-window footprint. The main window's
-minimum and maximum frame sizes are both 988×685. A separate frame-save key
+minimum and maximum frame sizes are both 944×656. A separate frame-save key
 prevents restoration of the previous window size.
 
-Titled windows retain the native zoom traffic light, shown grey and disabled.
-Equal minimum and maximum frame sizes prevent resizing; the Window menu keeps
-Zoom visible and disabled too. The main window has an explicit 44pt native drag
+Fixed windows omit the AppKit resizable style and set equal frame limits.
+Titled windows show a disabled native zoom control. The Window menu also shows
+Zoom as disabled. The main window has an explicit 44pt native drag
 strip across its top and a second drag target over the sidebar brand row. These
 regions retain the normal arrow and use AppKit window dragging. The strip excludes
 the native traffic lights. The fixed bottom-right corner shows a grey diagonal

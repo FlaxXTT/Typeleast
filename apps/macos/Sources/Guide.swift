@@ -71,7 +71,7 @@ struct MirrorHint: View {
     @EnvironmentObject var model: AppModel
     /// Downloads again (with the mirror now saved in the settings).
     let retry: () -> Void
-    @State private var copied = false
+    @State private var copyFeedback: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -80,10 +80,10 @@ struct MirrorHint: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Text(ModelMirror.suggested).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
-                Button(copied ? L10n.text("已复制") : L10n.text("复制")) {
+                Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(ModelMirror.suggested, forType: .string)
-                    copied = true
+                    copyFeedback = UUID()
                 }.buttonStyle(SecondaryButtonStyle())
                 Button(L10n.text("用镜像重试")) {
                     model.setting(\.modelMirror).wrappedValue = ModelMirror.suggested
@@ -92,6 +92,7 @@ struct MirrorHint: View {
             }
         }
         .padding(12)
+        .resetCopyFeedback($copyFeedback)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.warning.opacity(0.10)))
     }

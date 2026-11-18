@@ -15,7 +15,7 @@ enum HubPage: String, CaseIterable, Identifiable {
         case .home: return L10n.text("首页")
         case .history: return L10n.text("历史")
         case .meetings: return L10n.text("会议")
-        case .settings: return L10n.text("设置")
+        case .settings: return L10n.settingTitle
         }
     }
 

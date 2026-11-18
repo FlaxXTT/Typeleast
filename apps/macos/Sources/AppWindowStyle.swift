@@ -3,21 +3,34 @@ import SwiftUI
 
 /// Rounded native surfaces use the panel radius; the voice capsule has its own geometry.
 enum AppWindowStyle {
+    private static let disabledZoomID = NSUserInterfaceItemIdentifier("typeleast.disabledZoom")
+
     static func fixSize(_ window: NSWindow, to size: NSSize) {
-        // AppKit needs this style to retain the native zoom traffic light.
-        // Equal size limits still prevent edge resizing and system tiling.
-        if window.styleMask.contains(.titled) { window.styleMask.insert(.resizable) }
+        window.styleMask.remove(.resizable)
         window.minSize = size
         window.maxSize = size
         window.setFrame(NSRect(origin: window.frame.origin, size: size), display: false)
-        disableZoom(window)
     }
 
-    private static func disableZoom(_ window: NSWindow) {
-        guard let button = window.standardWindowButton(.zoomButton) else { return }
+    private static func fixedZoomButton(for window: NSWindow, in frame: NSView) -> NSButton? {
+        let placeholder = frame.subviews.first(where: { $0.identifier == disabledZoomID }) as? NSButton
+        let button: NSButton
+        if let native = window.standardWindowButton(.zoomButton) {
+            if let placeholder, placeholder !== native { placeholder.removeFromSuperview() }
+            button = native
+        } else if let placeholder {
+            button = placeholder
+        } else {
+            guard window.styleMask.contains(.titled),
+                  let native = NSWindow.standardWindowButton(.zoomButton, for: window.styleMask.union(.resizable))
+            else { return nil }
+            button = native
+            button.identifier = disabledZoomID
+        }
         button.isHidden = false
         button.isTransparent = false
         button.isEnabled = false
+        return button
     }
 
     static func round(_ window: NSWindow, radius: CGFloat = Theme.panelRadius) {
@@ -33,7 +46,10 @@ enum AppWindowStyle {
         }
         if window.sheetParent == nil, let content = window.contentView, let frame = content.superview {
             for (index, type) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
-                if let button = window.standardWindowButton(type) {
+                let button = type == .zoomButton && window.minSize == window.maxSize
+                    ? fixedZoomButton(for: window, in: frame)
+                    : window.standardWindowButton(type)
+                if let button {
                     let rect = NSRect(x: 14 + CGFloat(index) * 20,
                                       y: content.isFlipped ? 14 : content.bounds.maxY - 28,
                                       width: 14, height: 14)
@@ -47,7 +63,6 @@ enum AppWindowStyle {
                 }
             }
         }
-        if window.minSize == window.maxSize { disableZoom(window) }
     }
 }
 

@@ -18,7 +18,7 @@ final class MainMenu: NSObject {
         app.addItem(withTitle: L10n.text("关于 TypeLeast"),
                     action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(own(L10n.text("设置…"), #selector(onSettings), ","))
+        app.addItem(own(L10n.settingTitle + "…", #selector(onSettings), ","))
         app.addItem(own(L10n.text("检查更新…"), #selector(onCheckForUpdates), ""))
         app.addItem(.separator())
         app.addItem(withTitle: L10n.text("隐藏 TypeLeast"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")

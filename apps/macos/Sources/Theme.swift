@@ -79,6 +79,20 @@ enum Theme {
                        dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(referenceColour(0x426AF6), hex(0x6E8BF5))]
 }
 
+struct InitialHeading: View {
+    let title: String
+    let initialSize: CGFloat
+    let bodySize: CGFloat
+
+    var body: some View {
+        let initial = Text(String(title.prefix(1))).font(.custom("Prompt-Medium", size: initialSize))
+        let rest = Text(String(title.dropFirst())).font(.custom("Prompt-Medium", size: bodySize))
+        Text("\(initial)\(rest)")
+            .tracking(-0.6)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 /// Common pointer and press feedback for native-style controls.
 extension View {
     func capsuleInput() -> some View {
@@ -99,16 +113,6 @@ struct CapsuleTextEditor: View {
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
             .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))
     }
-}
-
-struct HoverInteraction: ViewModifier {
-    func body(content: Content) -> some View {
-        content.modifier(ControlMotion())
-    }
-}
-
-extension View {
-    func hoverInteraction() -> some View { modifier(HoverInteraction()) }
 }
 
 /// A rounded, softly filled container.
@@ -175,9 +179,9 @@ struct IconButton: View {
                 .foregroundColor(role == .destructive && hovering ? .red : Theme.secondary)
                 .frame(width: size, height: size)
         }
-        .buttonStyle(MotionIconButtonStyle())
+        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
         .help(help)
-        .onHover { hovering = $0 }
+        .transientHover($hovering)
     }
 }
 

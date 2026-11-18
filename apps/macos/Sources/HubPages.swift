@@ -141,7 +141,7 @@ private struct ShortcutReferenceCard: View {
                 Button(L10n.text("设置快捷键")) {
                     model.settingsCategory = 0
                     model.navigate(to: .settings)
-                }.buttonStyle(.plain).font(Theme.rowFont).foregroundColor(Theme.accent)
+                }.buttonStyle(FlatActionButtonStyle()).font(Theme.rowFont).foregroundColor(Theme.accent)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -201,8 +201,7 @@ private struct HomeVersionFooter: View {
                     .padding(.vertical, 4)
                     .contentShape(Rectangle())
             }
-                .buttonStyle(.plain).font(Theme.rowFont).foregroundColor(Theme.secondary)
-                .hoverInteraction()
+                .buttonStyle(FlatActionButtonStyle()).font(Theme.rowFont).foregroundColor(Theme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -305,7 +304,7 @@ private struct RecentCard: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundColor(hoveringAll ? Theme.accent : Theme.secondary)
-                        .onHover { hoveringAll = $0 }
+                        .transientHover($hoveringAll)
                 }
             }
             if model.history.isEmpty {
@@ -346,7 +345,7 @@ private struct EngineCard: View {
                 Button(L10n.text("管理模型")) {
                     model.settingsCategory = 1
                     model.navigate(to: .settings)
-                }.buttonStyle(.plain).font(.system(size: 12)).foregroundColor(Theme.accent).hoverInteraction()
+                }.buttonStyle(FlatActionButtonStyle()).font(.system(size: 12)).foregroundColor(Theme.accent)
             }
             .padding(20).frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
@@ -558,7 +557,8 @@ struct HistoryRow: View {
     @FocusState private var keyboardFocused: Bool
     @State private var hovering = false
     @State private var expanded = false
-    @State private var copied = false
+    @State private var copyFeedback: UUID?
+    private var copied: Bool { copyFeedback != nil }
     @State private var retryAvailable = false
 
     private var canRetry: Bool {
@@ -652,9 +652,10 @@ struct HistoryRow: View {
         .background(selected ? Theme.selection : hovering ? Theme.cardHover : Color.clear)
         .help(AppNames.name(for: entry.app))
         .focusable(!compact).focused($keyboardFocused)
-        .onHover { hovering = $0 }
+        .transientHover($hovering)
         .onTapGesture { selectOrExpand() }
         .onSubmit { selectOrExpand() }
+        .resetCopyFeedback($copyFeedback)
         .contextMenu {
             Button(L10n.text("复制")) { copy(raw: false) }
             Button(L10n.text("复制原话")) { copy(raw: true) }
@@ -673,8 +674,7 @@ struct HistoryRow: View {
 
     private func copy(raw: Bool) {
         model.actions?.copyEntry(id: entry.id, raw: raw)
-        copied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+        copyFeedback = UUID()
     }
 
     private func selectOrExpand() {
@@ -693,7 +693,7 @@ private struct HistoryDetail: View {
     @EnvironmentObject var model: AppModel
     let entry: LocalHistoryEntry
     let close: () -> Void
-    @State private var copied = false
+    @State private var copyFeedback: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -721,10 +721,9 @@ private struct HistoryDetail: View {
             }
             Divider().overlay(Theme.border)
             HStack {
-                Button(copied ? L10n.text("已复制") : L10n.text("复制")) {
+                Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
                     model.actions?.copyEntry(id: entry.id, raw: false)
-                    copied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+                    copyFeedback = UUID()
                 }.buttonStyle(PrimaryButtonStyle())
                 Spacer()
                 IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) {
@@ -734,6 +733,7 @@ private struct HistoryDetail: View {
         }
         .foregroundColor(Theme.ink)
         .background(RoundedWindowMarker())
+        .resetCopyFeedback($copyFeedback)
         .onExitCommand(perform: close)
     }
 

@@ -6,7 +6,7 @@ import Combine
 // sidebar (Home, History; Settings at the bottom left) and one page.
 
 final class HubWindowController: NSObject, NSWindowDelegate {
-    fileprivate static let size = NSSize(width: 988, height: 685)
+    fileprivate static let size = NSSize(width: 944, height: 656)
     private var window: NSWindow?
     private let settingsWindow: SettingsWindowController
     private var settingsPresentation: AnyCancellable?
@@ -71,13 +71,13 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
         AppWindowStyle.fixSize(window, to: Self.size)
         window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.center()
         // Keep this frame record separate from the old resizable window.
-        window.setFrameAutosaveName("typeleast.hub.988x685")
+        window.setFrameAutosaveName("typeleast.hub.944x656")
         window.delegate = self
         AppWindowStyle.round(window)
         return window
@@ -170,7 +170,7 @@ private struct Sidebar: View {
                 .frame(height: 36)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.cardHover))
             }
-            .buttonStyle(.plain).hoverInteraction()
+            .buttonStyle(FlatActionButtonStyle())
             .keyboardShortcut("k", modifiers: .command)
             .padding(.bottom, 12)
             .disabled(model.settings.needsPractice)
@@ -196,10 +196,10 @@ private struct Sidebar: View {
                     }
                     .frame(minHeight: 32)
                 }
-                .buttonStyle(.plain).foregroundColor(Theme.secondary).hoverInteraction()
+                .buttonStyle(FlatActionButtonStyle()).foregroundColor(Theme.secondary)
                 .help(L10n.text("联系我们"))
                 Spacer(minLength: 0)
-                IconButton(symbol: "gearshape", help: L10n.text("设置"), size: 32) { model.navigate(to: .settings) }
+                IconButton(symbol: "gearshape", help: L10n.settingTitle, size: 32) { model.navigate(to: .settings) }
                     .background(RoundedRectangle(cornerRadius: Theme.radius)
                         .fill(model.settingsPresented ? Theme.selection : Color.clear))
                 IconButton(symbol: "questionmark.circle", help: L10n.text("帮助"), size: 32) {
@@ -242,7 +242,7 @@ private struct SidebarItem: View {
         }
         .buttonStyle(.plain)
         .animation(reduceMotion ? nil : Theme.fast, value: hovering)
-        .onHover { hovering = $0 }
+        .transientHover($hovering)
     }
 }
 
@@ -272,16 +272,14 @@ private struct ServiceBadge: View {
             Spacer()
             if model.modelsMissing {
                 Button(L10n.text("下载模型")) { model.actions?.downloadModels() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(FlatActionButtonStyle())
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Theme.ink)
-                    .hoverInteraction()
             } else if !model.serviceUp && !model.modelsDownloading {
                 Button(L10n.text("重启")) { model.actions?.restartService() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(FlatActionButtonStyle())
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Theme.ink)
-                    .hoverInteraction()
             }
         }
         .padding(.horizontal, 10)
@@ -329,7 +327,7 @@ struct SidebarModes: View {
             Button { model.actions?.startAssistant() } label: {
                 Label(L10n.text("提示词模式"), systemImage:"text.bubble")
                     .font(.system(size: 14,weight:.medium)).padding(10)
-            }.buttonStyle(.plain).hoverInteraction()
+            }.buttonStyle(FlatActionButtonStyle())
         }
         .disabled(model.phase != .idle)
         .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
@@ -351,7 +349,7 @@ struct FlexibleSegment: View {
                 .padding(.horizontal, 4)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(selected ? Theme.selection : Color.clear))
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain).hoverInteraction()
+        }.buttonStyle(FlatActionButtonStyle())
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

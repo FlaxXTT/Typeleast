@@ -37,12 +37,12 @@ struct InsightsPanel: View {
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Insight").font(Theme.titleFont).tracking(-0.6)
+                InitialHeading(title: "Insight", initialSize: 50, bodySize: 29)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
-            .frame(height: 44)
+            .frame(height: 52)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible())], spacing: 16) {
                 Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, compact: compact)
                 Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed, compact: compact,
@@ -243,51 +243,64 @@ final class HomeDotGridView: NSView {
 struct ShareButton: NSViewRepresentable {
     let items: [Any]
 
-    func makeNSView(context: Context) -> NSButton {
-        let button = HoverShareButton(title: " " + L10n.text("分享"), image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil) ?? NSImage(),
+    func makeNSView(context: Context) -> HoverShareButton {
+        let button = HoverShareButton(title: L10n.text("分享"), image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil) ?? NSImage(),
                               target: context.coordinator, action: #selector(Coordinator.share(_:)))
+        button.setButtonType(.momentaryChange)
         button.imagePosition = .imageLeading
-        button.bezelStyle = .rounded
         button.isBordered = false
         button.font = .systemFont(ofSize: 16, weight: .medium)
         button.image = button.image?.withSymbolConfiguration(.init(pointSize: 17, weight: .regular))
         button.wantsLayer = true
-        button.layer?.cornerRadius = 20 // 40-point capsule
-        button.layer?.borderWidth = 0.5
-        button.updateSurface()
         button.controlSize = .regular
         button.toolTip = L10n.text("分享官网和 GitHub 链接")
         return button
     }
 
-    func updateNSView(_ nsView: NSButton, context: Context) {
+    func updateNSView(_ nsView: HoverShareButton, context: Context) {
         context.coordinator.items = items
-        (nsView as? HoverShareButton)?.updateSurface()
     }
     func makeCoordinator() -> Coordinator { Coordinator(items: items) }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, NSSharingServicePickerDelegate {
         var items: [Any]
+        private var picker: NSSharingServicePicker?
+        private weak var button: HoverShareButton?
+
         init(items: [Any]) { self.items = items }
-        @objc func share(_ sender: NSButton) {
-            NSSharingServicePicker(items: items).show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+
+        @objc func share(_ sender: HoverShareButton) {
+            guard picker == nil else { return }
+            let picker = NSSharingServicePicker(items: items)
+            self.picker = picker
+            button = sender
+            sender.setPickerOpen(true)
+            picker.delegate = self
+            picker.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        }
+
+        func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
+            button?.setPickerOpen(false)
+            button = nil
+            picker = nil
         }
     }
 }
 
-private final class HoverShareButton: NSButton {
+final class HoverShareButton: NSButton {
     private var hoverTracking: NSTrackingArea?
     private var hovering = false
+    private var pickerOpen = false
     override var intrinsicContentSize: NSSize { NSSize(width: 94, height: 40) }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateSurface()
+        needsDisplay = true
     }
 
     override func updateTrackingAreas() {
         if let hoverTracking { removeTrackingArea(hoverTracking) }
-        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(tracking)
         hoverTracking = tracking
         super.updateTrackingAreas()
@@ -295,24 +308,37 @@ private final class HoverShareButton: NSButton {
 
     override func mouseEntered(with event: NSEvent) { setHovered(true) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
+    override func mouseMoved(with event: NSEvent) { setHovered(true) }
 
     private func setHovered(_ hovering: Bool) {
-        self.hovering = hovering
-        updateSurface()
+        let next = hovering && !pickerOpen
+        guard self.hovering != next else { return }
+        self.hovering = next
+        needsDisplay = true
     }
 
-    func updateSurface() {
-        contentTintColor = NSColor(Theme.ink)
-        layer?.backgroundColor = NSColor(hovering ? Theme.cardHover : Theme.tile).cgColor
-        layer?.borderColor = NSColor(Theme.border).cgColor
+    func setPickerOpen(_ open: Bool) {
+        pickerOpen = open
+        hovering = false
+        highlight(false)
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        // A borderless NSButton otherwise places its image against the leading edge.
-        // Centre the icon and title as one group inside the 94×40 capsule.
+        let capsule = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 20, yRadius: 20)
+        NSColor(Theme.tile).setFill()
+        capsule.fill()
+        let pressed = isHighlighted && !pickerOpen
+        if pressed || (hovering && window?.isKeyWindow == true) {
+            NSColor(Theme.cardHover).setFill()
+            capsule.fill()
+        }
+        NSColor(Theme.border).setStroke()
+        capsule.lineWidth = 0.5
+        capsule.stroke()
+
         let ink = NSColor(Theme.ink)
-        let label = NSAttributedString(string: title.trimmingCharacters(in: .whitespaces),
+        let label = NSAttributedString(string: title,
                                        attributes: [.font: font ?? .systemFont(ofSize: 16, weight: .medium),
                                                     .foregroundColor: ink])
         let labelSize = label.size()
@@ -322,7 +348,7 @@ private final class HoverShareButton: NSButton {
         let icon = image?.withSymbolConfiguration(.init(paletteColors: [ink]))
         icon?.draw(in: NSRect(x: x, y: bounds.midY - iconSize / 2,
                              width: iconSize, height: iconSize),
-                   from: .zero, operation: .sourceOver, fraction: isHighlighted ? 0.6 : 1,
+                   from: .zero, operation: .sourceOver, fraction: pressed ? 0.75 : 1,
                    respectFlipped: true, hints: nil)
         label.draw(at: NSPoint(x: x + iconSize + gap, y: bounds.midY - labelSize.height / 2))
     }

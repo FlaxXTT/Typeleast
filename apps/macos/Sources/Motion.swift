@@ -1,4 +1,45 @@
+import AppKit
 import SwiftUI
+
+private struct TransientHover: ViewModifier {
+    @Binding var hovering: Bool
+    @Environment(\.isEnabled) private var enabled
+
+    func body(content: Content) -> some View {
+        content
+            .onHover {
+                let next = enabled && $0
+                if hovering != next { hovering = next }
+            }
+            .onChange(of: enabled) { _, _ in reset() }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in reset() }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in reset() }
+            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in reset() }
+            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in reset() }
+            .onDisappear(perform: reset)
+    }
+
+    private func reset() {
+        if hovering { hovering = false }
+    }
+}
+
+extension View {
+    func transientHover(_ hovering: Binding<Bool>) -> some View {
+        modifier(TransientHover(hovering: hovering))
+    }
+
+    func resetCopyFeedback(_ feedback: Binding<UUID?>) -> some View {
+        let current = feedback.wrappedValue
+        return task(id: current) {
+            guard let current else { return }
+            try? await Task.sleep(for: .milliseconds(1200))
+            if !Task.isCancelled && feedback.wrappedValue == current {
+                feedback.wrappedValue = nil
+            }
+        }
+    }
+}
 
 /// Hover changes only a flat highlight; press feedback is short and does not move layout.
 struct ControlMotion: ViewModifier {
@@ -27,12 +68,12 @@ struct ControlMotion: ViewModifier {
                 }
             }
             .scaleEffect(down && !reduceMotion ? 0.98 : 1)
-            .opacity(down ? 0.90 : 1)
+            .opacity(enabled ? (down ? 0.90 : 1) : 0.48)
             .animation(reduceMotion ? nil : Theme.fast, value: down)
             .animation(reduceMotion ? nil : Theme.fast, value: active)
-            .onHover { value in
-                let next = value && enabled
-                if hovering != next { hovering = next }
+            .transientHover($hovering)
+            .onChange(of: down) { _, down in
+                if down { hovering = false }
             }
     }
 }
@@ -52,8 +93,11 @@ struct SidebarMotionIcon: View {
     }
 }
 
-struct MotionIconButtonStyle: ButtonStyle {
+struct FlatActionButtonStyle: ButtonStyle {
+    var cornerRadius: CGFloat = Theme.radius
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.smallControlRadius))
+        configuration.label
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: cornerRadius))
     }
 }
