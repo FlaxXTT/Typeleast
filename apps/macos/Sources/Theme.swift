@@ -58,12 +58,12 @@ enum Theme {
     static let sidebarWidth: CGFloat = 210
     static let spacing: CGFloat = 8
     static let halfSpacing: CGFloat = 4
-    static let titleFont = Font.custom("Prompt-Medium", size: 36)
-    static let homeTitleFont = Font.custom("Prompt-Medium", size: 48)
-    static let sectionTitleFont = Font.custom("Prompt-Medium", size: 24)
-    static let bodyFont = Font.system(size: 16)
-    static let rowFont = Font.system(size: 14)
-    static let captionFont = Font.system(size: 12)
+    static let titleFont = L10n.language == "en" ? InterfaceTypography.english(36, emphasized: true) : .custom("Prompt-Medium", size: 36)
+    static let homeTitleFont = L10n.language == "en" ? InterfaceTypography.english(48, emphasized: true) : .custom("Prompt-Medium", size: 48)
+    static let sectionTitleFont = L10n.language == "en" ? InterfaceTypography.english(24, emphasized: true) : .custom("Prompt-Medium", size: 24)
+    static let bodyFont = L10n.language == "en" ? InterfaceTypography.english(16) : .system(size: 16)
+    static let rowFont = L10n.language == "en" ? InterfaceTypography.english(14) : .system(size: 14)
+    static let captionFont = L10n.language == "en" ? InterfaceTypography.english(12) : .system(size: 12)
     static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12)
     static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
@@ -83,10 +83,11 @@ struct InitialHeading: View {
     let title: String
     let initialSize: CGFloat
     let bodySize: CGFloat
+    var typeface: (CGFloat) -> Font = { InterfaceTypography.english($0, emphasized: true) }
 
     var body: some View {
-        let initial = Text(String(title.prefix(1))).font(.custom("Prompt-Medium", size: initialSize))
-        let rest = Text(String(title.dropFirst())).font(.custom("Prompt-Medium", size: bodySize))
+        let initial = Text(String(title.prefix(1))).font(typeface(initialSize))
+        let rest = Text(String(title.dropFirst())).font(typeface(bodySize))
         Text("\(initial)\(rest)")
             .tracking(-0.6)
             .accessibilityAddTraits(.isHeader)
@@ -191,8 +192,7 @@ struct Keycap: View {
     var large = false
 
     var body: some View {
-        Text(label)
-            .font(.system(size: large ? 15 : 12, weight: .semibold, design: .rounded))
+        InterfaceTypography.text(label, size: large ? 15 : 12, weight: .semibold)
             .foregroundColor(Theme.ink)
             .padding(.horizontal, large ? 12 : 8)
             .frame(minWidth: large ? 40 : 28, minHeight: large ? 32 : 24)

@@ -162,10 +162,10 @@ struct UpdateProgressView: View {
             LoadingLinearProgress(value: stage.fraction)
             if let fraction = stage.fraction {
                 HStack {
-                    Text("\(Int(fraction * 100))%")
+                    InterfaceTypography.text("\(Int(fraction * 100))%", size: 12)
                     Spacer()
-                    if let amount = stage.amount { Text(amount) }
-                }.font(Theme.captionFont.monospacedDigit()).foregroundColor(Theme.secondary)
+                    if let amount = stage.amount { InterfaceTypography.text(amount, size: 12) }
+                }.foregroundColor(Theme.secondary)
             }
         case .ready(let version, let note):
             detail(L10n.text("TypeLeast {0} 已下载，重启后完成安装。", version))

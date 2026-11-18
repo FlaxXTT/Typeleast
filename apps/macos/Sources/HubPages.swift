@@ -131,7 +131,7 @@ private struct ShortcutReferenceCard: View {
             if binding.enabled {
                 ShortcutKeyLayout(spacing: 6) {
                     ForEach(Array(keys(binding).enumerated()), id: \.offset) { _, key in
-                        Text(key).font(.system(size: 14, weight: .semibold))
+                        InterfaceTypography.text(key, size: 14, weight: .semibold)
                             .padding(.horizontal, 8).frame(minWidth: 28, minHeight: 30)
                             .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.window))
                             .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.border, lineWidth: 1))
@@ -192,8 +192,8 @@ private struct HomeVersionFooter: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            Text(L10n.text("版本 {0}", "v" + Updater.currentVersion))
-                .font(Theme.captionFont).foregroundColor(Theme.tertiary)
+            InterfaceTypography.text(L10n.text("版本 {0}", "v" + Updater.currentVersion), size: 12)
+                .foregroundColor(Theme.tertiary)
             Button {
                 model.actions?.checkForUpdates(interactive: true)
             } label: {
@@ -360,7 +360,7 @@ private struct EngineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: symbol).font(.system(size: 11)).foregroundColor(Theme.homeLabel)
-            Text(value).font(.system(size: 14, weight: .medium))
+            InterfaceTypography.text(value, size: 14, weight: .medium)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -576,8 +576,7 @@ struct HistoryRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(Formatters.time.string(from: entry.ts))
-                .font(.system(size: 12, design: .rounded))
+            InterfaceTypography.text(Formatters.time.string(from: entry.ts), size: 12)
                 .foregroundColor(hovering ? Theme.accent : Theme.tertiary)
                 .frame(width: 52, alignment: .leading)
                 .padding(.top, 1)

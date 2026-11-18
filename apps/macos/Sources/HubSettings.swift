@@ -363,7 +363,8 @@ struct SettingsPage: View {
                 }.labelsHidden().frame(width: 220)
             }
             if let version = model.health?.version {
-                Text(L10n.text("服务版本 ") + version + " · App " + Updater.currentVersion).font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                InterfaceTypography.text(L10n.text("服务版本 ") + version + " · App " + Updater.currentVersion, size: 11)
+                    .foregroundColor(Theme.tertiary)
             }
         }
     }
