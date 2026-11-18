@@ -499,6 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     // MARK: notifications
 
     @objc func onSettingsChanged() {
+        ServiceManager.shared.setLocalASREnabled(settings.onlineASRProvider == .local)
         applyState()
     }
 
@@ -629,7 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// What to tell the user about the recogniser, or "" when it is ready.
     static func speechProblem(_ speech: SpeechStatus?) -> String {
         switch speech?.phase ?? "" {
-        case "ready": return ""
+        case "ready", "disabled": return ""
         case "missing-model": return L10n.text("请选择并安装语音模型。")
         case "downloading":
             return L10n.text("正在下载语音模型") + (speech?.downloadFraction.map { "：" + String(Int($0 * 100)) + "%" } ?? "…")
@@ -645,6 +646,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let manager = ServiceManager.shared
         manager.nodePathOverride = settings.nodePath
         manager.modelMirror = settings.modelMirror
+        manager.setLocalASREnabled(settings.onlineASRProvider == .local)
         manager.onChange = { [weak self] state in
             guard let self = self else { return }
             if !state.isRunning { self.invalidateHealthRefresh() }

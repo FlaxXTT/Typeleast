@@ -1028,6 +1028,16 @@ final class ServiceClient {
         } }
     }
 
+    func setLocalASREnabledSync(_ enabled: Bool) throws {
+        try withPortRetry { try withTokenRetry { token in
+            let body = try JSONEncoder().encode(["enabled": enabled])
+            let request = try makeRequest(path: "/api/voice-polish/models/local-asr", method: "PUT", token: token,
+                headers: ["content-type": "application/json"], body: body, timeout: healthTimeout)
+            let (data, response) = try performSync(request, timeout: healthTimeout)
+            guard response.statusCode == 200 else { throw httpError(response, data) }
+        } }
+    }
+
     func localModelActionSync(path: String, body: [String: Any]) throws -> Data {
         try withPortRetry { try withTokenRetry { token in
             let payload = try JSONSerialization.data(withJSONObject: body)

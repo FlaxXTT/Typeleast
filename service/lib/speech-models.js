@@ -41,6 +41,8 @@ export class SpeechModels {
     this.preparingId = null;
     this.closed = false;
     this.lifecycle = new AbortController();
+    this.localEnabled = options.localASREnabled !== false;
+    this.localLifecycle = new AbortController();
     this.operation = null;
     this.notice = null;
     this.beforeActivate = async () => {};
@@ -53,14 +55,18 @@ export class SpeechModels {
   prepare() {
     if (this.closed) return Promise.resolve('missing-model');
     if (this.preparing) return this.preparing;
-    this.preparing = this.enqueue(() => this.prepareSelected()).finally(() => {
-      this.preparing = null;
-      this.preparingId = null;
+    const signal = AbortSignal.any([this.lifecycle.signal, this.localLifecycle.signal]);
+    const preparing = this.enqueue(() => this.prepareSelected(signal)).finally(() => {
+      if (this.preparing === preparing) {
+        this.preparing = null;
+        this.preparingId = null;
+      }
     });
-    return this.preparing;
+    this.preparing = preparing;
+    return preparing;
   }
-  async prepareSelected() {
-    if (this.closed) return 'missing-model';
+  async prepareSelected(signal) {
+    if (signal.aborted) return 'missing-model';
     try {
       const saved = await readFile(this.registryPath, 'utf8');
       if (saved.length > 200000) throw fail('invalid-local-model', 'local model registry is too large');
@@ -81,27 +87,53 @@ export class SpeechModels {
       }
       selected = this.defaultId;
     }
+    if (signal.aborted) return 'missing-model';
+    if (!this.localEnabled) {
+      this.activeId = selected;
+      return 'disabled';
+    }
     this.preparingId = selected;
     if (selected !== this.defaultId) {
       let next;
       try {
         await this.verify(selected);
-        this.lifecycle.signal.throwIfAborted();
+        signal.throwIfAborted();
         next = this.factory(selected);
-        if (await next.prepare(this.lifecycle.signal) !== 'ready') throw fail('model-load-failed', 'speech model could not be loaded');
-        this.lifecycle.signal.throwIfAborted();
+        if (await next.prepare(signal) !== 'ready') throw fail('model-load-failed', 'speech model could not be loaded');
+        signal.throwIfAborted();
         this.current = next; this.activeId = selected;
         return 'ready';
-      } catch { await next?.release?.(); this.notice = 'saved-model-unavailable'; this.activeId = ''; return 'missing-model'; }
+      } catch {
+        await next?.release?.();
+        if (!signal.aborted) { this.notice = 'saved-model-unavailable'; this.activeId = ''; }
+        return 'missing-model';
+      }
     }
     // MLX tokenizer and weights are data, but affect every recognition result.
     // Recheck the pinned inventory before the default model is loaded on restart.
     if (this.mlxOnly) {
       try { await this.verify(this.defaultId); }
-      catch { this.notice = 'saved-model-unavailable'; this.activeId = ''; return 'missing-model'; }
+      catch {
+        if (!signal.aborted) { this.notice = 'saved-model-unavailable'; this.activeId = ''; }
+        return 'missing-model';
+      }
     }
-    if (this.closed) return 'missing-model';
-    return this.current.prepare(this.lifecycle.signal);
+    if (signal.aborted) return 'missing-model';
+    return this.current.prepare(signal);
+  }
+  setLocalEnabled(enabled) {
+    if (this.closed || this.localEnabled === enabled) return;
+    this.localEnabled = enabled;
+    this.localLifecycle.abort();
+    this.localLifecycle = new AbortController();
+    this.preparing = null;
+    this.preparingId = null;
+    if (enabled) {
+      void this.prepare();
+    } else {
+      // Let an in-flight local transcription finish before disposing of its worker.
+      void this.enqueue(() => this.current.release?.());
+    }
   }
   definition(id) {
     const model = this.local.get(id) ?? modelFor(id);
@@ -110,6 +142,7 @@ export class SpeechModels {
   }
   transcribe(audio, language, signal) { return this.enqueue(() => {
     if (this.closed) throw fail('speech-not-ready', 'speech service is closed');
+    if (!this.localEnabled) throw fail('speech-not-ready', 'local speech recognition is disabled');
     if (!this.activeId) throw fail('speech-not-ready', 'select a speech model first');
     return this.current.transcribe(audio, language, signal);
   }); }
@@ -124,8 +157,8 @@ export class SpeechModels {
     return this.meeting;
   }
   snapshot() {
+    if (!this.localEnabled) return this.describeSelection({ phase: 'disabled', ready: false }, this.activeId);
     if (!this.activeId) return { phase: 'missing-model', ready: false, modelId: '', modelName: '', languages: [], canSetLanguage: false, notice: this.notice, operation: this.operation };
-    const model = this.definition(this.preparingId ?? this.activeId);
     const state = { ...this.current.snapshot() };
     // Verification can read gigabytes before a worker even starts. Report the
     // entire startup as loading so clients keep polling after a cold reboot.
@@ -136,8 +169,12 @@ export class SpeechModels {
       } else if (['waiting','loading'].includes(this.operation.phase)) state.phase = 'loading';
       else if (this.operation.phase === 'error') { state.phase = 'error'; state.error = this.operation.error; }
     }
-    return { ...state, modelId: model.id, modelName: model.name,
-      canSetLanguage: model.canSetLanguage, modelBytes: model.modelBytes,
+    return this.describeSelection(state, this.preparingId ?? this.activeId);
+  }
+  describeSelection(state, id) {
+    const model = id ? this.definition(id) : null;
+    return { ...state, modelId: model?.id ?? '', modelName: model?.name ?? '',
+      canSetLanguage: model?.canSetLanguage ?? false, modelBytes: model?.modelBytes,
       operation: this.operation ? { ...this.operation } : null, notice: this.notice };
   }
   async catalog() {
@@ -177,6 +214,8 @@ export class SpeechModels {
     signal?.throwIfAborted();
     await this.beforeActivate(signal);
     return this.enqueue(async () => {
+      const loadSignal = AbortSignal.any([signal, this.localLifecycle.signal]);
+      const shouldLoad = this.localEnabled;
       signal?.throwIfAborted();
       await this.verify(id);
       signal?.throwIfAborted();
@@ -185,7 +224,11 @@ export class SpeechModels {
       this.candidate = next;
       const temporary = this.selectionPath + '.tmp';
       try {
-        if (await next.prepare(signal) !== 'ready') throw fail('model-load-failed', 'speech model could not be loaded');
+        if (shouldLoad) {
+          loadSignal.throwIfAborted();
+          if (await next.prepare(loadSignal) !== 'ready') throw fail('model-load-failed', 'speech model could not be loaded');
+          loadSignal.throwIfAborted();
+        }
         signal?.throwIfAborted();
         // Persist only after successful loading. A disk failure leaves the old selection running.
         await mkdir(dirname(this.selectionPath), { recursive: true });

@@ -50,7 +50,10 @@ export async function startService(options = {}) {
   // Versions up to 1.17.8 kept a history of digests and a copy of the dictionary here;
   // the apps own the history now, so the leftovers are removed.
   for (const leftover of ["history.jsonl", "dictionary.json"]) await rm(join(stateDir, leftover), { force: true }).catch(() => {});
-  const recognizer = options.recognizer ?? new SpeechModels({ modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads, language: config.language, logger });
+  const recognizer = options.recognizer ?? new SpeechModels({
+    modelsDir, selectionPath: join(stateDir, "speech-model.json"), numThreads: config.numThreads,
+    language: config.language, logger, localASREnabled: options.localASREnabled,
+  });
   const service = new VoicePolishService({
     recognizer,
     config,

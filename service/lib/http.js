@@ -144,7 +144,7 @@ export function createHandler(options) {
       if (route === "/health" && req.method === "GET") {
         const state = service.snapshot();
         reply(res, 200, {
-          ok: state.speech.ready,
+          ok: state.speech.ready || state.speech.phase === "disabled",
           service: "typeleast",
           version: state.version,
           provider: state.provider,
@@ -201,6 +201,16 @@ export function createHandler(options) {
 
       if (route === "/models" && req.method === "GET") {
         reply(res, 200, await service.recognizer.catalog());
+        return;
+      }
+      if (route === "/models/local-asr" && req.method === "PUT") {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8"));
+        if (typeof body?.enabled !== "boolean") {
+          reply(res, 400, { error: "enabled must be a boolean", code: "invalid-model" });
+          return;
+        }
+        service.recognizer.setLocalEnabled(body.enabled);
+        reply(res, 200, { ok: true });
         return;
       }
       if (route === '/models/storage/delete' && req.method === 'POST') {

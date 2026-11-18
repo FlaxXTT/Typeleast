@@ -29,6 +29,7 @@ const { values } = parseArgs({
     "parent-pid": { type: "string" },
     "auth-stdin": { type: "boolean" },
     "secure-transport": { type: "boolean" },
+    "no-local-asr": { type: "boolean" },
   },
   allowPositionals: false,
 });
@@ -63,6 +64,7 @@ try {
     port,
     proofKey,
     secureTransport: values["secure-transport"] === true,
+    localASREnabled: !values["no-local-asr"],
     logger: stderrLogger,
   });
 } catch (error) {
