@@ -88,6 +88,7 @@ struct OnboardingView: View {
             footer.padding(.horizontal, 40).padding(.bottom, 28)
         }
         .frame(width: 940, height: 610)
+        .font(Theme.bodyFont)
         .background(Theme.window)
         .onReceive(poll) { _ in
             if step == .microphone || step == .accessibility { model.refreshPermissions() }
@@ -113,7 +114,7 @@ struct OnboardingView: View {
                      text: L10n.text("在任何 App 里按 Fn 说话，再按一下结束。文字写到光标处。")) {
                 VStack(spacing: 14) {
                     AppMarkView(size: 72)
-                    Text(L10n.text("遇到简称或专名，可补充全称、含义或逐字拼写。听写会结合整段理解，删除只用于确认名称的解释。")).font(.callout).foregroundColor(.secondary)
+                    Text(L10n.text("遇到简称或专名，可补充全称、含义或逐字拼写。听写会结合整段理解，删除只用于确认名称的解释。")).font(Theme.rowFont).foregroundColor(.secondary)
                 }
             }
         case .localService:
@@ -169,7 +170,7 @@ struct OnboardingView: View {
                 VStack(spacing: 14) {
                     LevelBars(level: meter.level, count: 18).scaleEffect(1.3)
                     Text(meter.heardVoice ? L10n.text("听到了 ✓") : (meter.running ? L10n.text("等待说话…") : L10n.text("麦克风未打开")))
-                        .font(.system(size: 14, weight: .medium))
+                        .font(InterfaceTypography.localized(14, weight: .medium))
                         .foregroundColor(meter.heardVoice ? Theme.success : Theme.secondary)
                     Button(meter.running ? L10n.text("停止测试") : L10n.text("开始测试")) {
                         if meter.running { meter.stop() } else { meter.start(deviceUID: model.settings.inputDeviceUID) }
@@ -190,7 +191,7 @@ struct OnboardingView: View {
                 VStack(spacing: 14) {
                     if !model.assistantLabel.isEmpty { Keycap(label: model.assistantLabel, large: true) }
                     Text(L10n.text("先选中一段文字再按这个键，就以选中内容为底稿修改。按翻译键则直接翻译选中内容。"))
-                        .font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                        .font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("拆解一段示例提示词")) { model.actions?.breakdownSample() }
                         .buttonStyle(SecondaryButtonStyle()).disabled(!model.llmConfigured)
@@ -213,11 +214,11 @@ struct OnboardingView: View {
     private func permissionState(granted: Bool, denied: Bool, ask: @escaping () -> Void, open: (() -> Void)?) -> some View {
         if granted {
             Label(L10n.text("已允许"), systemImage: "checkmark.circle.fill")
-                .font(.system(size: 14, weight: .semibold))
+                .font(InterfaceTypography.localized(14, weight: .semibold))
                 .foregroundColor(Theme.success)
         } else if denied, let open = open {
             VStack(spacing: 8) {
-                Text(L10n.text("之前已拒绝，请在系统设置里打开。")).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(L10n.text("之前已拒绝，请在系统设置里打开。")).font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
                 Button(L10n.text("打开系统设置"), action: open).buttonStyle(PrimaryButtonStyle())
             }
         } else {
@@ -286,7 +287,7 @@ private struct StepView<Accessory: View>: View {
             }
             Text(title).font(Theme.sectionTitleFont).multilineTextAlignment(.center)
             Text(text)
-                .font(.system(size: 14))
+                .font(InterfaceTypography.localized(14))
                 .foregroundColor(Theme.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -308,8 +309,8 @@ private struct OnboardingCheck<Trailing: View>: View {
                 .font(.system(size: 16))
                 .foregroundColor(done ? Theme.success : Theme.tertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .medium))
-                Text(detail).font(.system(size: 12)).foregroundColor(Theme.secondary)
+                Text(title).font(InterfaceTypography.localized(14, weight: .medium))
+                Text(detail).font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
@@ -327,21 +328,21 @@ private struct TranslatePracticeView: View {
         VStack(spacing: 16) {
             Text(L10n.text("说中文，写成其他语言")).font(Theme.sectionTitleFont)
             Text(L10n.text("平时按 {0} 翻译。现在选一种语言，读下面这句试试。", HotKeyCentre.describe(keyCode: model.settings.hotkeyTranslate.keyCode, modifiers: model.settings.hotkeyTranslate.modifiers)))
-                .font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                .font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
             Picker("", selection: model.setting(\.translateTarget)) {
                 ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
             }.labelsHidden().frame(width: 180).disabled(practice.busy)
             Text(practice.translateSample)
-                .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center)
+                .font(InterfaceTypography.localized(15, weight: .medium)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 12)
                 .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
             Button(practice.phase == .recording ? L10n.text("停止并翻译") : L10n.text("开始录音")) { practice.toggle() }
                 .buttonStyle(PrimaryButtonStyle()).disabled(practice.phase == .thinking)
             if !practice.status.isEmpty {
-                Text(practice.status).font(.system(size: 14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
+                Text(practice.status).font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
             }
             if !practice.output.isEmpty {
-                Text(practice.output).font(.system(size: 14)).textSelection(.enabled)
+                Text(practice.output).font(InterfaceTypography.localized(14)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                     .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
             }

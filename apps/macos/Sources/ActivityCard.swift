@@ -4,8 +4,10 @@ import QuartzCore
 
 /// A single elapsed-time animation drives the readouts and week columns.
 private enum DashboardMotion {
+    static let focusDuration = 0.280
+    static let countDelay = 0.180
     static let countDuration = 0.250
-    static let gridDelay = 0.400
+    static let gridDelay = 0.480
     static let columnDuration = 0.300
     static let columnStagger = 0.028
     static let maximumWave = 0.520
@@ -25,10 +27,47 @@ private enum DashboardMotion {
     }
 }
 
-struct InsightsPanel: View {
-    @EnvironmentObject var model: AppModel
+struct DashboardEntrance<Content: View>: View {
+    @ViewBuilder let content: (Double) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var elapsed: Double = 0
+
+    var body: some View {
+        let time = reduceMotion ? DashboardMotion.duration : elapsed
+        content(time)
+            .background(Theme.window)
+            .modifier(DashboardFocus(elapsed: time))
+            .task(id: reduceMotion) {
+                if reduceMotion {
+                    elapsed = DashboardMotion.duration
+                    return
+                }
+                // Present the initial blurred frame before animating the timeline.
+                try? await Task.sleep(for: .milliseconds(60))
+                guard !Task.isCancelled, elapsed == 0 else { return }
+                withAnimation(.linear(duration: DashboardMotion.duration)) {
+                    elapsed = DashboardMotion.duration
+                }
+            }
+    }
+}
+
+private struct DashboardFocus: AnimatableModifier {
+    var elapsed: Double
+    var animatableData: Double {
+        get { elapsed }
+        set { elapsed = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let remaining = 1 - DashboardMotion.ease(elapsed / DashboardMotion.focusDuration)
+        content.blur(radius: 8 * remaining, opaque: true)
+    }
+}
+
+struct InsightsPanel: View {
+    @EnvironmentObject var model: AppModel
+    let elapsed: Double
 
     static let shareText = "TypeLeast · https://typeleast.promptking.workers.dev · https://github.com/FlaxXTT/Typeleast"
     static let shareItems: [Any] = [shareText, URL(string: "https://typeleast.promptking.workers.dev")!, URL(string: "https://github.com/FlaxXTT/Typeleast")!]
@@ -49,7 +88,7 @@ struct InsightsPanel: View {
                 HStack {
                     InitialHeading(title: "INSIGHT", initialSize: Theme.homeHeadingSize,
                                    bodySize: Theme.homeHeadingSize * Theme.homeRatio,
-                                   typeface: InterfaceTypography.sackers, tracking: 1.8)
+                                   weight: .light, tracking: 1.8)
                         .foregroundColor(Theme.homeLabel)
                         .accessibilityLabel("Insight")
                     Spacer()
@@ -57,34 +96,18 @@ struct InsightsPanel: View {
                 }
                 .frame(height: headerHeight)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: tileGap), GridItem(.flexible())], spacing: tileGap) {
-                    Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed, height: tileHeight)
-                    Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed,
+                    Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: elapsed, height: tileHeight)
+                    Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: elapsed,
                            height: tileHeight, unavailable: timingUnavailable, note: timingNote)
                     Figure(parts: [InsightPart(value: Double(stats.wordsPerMinute), unit: L10n.text("每分钟字数"))],
-                           label: L10n.text("平均口述速度"), elapsed: displayedElapsed, height: tileHeight,
+                           label: L10n.text("平均口述速度"), elapsed: elapsed, height: tileHeight,
                            unavailable: timingUnavailable, note: timingNote)
-                    Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: displayedElapsed,
+                    Figure(parts: Self.duration(stats.speakingSeconds), label: L10n.text("总口述时间"), elapsed: elapsed,
                            height: tileHeight, unavailable: timingUnavailable, note: timingNote)
                 }
-                ActivityCard(elapsed: displayedElapsed).frame(height: activityHeight)
+                ActivityCard(elapsed: elapsed).frame(height: activityHeight)
             }
         }
-        .task(id: reduceMotion) {
-            if reduceMotion {
-                elapsed = DashboardMotion.duration
-                return
-            }
-            // Leave time for the initial zero values and outlined grid to render.
-            try? await Task.sleep(for: .milliseconds(60))
-            guard !Task.isCancelled, elapsed == 0 else { return }
-            withAnimation(.linear(duration: DashboardMotion.duration)) {
-                elapsed = DashboardMotion.duration
-            }
-        }
-    }
-
-    private var displayedElapsed: Double {
-        reduceMotion ? DashboardMotion.duration : elapsed
     }
 
     /// The reference uses K in both languages. Units stay fixed during count-up.
@@ -135,12 +158,13 @@ private struct CountingNumber: View, Animatable {
     }
 
     var body: some View {
-        let progress = DashboardMotion.ease(elapsed / DashboardMotion.countDuration)
-        InterfaceTypography.text(part.widthSample, size: size, weight: .semibold).hidden()
+        let progress = DashboardMotion.ease((elapsed - DashboardMotion.countDelay) / DashboardMotion.countDuration)
+        Text(part.widthSample).hidden()
             .overlay(alignment: .trailing) {
-                InterfaceTypography.text(part.string(at: progress), size: size, weight: .semibold)
+                Text(part.string(at: progress))
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
+            .font(InterfaceTypography.figure(size))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(part.string(at: 1))
     }
@@ -357,7 +381,7 @@ final class HoverShareButton: NSButton {
 
         let ink = NSColor(Theme.ink)
         let label = NSAttributedString(string: title,
-                                       attributes: [.font: font ?? .systemFont(ofSize: 16, weight: .medium),
+                                       attributes: [.font: font ?? InterfaceTypography.localizedAppKit(16, weight: .medium),
                                                     .foregroundColor: ink])
         let labelSize = label.size()
         let iconSize: CGFloat = 18
@@ -449,7 +473,7 @@ struct ActivityCard: View {
         let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
         return ZStack(alignment: .topLeading) {
             ForEach(0..<7, id: \.self) { row in
-                Text(weekdays[row]).font(InterfaceTypography.english(11)).foregroundColor(Theme.homeLabel)
+                Text(weekdays[row]).font(InterfaceTypography.localized(11)).foregroundColor(Theme.homeLabel)
                     .frame(width: 14, height: cell)
                     .offset(y: CGFloat(row) * rowStep)
                 // A hatched leading edge marks the cropped range, not extra usage data.

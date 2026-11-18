@@ -178,7 +178,7 @@ final class IdleBarView: NSView {
         }
         if let countdown, bounds.width >= 100 {
             (countdown as NSString).draw(in: NSRect(x: bounds.maxX - 38, y: bounds.midY - 7, width: 32, height: 14),
-                                        withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
+                                        withAttributes: [.font: InterfaceTypography.localizedAppKit(10, weight: .medium),
                                                          .foregroundColor: VoiceBarPalette.ink.withAlphaComponent(opacityProgress)])
         }
     }

@@ -113,26 +113,9 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 struct HubRootView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showsCommands = false
-    @State private var pendingCommand: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 0) {
-            Sidebar(showsCommands: $showsCommands)
-                .frame(width: Theme.sidebarWidth - 8)
-                .background(RoundedRectangle(cornerRadius: Theme.sidebarRadius).fill(Theme.sidebar))
-                .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
-            ZStack {
-                Theme.window
-                switch model.page {
-                case .home: HomePage()
-                case .history: HistoryPage()
-                case .meetings: MeetingsPage().environmentObject(model.meeting)
-                case .settings: HomePage()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        pageLayout
         .frame(width: HubWindowController.size.width, height: HubWindowController.size.height)
         .background(Theme.window)
         .font(Theme.bodyFont)
@@ -149,52 +132,54 @@ struct HubRootView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
         .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
-        .sheet(isPresented: $showsCommands, onDismiss: {
-            let action = pendingCommand
-            pendingCommand = nil
-            action?()
-        }) {
-            HubCommandPalette { command in
-                pendingCommand = command.run
-                showsCommands = false
-            }.environmentObject(model)
-        }
         .ignoresSafeArea()
+    }
+
+    @ViewBuilder private var pageLayout: some View {
+        switch model.page {
+        case .home, .settings:
+            DashboardEntrance { elapsed in
+                layout { HomePage(elapsed: elapsed) }
+            }
+            .id(model.homePresentationID)
+        case .history:
+            layout { HistoryPage() }
+        case .meetings:
+            layout { MeetingsPage().environmentObject(model.meeting) }
+        }
+    }
+
+    private func layout<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 0) {
+            Sidebar()
+                .frame(width: Theme.sidebarWidth - 8)
+                .background(RoundedRectangle(cornerRadius: Theme.sidebarRadius).fill(Theme.sidebar))
+                .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
+            ZStack {
+                Theme.window
+                content()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 }
 
 private struct Sidebar: View {
     @EnvironmentObject var model: AppModel
-    @Binding var showsCommands: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 AppMarkView(size: 26).accessibilityHidden(true)
-                Text("TYPELEAST").font(InterfaceTypography.sackers(Theme.homeHeadingSize * Theme.homeRatio * Theme.homeRatio)).tracking(1)
+                Text("TYPELEAST")
+                    .font(InterfaceTypography.localized(Theme.homeHeadingSize * Theme.homeRatio * Theme.homeRatio, weight: .light))
+                    .tracking(1)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .accessibilityLabel("TypeLeast")
                 Spacer(minLength: 0)
             }
             .padding(.bottom, 16)
             .overlay { WindowDragRegion() }
-
-            Button { showsCommands = true } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                    Text(L10n.text("搜索与命令"))
-                    Spacer()
-                    Text("⌘K").font(.system(size: 11)).foregroundColor(Theme.tertiary)
-                }
-                .font(Theme.rowFont).foregroundColor(Theme.secondary)
-                .padding(.horizontal, 12)
-                .frame(height: 36)
-                .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.cardHover))
-            }
-            .buttonStyle(FlatActionButtonStyle())
-            .keyboardShortcut("k", modifiers: .command)
-            .padding(.bottom, 12)
-            .disabled(model.settings.needsPractice)
 
             ForEach([HubPage.home, .history, .meetings]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)
@@ -366,7 +351,7 @@ struct FlexibleSegment: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label).font(.system(size: 14, weight: selected ? .medium : .regular))
+            Text(label).font(InterfaceTypography.localized(14, weight: selected ? .medium : .regular))
                 .foregroundColor(selected ? Theme.accent : Theme.secondary).multilineTextAlignment(.center)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 32)

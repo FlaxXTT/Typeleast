@@ -22,7 +22,7 @@ final class RecordingOverlayHost: NSView {
             layer?.addSublayer(shadow)
         }
         addSubview(pill)
-        modeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        modeLabel.font = InterfaceTypography.localizedAppKit(12, weight: .semibold)
         modeLabel.textColor = .white
         modeLabel.alignment = .center
         modeLabel.lineBreakMode = .byTruncatingTail

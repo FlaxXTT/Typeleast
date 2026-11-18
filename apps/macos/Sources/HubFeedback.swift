@@ -42,7 +42,7 @@ struct HubNoticeStack: View {
             ForEach(feedback.notices) { notice in
                 HStack(spacing: 12) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.success)
-                    Text(notice.message).font(.system(size: 14)).foregroundColor(Theme.ink)
+                    Text(notice.message).font(InterfaceTypography.localized(14)).foregroundColor(Theme.ink)
                     if notice.undo != nil {
                         Button(L10n.text("撤销")) { feedback.dismiss(notice.id, undo: true) }
                             .buttonStyle(.plain).foregroundColor(Theme.accent)

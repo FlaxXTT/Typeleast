@@ -40,19 +40,15 @@ Settings opens the independent window. The Insight backdrop uses retained native
 dot layers behind the metric and activity cards. The shortcut and engine column
 sits on the plain page background.
 
-Opening, restoring or navigating back to Home plays its entrance. The metrics, active
-days and streaks count from zero over 460ms with space reserved for their final values.
-The heatmap first shows outlines. Its week columns start filling after 260ms, from left
-to right, with up to 52ms between columns and a 300ms fade and settle per column. Future
-dates retain their outlines. Both effects share one elapsed-time animation local to the
-figure and cell views. Month arrows show actual activity history directly. Reduce Motion
-shows the final figures and cells immediately.
+Opening, restoring or navigating back to Home plays its entrance. The main content and
+sidebar sharpen over 280ms. Metrics, active days and streaks count from zero over 250ms,
+with space reserved for their final values. The heatmap first shows outlines. Its week
+columns start filling after 480ms, from left to right, with a 300ms fade and settle per
+column. Future dates retain their outlines. All three effects share one elapsed-time
+animation. Month arrows show activity history directly. Reduce Motion shows the final
+state immediately.
 
-### History and commands
-
-`⌘K` opens one search field for pages, appearance commands and history text. The native
-field editor handles text input; arrow keys select results, Return opens them and Escape
-closes the panel. Input-method candidate selection takes priority over command navigation.
+### History
 
 History retains its header and filters while the list scrolls. Date headings pin at the
 top. Groups have 10pt corners at their first/last rows, with square middle rows and no dividers. Rows use 8×12pt insets, a 52pt time column and 14pt text on a 22pt line. Selecting a row opens a trailing detail column when the content area is at least
