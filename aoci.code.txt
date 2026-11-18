@@ -6,7 +6,7 @@
 AGENTS.md[SC4S]: F:约定Codex通过AOCI读取和维护项目认知 | R:- | A:AGENTS.md托管区块 | S:-
 CHANGELOG.md[SV4L]: F:按版本记录功能、修复和分发变更 | R:code:.github/release-notes.md | A:版本标题与日期 | S:-
 LICENSE[SS4M]: F:保存项目的GPL第三版许可原文 | R:code:THIRD-PARTY-NOTICES.md | A:GNU GPL v3 | S:-
-README.md[SG5M]: F:介绍听写、提示词模式、下载及平台支持 | R:code:apps/macos/README.md,code:apps/windows/README.md | A:下载、签名政策及开发文档入口 | S:-
+README.md[SG5M]: F:介绍 TypeLeast 的听写、提示词模式、平台支持和问题报告贡献者 | R:code:apps/macos/README.md,code:apps/windows/README.md,code:docs/CODE_SIGNING_POLICY.md | A:下载、签名政策、开发文档和问题报告入口 | S:-
 THIRD-PARTY-NOTICES.md[SS4T]: F:列出随包交付和按需下载组件的第三方声明 | R:code:LICENSE | A:随包、下载依赖两类清单 | S:-
 wrangler.jsonc[OV4T]: F:为Cloudflare部署声明静态资源输出 | R:code:site/build.sh | A:Workers静态站配置 | S:-
 
