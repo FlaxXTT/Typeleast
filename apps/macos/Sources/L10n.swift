@@ -147,6 +147,8 @@ enum L10n {
         "继续补充按钮": "Add more button",
 
         "正在翻译…": "Translating…",
+        "已翻译 {0}/{1} 批。请重试。": "{0} of {1} batches translated. Retry.",
+        "选区超过 {0} 字符，请分段翻译。": "Selection exceeds {0} characters. Translate it in sections.",
 
         "正在识别…": "Recognizing…",
         "本地模型": "On-device model",

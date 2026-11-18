@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoicePolishService } from '../lib/service.js';
 import { BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
-  hasContent, normaliseQuestions, parseJsonReply, boundaryQuestions, BOUNDARY_QUESTIONS } from '../lib/prompts/prompt-beta.js';
+  hasContent, normaliseQuestions, parseJsonReply } from '../lib/prompts/prompt-beta.js';
 
 const ROUTE = { baseURL: 'https://api.example.com/v1', model: 'm', apiKey: 'test-key' };
 const REQUEST = '帮我把会议记录整理成纪要，发给团队看，要详细一点。只读我给的会议记录，不联网，按以往的纪要格式重复做';
@@ -189,16 +189,6 @@ test('failed generation retains the accepted conversation for a retry',async()=>
  assert.ok(s.betaSessions.has(first.beta.sessionId));
 });
 
-test('the two boundary questions come first, once, unless the user already covered them', () => {
-  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍'), [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh]);
-  assert.deepEqual(boundaryQuestions('帮我写产品介绍，可以联网查资料，要有创意'), [BOUNDARY_QUESTIONS.reuse.zh], 'creative work asks about existing projects');
-  assert.deepEqual(boundaryQuestions('帮我写产品介绍，可以联网查资料，按模板重复做'), [], 'routine work does not');
-  assert.deepEqual(boundaryQuestions('帮我做个创新的工具，可以联网，先看看有没有开源项目'), [], 'already covered');
-  assert.deepEqual(boundaryQuestions('Write a product page'), [BOUNDARY_QUESTIONS.scope.en, BOUNDARY_QUESTIONS.nature.en]);
-  const turns = [{ questions: [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh], answer: '不确定' }];
-  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', turns), [], 'an unsure answer is not asked again');
-});
-
 test('a selected prompt is broken down into goals and details before any question', async () => {
   const calls = [];
   const service = new VoicePolishService({ recognizer: { snapshot: () => ({ ready: true }) }, config: { strength: 'prompt', dictionary: [], timeoutMs: 5000, maxOutputTokens: 800, redactSecrets: true },
@@ -208,28 +198,17 @@ test('a selected prompt is broken down into goals and details before any questio
   assert.match(calls[0], /现成的提示词/);
   assert.deepEqual(r.beta.goals, ['介绍新功能', '吸引试用']);
   assert.deepEqual(r.beta.confirmed, ['面向开发者', '不超过 500 字']);
-  assert.equal(r.beta.questions[0], BOUNDARY_QUESTIONS.scope.zh, 'the boundaries are still asked first');
+  assert.deepEqual(r.beta.questions, []);
 });
 
 test('prompt mode guides with the elements of a good prompt and says why each question matters', () => {
   for (const prompt of [BETA_INTERVIEW_PROMPT, BETA_BREAKDOWN_PROMPT]) {
-    for (const element of ['为什么做', '背景', '可用的资料', '什么格式', '验收标准', '可参照的例子', '为什么要补']) assert.ok(prompt.includes(element), element);
+    for (const element of ['为什么做', '背景', '可用的资料', '什么格式', '验收标准', '可参照的例子', '影响结果']) assert.ok(prompt.includes(element), element);
   }
   for (const section of ['目标与原因', '验收标准', '## 待确认']) assert.ok(BETA_DRAFT_PROMPT.includes(section), section);
-  for (const q of Object.values(BOUNDARY_QUESTIONS)) {
-    assert.match(q.zh, /（.+）$/u, 'each boundary question says why');
-    assert.match(q.en, /\(.+\)$/u);
-    assert.ok(q.zh.length <= 200 && q.en.length <= 200, 'within the question length limit');
-  }
 });
 
-test('a one-click answer counts only the choice, not the words of its question', () => {
-  const routine = [{ questions: [BOUNDARY_QUESTIONS.scope.zh, BOUNDARY_QUESTIONS.nature.zh],
-    answer: BOUNDARY_QUESTIONS.scope.zh + ' 全部文件，仅本地\n' + BOUNDARY_QUESTIONS.nature.zh + ' 重复执行' }];
-  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', routine), [], 'routine work is not asked about reuse');
-  const creative = [{ ...routine[0], answer: BOUNDARY_QUESTIONS.nature.zh + ' 创新探索' }];
-  assert.deepEqual(boundaryQuestions('帮我写一份产品介绍', creative), [BOUNDARY_QUESTIONS.reuse.zh], 'creative work is');
-});
+
 
 test('selected text is the draft, revised by what was said, and both reach the model', async () => {
   const p = provider({ other: interview() });

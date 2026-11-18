@@ -47,7 +47,9 @@ final class BetaPanel {
     /// `anchor` is the cursor the prompt will go to: the panel appears beside it, on its screen.
     func show(info: BetaInfo, hotkey: String, busy: String? = nil, anchor: NSRect? = nil) {
         let firstShow = !isVisible
-        if model.info.sessionId != info.sessionId || model.info.questions != info.questions { model.chosen = [:] }
+        if model.info.sessionId != info.sessionId || model.info.questions != info.questions || model.info.round != info.round {
+            model.chosen = [:]
+        }
         model.info = info
         model.hotkey = hotkey
         model.busy = busy
@@ -186,7 +188,6 @@ struct BetaQuestionsView: View {
                 Button(L10n.text("取消"), action: cancel).buttonStyle(SecondaryButtonStyle())
                 if let chosen = model.chosenAnswer {
                     Button(L10n.text("发送选择")) {
-                        model.chosen = [:]
                         answer(chosen)
                     }.buttonStyle(SecondaryButtonStyle()).disabled(model.busy != nil)
                 } else {
@@ -195,9 +196,7 @@ struct BetaQuestionsView: View {
                 Spacer()
                 // Chosen answers not sent yet go with 生成 rather than being dropped.
                 Button(L10n.text("生成")) {
-                    let chosen = model.chosenAnswer
-                    model.chosen = [:]
-                    skip(chosen)
+                    skip(model.chosenAnswer)
                 }.buttonStyle(PrimaryButtonStyle()).disabled(model.busy != nil)
             }
         }

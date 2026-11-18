@@ -21,6 +21,7 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
     case decoding(String)
     /// The service answered, but the translation model did not deliver a usable result.
     case translationFailed(reason: String?)
+    case translationIncomplete(TranslationProgress)
     /// Something answers on the service's port but could not prove it is the service this app started.
     case untrusted
 
@@ -42,6 +43,8 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
             case "cancelled": return L10n.text("翻译已取消。")
             default: return L10n.text("翻译失败，请重试或检查模型设置。")
             }
+        case .translationIncomplete(let progress):
+            return L10n.text("已翻译 {0}/{1} 批。请重试。", progress.completed, progress.total)
         case .untrusted: return "the local service could not prove its identity"
         }
     }
@@ -51,7 +54,7 @@ enum ServiceError: Error, CustomStringConvertible, Equatable {
         switch self {
         case .noToken, .transport, .untrusted: return true
         case .http(let s, _, _): return s == 401 || s == 403 || s == 404 || s >= 500
-        case .decoding, .translationFailed: return false
+        case .decoding, .translationFailed, .translationIncomplete: return false
         }
     }
 
@@ -426,6 +429,12 @@ struct QualityReview: Codable, Equatable {
     var issues: [QualityReviewIssue]? = nil
 }
 
+struct TranslationProgress: Codable, Equatable {
+    let text: String
+    let completed: Int
+    let total: Int
+}
+
 struct DictateResponse: Codable, Equatable {
     var task: String? = nil
     var requestId: String?
@@ -448,12 +457,13 @@ struct DictateResponse: Codable, Equatable {
     var intention: String?
     /// 翻译模式: the target language the text was written in.
     var translated: String?
+    var translationProgress: TranslationProgress?
     /// Prompt Beta asked questions: nothing to insert yet.
     var betaWaiting: Bool { beta?.sessionId?.isEmpty == false }
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case task, requestId, text, raw, fallback, fallbackReason, offerFailover, switchedProvider, noiseSuspected, noiseCandidate, qualityReview, model, provider, ms, beta, translated, corrections, intention
+        case task, requestId, text, raw, fallback, fallbackReason, offerFailover, switchedProvider, noiseSuspected, noiseCandidate, qualityReview, model, provider, ms, beta, translated, translationProgress, corrections, intention
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -479,6 +489,7 @@ struct DictateResponse: Codable, Equatable {
         ms = lenient(c, MSBreakdown.self, .ms)
         beta = lenient(c, BetaInfo.self, .beta)
         translated = lenient(c, String.self, .translated)
+        translationProgress = lenient(c, TranslationProgress.self, .translationProgress)
         corrections = lenient(c, [TermCorrection].self, .corrections).map { Array($0.prefix(40)) }
         intention = lenient(c, String.self, .intention)
     }
@@ -505,6 +516,28 @@ struct ApiErrorBody: Codable, Equatable {
 }
 
 // MARK: - Client
+
+final class ServiceRequestCancellation {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var task: URLSessionTask?
+
+    func start(_ next: URLSessionTask) throws {
+        try lock.withLock {
+            guard !cancelled else { throw URLError(.cancelled) }
+            task = next
+            next.resume()
+        }
+    }
+
+    func cancel() {
+        let current = lock.withLock {
+            cancelled = true
+            return task
+        }
+        current?.cancel()
+    }
+}
 
 final class ServiceClient {
     static let shared: ServiceClient = {
@@ -688,7 +721,8 @@ final class ServiceClient {
     }
 
     @discardableResult
-    private func performSync(_ request: URLRequest, timeout: TimeInterval, generation: Int? = nil) throws -> (Data, HTTPURLResponse) {
+    private func performSync(_ request: URLRequest, timeout: TimeInterval, generation: Int? = nil,
+                             cancellation: ServiceRequestCancellation? = nil) throws -> (Data, HTTPURLResponse) {
         let identity = proofLock.withLock { (proofKeyValue, endpointEpoch) }
         let requestID = UUID().uuidString
         var wire = request
@@ -726,7 +760,8 @@ final class ServiceClient {
             generationTasks[taskID] = task;generationLock.unlock()
         }
         defer { generationLock.lock();generationTasks[taskID] = nil;generationLock.unlock() }
-        task.resume()
+        if let cancellation { try cancellation.start(task) }
+        else { task.resume() }
         if sem.wait(timeout: .now() + timeout + 5) == .timedOut {
             task.cancel()
             throw ServiceError.transport("timeout after " + String(format: "%.0fs", timeout))
@@ -876,7 +911,7 @@ final class ServiceClient {
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false) throws -> DictateResponse {
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false, cancellation: ServiceRequestCancellation? = nil) throws -> DictateResponse {
         let generation = generationTicket ?? epoch()
         return try withPortRetry { try withTokenRetry { token in
             var body: [String: Any] = ["text": text, "language": language, "strength": strength, "task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation"]
@@ -897,7 +932,7 @@ final class ServiceClient {
             if let translatePrompt, !translatePrompt.isEmpty { body["translatePrompt"] = translatePrompt }
             let req = try makeRequest(path: "/api/voice-polish/polish", method: "POST", token: token,
                                       headers: ["content-type": "application/json"], body: JSONSerialization.data(withJSONObject: body), timeout: dictateTimeout)
-            let (data, response) = try performSync(req, timeout: dictateTimeout,generation:generation)
+            let (data, response) = try performSync(req, timeout: dictateTimeout, generation: generation, cancellation: cancellation)
             guard response.statusCode == 200 else { throw httpError(response, data) }
             return try JSONDecoder().decode(DictateResponse.self, from: data)
         } }
