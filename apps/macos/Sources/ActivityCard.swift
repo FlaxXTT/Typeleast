@@ -34,15 +34,15 @@ struct InsightsPanel: View {
         let timingNote = stats.hasIncompleteTiming
             ? L10n.text("旧活动仅保留字数；时间相关统计仅包含已记录时长的听写。") : nil
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 InitialHeading(title: "Insight", initialSize: 50, bodySize: 31, typeface: InterfaceTypography.blackletter)
                     .foregroundColor(Theme.homeLabel)
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
-            .frame(height: 48)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())], spacing: 10) {
+            .frame(height: 54)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
                 Figure(parts: Self.count(stats.words, unit: L10n.text("字")), label: L10n.text("口述字数"), elapsed: displayedElapsed)
                 Figure(parts: Self.duration(stats.savedSeconds), label: L10n.text("节省时间"), elapsed: displayedElapsed,
                        unavailable: timingUnavailable, note: timingNote)
@@ -139,14 +139,14 @@ private struct Figure: View {
     var note: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if unavailable {
-                    Text("—").font(InterfaceTypography.figure(23))
+                    Text("—").font(InterfaceTypography.figure(26))
                         .accessibilityLabel(L10n.text("尚无时长记录"))
                 } else {
                     ForEach(parts.indices, id: \.self) { index in
-                        CountingNumber(part: parts[index], elapsed: elapsed, size: 23)
+                        CountingNumber(part: parts[index], elapsed: elapsed, size: 26)
                             .tracking(-0.6)
                             .lineLimit(1).minimumScaleFactor(0.6)
                         InterfaceTypography.text(parts[index].unit, size: 12, weight: .semibold)
@@ -155,7 +155,7 @@ private struct Figure: View {
                 }
             }
             HStack(spacing: 5) {
-                InterfaceTypography.text(label, size: 12)
+                InterfaceTypography.text(label, size: 13)
                     .lineLimit(1).minimumScaleFactor(0.85)
                 if let note {
                     Image(systemName: "info.circle").font(.system(size: 11))
@@ -164,8 +164,8 @@ private struct Figure: View {
             }
             .font(Theme.rowFont).foregroundColor(Theme.homeLabel)
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
         .help(note ?? label)
     }
@@ -361,8 +361,8 @@ struct ActivityCard: View {
     let elapsed: Double
     @State private var weekOffset = 0
 
-    private let cell: CGFloat = 12
-    private let gap: CGFloat = 7
+    private let cell: CGFloat = 14
+    private let gap: CGFloat = 6
     private let dayColumn: CGFloat = 30
 
     var body: some View {
@@ -384,24 +384,24 @@ struct ActivityCard: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(height: 7 * (cell + gap) + 18)
-            .padding(.top, 10)
+            .padding(.top, 16)
             HStack(spacing: 6) {
                 Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-                ForEach(1..<5) { level in square(level, size: 10) }
+                ForEach(1..<5) { level in square(level, size: 12) }
                 Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
-            .padding(.top, 6)
+            .padding(.top, 10)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
     }
 
     private func figure(_ value: Int, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
-                               elapsed: elapsed, size: 22)
+                               elapsed: elapsed, size: 24)
                     .tracking(-0.6)
                 InterfaceTypography.text(L10n.text("天"), size: 12, weight: .semibold)
             }
