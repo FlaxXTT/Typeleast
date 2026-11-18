@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-18T17:19:15Z",
-  "updated_at": "2026-11-18T21:11:19Z",
+  "updated_at": "2026-11-18T21:16:57Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -71,9 +71,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "e99c79b9442d6af03e37ad835e40cf3270f8456c52ce9824585aa68a47593f05",
-      "size": 78905,
-      "normalized_sha256": "e99c79b9442d6af03e37ad835e40cf3270f8456c52ce9824585aa68a47593f05"
+      "sha256": "e005aa47f4fc50089dd51240a5a3ea97383f100569f974b1720942192e6ea50a",
+      "size": 78887,
+      "normalized_sha256": "e005aa47f4fc50089dd51240a5a3ea97383f100569f974b1720942192e6ea50a"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -356,9 +356,9 @@
     },
     "apps/macos/Sources/HubWindow.swift": {
       "role": "index",
-      "sha256": "c20a02e7d07f56092663e06b68cc56a910beec2c544be5737bb43a3a9a8a1636",
-      "size": 17172,
-      "normalized_sha256": "c20a02e7d07f56092663e06b68cc56a910beec2c544be5737bb43a3a9a8a1636"
+      "sha256": "084216b4111e84c8d3537ee536437d0355258575498a45d888009385f42b6a87",
+      "size": 17177,
+      "normalized_sha256": "084216b4111e84c8d3537ee536437d0355258575498a45d888009385f42b6a87"
     },
     "apps/macos/Sources/IdleBar.swift": {
       "role": "index",
@@ -668,9 +668,9 @@
     },
     "apps/macos/Tests/PerformanceRegressionTests.swift": {
       "role": "index",
-      "sha256": "269cb42cf39c4fa039565b09a9b00d86f64f1809c839f470f1e1de189afc3f21",
-      "size": 16830,
-      "normalized_sha256": "269cb42cf39c4fa039565b09a9b00d86f64f1809c839f470f1e1de189afc3f21"
+      "sha256": "5c8762819db445e903d2c3895af05462c4a6f6430c3c25e3c44d7257af04857d",
+      "size": 17073,
+      "normalized_sha256": "5c8762819db445e903d2c3895af05462c4a6f6430c3c25e3c44d7257af04857d"
     },
     "apps/macos/Tests/SettingsScrollTests.swift": {
       "role": "index",

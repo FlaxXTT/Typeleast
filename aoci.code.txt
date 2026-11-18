@@ -75,7 +75,7 @@ HubPages.swift[DU7L]: F:组装首页概览、快捷键试用入口、引擎与�
 HubScrollView.swift[IU7M]: F:提供全局原生滚动及可选位置记忆、渐隐和滑块高亮 | R:code:apps/macos/Sources/HubPages.swift,code:apps/macos/Sources/HubSettings.swift | A:HubScrollView、NativeScrollAppearance | S:保持系统滚轮和惯性；装饰按帧合并，关闭装饰时不附加观察开销
 HubSettings.swift[DU7L]: F:提供听写、模型与通用设置，以及相关的权限反馈 | R:code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/LLMSettings.swift | A:SettingsPage、LoginItemStatus | S:视图渲染只查凭据存在性；主动获取列表或测试时区分钥匙串拒绝访问和未保存 Key
 HubThemeReveal.swift[DU6T]: F:抓取旧外观并调度主窗及设置窗主题揭示 | R:code:apps/macos/Sources/ThemeMosaicOverlay.swift,code:apps/macos/Sources/HubWindow.swift | A:HubThemeReveal.apply | S:主题遮罩在原生窗口层挂载且不抢界面点击
-HubWindow.swift[AU7L]: F:创建主窗和独立设置窗口，管理启动遮罩及首页窗口路由 | R:code:apps/macos/Sources/AppWindowStyle.swift,code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/AppModel.swift | A:HubWindowController.openMainWindow、show、userCacheDidLoad | S:遮罩同时等缓存与页面骨架，超时只撤遮罩；外部打开重播活动，设置和侧栏保留自己的入口
+HubWindow.swift[AU7L]: F:创建主窗和独立设置窗口，管理启动遮罩及首页窗口路由 | R:code:apps/macos/Sources/AppWindowStyle.swift,code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/AppModel.swift | A:HubWindowController.openMainWindow、show、userCacheDidLoad | S:遮罩等待缓存与页面布局完成，超时只撤遮罩；设置和侧栏保留自己的入口
 IdleBar.swift[DU6M]: F:提供桌面收起态语音条、悬停展开及启动入口 | R:code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:IdleBarView | S:使用非激活面板，让外部文档保留焦点
 Inserter.swift[IU8M]: F:生成纯文本或富文本剪贴板并通过系统粘贴交付 | R:code:apps/macos/Sources/Delivery.swift,code:apps/macos/Sources/FieldContext.swift | A:Inserter.snapshot、setString、setRich | S:剪贴板已被用户改动时不得覆盖其新内容；保留粘贴失败时的可恢复文本
 InstanceLock.swift[RR4T]: F:使用文件描述符持有进程级单实例锁 | R:code:apps/macos/Sources/AppDelegate.swift | A:InstanceLock.acquire | S:崩溃关闭描述符时释放锁
@@ -129,7 +129,7 @@ RecordingHints.swift[DU7M]: F:管理首次就绪卡和短提示的独立悬浮�
 ===/<repository>/apps/macos/Tests/===
 ContextPreferencesTests.swift[TS4T]: F:覆盖光标语境边界及偏好隔离 | R:code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/Settings.swift | A:contextPreferencesTests | S:-
 MeetingTests.swift[TB4T]: F:以短音频文件覆盖会议导入和格式处理 | R:code:apps/macos/Sources/Meeting.swift | A:meetingTests | S:-
-PerformanceRegressionTests.swift[TP4M]: F:覆盖异步刷新、启动窗口和首页动效的回归用例 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/CoalescingRefresh.swift | A:performanceRegressionTests、dashboardMotionTests、dashboardWindowTests | S:通过真实统计卡位图验证无数据和有缓存时的零值首帧及后续插值
+PerformanceRegressionTests.swift[TP4M]: F:覆盖异步刷新、启动窗口和首页动效回归 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/CoalescingRefresh.swift | A:performanceRegressionTests、dashboardMotionTests、dashboardWindowTests | S:窗口断言等待实际布局提交；动画测试用真实统计卡位图验证零值首帧和插值
 SettingsScrollTests.swift[TU4S]: F:用受控登录状态服务记录真实设置视图的滚动行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:隔离历史，不打开实际麦克风或注册登录项
 StubServer.swift[TN4S]: F:给客户端契约测试提供最小回环HTTP桩 | R:code:apps/macos/Sources/ServiceClient.swift | A:StubServer、Request、Response | S:-
 build-mlx.sh[TV4T]: F:验证MLX构建脚本选择当前Xcode生成的Metal库 | R:code:apps/macos/scripts/build-mlx.sh | A:独立脚本入口 | S:-
