@@ -6,6 +6,7 @@ import Combine
 // sidebar (Home, History; Settings at the bottom left) and one page.
 
 final class HubWindowController: NSObject, NSWindowDelegate {
+    fileprivate static let size = NSSize(width: 988, height: 685)
     private var window: NSWindow?
     private let settingsWindow: SettingsWindowController
     private var settingsPresentation: AnyCancellable?
@@ -25,6 +26,8 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     var isVisible: Bool { window?.isVisible ?? false }
     var themeTransitionWindow: NSWindow? { isVisible ? window : nil }
     var settingsThemeTransitionWindow: NSWindow? { settingsWindow.visibleWindow }
+    func dismissSettingsIfVisible() -> Bool { settingsWindow.closeIfVisible() }
+
     var updateDialogWindow: NSWindow? {
         if let settings = settingsWindow.visibleWindow, settings.isKeyWindow { return settings }
         return themeTransitionWindow ?? settingsWindow.visibleWindow
@@ -62,20 +65,19 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let host = NSHostingController(rootView: HubRootView().environmentObject(model))
+        host.sizingOptions = []
         let window = NSWindow(contentViewController: host)
         window.title = "TypeLeast"
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        let size = NSSize(width: 1080, height: 750)
-        window.setContentSize(size)
-        AppWindowStyle.fixSize(window, to: size)
+        AppWindowStyle.fixSize(window, to: Self.size)
         window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.center()
         // Keep this frame record separate from the old resizable window.
-        window.setFrameAutosaveName("typeleast.hub.1080x750")
+        window.setFrameAutosaveName("typeleast.hub.988x685")
         window.delegate = self
         AppWindowStyle.round(window)
         return window
@@ -86,6 +88,10 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         model.refreshPermissions()
         // The service may have restarted on a new port since the last check.
         model.actions?.recheckHealth()
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        !dismissSettingsIfVisible()
     }
 
     func windowDidDeminiaturize(_ notification: Notification) {
@@ -115,7 +121,7 @@ struct HubRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 1080, height: 750)
+        .frame(width: HubWindowController.size.width, height: HubWindowController.size.height)
         .background(Theme.window)
         .font(Theme.bodyFont)
         .foregroundColor(Theme.ink)

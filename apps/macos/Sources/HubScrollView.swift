@@ -8,6 +8,7 @@ struct HubScrollView<Content: View>: View {
     var key: String? = nil
     var showsChrome = true
     var showsProgress = true
+    var showsBottomFade = true
     var followsBottom = false
     @ViewBuilder var content: Content
 
@@ -15,6 +16,7 @@ struct HubScrollView<Content: View>: View {
         ScrollView {
             content.background(HubScrollAnchor(key: key, showsChrome: showsChrome,
                                                showsProgress: showsProgress,
+                                               showsBottomFade: showsBottomFade,
                                                followsBottom: followsBottom))
         }
     }
@@ -88,13 +90,16 @@ private struct HubScrollAnchor: NSViewRepresentable {
     let key: String?
     let showsChrome: Bool
     let showsProgress: Bool
+    let showsBottomFade: Bool
     let followsBottom: Bool
 
     func makeNSView(context: Context) -> HubScrollMarker {
-        HubScrollMarker(key: key, showsChrome: showsChrome, showsProgress: showsProgress, followsBottom: followsBottom)
+        HubScrollMarker(key: key, showsChrome: showsChrome, showsProgress: showsProgress,
+                        showsBottomFade: showsBottomFade, followsBottom: followsBottom)
     }
     func updateNSView(_ view: HubScrollMarker, context: Context) {
-        view.use(key: key, showsChrome: showsChrome, showsProgress: showsProgress, followsBottom: followsBottom)
+        view.use(key: key, showsChrome: showsChrome, showsProgress: showsProgress,
+                 showsBottomFade: showsBottomFade, followsBottom: followsBottom)
     }
     static func dismantleNSView(_ view: HubScrollMarker, coordinator: ()) { view.detach() }
 }
@@ -121,19 +126,24 @@ private final class HubScrollMarker: NSView {
     private var nearBottom = true
     private var liveScrolling = false
 
-    init(key: String?, showsChrome: Bool, showsProgress: Bool, followsBottom: Bool) {
+    init(key: String?, showsChrome: Bool, showsProgress: Bool, showsBottomFade: Bool, followsBottom: Bool) {
         self.key = key
         self.showsChrome = showsChrome
         self.followsBottom = followsBottom
         super.init(frame: .zero)
         chrome.showsProgress = showsProgress
+        chrome.showsBottomFade = showsBottomFade
     }
     required init?(coder: NSCoder) { fatalError("Created in code") }
     deinit { detach() }
 
-    func use(key: String?, showsChrome: Bool, showsProgress: Bool, followsBottom: Bool) {
+    func use(key: String?, showsChrome: Bool, showsProgress: Bool, showsBottomFade: Bool, followsBottom: Bool) {
         if chrome.showsProgress != showsProgress {
             chrome.showsProgress = showsProgress
+        }
+        if chrome.showsBottomFade != showsBottomFade {
+            chrome.showsBottomFade = showsBottomFade
+            requestFrame()
         }
         if self.key != key || self.showsChrome != showsChrome || self.followsBottom != followsBottom {
             detach()
@@ -269,6 +279,7 @@ private final class HubScrollMarker: NSView {
 
 private final class HubScrollChrome: NSView {
     var showsProgress = true { didSet { progressLayer.isHidden = !showsProgress } }
+    var showsBottomFade = true
     weak var scroll: NSScrollView?
     private var progressWidth: CGFloat = 0
     private var showsFade = false
@@ -332,7 +343,7 @@ private final class HubScrollChrome: NSView {
     func update(offset: CGFloat, extent: CGFloat) {
         let scale = window?.backingScaleFactor ?? 2
         let width = ((extent > 0 ? min(1, offset / extent) : 0) * bounds.width * scale).rounded() / scale
-        let fade = extent - offset > 2
+        let fade = showsBottomFade && extent - offset > 2
         let hideButton = offset < 360
         if topButton.isHidden != hideButton { topButton.isHidden = hideButton }
         if progressWidth != width || showsFade != fade {
