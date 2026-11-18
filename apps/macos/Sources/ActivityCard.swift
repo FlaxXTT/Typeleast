@@ -384,10 +384,9 @@ struct ActivityCard: View {
             }
             .padding(.top, 12)
             HStack(spacing: 6) {
-                square(active: false, size: 13)
-                Text(L10n.text("没有活动")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-                square(active: true, size: 13).padding(.leading, 4)
-                Text(L10n.text("有活动")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+                Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+                ForEach(1..<5) { level in square(level, size: 13) }
+                Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
             .padding(.horizontal, 7)
             .padding(.top, 8)
@@ -450,15 +449,15 @@ struct ActivityCard: View {
                     Group {
                         if date <= today {
                             let day = log.day(date)
-                            let active = day.dictations > 0
+                            let level = ActivityLog.level(day.dictations)
                             let description = tooltip(date, day)
-                            if active && weekOffset == 0 {
-                                square(active: false, size: cell).overlay {
-                                    square(active: true, size: cell).modifier(HeatmapReveal(elapsed: elapsed))
+                            if level > 0 && weekOffset == 0 {
+                                square(0, size: cell).overlay {
+                                    square(level, size: cell).modifier(HeatmapReveal(elapsed: elapsed))
                                 }
                                 .help(description).accessibilityLabel(description)
                             } else {
-                                square(active: active, size: cell).help(description).accessibilityLabel(description)
+                                square(level, size: cell).help(description).accessibilityLabel(description)
                             }
                         } else {
                             outlinedCell(size: cell).accessibilityHidden(true)
@@ -496,9 +495,9 @@ struct ActivityCard: View {
             .frame(width: size, height: size)
     }
 
-    private func square(active: Bool, size: CGFloat) -> some View {
+    private func square(_ level: Int, size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
-            .fill(active ? Theme.heatActive : Theme.heatEmpty)
+            .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
             .frame(width: size, height: size)
     }
 
