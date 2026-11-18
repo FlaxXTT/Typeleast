@@ -1098,10 +1098,10 @@ do {
 // UI language and privacy regressions.
 do {
     checkEq("invalid UI preference follows system", L10n.normalized("bad"), "system")
-    checkEq("Chinese system uses Traditional Chinese", L10n.resolve("system", preferred: ["zh-Hant-TW"]), "zh-Hant")
+    checkEq("Chinese system uses Simplified Chinese", L10n.resolve("system", preferred: ["zh-Hant-TW"]), "zh-Hans")
     checkEq("other systems use English", L10n.resolve(nil, preferred: ["ja-JP"]), "en")
     checkEq("manual English overrides system", L10n.resolve("en", preferred: ["zh-CN"]), "en")
-    checkEq("saved Chinese preference uses Traditional Chinese", L10n.resolve("zh-Hans", preferred: ["en-US"]), "zh-Hant")
+    checkEq("saved Traditional Chinese UI preference migrates", L10n.resolve("zh-Hant", preferred: ["en-US"]), "zh-Hans")
     checkEq("translated label", L10n.render("设置", arguments: [], language: "en"), "Settings")
     checkEq("content slots are not translated or expanded", L10n.render("常被识别成「{0}」", arguments: ["用户 {1}"], language: "en"), "Heard as “用户 {1}”")
     let previous = Settings.shared.interfaceLanguage
