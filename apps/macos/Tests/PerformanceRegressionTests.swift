@@ -12,6 +12,8 @@ func performanceRegressionTests() {
         KeychainStore.stub = ["presence-fixture": "fictional-key"]
         var queries = 0
         KeychainStore.presenceQueryOverride = { account in
+            // Activation also starts background queries for configured providers.
+            guard account == "presence-fixture" || account == "missing-fixture" else { return false }
             queries += 1
             return KeychainStore.stub?[account] != nil
         }

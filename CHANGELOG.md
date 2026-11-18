@@ -2,6 +2,10 @@
 
 每个版本的安装包都在 [Releases](https://github.com/FlaxXTT/Typeleast/releases) 页面。
 
+## 2.1.15（2026-11-18）
+
+- 修复 MLX 语音识别发布构建，使 worker 退出时不再生成覆盖率文件。感谢 [pioneerAlone](https://github.com/FlaxXTT/Typeleast/issues/107) 提供复现步骤。
+
 ## 2.1.14（2026-11-18）
 
 - 翻译窗口随内容调整高度。译文可选取，失败可重试。分批翻译保留段落分隔和已完成部分，并明确提示未完成的批次。
