@@ -122,6 +122,7 @@ struct HubRootView: View {
         .tint(Theme.accent)
         .overlay(alignment: .top) { WindowDragRegion().frame(height: 44).padding(.leading, 84) }
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
         .overlay(alignment: .bottomTrailing) { FixedWindowCornerRegion().frame(width: 16, height: 16) }
         .sheet(isPresented: $showsCommands, onDismiss: {
             let action = pendingCommand
