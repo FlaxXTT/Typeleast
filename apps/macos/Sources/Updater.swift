@@ -1,12 +1,13 @@
 import Foundation
 import CryptoKit
+import Security
 
 // Updater.swift - in-app update for this Mac. The release is fetched from GitHub's public
 // release page (no account needed), or from a public mirror when GitHub is slow
 // (UpdateSources). Its SHA-256 is checked against the
 // release's SHA256SUMS.txt. A release with the same certificate identity keeps its signature;
-// otherwise the app is re-signed with this Mac's own "TypeLeast Local Signing" certificate
-// before it replaces the installed copy. Same certificate + same bundle id = same requirement, so macOS
+// legacy local installations may use this Mac's own "TypeLeast Local Signing" certificate.
+// Same certificate + same bundle id = same requirement, so macOS
 // keeps the microphone and Accessibility permissions. Existing Keychain items stay
 // in place; preparing an update does not pre-authorize them from a temporary app.
 
@@ -47,6 +48,23 @@ enum Updater {
 
     static func canKeepSignature(current: String?, update: String?) -> Bool {
         hasStableRequirement(current) && current == update
+    }
+
+    static func permitsLocalResigning(current requirement: String, certificateName: String?) -> Bool {
+        !hasStableRequirement(requirement) || certificateName == signingIdentity
+    }
+
+    private static func signingCertificateName(of app: URL) -> String? {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code else { return nil }
+        var information: CFDictionary?
+        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
+        guard SecCodeCopySigningInformation(code, flags, &information) == errSecSuccess,
+              let certificates = (information as? [String: Any])?[kSecCodeInfoCertificates as String] as? [SecCertificate],
+              let leaf = certificates.first else { return nil }
+        var name: CFString?
+        guard SecCertificateCopyCommonName(leaf, &name) == errSecSuccess else { return nil }
+        return name as String?
     }
 
     // MARK: pure helpers
@@ -272,7 +290,7 @@ enum Updater {
               hasSigningIdentity() else { throw UpdateError.noSigningCertificate }
     }
 
-    /// Download and re-sign `version`; credentials stay in the existing Keychain.
+    /// Prepare the verified update; credentials stay in the existing Keychain.
     static func prepare(version: String, current: URL = Bundle.main.bundleURL,
                         stage: ((UpdateStage) -> Void)? = nil) throws -> (app: URL, work: URL) {
         stage?(.preparing)
@@ -322,6 +340,9 @@ enum Updater {
             // signing-key access. The cryptographic requirement and all sealed
             // resources are checked below before either path can be installed.
             if !canKeepSignature(current: mine, update: designatedRequirement(of: app)) {
+                guard permitsLocalResigning(current: mine, certificateName: signingCertificateName(of: current)) else {
+                    throw UpdateError.requirementChanged
+                }
                 stage?(.signing)
                 try ensureSigningIdentity()
                 // Not --deep: preserve Node.js's upstream signature.

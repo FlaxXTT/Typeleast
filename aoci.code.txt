@@ -12,17 +12,17 @@ wrangler.jsonc[OV4T]: F:为Cloudflare部署声明静态资源输出 | R:code:sit
 
 ===/<repository>/.github/===
 release-notes-windows.md[SV3T]: F:提供历史Windows安装包与变更的发布文字 | R:code:apps/windows/package.ps1 | A:分架构安装说明 | S:-
-release-notes.md[SV5T]: F:提供当前 macOS 版本的双语更新摘要和安装说明 | R:code:apps/macos/Sources/ReleaseSummary.swift,code:.github/workflows/release.yml | A:typeleast-update语言标记 | S:应用内更新窗口按语言标记提取摘要，安装说明留在完整发布页
+release-notes.md[SV5T]: F:提供当前 macOS 版本的双语摘要、安装和 Touch ID 迁移说明 | R:code:apps/macos/Sources/ReleaseSummary.swift,code:.github/workflows/release.yml,code:apps/macos/Sources/main.swift | A:typeleast-update 语言标记 | S:应用内只提取带语言标记的摘要；安装和迁移命令保留在完整发布页
 
 ===/<repository>/.github/workflows/===
 ci.yml[OQ6M]: F:手动调度服务、原生客户端与模型验证任务 | R:code:.github/workflows/release.yml,code:apps/macos/test.sh | A:workflow_dispatch | S:自动触发会与官网部署的跳过规则发生耦合
 release.yml[OV8S]: F:构建并发布已签名的Apple芯片安装包与更新包 | R:code:apps/macos/package.sh,code:.github/release-notes.md | A:workflow_dispatch的tag、draft、signing_mode参数 | S:要求UTC标注标签匹配当前main，拒绝替换已发布版本，旧临时签名只限v2.1.6
 
 ===/<repository>/apps/macos/===
-Info.plist[FV6T]: F:定义 macOS 应用标识、版本、权限提示和系统要求 | R:code:apps/macos/package.sh,code:apps/macos/Sources/main.swift | A:CFBundleIdentifier、CFBundleShortVersionString、CFBundleVersion、LSMinimumSystemVersion | S:发布时需同时维护应用短版本与构建号
+Info.plist[FV6T]: F:定义 macOS 应用标识、版本、权限提示和系统要求 | R:code:apps/macos/package.sh,code:apps/macos/Sources/main.swift | A:CFBundleIdentifier、CFBundleShortVersionString、CFBundleVersion、LSMinimumSystemVersion | S:发布同时更新短版本与构建号
 README.md[SV4M]: F:说明Mac客户端构建、服务定位、会议与权限 | R:code:apps/macos/build.sh,code:apps/macos/package.sh | A:构建、打包与本机状态目录指引 | S:-
 TypeLeast.entitlements[FS5T]: F:声明硬化运行时下Mac应用麦克风权限 | R:code:apps/macos/package.sh,code:apps/macos/Info.plist | A:com.apple.security.device.audio-input | S:随包Node使用独立签名
-build.sh[OV7S]: F:编译Swift客户端、复制资源及服务并签名安装 | R:code:apps/macos/package.sh,code:apps/macos/Info.plist | A:--no-install、--test、TYPELEAST_RELEASE | S:构建副本放在noindex目录，发布路径需要打包非开发安装
+build.sh[OV7S]: F:编译 Swift 客户端、复制资源并签名安装 | R:code:apps/macos/package.sh,code:apps/macos/Info.plist,code:apps/macos/Sources/Updater.swift | A:--no-install、--test、TYPELEAST_RELEASE | S:已有证书身份的安装先验新包匹配旧要求，失败时不退出或替换正在使用的程序
 make-signing-cert.sh[OS5T]: F:在本机登录钥匙串建立稳定开发签名身份 | R:code:apps/macos/build.sh,code:apps/macos/Sources/SigningAccess.swift | A:本机签名证书脚本 | S:私钥留在本机钥匙串
 package.sh[OV8S]: F:封装Apple芯片的自带Node应用、磁盘映像和ZIP | R:code:apps/macos/build.sh,code:apps/macos/scripts/package-names.sh,code:.github/workflows/release.yml | A:arm64、可选输出目录、NODE_VERSION | S:更新ZIP和旧Mac包用不同名称；提前拒绝覆盖目标，随包Node按发行方清单核对
 test.sh[TQ4T]: F:编译并加载生产源文件进入Mac测试工具 | R:code:apps/macos/Tests/main.swift | A:本机测试入口 | S:不依赖常驻服务
@@ -48,13 +48,13 @@ InfoPlist.strings[FL2T]: F:为系统麦克风权限请求提供英语说明 | R:
 InfoPlist.strings[FL2T]: F:为系统麦克风权限请求提供简体中文说明 | R:code:apps/macos/Info.plist | A:NSMicrophoneUsageDescription | S:-
 
 ===/<repository>/apps/macos/Sources/===
-ActivityCard.swift[DU7L]: F:显示首页统计、连续天数及按周填色的热力图 | R:code:apps/macos/Sources/ActivityLog.swift,code:apps/macos/Sources/HubPages.swift | A:InsightsPanel、DashboardMotion | S:统计与列显现共用经过时间，恢复首页时由外部令牌重播
+ActivityCard.swift[DU7L]: F:渲染首页统计、连续天数及按周着色的活动网格 | R:code:apps/macos/Sources/ActivityLog.swift,code:apps/macos/Sources/AppModel.swift | A:InsightsPanel、CountUpTransition、ActivityCard、HeatmapMotion | S:统计卡在冷启动和有缓存的重开下先显示零，再开始插值。刷新从可见读数继续；热力图错峰显色并与月份同轨移动
 ActivityLog.swift[PD7S]: F:保存每日字数、耗时和首页缓存统计 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/History.swift | A:record、seedIfNeeded、clear | S:独立于文本留存期限且不保存文本，删除全部历史会清空累计活动
 AppDelegate+Dictation.swift[EB4T]: F:把菜单、快捷键和界面的听写入口转给录音或练习 | R:code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/OnboardingPractice.swift | A:toggleDictation、cancelDictation、pasteLast | S:-
 AppDelegate+SpeechModels.swift[AB5T]: F:把模型下载、取消和清理请求交给后台服务 | R:code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/AppDelegate.swift | A:manageSpeechModel、clearSpeechModelStorage | S:-
-AppDelegate.swift[EW8L]: F:协调Mac应用生命周期、快捷键、窗口和后台服务 | R:code:apps/macos/Sources/main.swift,code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/ServiceManager.swift | A:NSApplicationDelegate、AppActions、MenuActionTarget | S:听写过程保留目标应用焦点；程序重开现有窗口并返回首页
+AppDelegate.swift[EW8L]: F:编排 Mac 生命周期、听写快捷键、后台服务及窗口入口 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/RecordingHints.swift,code:apps/macos/Sources/TouchIDVault.swift | A:NSApplicationDelegate、AppActions、MenuActionTarget | S:指纹解锁先于历史载入；区分点按切换和按住听写，确保松键结束正确录音；引导后检查权限并显示一次就绪提示
 AppIconArtwork.swift[DU5S]: F:共享Dock图标、侧栏和引导的五柱矢量绘制 | R:code:docs/APP_ICON.md,code:apps/macos/Sources/HubWindow.swift | A:AppIconArtwork.draw、image、Surface | S:Dock保留画布边距，界面图标用各自视图边界
-AppModel.swift[AD6M]: F:提供首页、菜单、引导和录音共享的可观察状态及操作契约 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/HubWindow.swift | A:AppModel、AppActions、AppPhase、HubPage | S:-
+AppModel.swift[AD6M]: F:管理首页、录音、菜单和引导共享的可观察状态与操作契约 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/ActivityLog.swift | A:AppModel、AppActions、AppPhase、HubPage | S:历史读取失败与钥匙串锁定分别报告；统计与活动独立交付
 AppWindowStyle.swift[IU6S]: F:固定原生窗口尺寸并配置圆角、拖拽区和标题栏按钮 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/SettingsWindow.swift | A:fixSize、round、WindowDragRegion | S:需保留灰色缩放控制外观并隔开窗口按钮与拖拽区
 AudioConvert.swift[KH5T]: F:将设备音频统一为识别所需的16kHz单声道PCM16 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/Wav.swift | A:targetFormat、makeConverter、convert | S:-
 AudioDevices.swift[IH6S]: F:枚举麦克风、选择输入并提供预览电平和其他音频静音 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/HubSettings.swift | A:AudioDevices.inputs、AudioInputSelector | S:选择设备时用UID匹配系统设备，保留跟随默认输入的选项
@@ -63,24 +63,24 @@ BetaPanel.swift[DU6M]: F:呈现提示词澄清问题、选项和继续操作 | R
 CoalescingRefresh.swift[RW5T]: F:合并后台刷新并丢弃不匹配表单输入的旧结果 | R:code:apps/macos/Sources/HubSettings.swift | A:FormRequest、CoalescingRefresh | S:突发请求最多追赶一次，表单上下文只留在内存
 Delivery.swift[AB7S]: F:为听写结果选择插入目标、等待或回退复制 | R:code:apps/macos/Sources/Inserter.swift,code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/TerminalGuard.swift | A:Delivery.prepare、DeliveryOutcome、DeliveryWait | S:确认焦点仍匹配原光标后才插入，历史状态由控制器记录
 DiagnosticsLog.swift[PS5T]: F:轮换并限制本地故障日志内容 | R:code:apps/macos/Sources/ServiceManager.swift | A:DiagnosticsLog.write、safeField | S:只写事件、代码与时序，不记录密钥或听写内容
-DictationController.swift[AB9L]: F:协调录音、识别、整理、审核、记录和文字交付 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/OnlineASR.swift,code:apps/macos/Sources/Delivery.swift | A:toggleDictation、stopRecording、cancelDictation、pasteLast | S:云端识别按设置显式启用；取消及晚到回调不得落地旧会话；交付保持最初输入目标
-FieldContext.swift[IS8M]: F:通过辅助功能读取焦点、选区和光标语境 | R:code:apps/macos/Sources/SelectionTranslator.swift,code:apps/macos/Sources/Delivery.swift,code:service/lib/context.js | A:FieldContext、FocusedField、CaretAnchor | S:安全字段与密码管理器不收集语境，选区读取应限制目标进程且避免阻塞主线程
-FnKey.swift[IH7M]: F:识别Fn单击及修饰键组合，分发分配的动作 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/HotKey.swift | A:FnChord、FnTapDetector、FnTapGate | S:按系统Fn用途延后单击判定，其他输入取消单击
+DictationController.swift[AB9L]: F:协调录音、识别、整理、审核、记录和文字交付 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/OnlineASR.swift,code:apps/macos/Sources/Delivery.swift | A:toggleDictation、startHeldShortcut、stopRecording、cancelDictation | S:采样、焦点回调和请求完成连到当前录音实例；取消或新请求作废旧界面回调，交付仍保持最初输入目标
+FieldContext.swift[IS8M]: F:通过辅助功能判断编辑焦点并读取获准的上下文 | R:code:apps/macos/Sources/SelectionTranslator.swift,code:apps/macos/Sources/Delivery.swift,code:apps/macos/Sources/RecordingHints.swift | A:FieldContext、FocusedField、CaretAnchor、hasEditableFocus | S:提示仅查询角色和可编辑性，不读取内容；排除密码框，限制目标进程和查询超时
+FnKey.swift[IH7M]: F:识别 Fn 单击、长按及配置的组合键，再分发监听动作 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/HotKey.swift | A:FnChord、FnTapDetector、FnTapGate | S:只在系统 Fn 动作为无操作时启动长按听写，组合键和输入源切换保留原有保护
 Guide.swift[DU4T]: F:显示设置导航帮助和语音模型下载提示 | R:code:apps/macos/Sources/HubSettings.swift | A:SettingsGuide、GuideList、MirrorHint | S:-
-History.swift[PD8L]: F:管理本机听写历史、留存、词典相关记录及统计 | R:code:apps/macos/Sources/HistoryDatabase.swift,code:apps/macos/Sources/ActivityLog.swift,code:apps/macos/Sources/LLMSettings.swift | A:LocalHistoryEntry、DictationStats、History本地存取 | S:行内容先以钥匙串密钥加密再写数据库，活动统计的生命周期与文本留存区分
+History.swift[PD8L]: F:管理本地听写、文本留存、音频回听及词典相关记录 | R:code:apps/macos/Sources/HistoryDatabase.swift,code:apps/macos/Sources/ActivityLog.swift,code:apps/macos/Sources/LLMSettings.swift | A:LocalHistoryEntry、DictationStats、HistoryStore、HistorySeal | S:历史行使用钥匙串中的密钥加密复用。解锁重试读取旧行，再合并锁定期间内存里的新行；活动统计独立留存
 HistoryDatabase.swift[PD7S]: F:以SQLite行存取已加密听写条目并查询非文本元数据 | R:code:apps/macos/Sources/History.swift | A:StoredEntryRow、HistoryDatabase | S:调用方完成数据密封，普通查询列不含听写文字
-HotKey.swift[IH6S]: F:通过Carbon注册全局快捷键并格式化显示 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/FnKey.swift | A:HotKeyCentre.register、unregister、describe | S:Carbon注册路径无需为事件监听获取输入监控权限
+HotKey.swift[IH6S]: F:使用 Carbon 注册快捷键及可选松键回调并格式化其名称 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/FnKey.swift | A:HotKeyCentre.register、unregister、describe | S:Carbon 收按下和松开事件，无需输入监控；取消注册同时清理两种回调
 HubFeedback.swift[DU4T]: F:维护主窗口局部通知、撤销操作和到期回调 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/HubPages.swift | A:HubFeedback.show、dismiss、HubNoticeStack | S:-
-HubPages.swift[DU7L]: F:组装首页概览、快捷键、引擎和历史详情 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/History.swift,code:apps/macos/Sources/HubScrollView.swift | A:HomePage、历史页、Formatters | S:首页内容限制为单屏，历史的详情和行操作保留列表定位
+HubPages.swift[DU7L]: F:组装首页概览、快捷键试用入口、引擎与历史详情 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/History.swift,code:apps/macos/Sources/RecordingHints.swift | A:HomePage、历史页、Formatters | S:首页为单屏，历史详情保留列表定位；从快捷键卡打开推荐编辑器可触发短提示
 HubScrollView.swift[IU7M]: F:提供全局原生滚动及可选位置记忆、渐隐和滑块高亮 | R:code:apps/macos/Sources/HubPages.swift,code:apps/macos/Sources/HubSettings.swift | A:HubScrollView、NativeScrollAppearance | S:保持系统滚轮和惯性；装饰按帧合并，关闭装饰时不附加观察开销
-HubSettings.swift[DU7L]: F:提供听写、模型和通用设置分类及权限管理 | R:code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/OnlineASRSettings.swift | A:SettingsPage、LoginItemStatus | S:模型、麦克风、凭据和系统登录项状态不得阻塞分类切换或在视图求值时同步查询
+HubSettings.swift[DU7L]: F:提供听写、模型与通用设置，以及相关的权限反馈 | R:code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/LLMSettings.swift | A:SettingsPage、LoginItemStatus | S:视图渲染只查凭据存在性；主动获取列表或测试时区分钥匙串拒绝访问和未保存 Key
 HubThemeReveal.swift[DU6T]: F:抓取旧外观并调度主窗及设置窗主题揭示 | R:code:apps/macos/Sources/ThemeMosaicOverlay.swift,code:apps/macos/Sources/HubWindow.swift | A:HubThemeReveal.apply | S:主题遮罩在原生窗口层挂载且不抢界面点击
-HubWindow.swift[AU7M]: F:创建固定主窗、侧栏和独立设置入口，处理重新打开 | R:code:apps/macos/Sources/AppWindowStyle.swift,code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/HubPages.swift | A:HubWindowController.show、reopen、prepareForUpdate | S:设置优先关闭；Dock恢复返回首页并触发统计重播
+HubWindow.swift[AU7L]: F:创建主窗和独立设置窗口，管理启动遮罩及首页窗口路由 | R:code:apps/macos/Sources/AppWindowStyle.swift,code:apps/macos/Sources/SettingsWindow.swift,code:apps/macos/Sources/AppModel.swift | A:HubWindowController.openMainWindow、show、userCacheDidLoad | S:遮罩等待缓存与页面布局完成，超时只撤遮罩；设置和侧栏保留自己的入口
 IdleBar.swift[DU6M]: F:提供桌面收起态语音条、悬停展开及启动入口 | R:code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:IdleBarView | S:使用非激活面板，让外部文档保留焦点
 Inserter.swift[IU8M]: F:生成纯文本或富文本剪贴板并通过系统粘贴交付 | R:code:apps/macos/Sources/Delivery.swift,code:apps/macos/Sources/FieldContext.swift | A:Inserter.snapshot、setString、setRich | S:剪贴板已被用户改动时不得覆盖其新内容；保留粘贴失败时的可恢复文本
 InstanceLock.swift[RR4T]: F:使用文件描述符持有进程级单实例锁 | R:code:apps/macos/Sources/AppDelegate.swift | A:InstanceLock.acquire | S:崩溃关闭描述符时释放锁
-L10n.swift[CL6L]: F:以中文键查找界面译文并统一数字及格式化 | R:code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/ReleaseSummary.swift | A:L10n.text、formattedNumber、resolve | S:语言在每次启动时确定，保存偏好后重启才全局生效
-LLMSettings.swift[IS8M]: F:管理模型服务预设、地址规则与钥匙串凭据 | R:code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/Settings.swift | A:LLMPreset、KeychainStore、isAllowedBaseURL | S:密钥不写入UserDefaults，按请求提供给本机服务；界面查询使用凭据存在性缓存
+L10n.swift[CL6L]: F:提供界面译文、参数替换、数字和日期本地化入口 | R:code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/ReleaseSummary.swift | A:L10n.text、formattedNumber、resolve | S:语言在启动时确定，保存偏好后重启才全局生效
+LLMSettings.swift[IS8L]: F:管理模型服务预设、地址规则和钥匙串凭据 | R:code:apps/macos/Sources/TouchIDVault.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/History.swift | A:LLMPreset、KeychainStore、migrateToTouchID | S:普通运行禁用旧钥匙串密码交互；迁移在独立带锁进程中按明确授权读取旧条目，全量验证后启用指纹钥匙串且保留旧条目
 LearnedToast.swift[DU5S]: F:在语音条附近显示可撤销反馈和取消淡出 | R:code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/RecordingBar.swift | A:LearnedToast.show、finish | S:反馈面板不激活应用
 LoadingMotion.swift[DU5S]: F:提供骨架扫光、不确定进度及伸缩圆弧动画 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/UpdateProgressWindow.swift | A:SkeletonWave、LoadingLinearProgress、LoadingCircularProgress | S:动画时钟局限于视图，不通过全局模型发布帧
 MainMenu.swift[EU4T]: F:安装Mac应用、编辑与窗口菜单及快捷命令 | R:code:apps/macos/Sources/AppDelegate.swift | A:MainMenu.build | S:AppKit文本编辑快捷键依赖拥有正确编辑菜单
@@ -96,17 +96,17 @@ OnboardingPractice.swift[AB6S]: F:执行不落地的首次听写练习并评估�
 OnboardingPracticeView.swift[DU4S]: F:复用录音条显示练习启停、取消和结果 | R:code:apps/macos/Sources/OnboardingPractice.swift,code:apps/macos/Sources/RecordingBar.swift | A:OnboardingPracticeView | S:-
 OnlineASR.swift[IN8M]: F:经WebSocket把规范音频发给豆包或阿里云并合成文本 | R:code:apps/macos/Sources/OnlineASRSettings.swift,code:apps/macos/Sources/DictationController.swift | A:OnlineASRProvider、OnlineASRConfiguration、transcribe | S:按提供方分别处理音频帧和终止事件，显式选择云端路径后才发送录音
 OnlineASRSettings.swift[DS5T]: F:配置云端识别提供方和凭据界面、展示录音用途 | R:code:apps/macos/Sources/OnlineASR.swift,code:apps/macos/Sources/LLMSettings.swift | A:OnlineASRSettings | S:-
-Recorder.swift[IH8L]: F:采集系统麦克风、转换PCM并提供波形和WAV快照 | R:code:apps/macos/Sources/AudioConvert.swift,code:apps/macos/Sources/AudioDevices.swift,code:apps/macos/Sources/VoiceVisualization.swift | A:Recorder、pcmSnapshot、level、voiceLevel | S:快照按字节偏移提供追加数据；呈现电平与录音样本分离
-RecordingBar.swift[DU8L]: F:绘制录音胶囊和声纹，处理启动、免提、转写及结束状态 | R:code:apps/macos/Sources/RecordingOverlayHost.swift,code:apps/macos/Sources/VoiceBarGeometry.swift,code:apps/macos/Sources/VoiceVisualization.swift | A:RecordingBarModel、RecordingBarFormat、LevelHistory | S:录音外观独立于日夜主题；只在活动时更新声纹，保留非激活交互
-RecordingOverlayHost.swift[IU5T]: F:在透明承载视图内放置语音胶囊及其命中区域 | R:code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:RecordingOverlayHost.apply、hitTest | S:透明载体的空白区必须可点穿
+Recorder.swift[IH8L]: F:采集系统麦克风、转换 PCM 并提供电平与 WAV 快照 | R:code:apps/macos/Sources/AudioConvert.swift,code:apps/macos/Sources/AudioDevices.swift,code:apps/macos/Sources/VoiceVisualization.swift | A:Recorder、pcmSnapshot、level、voiceLevel | S:快照按字节偏移提供追加数据；声纹直接取话筒 RMS，供显示的电平与录音样本分离
+RecordingBar.swift[DU8L]: F:绘制录音胶囊、实时声纹、处理进度和短暂完成状态 | R:code:apps/macos/Sources/RecordingOverlayHost.swift,code:apps/macos/Sources/VoiceBarGeometry.swift,code:apps/macos/Sources/VoiceVisualization.swift | A:RecordingBar.Take、RecordingBarModel、PillView | S:实例标记阻止旧回调更改胶囊；处理最多 99%，成功后到 100% 并收起；非激活面板不抢占焦点
+RecordingOverlayHost.swift[IU5T]: F:在透明承载视图内放置胶囊、状态标签和倒计时并同步命中区域 | R:code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:RecordingOverlayHost.apply、hitTest | S:透明载体空白可点穿；倒计时显示在胶囊外以保留固定宽度
 RecordingStartup.swift[RH6T]: F:串行异步打开录音设备并将结果回送主线程 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/DictationController.swift | A:RecordingStartup.begin、cancel | S:取消不能接收晚到设备，弃用设备必须先在串行队列上关闭
 ReleaseSummary.swift[DV4T]: F:从发布说明取出当前语言的短更新摘要 | R:code:.github/release-notes.md,code:apps/macos/Sources/UpdateController.swift | A:ReleaseSummary.text | S:发布文本只当普通文字
 SelectableText.swift[IU5S]: F:桥接可选取的AppKit文本到SwiftUI历史和译文 | R:code:apps/macos/Sources/HubPages.swift,code:apps/macos/Sources/SelectionTranslator.swift | A:SelectableText、HistoryTextView | S:无选区的点击可转发行操作
 SelectionTranslator.swift[AU8L]: F:被动发现划选并在用户点击后请求、呈现和重试翻译 | R:code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/SelectableText.swift | A:SelectionTranslator.start、stop、hide | S:正常输入撤销待完成读选区；只在复核后发送，结果不写入历史也不自动粘贴
 SelfIntegrity.swift[RS6T]: F:在启动内置运行时时检测应用签名和资源完整性 | R:code:apps/macos/Sources/ServiceManager.swift,code:apps/macos/Sources/SigningAccess.swift | A:SelfIntegrity.problem | S:服务脚本和依赖在资源目录，需在执行前覆盖签名资源
-ServiceClient.swift[IN9L]: F:定义并执行Mac到本机识别服务的请求、取消和响应解码 | R:code:apps/macos/Sources/ServiceManager.swift,code:service/lib/http.js,code:service/lib/secure-channel.js | A:healthSync、dictateSync、polishSync、betaSync、sendMeeting | S:请求绑定当前服务代次，敏感请求走保密通道，拒绝重定向；可按响应保留分批翻译进度
-ServiceManager.swift[RR8M]: F:启动、监视并关闭Mac随包的Node本地服务 | R:code:apps/macos/Sources/SelfIntegrity.swift,code:apps/macos/Sources/ServiceClient.swift,code:service/lib/server.js | A:ServiceLocator、ServiceManager、就绪行 | S:签名资源检查通过后才执行随包运行时；端口随进程代次更新
-Settings.swift[PC7L]: F:保存快捷键、模型、语言、外观和留存偏好 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/LLMSettings.swift | A:VoiceLanguage、TranslateLanguage、HotKeyBinding、HistoryRetention | S:迁移旧默认绑定时应保留用户自定义键；凭据另存钥匙串
+ServiceClient.swift[IN9L]: F:定义并执行 Mac 到本机识别服务的请求、取消和响应解码 | R:code:apps/macos/Sources/ServiceManager.swift,code:service/lib/http.js,code:service/lib/secure-channel.js | A:healthSync、dictateSync、polishSync、setLocalASREnabledSync | S:请求绑定当前服务代次；敏感请求走保密通道并拒绝重定向，本机识别开关沿用端口及令牌重试
+ServiceManager.swift[RR8L]: F:启动和监视随包 Node 服务，按识别来源同步本机模型开关 | R:code:apps/macos/Sources/SelfIntegrity.swift,code:apps/macos/Sources/ServiceClient.swift,code:service/lib/server.js | A:ServiceLocator、ServiceManager、setLocalASREnabled | S:签名资源验证后才执行随包运行时；云端识别随启动参数禁用本机模型，在役切换失败重试限于同一子进程
+Settings.swift[PC7L]: F:保存快捷键、模型、语言、外观、提醒与留存偏好 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/LLMSettings.swift,code:apps/macos/Sources/RecordingHints.swift | A:VoiceLanguage、TranslateLanguage、HotKeyBinding、HistoryRetention | S:旧默认迁移保留自定义键；钥匙串托管凭据；首次提示与冷却只持久化标记和显示时间
 SettingsWindow.swift[AU6S]: F:呈现带遮罩的独立固定设置窗并管理淡入淡出关闭 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/AppWindowStyle.swift | A:SettingsWindowController.show、closeIfVisible、closeImmediately | S:设置浮在主窗上方，关闭时需清理背景交互遮罩
 SigningAccess.swift[IS6T]: F:收紧指定本机签名身份的钥匙串访问权限 | R:code:apps/macos/make-signing-cert.sh | A:SigningAccess.tighten、restrict | S:只匹配指定身份；遇多个同名身份拒绝，绝不导出密钥
 SpeechModelOptions.swift[DU5S]: F:展示语音模型下载、激活、取消及存储清理操作 | R:code:apps/macos/Sources/AppDelegate+SpeechModels.swift,code:apps/macos/Sources/ServiceClient.swift | A:SpeechModelOptions | S:-
@@ -118,20 +118,22 @@ TranslationSunset.swift[DU3T]: F:绘制划词翻译的紧凑实心墨迹图标 |
 Typography.swift[CU4T]: F:集中提供界面、数字和AppKit文字字体 | R:code:apps/macos/Sources/Theme.swift,code:apps/macos/Sources/ActivityCard.swift | A:InterfaceTypography.localized、localizedAppKit、figure | S:-
 UpdateController.swift[AV7S]: F:协调手动和后台更新发现、下载与重启 | R:code:apps/macos/Sources/Updater.swift,code:apps/macos/Sources/UpdateProgressWindow.swift | A:check、scheduleChecks、blockingReason | S:后台检查不主动弹窗；忙于录音或提示词时阻断安装
 UpdateProgressWindow.swift[DU5M]: F:在同一更新对话框显示检查、进度和重启 | R:code:apps/macos/Sources/UpdateController.swift,code:apps/macos/Sources/LoadingMotion.swift | A:UpdateDialogState、UpdateProgressWindow | S:-
-Updater.swift[IV8L]: F:查找新发布、下载更新并安排替换重启 | R:code:apps/macos/Sources/UpdateController.swift,code:apps/macos/scripts/package-names.sh,code:.github/workflows/release.yml | A:Updater、UpdateError、isNewer、canKeepSignature | S:验证更新清单和签名要求；固定签名身份维持更新链，迁移旧签名有独立路径
+Updater.swift[IV8L]: F:查找发布、验证下载并安排替换和重启 | R:code:apps/macos/Sources/UpdateController.swift,code:apps/macos/Sources/SelfIntegrity.swift,code:.github/workflows/release.yml | A:Updater、UpdateError、canKeepSignature、permitsLocalResigning | S:发布签名稳定时必须维持现有签名要求；只有旧临时签名或旧本地证书可进入本地迁移路径
 VoiceBarGeometry.swift[DU5T]: F:计算语音条状态尺寸、圆弧命中和形变曲线 | R:code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/RecordingOverlayHost.swift | A:VoiceBarGeometry、RecordingBarMode | S:-
-VoiceVisualization.swift[KH7M]: F:以窗口FFT提取人声能量并平滑波纹渲染 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/RecordingBar.swift | A:VoiceLevel、VoiceSpectrum、VoiceResponse | S:频率边界按设备采样率转换，FFT不在界面线程运行
+VoiceVisualization.swift[KH7T]: F:将真实麦克风电平转换为对称声纹包络 | R:code:apps/macos/Sources/Recorder.swift,code:apps/macos/Sources/RecordingBar.swift | A:VoiceLevel、VoiceWaveform | S:峰值由中心向两侧传播，静音回落到固定基础高度
 Wav.swift[CH6S]: F:读写客户端和服务共用的规范PCM WAV | R:code:apps/macos/Sources/Recorder.swift,code:service/lib/wav.js | A:Wav.header、wrap、parse、isCanonical | S:接口要求16kHz单声道PCM16，固定头和时长上限要与服务一致
-main.swift[ER6T]: F:处理更新凭据交接后启动AppKit代理 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/Updater.swift | A:TypeLeast应用入口 | S:交接在历史读取钥匙串前恢复，忽略失效子进程管道的SIGPIPE
+main.swift[ER6T]: F:处理旧交接与指纹迁移子命令并启动 AppKit | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/InstanceLock.swift,code:apps/macos/Sources/LLMSettings.swift | A:TypeLeast 应用入口 | S:迁移持实例锁且只有明确参数才允许旧交互；正常应用忽略失效子进程管道的 SIGPIPE
+TouchIDVault.swift[PS8S]: F:把 TypeLeast 凭据保存在需要 Touch ID 解锁的专用钥匙串 | R:code:apps/macos/Sources/LLMSettings.swift,code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/L10n.swift | A:TouchIDVault.provision、unlock、read、write | S:专用钥匙串口令以 Secure Enclave 密钥和 HPKE 封装，常规运行禁止密码交互。新库经指纹读回后才提交选择标记，每次访问结束重新锁定
+RecordingHints.swift[DU7M]: F:管理首次就绪卡和短提示的独立悬浮窗、队列和计时 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/FieldContext.swift | A:RecordingHints、TypingHintWindow | S:完成引导且两项权限齐备才监听键入；持久化首次标记和显示时间，计时不读取键盘内容；输入目标改变时撤去短提示
 
 ===/<repository>/apps/macos/Tests/===
 ContextPreferencesTests.swift[TS4T]: F:覆盖光标语境边界及偏好隔离 | R:code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/Settings.swift | A:contextPreferencesTests | S:-
 MeetingTests.swift[TB4T]: F:以短音频文件覆盖会议导入和格式处理 | R:code:apps/macos/Sources/Meeting.swift | A:meetingTests | S:-
-PerformanceRegressionTests.swift[TP4S]: F:覆盖异步刷新与启动相关性能回归 | R:code:apps/macos/Sources/CoalescingRefresh.swift,code:apps/macos/Sources/RecordingStartup.swift,code:apps/macos/Sources/LLMSettings.swift | A:performanceRegressionTests | S:凭据存在性断言只计夹具账户，应用激活也可能发起其他后台查询
-SettingsScrollTests.swift[TU4S]: F:用受控登录状态服务记录真实设置视图的滚动行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:隔离历史，不打开实际麦克风或注册登录项
+PerformanceRegressionTests.swift[TP4M]: F:覆盖异步刷新、启动窗口和首页动效回归 | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/CoalescingRefresh.swift | A:performanceRegressionTests、dashboardMotionTests、dashboardWindowTests | S:窗口断言等待实际布局提交；动画测试用真实统计卡位图验证零值首帧和插值
+SettingsScrollTests.swift[TU4S]: F:用受控登录状态服务校验真实设置视图的滚动行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:等待后台登录状态提交后才断言，滚动和模型更新不得触发额外系统查询；隔离历史且不注册登录项
 StubServer.swift[TN4S]: F:给客户端契约测试提供最小回环HTTP桩 | R:code:apps/macos/Sources/ServiceClient.swift | A:StubServer、Request、Response | S:-
 build-mlx.sh[TV4T]: F:验证MLX构建脚本选择当前Xcode生成的Metal库 | R:code:apps/macos/scripts/build-mlx.sh | A:独立脚本入口 | S:-
-main.swift[TQ5L]: F:运行 Mac 服务契约、窗口、录音交接与数据回归用例 | R:code:apps/macos/test.sh,code:apps/macos/Tests/StubServer.swift,code:apps/macos/Sources/RecordingBar.swift | A:单元与验收测试入口 | S:真实录音面板须在观察应用激活的用例之后展示，验证启动到录音及关闭过渡
+main.swift[TQ5L]: F:运行 Mac 服务契约、录音交接、窗口及数据回归用例 | R:code:apps/macos/test.sh,code:apps/macos/Tests/StubServer.swift,code:apps/macos/Tests/PerformanceRegressionTests.swift | A:测试入口 | S:原生窗口在应用激活观察之后显示，验证迟到录音回调、实际尺寸、进度封顶及一次性提示
 package-names.sh[TV4T]: F:覆盖安全发布文件名和已有输出保护 | R:code:apps/macos/scripts/package-names.sh,code:apps/macos/package.sh | A:打包命名回归入口 | S:-
 package-runtime.mjs[TV4T]: F:使用包内Node和隔离状态目录验证随包服务 | R:code:apps/macos/package.sh,code:service/lib/server.js | A:独立运行时检查 | S:-
 publisher-setup.py[TV4S]: F:以模拟下载和鉴权覆盖Mac发布证书安装脚本 | R:code:apps/macos/scripts/setup-release-signing.sh | A:Python夹具入口 | S:-
@@ -316,7 +318,7 @@ README.md[SG4T]: F:记录本地服务运行方法、状态文件、配置和HTTP
 package.json[FV5T]: F:声明本机Node服务入口、依赖及开发命令 | R:code:service/bin/typeleast-service.mjs,code:service/lib/server.js | A:typeleast-service、lib/server.js、ES模块 | S:-
 
 ===/<repository>/service/bin/===
-typeleast-service.mjs[ER7T]: F:处理本地服务命令行、父进程和就绪通知 | R:code:service/lib/server.js,code:apps/macos/Sources/ServiceManager.swift | A:--state-dir、--models-dir、--port、--parent-pid | S:标准输出首行供客户端解析；受控运行密钥不经命令行传递
+typeleast-service.mjs[ER7T]: F:处理本机服务命令行、父进程退出和就绪通知 | R:code:service/lib/server.js,code:apps/macos/Sources/ServiceManager.swift | A:--state-dir、--port、--parent-pid、--no-local-asr | S:标准输出首行供客户端解析，受控运行密钥不经过命令行；禁用本机识别仍启动服务
 
 ===/<repository>/service/lib/===
 asr-catalog.json[FB5M]: F:列出已支持的Sherpa识别模型、来源、许可和文件清单 | R:code:service/lib/speech-models.js,code:service/lib/models.js | A:语音模型ID与文件描述 | S:-
@@ -327,7 +329,7 @@ config.js[FC6S]: F:解析服务配置、默认值及历史强度迁移 | R:code:
 context.js[DS8S]: F:限制光标语境并对模型输入做凭据脱敏 | R:code:service/lib/service.js,code:service/lib/http.js | A:redactSecrets、parseFieldContext、redactFieldContext | S:应兼顾常见API Key和多词密码，仅替换凭据形状的片段
 dictation-task.js[DB4T]: F:识别独立听写、翻译和助手任务码 | R:code:service/lib/service.js,code:service/lib/prompts/translate.js | A:TASKS、taskFor | S:任务身份不受已退役整理强度设置限制
 fact-review.js[KB6T]: F:对可能改变含义的候选发起事实审核 | R:code:service/lib/quantity-review.js,code:service/lib/tasks/dictation.js,code:service/lib/tasks/translation.js | A:needsFactReview、reviewFacts | S:风险信号不证明改写错误，由审核结果决定提示选择
-http.js[EN9L]: F:提供本机识别、整理、模型、提示词和会议HTTP接口 | R:code:service/lib/server.js,code:service/lib/service.js,code:service/lib/token.js,code:service/lib/secure-channel.js | A:ROUTE_PREFIX、createHandler、MAX_JSON_BYTES、MAX_META_BYTES | S:限回环Host且验证私有令牌；按路由限制请求体，关闭连接取消相应任务
+http.js[EN9L]: F:提供本机识别、整理、模型和会议的 HTTP 接口 | R:code:service/lib/server.js,code:service/lib/service.js,code:service/lib/token.js,code:service/lib/secure-channel.js | A:ROUTE_PREFIX、createHandler、MAX_JSON_BYTES、MAX_META_BYTES | S:仅接受回环 Host 和私有令牌，按路由限流请求体，连接关闭取消任务。本机识别暂停仍报告服务健康，识别开关要求布尔值
 llm.js[CR6S]: F:共享模型请求取消、截止时间和脱敏错误分类 | R:code:service/lib/openai-compat.js,code:service/lib/cleanup-task.js | A:ModelCallError、createDeadline、failureReason、failureDetail | S:区分用户取消和超时，超大定时器须限制到平台合法范围
 local-models.js[DS6T]: F:检查本地ONNX模型目录并生成受限识别配置 | R:code:service/lib/onnx-files.js,code:service/lib/local-recognizer.js | A:LOCAL_MODEL_TEMPLATES、inspectLocalModel、localConfig | S:外部模型描述只当数据，不接受任意原生配置
 local-recognizer.js[IS6T]: F:用独立可销毁进程运行用户导入的本地模型 | R:code:service/lib/local-models.js,code:service/lib/asr.js | A:LocalModelProcess、modelEnvironment | S:子进程环境仅传递白名单，不继承模型API凭据
@@ -345,9 +347,9 @@ punctuation.js[KB5T]: F:归一化正文冗余标点并跳过字面片段 | R:cod
 quantity-review.js[KB5T]: F:检测原文和候选间可核对的数值单位冲突 | R:code:service/lib/fact-review.js | A:quantityUnitConflict、hasQuantityUnitConflict | S:同值多实例可能是更正或对照，留给人工判断而不自动替换
 runtime.js[RR6T]: F:发布并撤回带PID的服务端口和版本状态 | R:code:service/lib/server.js,code:apps/macos/Sources/ServiceClient.swift | A:RUNTIME_FILE、publishRuntime、withdrawRuntime | S:新进程端口由系统分配，旧进程退出不能删除新进程的状态
 secure-channel.js[MS8T]: F:给受控Mac本机服务封装加密请求和响应 | R:code:service/lib/server.js,code:apps/macos/Sources/ServiceClient.swift | A:seal、open、secureHandler | S:方法、方向及请求身份受边界约束，重复请求被拒绝，拒绝后不返回内层文字
-server.js[ER8S]: F:在回环启动识别与整理服务，发布发现信息并负责退出 | R:code:service/lib/config.js,code:service/lib/http.js,code:service/lib/speech-models.js,code:service/lib/runtime.js | A:startService、VERSION、close | S:模型异步准备；退出取消会议及进程任务，并撤回自己拥有的状态记录
+server.js[ER8S]: F:在回环启动识别与文字整理服务，管理发现记录和退出 | R:code:service/lib/config.js,code:service/lib/http.js,code:service/lib/speech-models.js,code:service/lib/runtime.js | A:startService、VERSION、close | S:模型独立于服务异步准备；关闭时取消会议及进程任务，仅撤回本进程拥有的发现记录
 service.js[AB9L]: F:协调识别、整理、翻译、提示词、会议及健康状态 | R:code:service/lib/http.js,code:service/lib/tasks/dictation.js,code:service/lib/tasks/translation.js,code:service/lib/speech-models.js | A:VoicePolishService.polish、transcribeAndPolish、snapshot、taskProgress | S:限制在途请求和队列；错误保留原口述；服务不保存历史和密钥
-speech-models.js[AB8M]: F:管理本机模型准备、选择、激活、下载与存储 | R:code:service/lib/models.js,code:service/lib/asr.js,code:service/lib/mlx-recognizer.js,code:service/lib/moss-recognizer.js | A:SpeechModels、catalog、start、activate、meetingRecognizer | S:下载不替换活动识别器；应等现有工作结束再激活
+speech-models.js[AB8L]: F:管理本机模型选择、验证、准备、下载、卸载及重新激活 | R:code:service/lib/models.js,code:service/lib/asr.js,code:service/lib/mlx-recognizer.js,code:service/lib/moss-recognizer.js | A:SpeechModels、catalog、activate、meetingRecognizer、setLocalEnabled | S:切换云端取消陈旧模型准备，等待正在执行的识别完成再释放工作进程，保留已保存选择。切回本机才加载
 tidy.js[KB6M]: F:以确定规则去填充词、重复和相邻多余标点 | R:code:service/lib/punctuation.js,code:service/lib/tasks/dictation.js | A:stripParticles、collapseRepeats、tidy | S:去除语气词会改变相邻标点归属，需在归一化时处理
 token.js[PS6T]: F:生成私有回环令牌并验证请求凭据 | R:code:service/lib/server.js,code:service/lib/http.js | A:ensureToken、authorize | S:状态目录存放令牌，比较使用恒定时间
 validate.js[CB4T]: F:从模型回答取出外层围栏内的文本 | R:code:service/lib/tasks/translation.js,code:service/lib/tasks/dictation.js | A:unwrap | S:-
@@ -374,7 +376,7 @@ translation.js[AB7T]: F:用段落批次翻译口述或选区并呈现部分成�
 asr-test-policy.mjs[TQ3T]: F:为指定大模型提供显式内存预算跳过规则 | R:code:service/scripts/check-asr-models.mjs | A:skipForMemory | S:默认不跳过，测试预算不定义产品硬件要求
 check-asr-models.mjs[TB4S]: F:按公开样本和语言提示检查真实识别模型 | R:code:service/scripts/asr-test-policy.mjs,code:service/lib/speech-models.js | A:--models-dir、--state-dir、--download、--sample-file | S:每个模型用独立子进程，切换前释放原生内存
 check-localization.mjs[TL3T]: F:对照应用内置语言目录的翻译条目 | R:code:apps/macos/Sources/L10n.swift,code:apps/windows/TypeLeast.Core/L10n.cs | A:本地化目录检查入口 | S:-
-check-redaction.mjs[TS4T]: F:捕捉发给模型桩的请求体来覆盖脱敏 | R:code:service/lib/context.js,code:service/lib/service.js | A:本地请求捕捉入口 | S:无需连接真实提供方
+check-redaction.mjs[TS4T]: F:捕捉模型桩的请求体验证口述和上下文凭据脱敏 | R:code:service/lib/context.js,code:service/lib/service.js | A:本地请求捕捉入口 | S:无需连接真实提供方
 cleanup-acceptance.mjs[TB3T]: F:通过在运行服务执行整理规则的示例验收 | R:code:service/scripts/service-env.mjs,code:service/lib/prompts/cleanup.md | A:整理验收入口 | S:使用真实配置会消耗模型额度
 compare-qwen-formats.mjs[XB3T]: F:对比两种本机Qwen模型文件形态的识别 | R:code:service/lib/local-models.js,code:service/lib/local-recognizer.js | A:baseline-dir、candidate-dir、samples-dir | S:显式传路径，不读用户偏好或凭据
 live-acceptance.mjs[TB3T]: F:通过运行中的本机服务对照整理验收案例 | R:code:service/scripts/service-env.mjs,code:service/lib/service.js | A:真实服务验收入口 | S:使用真实模型额度

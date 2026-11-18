@@ -143,6 +143,20 @@ else
 fi
 
 if [ "${1:-}" != "--no-install" ]; then
+  # Keep an existing certificate-backed identity before quitting the running app.
+  installed="$DEST"
+  if [ ! -d "$installed" ]; then installed="/Applications/$BIN_NAME.app"; fi
+  if [ -d "$installed" ]; then
+    current_requirement="$(codesign -d -r- "$installed" 2>&1 | sed -n 's/^designated => //p')"
+    case "$current_requirement" in
+      *"certificate leaf"*|*"anchor = H\""*|*"anchor H\""*)
+        if ! codesign --verify --deep --strict -R "=$current_requirement" "$APP"; then
+          echo "The local build does not match the installed TypeLeast signing identity. Use the same certificate to keep Keychain access." >&2
+          exit 1
+        fi
+        ;;
+    esac
+  fi
   # Quit the running copy (new or old name) so the new binary is the only one alive.
   if pgrep -x "$BIN_NAME" >/dev/null 2>&1 || pgrep -x dsh-voice >/dev/null 2>&1; then
     osascript -e 'tell application id "com.dsh.voice" to quit' >/dev/null 2>&1 || true

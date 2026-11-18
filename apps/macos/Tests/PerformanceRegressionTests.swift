@@ -1,5 +1,161 @@
 import AppKit
 import Foundation
+import SwiftUI
+
+func dashboardMotionTests() {
+    let start = Date(timeIntervalSinceReferenceDate: 0)
+    var count = CountUpTransition(initial: nil)
+    check("a fresh count has no target before data arrives", count.target == nil)
+    checkEq("a fresh count starts at zero", count.value(at: start), 0)
+    count.retarget(800, at: start, reduceMotion: false)
+    let halfway = start.addingTimeInterval(0.125)
+    checkEq("count uses cubic ease-out halfway through 250 ms", count.value(at: halfway), 700)
+    count.retarget(900, at: halfway, reduceMotion: false)
+    checkEq("updates start from the current interpolation", count.value(at: halfway), 700)
+    checkEq("count finishes on its new target", count.value(at: halfway.addingTimeInterval(0.250)), 900)
+    count.retarget(123, at: halfway, reduceMotion: true)
+    checkEq("reduced motion skips count interpolation", count.value(at: halfway), 123)
+    checkEq("a cached count can display immediately", CountUpTransition(initial: 91).value(at: start), 91)
+    checkEq("unavailable statistics render dashes", InsightFormat.count.parts(for: nil).first?.digits, "--")
+    checkEq("thousands suffix applies after rounding", InsightFormat.count.parts(for: 999.6).first?.suffix, "k")
+    checkEq("duration formats the interpolated total", InsightFormat.duration.parts(for: 3659.6).map(\.digits), ["1", "1"])
+
+    let covered = HeatmapMotion.Sample(scale: 1, cover: 1)
+    let final = HeatmapMotion.Sample(scale: 1, cover: 0)
+    checkEq("waiting columns keep the placeholder", HeatmapMotion.sample(elapsed: 0.019, column: 1), covered)
+    check("the first column has already begun", HeatmapMotion.sample(elapsed: 0.019, column: 0).cover < 1)
+    checkEq("a cell is uncovered and at peak scale at 150 ms", HeatmapMotion.sample(elapsed: 0.150, column: 0),
+            .init(scale: 1.2, cover: 0))
+    checkEq("a cell settles after 300 ms", HeatmapMotion.sample(elapsed: 0.300, column: 0), final)
+    checkEq("column-local samples match at the same time", HeatmapMotion.sample(elapsed: 0.125, column: 0),
+            HeatmapMotion.sample(elapsed: 0.165, column: 2))
+    check("34 columns finish in 960 ms", abs(HeatmapMotion.finishTime(columns: 34) - 0.960) < 0.000001)
+}
+
+func dashboardWindowTests() {
+    func wait(_ seconds: TimeInterval) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+    func waitFor(_ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(4)
+        while !condition(), Date() < deadline { wait(0.01) }
+        return condition()
+    }
+
+    let onboardingDone = Settings.shared.onboardingDone
+    let activationPolicy = NSApp.activationPolicy()
+    Settings.shared.onboardingDone = true
+    NSApp.setActivationPolicy(.accessory)
+    defer {
+        Settings.shared.onboardingDone = onboardingDone
+        NSApp.setActivationPolicy(activationPolicy)
+    }
+
+    dashboardCountRenderingTests()
+
+    let model = AppModel(loadCacheImmediately: false)
+    let hub = HubWindowController(model: model)
+    hub.openMainWindow()
+    guard let window = hub.themeTransitionWindow, let container = window.contentView,
+          let mask = container.subviews.first else {
+        check("the startup window creates a mask before mounting its shell", false)
+        return
+    }
+    defer { window.close() }
+    checkEq("the mask is initially the only content view", container.subviews.count, 1)
+    let shellReady = waitFor { hub.shellCommitted }
+    check("the shell mounts underneath while the cache is pending", shellReady && container.subviews.count >= 2 && mask.superview != nil)
+    check("separate dashboard data remains unavailable during startup", model.stats == nil && !model.activityReady)
+    model.finishUserCacheLoad()
+    hub.userCacheDidLoad()
+    check("the mask is removed once shell and cache are ready", mask.superview == nil)
+    check("the shell is visible before its dashboard deliveries", model.stats == nil && !model.activityReady)
+    check("statistics and activity both reach the visible shell", waitFor { model.stats != nil && model.activityReady })
+
+    hub.show(page: .history)
+    checkEq("explicit history navigation is preserved", model.page, .history)
+    hub.openMainWindow()
+    checkEq("opening the visible window goes Home", model.page, .home)
+    hub.show(page: .history)
+    window.close()
+    hub.openMainWindow()
+    check("closed window reopens at Home", window.isVisible && model.page == .home)
+
+    let pending = AppModel(loadCacheImmediately: false)
+    let slowHub = HubWindowController(model: pending)
+    slowHub.openMainWindow()
+    guard let slowWindow = slowHub.themeTransitionWindow,
+          let slowMask = slowWindow.contentView?.subviews.first else {
+        check("slow startup shows a mask", false)
+        return
+    }
+    defer { slowWindow.close() }
+    wait(5.2)
+    check("the five-second fallback removes the mask with cache pending", slowMask.superview == nil && !pending.userCacheReady)
+    pending.finishUserCacheLoad()
+    slowHub.userCacheDidLoad()
+    check("a late cache completion still loads both dashboard sections", waitFor { pending.stats != nil && pending.activityReady })
+}
+
+private func dashboardCountRenderingTests() {
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        print("SKIP native count rendering when macOS Reduce Motion is enabled")
+        return
+    }
+
+    let size = NSRect(x: 0, y: 0, width: 400, height: 90)
+    func figures(words: Double?, seconds: Double?, presentation: Int) -> some View {
+        HStack(spacing: 0) {
+            Figure(value: words, format: .count, label: "Words dictated", height: size.height)
+            Figure(value: seconds, format: .duration, label: "Time saved", height: size.height)
+        }
+        .frame(width: size.width, height: size.height)
+        .id(presentation)
+    }
+    let view = NSHostingView(rootView: figures(words: 0, seconds: 0, presentation: 0))
+    let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = view
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+
+    func snapshot(_ region: NSRect) -> Data? {
+        view.layoutSubtreeIfNeeded()
+        guard let image = view.bitmapImageRepForCachingDisplay(in: region) else { return nil }
+        view.cacheDisplay(in: region, to: image)
+        return image.representation(using: .png, properties: [:])
+    }
+
+    let words = NSRect(x: 0, y: 0, width: size.width / 2, height: size.height)
+    let time = words.offsetBy(dx: words.width, dy: 0)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    let zeroWords = snapshot(words)
+    let zeroTime = snapshot(time)
+
+    view.rootView = figures(words: nil, seconds: nil, presentation: 1)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    check("the first frame before data arrives renders numeric zeros", zeroWords != nil && zeroTime != nil &&
+          zeroWords == snapshot(words) && zeroTime == snapshot(time))
+
+    view.rootView = figures(words: 64_300, seconds: 45_900, presentation: 2)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+    check("reopening with cached statistics renders zeros before the animation", zeroWords != nil && zeroTime != nil &&
+          zeroWords == snapshot(words) && zeroTime == snapshot(time))
+    var wordsFrames = Set<Data>()
+    var timeFrames = Set<Data>()
+    let deadline = Date().addingTimeInterval(CountUpTransition.duration + 0.10)
+    while Date() < deadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.025))
+        if let frame = snapshot(words) { wordsFrames.insert(frame) }
+        if let frame = snapshot(time) { timeFrames.insert(frame) }
+    }
+    check("cached word count renders intermediate frames on appearance", wordsFrames.count >= 3,
+          "rendered \(wordsFrames.count) distinct frames")
+    check("cached saved time renders intermediate frames on appearance", timeFrames.count >= 3,
+          "rendered \(timeFrames.count) distinct frames")
+    let finalWords = snapshot(words)
+    let finalTime = snapshot(time)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.08))
+    check("the rendered word and time counts settle", finalWords != nil && finalTime != nil &&
+          finalWords == snapshot(words) && finalTime == snapshot(time))
+}
 
 func performanceRegressionTests() {
     // Attributes only: repeated configured-state rendering must not query Keychain.

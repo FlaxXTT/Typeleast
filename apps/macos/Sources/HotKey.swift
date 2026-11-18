@@ -12,7 +12,7 @@ private let hotKeyCallback: EventHandlerUPP = { _, event, userData in
                                EventParamType(typeEventHotKeyID), nil,
                                MemoryLayout<EventHotKeyID>.size, nil, &hkID)
     if err == noErr {
-        centre.fire(id: hkID.id)
+        centre.fire(id: hkID.id, released: GetEventKind(event) == UInt32(kEventHotKeyReleased))
         return noErr
     }
     return OSStatus(eventNotHandledErr)
@@ -26,6 +26,7 @@ final class HotKeyCentre {
     private var eventHandler: EventHandlerRef?
     private var refs: [String: EventHotKeyRef] = [:]
     private var actions: [String: () -> Void] = [:]
+    private var releases: [String: () -> Void] = [:]
     private var idToKey: [UInt32: String] = [:]
     private var nextID: UInt32 = 1
 
@@ -34,20 +35,21 @@ final class HotKeyCentre {
 
     func installIfNeeded() {
         guard eventHandler == nil else { return }
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
-                                 eventKind: UInt32(kEventHotKeyPressed))
-        let err = InstallEventHandler(GetApplicationEventTarget(), hotKeyCallback, 1, &spec,
+        let specs = [kEventHotKeyPressed, kEventHotKeyReleased].map {
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32($0))
+        }
+        let err = InstallEventHandler(GetApplicationEventTarget(), hotKeyCallback, specs.count, specs,
                                       Unmanaged.passUnretained(self).toOpaque(), &eventHandler)
         if err != noErr { status["handler"] = "InstallEventHandler -> " + String(err) }
     }
 
-    fileprivate func fire(id: UInt32) {
-        guard let key = idToKey[id], let action = actions[key] else { return }
+    fileprivate func fire(id: UInt32, released: Bool) {
+        guard let key = idToKey[id], let action = (released ? releases[key] : actions[key]) else { return }
         if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     @discardableResult
-    func register(slot: String, binding: HotKeyBinding, action: @escaping () -> Void) -> Bool {
+    func register(slot: String, binding: HotKeyBinding, onRelease: (() -> Void)? = nil, action: @escaping () -> Void) -> Bool {
         installIfNeeded()
         unregister(slot: slot)
         guard binding.enabled else {
@@ -66,6 +68,7 @@ final class HotKeyCentre {
         }
         refs[slot] = r
         actions[slot] = action
+        releases[slot] = onRelease
         idToKey[id] = slot
         status[slot] = L10n.text("已注册 ") + HotKeyCentre.describe(keyCode: binding.keyCode, modifiers: binding.modifiers)
         return true
@@ -78,12 +81,14 @@ final class HotKeyCentre {
         }
         if let id = idToKey.first(where: { $0.value == slot })?.key { idToKey[id] = nil }
         actions[slot] = nil
+        releases[slot] = nil
     }
 
     func unregisterAll() {
         for (_, r) in refs { UnregisterEventHotKey(r) }
         refs.removeAll()
         actions.removeAll()
+        releases.removeAll()
         idToKey.removeAll()
     }
 

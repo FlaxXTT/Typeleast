@@ -557,6 +557,22 @@ do {
     checkEq("waveform reset empties", history.count, 0)
     checkEq("waveform default capacity is 40 samples", LevelHistory.defaultCapacity, 40)
 
+    let tick = 1.0 / 60
+    let quiet = VoiceLevel(volume: Recorder.loudness(rms: 0.01), hasAudio: true)
+    let loud = VoiceLevel(volume: Recorder.loudness(rms: 0.1), hasAudio: true)
+    var waveform = VoiceWaveform()
+    check("an audio-free waveform stays at rest", !waveform.advance(level: VoiceLevel(), delta: tick, reduceMotion: false))
+    waveform.advance(level: loud, delta: tick, reduceMotion: false)
+    check("live peaks reach the centre on the first frame", waveform.heights[4] > waveform.heights[0] + 2)
+    checkEq("audio-driven bars mirror their other half", waveform.heights, Array(waveform.heights.reversed()))
+    for _ in 0..<90 { waveform.advance(level: VoiceLevel(hasAudio: true), delta: tick, reduceMotion: false) }
+    check("a pause returns every bar to rest", waveform.heights.allSatisfy { $0 == VoiceWaveform.restingHeight })
+    waveform.advance(level: quiet, delta: tick, reduceMotion: true)
+    let quietHeight = waveform.heights[4]
+    waveform.advance(level: loud, delta: tick, reduceMotion: true)
+    check("reduced motion still distinguishes quiet and loud input",
+          quietHeight > VoiceWaveform.restingHeight && waveform.heights[4] > quietHeight)
+
     // pill show/hide state machine
     var model = RecordingBarModel()
     checkEq("pill starts hidden", model.phase, RecordingBarModel.Phase.hidden)
@@ -605,6 +621,27 @@ do {
     model.showRecording(destination: "com.apple.TextEdit")
     checkEq("pill can start again after hide", model.phase, RecordingBarModel.Phase.recording)
     model.hide()
+}
+
+do {
+    var capsule = RecordingBarModel()
+    capsule.processing(at: 20)
+    checkEq("capsule starts processing at zero", capsule.progress(at: 20), 0)
+    checkEq("capsule advances by elapsed time", capsule.progress(at: 21), 25)
+    checkEq("processing cannot claim completion", capsule.progress(at: 80), 99)
+    capsule.complete()
+    checkEq("real completion advances the capsule to 100", capsule.progress(at: 21), 100)
+    capsule.hide()
+    checkEq("cancel clears progress", capsule.progress(at: 80), nil)
+
+    var typing = TypingHintWindow()
+    check("60 key events do not trigger a tip", !typing.record(Array(repeating: 1, count: 60), in: "a", now: 1))
+    check("the 61st event in the same app triggers a tip", typing.record([1], in: "a", now: 1))
+    check("events do not carry across apps", !typing.record([1], in: "b", now: 1))
+    check("old events fall out of the 60-second window", !typing.record(Array(repeating: 1, count: 60), in: "b", now: 62))
+    let previous = Date(timeIntervalSince1970: 1)
+    check("normal hints cool down for 48 hours", !TypingHintWindow.permitsReminder(lastShown: previous, now: previous.addingTimeInterval(172_799)))
+    check("normal hints are eligible at the 48-hour boundary", TypingHintWindow.permitsReminder(lastShown: previous, now: previous.addingTimeInterval(172_800)))
 }
 
 // Slow device opening must not block UI events, and cancelling then starting
@@ -822,6 +859,12 @@ do {
     check("a different certificate cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: other))
     check("a missing update identity cannot bypass local re-signing", !Updater.canKeepSignature(current: signed, update: nil))
     check("a missing current identity cannot bypass local re-signing", !Updater.canKeepSignature(current: nil, update: signed))
+    check("publisher-signed installs never ask for the local signing key",
+          !Updater.permitsLocalResigning(current: signed, certificateName: "TypeLeast Publisher Signing"))
+    check("legacy local-certificate installs can keep their local identity",
+          Updater.permitsLocalResigning(current: selfSigned, certificateName: Updater.signingIdentity))
+    check("ad-hoc installs can make their initial transition to a stable identity",
+          Updater.permitsLocalResigning(current: adhoc, certificateName: nil))
     // The update offer rule and the ring's steps.
     check("a quiet check offers a new version once", Updater.shouldOffer(latest: "1.18.0", offered: nil, interactive: false, busy: false))
     check("…not again", !Updater.shouldOffer(latest: "1.18.0", offered: "1.18.0", interactive: false, busy: false))
@@ -2141,10 +2184,12 @@ do {
 contextPreferencesTests()
 meetingTests()
 performanceRegressionTests()
+dashboardMotionTests()
 
 // Show the actual panel after the tests that observe application activation.
 do {
     _ = NSApplication.shared
+    dashboardWindowTests()
     let bar = RecordingBar()
     bar.showThinking(detail: "Opening microphone", startingMicrophone: true)
     check("microphone startup shows the panel before capture starts", bar.isVisible)
@@ -2154,6 +2199,46 @@ do {
     bar.hide()
     RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.1))
     check("the recording panel dismisses after the transition", !bar.isVisible)
+
+    let earlier = bar.begin(handsFree: false)
+    earlier.recording(destination: "fixture", badge: "")
+    RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    checkEq("a held shortcut reaches 70 by 34", bar.capsuleSize?.width.rounded(), 70)
+    checkEq("the listening capsule is 34 points high", bar.capsuleSize?.height.rounded(), 34)
+    earlier.processing()
+    let latest = bar.begin(handsFree: true)
+    earlier.done()
+    latest.recording(destination: "fixture", badge: "")
+    earlier.cancel()
+    earlier.level(1, elapsed: 10)
+    checkEq("late callbacks cannot change the next capture", bar.phase, .recording)
+    latest.level(0.8, elapsed: 1)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    checkEq("hands-free listening reaches 116 points wide", bar.capsuleSize?.width.rounded(), 116)
+    latest.processing()
+    latest.recording(destination: "fixture", badge: "")
+    checkEq("a late microphone callback cannot restart processing", bar.phase, .thinking)
+    latest.done()
+    checkEq("successful transcription shows the completion phase", bar.phase, .completed)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.70))
+    check("the completion capsule closes after its hold and shrink", !bar.isVisible)
+
+    let hintSuite = "typeleast.recording-hints." + UUID().uuidString
+    let hintDefaults = UserDefaults(suiteName: hintSuite)!
+    defer { hintDefaults.removePersistentDomain(forName: hintSuite) }
+    let hintSettings = Settings(defaults: hintDefaults)
+    var permissionsReady = false
+    let tips = RecordingHints(settings: hintSettings, permissionsReady: { permissionsReady }, isIdle: { true })
+    hintSettings.onboardingDone = true
+    tips.permissionsChanged()
+    check("welcome waits for permissions", !tips.isVisible && !hintSettings.recordingReadyHintShown)
+    permissionsReady = true
+    tips.permissionsChanged()
+    check("welcome can stay visible without the recording capsule", tips.isVisible && !bar.isVisible)
+    check("welcome writes the durable marker at presentation", hintDefaults.bool(forKey: "app-onboarding.onboardingCompletedFloatingBarStart"))
+    tips.stop()
+    tips.permissionsChanged()
+    check("welcome does not reappear after the panel is recreated", !tips.isVisible)
 }
 
 server.stop()

@@ -38,7 +38,12 @@ final class RecordingOverlayHost: NSView {
     required init?(coder: NSCoder) { fatalError("Created in code") }
 
     func apply(_ model: RecordingBarModel) {
-        let text = model.isStartingMicrophone ? "" : model.warning ? model.resultText : model.badge
+        var text = model.isStartingMicrophone ? "" : model.warning ? model.resultText : model.badge
+        let remaining = pill.limitSeconds - model.elapsed
+        if model.phase == .recording, remaining <= PillView.countdownSeconds {
+            let countdown = RecordingBarFormat.elapsed(remaining)
+            text = text.isEmpty ? countdown : text + " · " + countdown
+        }
         if modeLabel.stringValue != text {
             modeLabel.stringValue = text
             modeLabel.isHidden = text.isEmpty
@@ -53,9 +58,7 @@ final class RecordingOverlayHost: NSView {
     override func layout() {
         super.layout()
         CATransaction.begin()
-        CATransaction.setDisableActions(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        CATransaction.setAnimationDuration(VoiceBarGeometry.shapeDuration)
-        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.05, 0.6, 0.4, 0.95))
+        CATransaction.setDisableActions(true)
         let radius = min(99, min(pill.frame.width, pill.frame.height) / 2)
         for shadow in [nearShadow, farShadow] {
             shadow.frame = pill.frame

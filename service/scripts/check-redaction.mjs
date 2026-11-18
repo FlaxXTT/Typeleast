@@ -33,7 +33,7 @@ if (outbound === null) {
 const checks = [
   ['outbound payload excludes the dictated API key', !outbound.includes('sk-abcdefghijklmnopqrstuvwxyz')],
   ['outbound payload excludes the password', !outbound.includes('hunter2')],
-  ['outbound payload shows the key redaction', outbound.includes('[redacted-key]')],
+  ['outbound payload shows the key redaction', outbound.includes('my api key is [redacted]')],
   ['outbound payload shows the password redaction', outbound.includes('[redacted]')],
   ['field context passed to the model is redacted', !outbound.includes('ghp_abcdefghijklmnop')],
   ['the route key travels only in the Authorization header, never in the body', !outbound.includes(route.apiKey)],

@@ -35,6 +35,7 @@ struct FnTapDetector {
     private(set) var isDown = false
     private var downAt: Date?
     private var spoiled = false
+    var canHold: Bool { isDown && !spoiled }
 
     /// Fn went down. Another modifier already held spoils the tap (⌃Fn, ⌘Fn …).
     mutating func fnDown(at time: Date, otherModifiersHeld: Bool) {
@@ -188,6 +189,8 @@ final class FnKeyMonitor {
 
     /// Called after a clean tap with the input source that was active when Fn went down.
     var onTap: ((String?) -> Void)?
+    var onHold: (() -> Bool)?
+    var onHoldEnd: (() -> Void)?
     var capturingShortcut = false {
         didSet {
             if capturingShortcut != oldValue {
@@ -204,6 +207,8 @@ final class FnKeyMonitor {
     private var chords: [FnChord: () -> Void] = [:]
     private var eatsSpace = false
     private var triggeredChord = false
+    private var holdWork: DispatchWorkItem?
+    private var heldDictation = false
     private lazy var spaceFilter = FnSpaceFilter { [weak self] in
         guard let self, !self.capturingShortcut else { return }
         self.detector.otherInput()
@@ -242,6 +247,10 @@ final class FnKeyMonitor {
     }
 
     private func resetGesture() {
+        holdWork?.cancel()
+        holdWork = nil
+        if heldDictation { onHoldEnd?() }
+        heldDictation = false
         detector = FnTapDetector()
         sourceAtDown = nil
         triggeredChord = false
@@ -268,6 +277,14 @@ final class FnKeyMonitor {
             triggeredChord = false
             sourceAtDown = bareFnEnabled ? InputSourceProbe.currentID() : nil
             detector.fnDown(at: Date(), otherModifiersHeld: !flags.intersection(FnChord.standardModifiers).isEmpty)
+            if bareFnEnabled, FnTapGate.currentDelay == 0, detector.canHold {
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, self.detector.canHold, !self.triggeredChord else { return }
+                    self.heldDictation = self.onHold?() == true
+                }
+                holdWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + FnTapDetector.maxTapSeconds, execute: work)
+            }
             if (flags.rawValue & 0x06) == 0x02, FnChord.matches(.leftShift, flags: flags) {
                 _ = trigger(.leftShift)
             }
@@ -275,7 +292,7 @@ final class FnKeyMonitor {
             let cleanTap = detector.fnUp(at: Date())
             let usedSpace = spaceFilter.endFnGesture()
             defer { resetGesture() }
-            guard bareFnEnabled && cleanTap && !usedSpace else { return }
+            guard !heldDictation, bareFnEnabled && cleanTap && !usedSpace else { return }
             let action = onTap
             let source = sourceAtDown
             DispatchQueue.main.async { action?(source) }
@@ -299,7 +316,7 @@ final class FnKeyMonitor {
 
     @discardableResult
     private func trigger(_ chord: FnChord) -> Bool {
-        guard !triggeredChord, let action = chords[chord] else { return false }
+        guard !heldDictation, !triggeredChord, let action = chords[chord] else { return false }
         triggeredChord = true
         DispatchQueue.main.async(execute: action)
         return true

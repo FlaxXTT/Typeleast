@@ -13,6 +13,10 @@ func settingsScrollTests(output: String) throws {
         RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         view.layoutSubtreeIfNeeded()
     }
+    func settle(_ view: NSView, until ready: () -> Bool) {
+        let deadline = Date().addingTimeInterval(4)
+        repeat { settle(view) } while !ready() && Date() < deadline
+    }
     func scrollView(in view: NSView) -> NSScrollView? {
         if let scroll = view as? NSScrollView { return scroll }
         return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
@@ -46,7 +50,7 @@ func settingsScrollTests(output: String) throws {
             let window = NSWindow(contentRect: frame, styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.contentView = view
             view.frame = frame
-            settle(view)
+            settle(view, until: { status.status == .enabled && !status.isLoading })
             checkEq("entering General reads login status once", queries, 1)
             check("General receives the actual enabled state", status.status == .enabled)
             let baseline = queries
@@ -74,7 +78,7 @@ func settingsScrollTests(output: String) throws {
 
             systemStatus = .requiresApproval
             NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: app)
-            settle(view)
+            settle(view, until: { status.status == .requiresApproval && !status.isLoading })
             checkEq("returning from System Settings refreshes once", queries, baseline + 1)
             check("external login-item changes are reflected", status.status == .requiresApproval)
             model.settingsCategory = 0
@@ -84,7 +88,7 @@ func settingsScrollTests(output: String) throws {
             checkEq("other settings tabs do not query login items", queries, baseline + 1)
             systemStatus = .notRegistered
             model.settingsCategory = 2
-            settle(view)
+            settle(view, until: { status.status == .notRegistered && !status.isLoading })
             checkEq("returning to General refreshes once", queries, baseline + 2)
             check("returning to General receives the latest disabled state", status.status == .notRegistered)
             if dark, width == 726 {

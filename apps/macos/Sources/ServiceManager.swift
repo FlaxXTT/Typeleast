@@ -151,12 +151,43 @@ final class ServiceManager {
     private var restartAttempts = 0
     private var readySince: TimeInterval?
     private var stdoutBuffer = ""
+    private var localASREnabled = true
+    private var childLocalASREnabled: Bool?
+    private var localASRRetryPending = false
 
     // MARK: lifecycle
 
     /// Start the service unless one is already answering.
     func start() {
         queue.async { [weak self] in self?.startLocked() }
+    }
+
+    func setLocalASREnabled(_ enabled: Bool) {
+        queue.async { [weak self] in
+            guard let self, self.localASREnabled != enabled else { return }
+            self.localASREnabled = enabled
+            self.syncLocalASR()
+        }
+    }
+
+    private func syncLocalASR() {
+        guard let child = process, state.isRunning, childLocalASREnabled != localASREnabled else { return }
+        do {
+            try ServiceClient.shared.setLocalASREnabledSync(localASREnabled)
+            childLocalASREnabled = localASREnabled
+            let currentState = state
+            DispatchQueue.main.async { [weak self] in self?.onChange?(currentState) }
+        } catch {
+            childLocalASREnabled = nil
+            DiagnosticsLog.write("service.asr-mode-fail", [:])
+            guard !localASRRetryPending else { return }
+            localASRRetryPending = true
+            queue.asyncAfter(deadline: .now() + 1) { [weak self, weak child] in
+                guard let self, let child, self.process === child else { return }
+                self.localASRRetryPending = false
+                self.syncLocalASR()
+            }
+        }
     }
 
     /// Stop the child (the service also exits by itself when this app does).
@@ -217,7 +248,10 @@ final class ServiceManager {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: node.path)
-        p.arguments = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid()), "--auth-stdin", "--secure-transport"]
+        let args = ["--expose-gc", dir + "/bin/typeleast-service.mjs", "--parent-pid", String(getpid()), "--auth-stdin", "--secure-transport"]
+        childLocalASREnabled = localASREnabled
+        localASRRetryPending = false
+        p.arguments = localASREnabled ? args : args + ["--no-local-asr"]
         p.currentDirectoryURL = URL(fileURLWithPath: dir)
         var env = ServiceLocator.serviceEnvironment(ProcessInfo.processInfo.environment)
         if let mirror = modelMirror, !mirror.isEmpty { env["HF_ENDPOINT"] = mirror }
@@ -278,6 +312,7 @@ final class ServiceManager {
                 ServiceClient.shared.usePort(port)
                 readySince = ProcessInfo.processInfo.systemUptime
                 state = .running(port: port)
+                syncLocalASR()
             }
         }
     }

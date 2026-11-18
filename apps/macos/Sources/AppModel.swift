@@ -41,6 +41,8 @@ protocol AppActions: AnyObject {
     func retryEntry(id: String)
     func deleteEntry(id: String)
     func clearHistory()
+    func unlockCredentials()
+    func openRecommendedApp(_ bundle: String)
     func requestAccessibility()
     func requestMicrophone()
     func openKeyboardSettings()
@@ -71,11 +73,17 @@ final class AppModel: ObservableObject {
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
     @Published var retryingHistoryID: String?
-    /// Opening the hub replays only the Home presentation, not changes to live stats.
+    /// External window entries start a new Home presentation.
     @Published var homePresentationID = 0
+    @Published var homePresentationSuspended = false
     @Published private(set) var history: [LocalHistoryEntry] = []
+    @Published private(set) var historyUnavailable = false
+    @Published var credentialsLocked = false
     @Published private(set) var historyRevision = 0
-    @Published private(set) var stats = DictationStats()
+    @Published private(set) var stats: DictationStats?
+    @Published private(set) var activityReady = false
+    private(set) var userCacheReady = false
+    private var dashboardRequested = false
     /// Bumped when the per-day activity changes; the heatmap reads ActivityLog.shared.
     @Published private(set) var activityRevision = 0
 
@@ -103,8 +111,13 @@ final class AppModel: ObservableObject {
     let meeting = MeetingController()
     private var observers: [NSObjectProtocol] = []
 
-    init() {
-        reloadHistory()
+    init(loadCacheImmediately: Bool = true) {
+        if loadCacheImmediately {
+            finishUserCacheLoad()
+            stats = ActivityLog.shared.stats
+            activityReady = true
+            dashboardRequested = true
+        }
         refreshPermissions()
         refreshLLMKeyPresence()
         refreshOnlineASRKeyPresence()
@@ -113,8 +126,9 @@ final class AppModel: ObservableObject {
             self?.reloadHistory()
         })
         observers.append(center.addObserver(forName: ActivityLog.didChange, object: nil, queue: .main) { [weak self] _ in
-            self?.stats = ActivityLog.shared.stats
-            self?.activityRevision += 1
+            guard let self else { return }
+            if self.stats != nil { self.stats = ActivityLog.shared.stats }
+            if self.activityReady { self.activityRevision += 1 }
         })
         observers.append(center.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.settingsRevision += 1
@@ -142,9 +156,23 @@ final class AppModel: ObservableObject {
     }
 
     func reloadHistory() {
-        history = HistoryStore.shared.entries
-        stats = ActivityLog.shared.stats
+        let store = HistoryStore.shared
+        history = store.entries
+        historyUnavailable = store.persistenceProblem != nil
+        if stats != nil { stats = ActivityLog.shared.stats }
         historyRevision &+= 1
+    }
+
+    func finishUserCacheLoad() {
+        reloadHistory()
+        userCacheReady = true
+    }
+
+    func loadDashboard() {
+        guard userCacheReady, !dashboardRequested else { return }
+        dashboardRequested = true
+        DispatchQueue.main.async { [weak self] in self?.stats = ActivityLog.shared.stats }
+        DispatchQueue.main.async { [weak self] in self?.activityReady = true }
     }
 
     func refreshPermissions() {

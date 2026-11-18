@@ -840,7 +840,11 @@ struct ModelSection: View {
         let base = settings.llmBaseURL
         guard LLMPreset.isAllowedBaseURL(base) else { status = L10n.text("接口地址错误"); statusOK = false; return }
         let key = keyForRequest()
-        guard !preset.needsKey || !key.isEmpty else { status = L10n.text("没有 Key"); statusOK = false; return }
+        guard !preset.needsKey || !key.isEmpty else {
+            status = L10n.text(keySaved ? "无法读取已保存的 API Key。" : "没有 Key")
+            statusOK = false
+            return
+        }
         let route = LLMRoute(baseURL: base, model: "", apiKey: key)
         let context = requestContext
         let request = requests.begin(context: context)
@@ -904,7 +908,13 @@ struct ModelSection: View {
     }
 
     private func test() {
-        guard let route = draftRoute() else { return }
+        guard let route = draftRoute() else {
+            if preset.needsKey && keySaved {
+                status = L10n.text("无法读取已保存的 API Key。")
+                statusOK = false
+            }
+            return
+        }
         let context = requestContext
         let request = requests.begin(context: context)
         busy = true
