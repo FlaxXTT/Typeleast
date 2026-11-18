@@ -11,6 +11,9 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     private let settingsWindow: SettingsWindowController
     private var settingsPresentation: AnyCancellable?
     private var requestedRestorePage: HubPage?
+    private var startupMask: NSView?
+    private var maskTimeout: DispatchWorkItem?
+    private var shellCommitted = false
     let model: AppModel
 
     init(model: AppModel) {
@@ -44,16 +47,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         settingsWindow.closeImmediately()
     }
 
-    func reopen() {
-        guard let window, window.isVisible, !window.isMiniaturized, !NSApp.isHidden else {
-            show()
-            return
-        }
-        let frontWindow = settingsWindow.visibleWindow ?? window
-        if frontWindow.isKeyWindow && NSApp.isActive { return }
-        NSApp.activate(ignoringOtherApps: true)
-        frontWindow.makeKeyAndOrderFront(nil)
-    }
+    func openMainWindow() { show(page: .home) }
 
     func show(page: HubPage = .home) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
@@ -65,6 +59,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
             present(page)
         }
         model.refreshPermissions()
+        if NSApp.isHidden { NSApp.unhide(nil) }
         NSApp.activate(ignoringOtherApps: true)
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
@@ -76,9 +71,15 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let host = NSHostingController(rootView: HubRootView().environmentObject(model))
-        host.sizingOptions = []
-        let window = NSWindow(contentViewController: host)
+        let container = NSViewController()
+        container.view = NSView(frame: NSRect(origin: .zero, size: Self.size))
+        let mask = NSHostingView(rootView: Theme.window.overlay { AppMarkView(size: 72) }.ignoresSafeArea())
+        mask.frame = container.view.bounds
+        mask.autoresizingMask = [.width, .height]
+        container.view.addSubview(mask)
+        startupMask = mask
+
+        let window = NSWindow(contentViewController: container)
         window.title = "TypeLeast"
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
@@ -92,7 +93,40 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         window.setFrameAutosaveName("typeleast.hub.944x656")
         window.delegate = self
         AppWindowStyle.round(window)
+
+        let timeout = DispatchWorkItem { [weak self] in self?.removeStartupMask() }
+        maskTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let host = NSHostingController(rootView: HubRootView().environmentObject(self.model))
+            host.sizingOptions = []
+            container.addChild(host)
+            host.view.frame = container.view.bounds
+            host.view.autoresizingMask = [.width, .height]
+            container.view.addSubview(host.view, positioned: .below, relativeTo: self.startupMask)
+            container.view.layoutSubtreeIfNeeded()
+            container.view.displayIfNeeded()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.shellCommitted = true
+                self.userCacheDidLoad()
+            }
+        }
         return window
+    }
+
+    func userCacheDidLoad() {
+        guard model.userCacheReady, shellCommitted else { return }
+        removeStartupMask()
+        model.loadDashboard()
+    }
+
+    private func removeStartupMask() {
+        maskTimeout?.cancel()
+        maskTimeout = nil
+        startupMask?.removeFromSuperview()
+        startupMask = nil
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -124,6 +158,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         model.homePresentationSuspended = false
         if page == .home {
             settingsWindow.closeImmediately()
+            model.settingsPresented = false
             model.homePresentationID &+= 1
         }
         model.navigate(to: page)

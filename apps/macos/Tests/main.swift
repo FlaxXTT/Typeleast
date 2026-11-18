@@ -623,6 +623,27 @@ do {
     model.hide()
 }
 
+do {
+    var capsule = RecordingBarModel()
+    capsule.processing(at: 20)
+    checkEq("capsule starts processing at zero", capsule.progress(at: 20), 0)
+    checkEq("capsule advances by elapsed time", capsule.progress(at: 21), 25)
+    checkEq("processing cannot claim completion", capsule.progress(at: 80), 99)
+    capsule.complete()
+    checkEq("real completion advances the capsule to 100", capsule.progress(at: 21), 100)
+    capsule.hide()
+    checkEq("cancel clears progress", capsule.progress(at: 80), nil)
+
+    var typing = TypingHintWindow()
+    check("60 key events do not trigger a tip", !typing.record(Array(repeating: 1, count: 60), in: "a", now: 1))
+    check("the 61st event in the same app triggers a tip", typing.record([1], in: "a", now: 1))
+    check("events do not carry across apps", !typing.record([1], in: "b", now: 1))
+    check("old events fall out of the 60-second window", !typing.record(Array(repeating: 1, count: 60), in: "b", now: 62))
+    let previous = Date(timeIntervalSince1970: 1)
+    check("normal hints cool down for 48 hours", !TypingHintWindow.permitsReminder(lastShown: previous, now: previous.addingTimeInterval(172_799)))
+    check("normal hints are eligible at the 48-hour boundary", TypingHintWindow.permitsReminder(lastShown: previous, now: previous.addingTimeInterval(172_800)))
+}
+
 // Slow device opening must not block UI events, and cancelling then starting
 // again must close the abandoned device before opening its replacement.
 do {
@@ -2163,10 +2184,12 @@ do {
 contextPreferencesTests()
 meetingTests()
 performanceRegressionTests()
+dashboardMotionTests()
 
 // Show the actual panel after the tests that observe application activation.
 do {
     _ = NSApplication.shared
+    dashboardWindowTests()
     let bar = RecordingBar()
     bar.showThinking(detail: "Opening microphone", startingMicrophone: true)
     check("microphone startup shows the panel before capture starts", bar.isVisible)
@@ -2176,6 +2199,46 @@ do {
     bar.hide()
     RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.1))
     check("the recording panel dismisses after the transition", !bar.isVisible)
+
+    let earlier = bar.begin(handsFree: false)
+    earlier.recording(destination: "fixture", badge: "")
+    RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    checkEq("a held shortcut reaches 70 by 34", bar.capsuleSize?.width.rounded(), 70)
+    checkEq("the listening capsule is 34 points high", bar.capsuleSize?.height.rounded(), 34)
+    earlier.processing()
+    let latest = bar.begin(handsFree: true)
+    earlier.done()
+    latest.recording(destination: "fixture", badge: "")
+    earlier.cancel()
+    earlier.level(1, elapsed: 10)
+    checkEq("late callbacks cannot change the next capture", bar.phase, .recording)
+    latest.level(0.8, elapsed: 1)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    checkEq("hands-free listening reaches 116 points wide", bar.capsuleSize?.width.rounded(), 116)
+    latest.processing()
+    latest.recording(destination: "fixture", badge: "")
+    checkEq("a late microphone callback cannot restart processing", bar.phase, .thinking)
+    latest.done()
+    checkEq("successful transcription shows the completion phase", bar.phase, .completed)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.70))
+    check("the completion capsule closes after its hold and shrink", !bar.isVisible)
+
+    let hintSuite = "typeleast.recording-hints." + UUID().uuidString
+    let hintDefaults = UserDefaults(suiteName: hintSuite)!
+    defer { hintDefaults.removePersistentDomain(forName: hintSuite) }
+    let hintSettings = Settings(defaults: hintDefaults)
+    var permissionsReady = false
+    let tips = RecordingHints(settings: hintSettings, permissionsReady: { permissionsReady }, isIdle: { true })
+    hintSettings.onboardingDone = true
+    tips.permissionsChanged()
+    check("welcome waits for permissions", !tips.isVisible && !hintSettings.recordingReadyHintShown)
+    permissionsReady = true
+    tips.permissionsChanged()
+    check("welcome can stay visible without the recording capsule", tips.isVisible && !bar.isVisible)
+    check("welcome writes the durable marker at presentation", hintDefaults.bool(forKey: "app-onboarding.onboardingCompletedFloatingBarStart"))
+    tips.stop()
+    tips.permissionsChanged()
+    check("welcome does not reappear after the panel is recreated", !tips.isVisible)
 }
 
 server.stop()

@@ -274,6 +274,15 @@ final class HistoryStore {
         persist()
     }
 
+    /// A canceled unlock can leave new dictations in memory. Merge them after the old rows open.
+    func retryAfterUnlock() {
+        guard locked else { return }
+        let pending = entries
+        load()
+        guard !locked else { entries = pending; return }
+        if !pending.isEmpty { adopt(pending) }
+    }
+
     /// Only migrate recordings created by this app in its temporary directory.
     private static func ownedPlainAudio(_ path: String) -> Bool {
         let url = URL(fileURLWithPath: path).standardizedFileURL

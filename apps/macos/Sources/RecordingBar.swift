@@ -101,10 +101,12 @@ struct RecordingBarModel {
         case hidden
         case recording
         case thinking
+        case completed
         case result
     }
 
     private(set) var phase: Phase = .hidden
+    private(set) var processingSince: TimeInterval?
     private(set) var destination = ""
     private(set) var detail = ""
     /// The mode used by this recording, or the translation target.
@@ -137,6 +139,7 @@ struct RecordingBarModel {
         voice = VoiceLevel()
         history.reset()
         phase = .recording
+        processingSince = nil
     }
 
     /// Level ticks only mean something while listening; late ticks are ignored so a
@@ -156,13 +159,36 @@ struct RecordingBarModel {
         self.voice = voice
     }
 
+    mutating func updateBadge(_ badge: String) {
+        guard phase == .recording else { return }
+        self.badge = badge
+    }
+
     mutating func showThinking(detail: String, startingMicrophone: Bool = false) {
         self.detail = detail
         isStartingMicrophone = startingMicrophone
         phase = .thinking
+        if startingMicrophone { processingSince = nil }
+    }
+
+    mutating func processing(at time: TimeInterval) {
+        showThinking(detail: "")
+        processingSince = time
+    }
+
+    mutating func complete() {
+        guard processingSince != nil, phase == .thinking else { return }
+        phase = .completed
+    }
+
+    func progress(at time: TimeInterval) -> Int? {
+        guard let processingSince else { return nil }
+        if phase == .completed { return 100 }
+        return Int(min(99, max(0, (time - processingSince) * 25)))
     }
 
     mutating func showResult(_ text: String, warning: Bool) {
+        processingSince = nil
         isStartingMicrophone = false
         resultText = RecordingBarFormat.summary(text)
         self.warning = warning
@@ -171,6 +197,7 @@ struct RecordingBarModel {
 
     mutating func hide() {
         phase = .hidden
+        processingSince = nil
         destination = ""
         detail = ""
         badge = ""
@@ -231,6 +258,8 @@ final class PillView: NSView {
     var onCancel: (() -> Void)?
     var onStop: (() -> Void)?
     var reduceMotion = false
+    var handoffPause: TimeInterval = 0.08
+    var countdownInsideCapsule = true
     /// The recording cap; the countdown appears in the last `countdownSeconds`.
     var limitSeconds: Double = 120
     static let countdownSeconds: Double = 15
@@ -258,8 +287,7 @@ final class PillView: NSView {
         let width: CGFloat
     }
     private var recordingHandoff: RecordingHandoff?
-    private static let handoffHold: TimeInterval = 0.08
-    private static let handoffFade: TimeInterval = 0.15
+    private static let handoffFade = VoiceBarGeometry.shapeDuration
     private var spinnerPhase: CGFloat = 0
     private var phaseElapsed: Double = 0
     private var lastAdvancedAt = ProcessInfo.processInfo.systemUptime
@@ -276,12 +304,12 @@ final class PillView: NSView {
     static let buttonSize: CGFloat = 24
 
     var holdsRecordingWidth: Bool {
-        recordingHandoff != nil && !reduceMotion && phaseElapsed < Self.handoffHold
+        recordingHandoff != nil && !reduceMotion && phaseElapsed < handoffPause
     }
 
-    /// Only presentation waits for the frozen frame. The model is already transcribing.
     var presentationWidth: CGFloat {
         if holdsRecordingWidth, let recordingHandoff { return recordingHandoff.width }
+        if !countdownInsideCapsule, model.phase == .recording { return model.mode.width }
         return Self.width(for: model, limit: limitSeconds)
     }
     var presentationHeight: CGFloat { model.isStartingMicrophone ? VoiceBarGeometry.starting.height : Self.height }
@@ -301,7 +329,9 @@ final class PillView: NSView {
             return model.mode.width + (limit - model.elapsed <= countdownSeconds ? 40 : 0)
         case .thinking:
             if model.isStartingMicrophone { return VoiceBarGeometry.starting.width }
+            if model.processingSince != nil { return 116 }
             return 94 + min(220, ceil((model.detail as NSString).size(withAttributes:[.font:InterfaceTypography.localizedAppKit(11)]).width))
+        case .completed: return 116
         case .result:
             if model.warning { return 70 }
             let text = (model.resultText.isEmpty ? L10n.text("（无内容）") : model.resultText) as NSString
@@ -413,7 +443,7 @@ final class PillView: NSView {
         stopHover = false
         cancelHoverAmount = 0
         stopHoverAmount = 0
-        if model.phase == .recording {
+        if model.phase == .recording, previous.phase != .recording {
             waveform.reset()
         }
         cancelButton.isHidden = model.isStartingMicrophone || (model.phase != .recording && model.phase != .thinking)
@@ -427,7 +457,7 @@ final class PillView: NSView {
         let delta = max(0, min(0.1, now - lastAdvancedAt))
         lastAdvancedAt = now
         phaseElapsed += delta
-        if reduceMotion || phaseElapsed >= Self.handoffHold + Self.handoffFade {
+        if reduceMotion || phaseElapsed >= handoffPause + Self.handoffFade {
             recordingHandoff = nil
         }
         let cancelTarget: CGFloat = cancelHover ? 1 : 0
@@ -480,6 +510,8 @@ final class PillView: NSView {
             } else {
                 drawThinking()
             }
+        case .completed:
+            drawProgress(100, showsCancel: false)
         case .result:
             drawResult()
         }
@@ -495,7 +527,7 @@ final class PillView: NSView {
     }
 
     private func drawHandoff(_ handoff: RecordingHandoff, context: CGContext) {
-        let progress = min(1, max(0, (phaseElapsed - Self.handoffHold) / Self.handoffFade))
+        let progress = min(1, max(0, (phaseElapsed - handoffPause) / Self.handoffFade))
         let blend = CGFloat(progress * progress * (3 - 2 * progress))
         // Keep the cancel control stable while the two content layers crossfade.
         drawCancel()
@@ -539,7 +571,7 @@ final class PillView: NSView {
             check.stroke()
         }
         let remaining = limitSeconds - recording.elapsed
-        let countingDown = remaining <= Self.countdownSeconds
+        let countingDown = countdownInsideCapsule && remaining <= Self.countdownSeconds
         let waveX = content.minX + (handsFree ? 38 : (recording.mode.width - VoiceBarGeometry.waveform.width) / 2)
         drawWaveform(NSRect(x: waveX, y: content.midY - VoiceBarGeometry.waveform.height / 2,
                             width: VoiceBarGeometry.waveform.width, height: VoiceBarGeometry.waveform.height),
@@ -552,6 +584,10 @@ final class PillView: NSView {
     }
 
     private func drawThinking(showsCancel: Bool = true) {
+        if let progress = model.progress(at: ProcessInfo.processInfo.systemUptime) {
+            drawProgress(progress, showsCancel: showsCancel)
+            return
+        }
         // three dots breathing in sequence
         let spacing: CGFloat = 10
         if showsCancel { drawCancel() }
@@ -570,6 +606,22 @@ final class PillView: NSView {
             let x: CGFloat = 82
             drawProcessingText(model.detail, x: x, width: max(0, bounds.width - x - 10))
         }
+    }
+
+    private func drawProgress(_ percent: Int, showsCancel: Bool) {
+        if showsCancel { drawCancel() }
+        let inset: CGFloat = model.phase == .completed ? 15 : 32
+        let track = NSRect(x: inset, y: bounds.midY - 1.5, width: max(0, bounds.width - inset - 39), height: 3)
+        VoiceBarPalette.ink.withAlphaComponent(0.20).setFill()
+        NSBezierPath(roundedRect: track, xRadius: 1.5, yRadius: 1.5).fill()
+        if percent > 0 {
+            var fill = track
+            fill.size.width *= CGFloat(percent) / 100
+            VoiceBarPalette.ink.setFill()
+            NSBezierPath(roundedRect: fill, xRadius: 1.5, yRadius: 1.5).fill()
+        }
+        drawText("\(percent)%", x: bounds.width - 34, centerY: bounds.midY, width: 31,
+                 font: .monospacedDigitSystemFont(ofSize: 10, weight: .medium), color: VoiceBarPalette.ink)
     }
 
     private func drawStarting() {
@@ -717,6 +769,7 @@ final class RecordingBar {
     static let size = VoiceBarGeometry.overlay
     private static let tickInterval: TimeInterval = 1.0 / 60.0
     private static let resultHold: TimeInterval = 1.0
+    private static let completionHold: TimeInterval = 0.350
     private static let fadeDuration: TimeInterval = VoiceBarGeometry.opacityDuration
 
     /// Both views are created on first use.
@@ -738,6 +791,10 @@ final class RecordingBar {
     private var microphoneHintDismissal: DispatchWorkItem?
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
+    private var currentTake: UUID?
+    private var completedAt: TimeInterval?
+    private var resultAt: TimeInterval?
+    private var resizing: (from: NSRect, to: NSRect, start: TimeInterval)?
 
     /// Nothing is allocated here on purpose: the panel is the expensive part and
     /// is only needed once dictation actually starts (or on an explicit warm-up).
@@ -757,6 +814,8 @@ final class RecordingBar {
         let view = PillView(frame: NSRect(x: (Self.size.width - 116) / 2, y: VoiceBarGeometry.bottomInset, width: 116, height: PillView.height))
         view.onCancel = { [weak self] in self?.onCancel?() }
         view.onStop = { [weak self] in self?.onStop?() }
+        view.handoffPause = 0
+        view.countdownInsideCapsule = false
         view.limitSeconds = limitSeconds
         pillBox = view
         return view
@@ -802,6 +861,14 @@ final class RecordingBar {
         _ = panel
     }
 
+    func resetAfterOnboarding() {
+        guard model.phase == .hidden else { return }
+        panelBox?.close()
+        panelBox = nil
+        pillBox = nil
+        warmUp()
+    }
+
     deinit {
         timer?.invalidate()
         stopPointerTracking()
@@ -813,6 +880,7 @@ final class RecordingBar {
 
     /// The phase the pill is in; exposed for wiring and diagnostics.
     var phase: RecordingBarModel.Phase { model.phase }
+    var capsuleSize: CGSize? { pillBox?.frame.size }
 
     /// Read-only snapshot of the panel facts that guarantee the pill can never steal
     /// focus. Building it has no side effects, so ./test.sh can assert the focus
@@ -845,6 +913,76 @@ final class RecordingBar {
     }
 
     // MARK: API
+
+    final class Take {
+        private weak var bar: RecordingBar?
+        private let id: UUID
+        private let mode: RecordingBarMode
+
+        fileprivate init(bar: RecordingBar, id: UUID, mode: RecordingBarMode) {
+            self.bar = bar
+            self.id = id
+            self.mode = mode
+        }
+
+        private func apply(_ change: @escaping (RecordingBar) -> Void) {
+            guard let bar else { return }
+            bar.onMain { [id] in
+                guard bar.currentTake == id else { return }
+                change(bar)
+            }
+        }
+
+        func recording(destination: String, badge: String) {
+            apply {
+                guard $0.model.isStartingMicrophone else { return }
+                $0.showRecording(destination: destination, badge: badge, mode: self.mode)
+            }
+        }
+
+        func badge(_ text: String) {
+            apply { $0.model.updateBadge(text); $0.pushModel() }
+        }
+
+        func level(_ voice: VoiceLevel, elapsed: Double) { apply { $0.update(voice: voice, elapsed: elapsed) } }
+
+        func level(_ value: Float, elapsed: Double) {
+            level(VoiceLevel(volume: RecordingBarFormat.clampLevel(value), hasAudio: true), elapsed: elapsed)
+        }
+
+        func processing() {
+            apply {
+                guard $0.model.phase == .recording else { return }
+                $0.model.processing(at: ProcessInfo.processInfo.systemUptime)
+                $0.showThinking(detail: "")
+            }
+        }
+
+        func done() {
+            apply { bar in
+                bar.model.complete()
+                guard bar.model.phase == .completed else { return }
+                bar.currentTake = nil
+                bar.completedAt = ProcessInfo.processInfo.systemUptime
+                bar.pushModel()
+                bar.stopPointerTracking()
+                bar.updatePointerPassthrough()
+                bar.startTimer()
+            }
+        }
+
+        func cancel() { apply { $0.hide() } }
+    }
+
+    func begin(handsFree: Bool) -> Take {
+        let id = UUID()
+        onMain {
+            self.currentTake = id
+            self.completedAt = nil
+            self.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true)
+        }
+        return Take(bar: self, id: id, mode: handsFree ? .handsFree : .recording)
+    }
 
     /// Starts the listening look. The destination is the bundle id the text will land in.
     func showRecording(destination: String, badge: String = "", mode: RecordingBarMode = .handsFree) {
@@ -940,6 +1078,9 @@ final class RecordingBar {
         onMain {
             self.cancelPendingFade()
             self.hideMicrophoneHint()
+            self.currentTake = nil
+            self.completedAt = nil
+            self.resultAt = ProcessInfo.processInfo.systemUptime
             self.model.showResult(text, warning: warning)
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
@@ -953,6 +1094,8 @@ final class RecordingBar {
     /// Stop interaction immediately, then fade the visible capsule over 500ms.
     func hide() {
         onMain {
+            self.currentTake = nil
+            self.completedAt = nil
             self.cancelPendingFade()
             self.stopTimer()
             self.stopPointerTracking()
@@ -1012,9 +1155,17 @@ final class RecordingBar {
     /// Keep the capsule centred on the same bottom-centre point as its width changes.
     private func resizeToCapsule(_ target: PillPanel) {
         let frame = capsuleFrame()
+        guard resizing?.to != frame else { return }
+        if !pill.reduceMotion, pill.frame != frame {
+            resizing = (pill.frame, frame, ProcessInfo.processInfo.systemUptime)
+        } else {
+            resizing = nil
+            applyCapsuleFrame(frame, to: target)
+        }
+    }
+
+    private func applyCapsuleFrame(_ frame: NSRect, to target: PillPanel) {
         guard pill.frame != frame else { return }
-        // Update the view and its button geometry together. AppKit's animated frame
-        // proxy can crash while invalidating visible rects on the recording handoff.
         pill.frame = frame
         target.contentView?.needsLayout = true
         positionMicrophoneHint()
@@ -1025,6 +1176,7 @@ final class RecordingBar {
         let entering = !panel.isVisible
         if entering || model.phase == .recording { positionOnMouseScreen() }
         if entering {
+            resizing = nil
             pill.frame = capsuleFrame()
             (panel.contentView as? RecordingOverlayHost)?.apply(model)
             panel.contentView?.needsLayout = true
@@ -1100,8 +1252,8 @@ final class RecordingBar {
     private func startTimer() {
         guard timer == nil || timerPhase != model.phase else { return }
         stopTimer()
-        let interval = model.phase == .result ? Self.resultHold : pill.reduceMotion ? 0.05 : Self.tickInterval
-        let ticker = Timer(timeInterval: interval, repeats: model.phase != .result) { [weak self] _ in
+        let interval = pill.reduceMotion ? 0.05 : Self.tickInterval
+        let ticker = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             self?.tick()
         }
         RunLoop.main.add(ticker, forMode: .common)
@@ -1120,11 +1272,35 @@ final class RecordingBar {
             stopTimer()
             return
         }
-        if model.phase == .result {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let motion = resizing, let panelBox {
+            let elapsed = (now - motion.start) / VoiceBarGeometry.shapeDuration
+            let amount = VoiceBarGeometry.shapeProgress(elapsed)
+            func mix(_ from: CGFloat, _ to: CGFloat) -> CGFloat { from + (to - from) * amount }
+            applyCapsuleFrame(NSRect(x: mix(motion.from.minX, motion.to.minX), y: motion.to.minY,
+                                    width: mix(motion.from.width, motion.to.width),
+                                    height: mix(motion.from.height, motion.to.height)), to: panelBox)
+            if elapsed >= 1 { resizing = nil }
+        }
+        if model.phase == .result, let resultAt, now - resultAt >= Self.resultHold {
             fadeOut()
             return
         }
-        let now = ProcessInfo.processInfo.systemUptime
+        if let completedAt, model.phase == .completed, now - completedAt >= Self.completionHold {
+            if pill.reduceMotion { dismiss(); return }
+            if !isDismissing, let panelBox {
+                isDismissing = true
+                let width = VoiceBarGeometry.starting.width
+                resizing = (pill.frame, NSRect(x: pill.frame.midX - width / 2, y: pill.frame.minY,
+                                               width: width, height: VoiceBarGeometry.starting.height), now)
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = VoiceBarGeometry.shapeDuration
+                    panelBox.animator().alphaValue = 0
+                }
+            } else if resizing == nil {
+                dismiss()
+            }
+        }
         if now - screenCheckedAt >= 0.1 {
             screenCheckedAt = now
             let mouse = NSEvent.mouseLocation
@@ -1133,12 +1309,8 @@ final class RecordingBar {
                 positionOnMouseScreen()
             }
         }
-        let wasHoldingWidth = pill.holdsRecordingWidth
         pill.advance(at: now)
         updatePointerPassthrough()
-        if wasHoldingWidth && !pill.holdsRecordingWidth, let panelBox {
-            resizeToCapsule(panelBox)
-        }
     }
 
     private func cancelPendingFade() {
@@ -1171,6 +1343,10 @@ final class RecordingBar {
     }
 
     private func dismiss() {
+        currentTake = nil
+        completedAt = nil
+        resultAt = nil
+        resizing = nil
         hideMicrophoneHint()
         stopTimer()
         stopPointerTracking()

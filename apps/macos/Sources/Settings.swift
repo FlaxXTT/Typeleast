@@ -403,6 +403,21 @@ final class Settings {
         set { d.set(newValue, forKey: "ui.onboardingDone.v1"); if newValue { d.set(false, forKey: "ui.practiceGate.v1") }; changed() }
     }
 
+    var recordingReadyHintShown: Bool {
+        get { d.bool(forKey: "app-onboarding.onboardingCompletedFloatingBarStart") }
+        set { d.set(newValue, forKey: "app-onboarding.onboardingCompletedFloatingBarStart") }
+    }
+
+    var recordingReminderLastShown: Date? {
+        get { d.object(forKey: "ui.recordingReminderLastShown") as? Date }
+        set { d.set(newValue, forKey: "ui.recordingReminderLastShown") }
+    }
+
+    var recommendedRecordingHintShown: Bool {
+        get { d.bool(forKey: "ui.recommendedRecordingHintShown") }
+        set { d.set(newValue, forKey: "ui.recommendedRecordingHintShown") }
+    }
+
     /// Whether to build the pill panel shortly after launch.
     ///
     /// The panel costs ~35 MB resident and is only needed once dictation starts.

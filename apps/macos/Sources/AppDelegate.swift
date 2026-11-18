@@ -14,12 +14,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     let recorder = Recorder()
     /// Floating capsule shown while listening and thinking.
     let recordingBar = RecordingBar()
+    private lazy var recordingHints = RecordingHints(settings: settings) { [weak self] in self?.phase == .idle }
+    private var wasDictationIdle = true
     let selectionTranslator = SelectionTranslator()
     /// Resting bar at the bottom of the screen ("show voice bar").
     let idleBar = IdleBar()
     let settings = Settings.shared
     let client = ServiceClient.shared
-    let model = AppModel.shared
+    let model = AppModel(loadCacheImmediately: false)
     lazy var updates = UpdateController(host: .init(
         busyReason: { [weak self] in
             guard let self else { return nil }
@@ -79,6 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var healthRetryTimer: Timer?
     /// Polls quickly while the speech model loads or downloads, for the progress bar.
     private var progressPoll: DispatchWorkItem?
+    private var unlockingCredentials = false
+    private var pendingShortcut: (slot: String, work: DispatchWorkItem)?
+    private var heldShortcutSlot: String?
     private let healthRefresh = CoalescingRefresh<(HealthResponse, SpeechModelCatalog?)>()
 
     // MARK: lifecycle
@@ -106,8 +111,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
         skipGlobalHotkeys = isolatedTestRun
         if !isolatedTestRun { DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showHubNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.hub.reopen()
+            self?.openHomeFromOutside()
         } }
+        #if TYPELEAST_DEV
+        let environment = ProcessInfo.processInfo.environment
+        let opensHome = environment["TYPELEAST_DEMO_WAV"] == nil && environment["TYPELEAST_SELFCHECK"] != "1"
+        #else
+        let opensHome = true
+        #endif
+        NSApp.appearance = configuredAppearance
+        if opensHome, settings.onboardingDone, !launchedAsLoginItem { hub.openMainWindow() }
+        model.credentialsLocked = TouchIDVault.shared.isConfigured && !TouchIDVault.shared.isUnlocked
+        if model.credentialsLocked, opensHome, !launchedAsLoginItem {
+            authenticateCredentials { [weak self] _ in self?.beginUserCacheLoad(opensHome: opensHome) }
+        } else {
+            beginUserCacheLoad(opensHome: opensHome)
+        }
+    }
+
+    private func beginUserCacheLoad(opensHome: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Resolve the legacy handoff before the history cache accesses its key.
+            KeychainHandoff.restoreIfPresent()
+            let history = HistoryStore.shared
+            let activity = ActivityLog.shared
+            if !activity.isStarted, history.persistenceProblem == nil {
+                activity.seedIfNeeded(from: history.entries.filter { !$0.displayText.isEmpty }.map {
+                    let counts = DictationStats.countWords($0.displayText)
+                    return (date: $0.ts, words: counts.cjk + counts.latin)
+                })
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.model.finishUserCacheLoad()
+                self.hub.userCacheDidLoad()
+                self.finishLaunch(opensHome: opensHome)
+            }
+        }
+    }
+
+    private func authenticateCredentials(completion: @escaping (Bool) -> Void) {
+        guard !unlockingCredentials else { return }
+        unlockingCredentials = true
+        Task { @MainActor [weak self] in
+            do { try await TouchIDVault.shared.unlock() }
+            catch { DiagnosticsLog.write("keychain.touch-id.fail", ["status": String(TouchIDVault.status(error))]) }
+            guard let self else { return }
+            self.unlockingCredentials = false
+            let unlocked = TouchIDVault.shared.isUnlocked
+            self.model.credentialsLocked = !unlocked
+            if unlocked {
+                self.model.refreshLLMKeyPresence()
+                self.model.refreshOnlineASRKeyPresence()
+            }
+            completion(unlocked)
+        }
+    }
+
+    func unlockCredentials() {
+        guard model.credentialsLocked, model.userCacheReady, phase == .idle else { return }
+        authenticateCredentials { [weak self] unlocked in
+            guard let self, unlocked else { return }
+            HistoryStore.shared.retryAfterUnlock()
+            self.model.reloadHistory()
+            self.applyState()
+        }
+    }
+
+    private func openHomeFromOutside() {
+        hub.openMainWindow()
+        if launchedAsLoginItem { unlockCredentials() }
+    }
+
+    private func finishLaunch(opensHome: Bool) {
         model.actions = self
         menuController.target = self
         mainMenu.openSettings = { [weak self] in self?.menuOpenHub(.settings) }
@@ -117,16 +193,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         NSApp.mainMenu = bar.menu
         NSApp.windowsMenu = bar.windows
         NSApp.applicationIconImage = AppMark.image(size: 512)
-        // The heatmap starts from whatever history is still kept, once.
-        ActivityLog.shared.seedIfNeeded(from: HistoryStore.shared.entries.filter { !$0.displayText.isEmpty }.map {
-            let counts = DictationStats.countWords($0.displayText)
-            return (date: $0.ts, words: counts.cjk + counts.latin)
-        })
         applyGeneralSettings()
         registerHotKeys()
         updates.scheduleChecks()
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
+        FnKeyMonitor.shared.onHold = { [weak self] in self?.beginHeldDictation() == true }
+        FnKeyMonitor.shared.onHoldEnd = { [weak self] in self?.dictation.endHeldShortcut() }
         recordingBar.onCancel = { [weak self] in self?.cancelDictation() }
         recordingBar.onDismiss = { [weak self] in self?.updateIdleBar() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
@@ -142,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         // when the user switches apps again.
         workspace.addObserver(self, selector: #selector(onAppActivated),
                               name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        if !skipGlobalHotkeys { recordingHints.start() }
 
         HistoryStore.shared.pruneAudio()
         // Retry recordings live five minutes: look once a minute, so none outlasts six.
@@ -176,21 +250,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         #endif
         if !settings.onboardingDone {
             showOnboarding()
-        } else if !launchedAsLoginItem {
-            hub.show(page: .home)
+        } else if !launchedAsLoginItem, !opensHome {
+            hub.openMainWindow()
         }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // A demo recording shows only the voice bar over another app.
         if recorder.demoPCM != nil { return false }
-        hub.reopen()
+        openHomeFromOutside()
         return false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
+        recordingHints.stop()
         HubFeedback.shared.dismissAll()
         recorder.cancel()
         dictation.dropCancelledRecording()
@@ -202,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         HotKeyCentre.shared.unregisterAll()
         ServiceManager.shared.stop()
         // Retry recordings do not outlive the app.
-        HistoryStore.shared.pruneAudio(olderThan: 0)
+        if model.userCacheReady { HistoryStore.shared.pruneAudio(olderThan: 0) }
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
@@ -323,6 +398,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func registerHotKeys() {
         guard !skipGlobalHotkeys else { return }
+        pendingShortcut?.work.cancel()
+        pendingShortcut = nil
+        if heldShortcutSlot != nil { heldShortcutSlot = nil; dictation.endHeldShortcut() }
         let centre = HotKeyCentre.shared
         var fnWanted = false
         var chords: [FnChord: () -> Void] = [:]
@@ -356,7 +434,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                 if binding.enabled { problems[slot] = L10n.text("Fn 组合键仅支持左 Shift 或空格") }
                 return
             }
-            if centre.register(slot: slot, binding: binding, action: action) { taken.insert(combo) }
+            let dictationShortcut = slot == "main" || slot == "alt"
+            let release: (() -> Void)? = dictationShortcut ? { [weak self] in self?.dictationShortcutReleased(slot) } : nil
+            if centre.register(slot: slot, binding: binding, onRelease: release, action: { [weak self] in
+                if dictationShortcut { self?.dictationShortcutPressed(slot) } else { action() }
+            }) { taken.insert(combo) }
             else if binding.enabled { problems[slot] = L10n.text("被占用，请换一个") }
         }
         for (slot, binding) in [("main", settings.hotkeyMain), ("alt", settings.hotkeyAlt)] {
@@ -372,6 +454,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// Fn or a shortcut: toggle (press to start, press to stop).
     func hotkeyPressed() {
         toggleDictation()
+    }
+
+    private func beginHeldDictation() -> Bool {
+        guard !settings.needsPractice, !onboarding.practice.busy, !onboarding.practice.acceptsShortcut else { return false }
+        return dictation.startHeldShortcut()
+    }
+
+    private func dictationShortcutPressed(_ slot: String) {
+        guard pendingShortcut == nil, heldShortcutSlot == nil else { return }
+        guard phase == .idle, !settings.needsPractice, !onboarding.practice.acceptsShortcut, !onboarding.practice.busy else {
+            hotkeyPressed()
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingShortcut?.slot == slot else { return }
+            self.pendingShortcut = nil
+            if self.beginHeldDictation() { self.heldShortcutSlot = slot }
+        }
+        pendingShortcut = (slot, work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    private func dictationShortcutReleased(_ slot: String) {
+        if heldShortcutSlot == slot {
+            heldShortcutSlot = nil
+            dictation.endHeldShortcut()
+        } else if pendingShortcut?.slot == slot {
+            pendingShortcut?.work.cancel()
+            pendingShortcut = nil
+            hotkeyPressed()
+        }
     }
 
     /// 翻译模式: starts a recording whose text is inserted in the target language;
@@ -470,14 +583,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     // MARK: settings that change the app itself
 
-    func applyGeneralSettings() {
-        let appearance: NSAppearance?
+    private var configuredAppearance: NSAppearance? {
         switch settings.appearance {
-        case .system: appearance = nil
-        case .light: appearance = NSAppearance(named: .aqua)
-        case .dark: appearance = NSAppearance(named: .darkAqua)
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
         }
-        HubThemeReveal.apply(appearance, in: hub.themeTransitionWindow,
+    }
+
+    func applyGeneralSettings() {
+        HubThemeReveal.apply(configuredAppearance, in: hub.themeTransitionWindow,
                              additionalWindows: [hub.settingsThemeTransitionWindow].compactMap { $0 })
         let policy: NSApplication.ActivationPolicy = settings.showInDock ? .regular : .accessory
         if NSApp.activationPolicy() != policy {
@@ -516,7 +631,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     @objc func onAppActivated(_ note: Notification) {
         let trusted = AXIsProcessTrusted()
-        if !skipGlobalHotkeys { FnKeyMonitor.shared.refreshEventSource() }
+        if !skipGlobalHotkeys {
+            FnKeyMonitor.shared.refreshEventSource()
+            recordingHints.foregroundChanged()
+        }
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
             if trusted, let h = hint, h.contains(L10n.text("辅助功能")) { setHint(L10n.text("辅助功能已允许，可以自动粘贴")) }
@@ -527,6 +645,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     // MARK: state
 
     func applyState() {
+        let idle = phase == .idle
+        if wasDictationIdle && !idle, !skipGlobalHotkeys { recordingHints.recordingStarted() }
+        wasDictationIdle = idle
         var s = MenuState()
         s.phase = phase
         s.strength = settings.strength
@@ -793,8 +914,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         settings.onboardingDone = true
         model.refreshPermissions()
         registerHotKeys()
-        hub.show(page: .home)
+        hub.openMainWindow()
+        recordingBar.resetAfterOnboarding()
+        if !skipGlobalHotkeys { recordingHints.permissionsChanged() }
     }
+
+    func openRecommendedApp(_ bundle: String) { recordingHints.openRecommendation(bundle) }
 
     // MARK: MenuActionTarget
 
@@ -812,7 +937,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuCancelDictation() { cancelDictation() }
     func menuPasteLast() { pasteLast() }
     func menuOpenHub(_ page: HubPage) {
-        if page == .home { hub.reopen() }
+        if page == .home { openHomeFromOutside() }
         else { hub.show(page: page) }
     }
     func menuRequestAccessibility() { requestAccessibility() }

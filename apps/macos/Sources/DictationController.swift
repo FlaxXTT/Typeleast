@@ -49,6 +49,9 @@ final class DictationController {
     private var pendingAppBundleId = ""
     private var pendingField: FocusedField?
     private var progressID = UUID()
+    private var captureTake: RecordingBar.Take?
+    private var captureRequest: UUID?
+    private var heldShortcut = false
     private var onlineASRTask: Task<Void, Never>?
     private var pendingAssistant = false
     /// 提示词模式's draft copied from a browser, whose fields Accessibility cannot read.
@@ -89,6 +92,24 @@ final class DictationController {
         model.assistantLabel.isEmpty ? L10n.text("继续补充按钮") : model.assistantLabel
     }
 
+    @discardableResult
+    func startHeldShortcut() -> Bool {
+        guard phase == .idle, captureRequest == nil else { return false }
+        pendingAssistant = false
+        pendingTranslate = nil
+        heldShortcut = true
+        startRecording()
+        return true
+    }
+
+    func endHeldShortcut() {
+        guard heldShortcut else { return }
+        heldShortcut = false
+        captureRequest = nil
+        if phase == .starting { cancelDictation() }
+        else if phase == .recording { stopRecording() }
+    }
+
     func startRecording() {
         guard phase == .idle else { return }
         if recorder.demoPCM != nil {
@@ -97,17 +118,23 @@ final class DictationController {
         }
         switch Recorder.authorizationStatus() {
         case .notDetermined:
+            guard captureRequest == nil else { return }
+            let request = UUID()
+            captureRequest = request
             Recorder.requestMicrophoneAccess { [weak self] granted in
-                guard let self = self else { return }
+                guard let self, self.captureRequest == request else { return }
+                self.captureRequest = nil
                 self.model.refreshPermissions()
                 if granted {
                     self.beginCapture()
                 } else {
+                    self.heldShortcut = false
                     self.setHint(L10n.text("录音需要麦克风权限"), warning: true)
                     self.applyState()
                 }
             }
         case .denied, .restricted:
+            heldShortcut = false
             setHint(L10n.text("麦克风权限被拒绝，请在设置里打开"), warning: true)
             applyState()
             host.showSettings()
@@ -131,10 +158,14 @@ final class DictationController {
             AudioInputSelector.apply(deviceID: AudioDevices.deviceID(forUID: inputUID), to: engine)
         }
         recorder.maxSeconds = max(5, min(600, settings.maxSeconds))
-        recorder.onAutoStop = { [weak self] in self?.stopRecording(auto: true) }
         phase = .starting
         idleBar.hide()
-        recordingBar.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true)
+        let take = recordingBar.begin(handsFree: !heldShortcut)
+        captureTake = take
+        recorder.onAutoStop = { [weak self, weak take] in
+            guard let self, let take, self.captureTake === take else { return }
+            self.stopRecording(auto: true)
+        }
         registerEscape()
         applyState()
         let token = progressID
@@ -145,14 +176,16 @@ final class DictationController {
             switch result {
             case .success:
                 DiagnosticsLog.write("recording.device-ready", ["ms": elapsed])
-                self.captureDidStart()
+                self.captureDidStart(take)
             case .failure(let error):
                 DiagnosticsLog.write("recording.device-failed", ["ms": elapsed])
                 self.phase = .idle
                 self.pendingAssistant = false
                 self.pendingTranslate = nil
                 self.unregisterEscape()
-                self.recordingBar.hide()
+                self.captureTake = nil
+                self.heldShortcut = false
+                take.cancel()
                 self.setHint((error as? RecorderError)?.description ?? error.localizedDescription, warning: true)
                 self.applyState()
                 self.updateIdleBar()
@@ -160,7 +193,7 @@ final class DictationController {
         }
     }
 
-    private func captureDidStart() {
+    private func captureDidStart(_ take: RecordingBar.Take) {
         phase = .recording
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
         if pendingAssistant && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", assistantKeyLabel)) }
@@ -170,9 +203,9 @@ final class DictationController {
         let now = Date()
         let microphone = recorder.microphoneName
         let remindMicrophone = lastMicrophoneActivityAt.map { now.timeIntervalSince($0) >= Self.microphoneReminderInterval } ?? true
-        recordingBar.showRecording(destination: pendingAppBundleId,
-                                   badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
-                                       ?? (pendingAssistant ? L10n.text("提示词模式") : ""))
+        take.recording(destination: pendingAppBundleId,
+                       badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
+                           ?? (pendingAssistant ? L10n.text("提示词模式") : ""))
         if !microphone.isEmpty, remindMicrophone || microphone != lastMicrophoneName {
             recordingBar.showMicrophoneHint(microphone)
         }
@@ -202,18 +235,18 @@ final class DictationController {
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 let field = FieldContextReader.capture(bundleId: bundle)
                 DispatchQueue.main.async {
-                    guard let self = self, self.phase == .recording, self.pendingAppBundleId == bundle else { return }
+                    guard let self, self.phase == .recording, self.captureTake === take else { return }
                     self.pendingField = field
                     // Text selected when 提示词模式 starts is the draft the user is about to revise.
                     guard self.pendingAssistant, self.betaPending == nil else { return }
                     if Self.hasText(field?.selection) {
-                        self.recordingBar.showRecording(destination: bundle, badge: L10n.text("提示词模式 · 修改选中内容"))
+                        take.badge(L10n.text("提示词模式 · 修改选中内容"))
                     } else if Inserter.readsSelectionByCopy(bundle) {
                         Inserter.shared.copySelection { [weak self] text in
-                            guard let self, self.phase == .recording, self.pendingAssistant, self.pendingAppBundleId == bundle,
+                            guard let self, self.phase == .recording, self.pendingAssistant, self.captureTake === take,
                                   Self.hasText(text) else { return }
                             self.copiedSelection = text.map { String($0.prefix(FieldContextReader.selectionLimit)) }
-                            self.recordingBar.showRecording(destination: bundle, badge: L10n.text("提示词模式 · 修改选中内容"))
+                            take.badge(L10n.text("提示词模式 · 修改选中内容"))
                         }
                     }
                 }
@@ -223,6 +256,8 @@ final class DictationController {
 
     func stopRecording(auto: Bool = false) {
         guard phase == .recording else { return }
+        let take = captureTake
+        heldShortcut = false
         lastMicrophoneActivityAt = Date()
         unregisterEscape()
         stopTick()
@@ -247,18 +282,19 @@ final class DictationController {
             let r = try recorder.finish()
             playSound(start: false)
             phase = .thinking
-            recordingBar.showThinking(detail: "")
+            take?.processing()
             setHint(auto ? L10n.text("已到 {0} 秒上限 · thinking", recorder.maxSeconds) : nil)
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,
                          insert: true, deleteWhenDone: !keep, betaSession: betaSession, translateTo: translateTo,
-                         baseline: baseline)
+                         baseline: baseline, take: take)
         } catch {
             playSound(start: false)
             phase = .idle
             recordingStartedAt = nil
-            recordingBar.hide()
+            captureTake = nil
+            take?.cancel()
             let msg = (error as? RecorderError)?.description ?? error.localizedDescription
             if betaPending != nil { showBetaQuestions() }
             setHint(msg, warning: true)
@@ -268,6 +304,10 @@ final class DictationController {
     }
 
     func cancelDictation() {
+        heldShortcut = false
+        captureRequest = nil
+        let take = captureTake
+        captureTake = nil
         switch phase {
         case .starting:
             progressID = UUID()
@@ -277,7 +317,7 @@ final class DictationController {
             pendingAssistant = false
             pendingTranslate = nil
             pendingField = nil
-            recordingBar.hide()
+            take?.cancel()
             setHint(nil)
             applyState()
             updateIdleBar()
@@ -302,7 +342,7 @@ final class DictationController {
             phase = .idle
             recordingStartedAt = nil
             pendingField = nil
-            recordingBar.hide()
+            take?.cancel()
             pendingTranslate = nil
             if betaPending != nil { showBetaQuestions() }
             applyState()
@@ -312,7 +352,8 @@ final class DictationController {
             onlineASRTask?.cancel()
             onlineASRTask = nil
             client.cancelGeneration()
-            unregisterEscape(); stopTick(); recordingBar.hide()
+            unregisterEscape(); stopTick()
+            if let take { take.cancel() } else { recordingBar.hide() }
             phase = .idle
             if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("已取消"));applyState();updateIdleBar()
@@ -349,7 +390,7 @@ final class DictationController {
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
-                      translateTo: String? = nil, baseline: String? = nil) {
+                      translateTo: String? = nil, baseline: String? = nil, take: RecordingBar.Take? = nil) {
         phase = .thinking
         registerEscape()
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
@@ -386,7 +427,7 @@ final class DictationController {
                                    audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: usedRoute ?? llm, variants: variants,
                                    betaSession: betaSession, betaInfo: previousBeta?.info, translateTo: translateTo, baseline: baseline,
                                    reviewContext: context, reviewProfile: profile, reviewTranslatePrompt: ownPrompt,
-                                   usesOnlineASR: usesOnlineASR)
+                                   usesOnlineASR: usesOnlineASR, take: take)
                 }
             }
         }
@@ -637,8 +678,14 @@ final class DictationController {
                        llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false,
                        betaSession: String? = nil, betaInfo: BetaInfo? = nil, translateTo: String? = nil, baseline: String? = nil,
                        reviewContext: Data? = nil, reviewProfile: String = "", reviewTranslatePrompt: String? = nil,
-                       usesOnlineASR: Bool = false) {
+                       usesOnlineASR: Bool = false, take: RecordingBar.Take? = nil) {
         unregisterEscape()
+        captureTake = nil
+        let generation = progressID
+        let showRequestResult: (String, Bool) -> Void = { [weak self] text, warning in
+            guard let self, take == nil, self.progressID == generation, self.phase == .idle else { return }
+            self.recordingBar.showResult(text, warning: warning)
+        }
         // A failed request or Beta question does not retain an untracked raw recording.
         defer {
             if let path = audioPath, !path.hasSuffix(".sealed") {
@@ -653,6 +700,11 @@ final class DictationController {
         }
         switch outcome {
         case .success(let resp):
+            if resp.insertableText.isEmpty && resp.beta == nil && resp.qualityReview == nil && !resp.noiseSuspected {
+                take?.cancel()
+            } else {
+                take?.done()
+            }
             if !usesOnlineASR {
                 serviceUp = true
                 model.serviceProblem = ""
@@ -669,7 +721,7 @@ final class DictationController {
                 entry.variants = variants
                 entry.qualityReview = review
                 HistoryStore.shared.add(entry)
-                recordingBar.showResult(L10n.text("整理结果需要核对"), warning: true)
+                showRequestResult(L10n.text("整理结果需要核对"), true)
                 setHint(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"), warning: true)
                 quantityReview.show(review: review) { [weak self] choice in
                     guard let self else { return false }
@@ -693,10 +745,10 @@ final class DictationController {
                         let counts = DictationStats.countWords(selected)
                         ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
                                                   typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
-                        self.insertText(selected, fallback: original, entryId: entry.id, appBundleId: appBundleId, field: field)
+                        self.insertText(selected, fallback: original, entryId: entry.id, appBundleId: appBundleId, field: field, showsCapsule: take == nil)
                     } else {
                         Inserter.shared.setString(selected)
-                        self.recordingBar.showResult(selected, warning: original)
+                        showRequestResult(selected, original)
                         self.setHint(L10n.text("重试完成，结果已复制"))
                         self.applyState()
                     }
@@ -721,7 +773,7 @@ final class DictationController {
                 entry.variants = variants
                 entry.translated = translateTo
                 HistoryStore.shared.add(entry)
-                recordingBar.showResult(L10n.text("识别结果待查看，未自动输入"), warning: true)
+                showRequestResult(L10n.text("识别结果待查看，未自动输入"), true)
                 setHint(L10n.text("请查看识别原文，或忽略后重新说。"), warning: true)
                 presentReviewedCandidate(ReviewedRequest(text: candidate, repeated: repeated, appBundleId: appBundleId,
                     language: language, strength: strength, field: field, insert: insert, llm: llm, variants: variants,
@@ -733,7 +785,7 @@ final class DictationController {
             if let sessionId = resp.beta?.sessionId, let info = resp.beta {
                 beta.accept(info: info, sessionId: sessionId, llm: llm, language: language,
                             variants: variants, appBundleId: appBundleId, field: field, copyResult: copyResult)
-                recordingBar.hide()
+                if take == nil { recordingBar.hide() }
                 showBetaQuestions()
                 setHint(L10n.text("提示词模式：继续补充或生成"))
                 applyState()
@@ -769,7 +821,7 @@ final class DictationController {
                 advisor.recommend(task: text, appBundleId: appBundleId, field: field, route: route)
             }
             if text.isEmpty {
-                recordingBar.showResult(L10n.text("没有识别到内容"), warning: true)
+                showRequestResult(L10n.text("没有识别到内容"), true)
                 setHint(L10n.text("没有识别到内容"), warning: true)
                 applyState()
                 return
@@ -780,18 +832,19 @@ final class DictationController {
                 let counts = DictationStats.countWords(text)
                 ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
                                           typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
-                insertText(text, fallback: resp.fallback, entryId: entry.id, appBundleId: appBundleId, field: field)
+                insertText(text, fallback: resp.fallback, entryId: entry.id, appBundleId: appBundleId, field: field, showsCapsule: take == nil)
             } else {
                 Inserter.shared.setString(text)
-                recordingBar.showResult(text, warning: resp.fallback)
+                showRequestResult(text, resp.fallback)
                 setHint(copied ? L10n.text("提示词已复制") : L10n.text("重试完成，结果已复制"))
                 applyState()
             }
         case .failure(let error):
+            take?.cancel()
             let d = error as? ServiceError
             if case .http(410, _, _)? = d, betaPending != nil {
                 dropBeta(notify: false)
-                recordingBar.showResult(L10n.text("问题已过期，请重新说需求"), warning: true)
+                showRequestResult(L10n.text("问题已过期，请重新说需求"), true)
                 setHint(L10n.text("问题已过期，请重新说需求"), warning: true)
                 applyState()
                 return
@@ -802,7 +855,7 @@ final class DictationController {
                 serviceUp = false
                 scheduleHealthRetry()
             }
-            recordingBar.showResult(usesOnlineASR || serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), warning: true)
+            showRequestResult(usesOnlineASR || serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), true)
             if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("听写失败：") + (d?.description ?? error.localizedDescription), warning: true)
             applyState()
@@ -811,25 +864,29 @@ final class DictationController {
 
     // MARK: insertion
 
-    func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?) {
+    func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?, showsCapsule: Bool = true) {
+        let generation = progressID
         let text = Delivery.prepare(text, appBundleId: appBundleId, field: field)
         Delivery.deliver(text, appBundleId: appBundleId, field: field, onWaiting: { [weak self] _ in
-            guard let self else { return }
-            self.recordingBar.showResult(L10n.text("回到原来的位置后自动放入"), warning: false)
+            guard let self, self.progressID == generation, self.phase == .idle else { return }
+            if showsCapsule { self.recordingBar.showResult(L10n.text("回到原来的位置后自动放入"), warning: false) }
             self.setHint(L10n.text("文字已整理好，回到开始听写的位置后会自动放入。"))
             self.applyState()
         }) { [weak self] outcome in
             guard let self = self else { return }
+            if case .pasted(let result) = outcome, let id = entryId {
+                HistoryStore.shared.update(id: id) { $0.inserted = result.ok }
+            }
+            guard self.progressID == generation, self.phase == .idle else { return }
             switch outcome {
             case .pasted(let result):
                 self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message, warning: !result.ok)
-                self.recordingBar.showResult(text, warning: !result.ok || fallback)
-                if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = result.ok } }
+                if showsCapsule { self.recordingBar.showResult(text, warning: !result.ok || fallback) }
                 self.applyState()
             case .appChanged:
-                self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"))
+                self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"), showsCapsule: showsCapsule)
             case .fieldLost:
-                self.notPasted(entryId, L10n.text("没有回到原输入框"), L10n.text("等了一会儿没有回到原来的输入框，未粘贴。"))
+                self.notPasted(entryId, L10n.text("没有回到原输入框"), L10n.text("等了一会儿没有回到原来的输入框，未粘贴。"), showsCapsule: showsCapsule)
             case .superseded:
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
             }
@@ -837,12 +894,14 @@ final class DictationController {
     }
 
     /// Nothing was pasted: say why, and how to paste it from History.
-    private func notPasted(_ entryId: String?, _ short: String, _ long: String) {
+    private func notPasted(_ entryId: String?, _ short: String, _ long: String, showsCapsule: Bool) {
         if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
         let paste = settings.hotkeyPasteLast
         let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
-        recordingBar.showResult(short + (key.isEmpty ? L10n.text("，未粘贴 · 见历史") : L10n.text("，未粘贴 · 按 ") + key + L10n.text(" 贴到这里")),
-                                warning: true)
+        if showsCapsule {
+            recordingBar.showResult(short + (key.isEmpty ? L10n.text("，未粘贴 · 见历史") : L10n.text("，未粘贴 · 按 ") + key + L10n.text(" 贴到这里")),
+                                    warning: true)
+        }
         setHint(long + (key.isEmpty ? L10n.text("文字在历史里。") : L10n.text("按 ") + key + L10n.text(" 贴到这里。历史里也有。")),
                 warning: true)
         applyState()
@@ -863,9 +922,10 @@ final class DictationController {
     /// One timer for both the menu and the waveform.
     func startTick() {
         stopTick()
+        let take = captureTake
         let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-            guard let self = self, self.phase == .recording else { return }
-            self.recordingBar.update(voice: self.recorder.voiceLevel(), elapsed: self.recorder.elapsed)
+            guard let self, self.phase == .recording, self.captureTake === take else { return }
+            take?.level(self.recorder.voiceLevel(), elapsed: self.recorder.elapsed)
             let second = Int(self.recorder.elapsed)
             if second != self.lastTickedSecond {
                 self.lastTickedSecond = second

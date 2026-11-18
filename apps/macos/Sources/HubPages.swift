@@ -77,7 +77,6 @@ struct HomePage: View {
             let insightsWidth = width * 0.67
             HStack(alignment: .top, spacing: gap) {
                 InsightsPanel()
-                    .id(model.homePresentationID)
                     .frame(width: insightsWidth, height: geometry.size.height)
                     .background {
                         HomeDotGrid()
@@ -118,6 +117,13 @@ private struct ShortcutReferenceCard: View {
             shortcut(L10n.text("口述"), binding: model.settings.hotkeyMain)
             shortcut(L10n.text("翻译"), binding: model.settings.hotkeyTranslate)
             shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
+            Menu(L10n.text("试试听写")) {
+                Button(L10n.text("备忘录")) { model.actions?.openRecommendedApp("com.apple.Notes") }
+                Button(L10n.text("文本编辑")) { model.actions?.openRecommendedApp("com.apple.TextEdit") }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .font(Theme.captionFont)
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.sidebar))
@@ -500,7 +506,12 @@ struct HistoryPage: View {
             if dayGroups.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(L10n.text("没有听写记录")).foregroundColor(Theme.secondary)
+                    Text(L10n.text(model.historyUnavailable ? "无法打开听写历史，原有记录已保留。" : "没有听写记录"))
+                        .foregroundColor(Theme.secondary)
+                    if model.credentialsLocked {
+                        Button(L10n.text("用 Touch ID 解锁")) { model.actions?.unlockCredentials() }
+                            .buttonStyle(SecondaryButtonStyle())
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

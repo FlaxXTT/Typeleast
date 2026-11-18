@@ -53,7 +53,7 @@ struct LLMPreset: Identifiable, Equatable {
     }
 }
 
-/// Generic-password items in the login Keychain, one per provider preset.
+/// Credential access through TypeLeast's Touch ID vault or the legacy login Keychain.
 enum KeychainStore {
     static let service = "TypeLeast.llm-api-key"
     /// OSStatus of the last write, for diagnostics and for telling the user why saving failed.
@@ -68,69 +68,52 @@ enum KeychainStore {
     /// already authorized in this process remain separate from display metadata.
     static func invalidatePresence() { lock.withLock { presence.removeAll() } }
 
-    // Each item is read from the Keychain at most once per launch. macOS asks the user
-    // whenever a build it has not seen reads an item, so reading on every redraw meant
-    // one password dialog after another after each update.
-    private static var cache: [String: String?] = [:]
+    private static var cache: [String: String] = [:]
     private static let lock = NSLock()
+    // A login-keychain ACL can open a SecurityAgent password dialog independently
+    // of LocalAuthentication. Keep every legacy operation noninteractive.
+    private static var promptPolicyStatus: OSStatus { TouchIDVault.noPasswordUI }
 
-    static func read(account: String) -> String? {
-        if let stub = stub { return stub[account] }
-        if let hit = lock.withLock({ cache[account] }) {
-            // A reboot can launch us before the login Keychain is available.
-            // Recover after it unlocks, while preserving the one-dialog limit.
-            if let hit { return hit }
-            return readSilently(account: account)
-        }
-        // An item the user already trusted should take the noninteractive path.
-        if let saved = readSilently(account: account) { return saved }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        let text = status == errSecSuccess ? (item as? Data).flatMap { String(data: $0, encoding: .utf8) } : nil
-        // A refused or cancelled dialog is remembered too: no second dialog this launch.
-        lock.withLock {
-            cache[account] = .some(text)
-            if text != nil { presence[account] = true }
-        }
-        return text
-    }
+    static func read(account: String) -> String? { readSilently(account: account) }
 
     /// A fallback may use only a key already read in this process; never open Keychain here.
     static func cached(account: String) -> String? {
         if let stub = stub { return stub[account] }
-        return lock.withLock { cache[account] ?? nil }
+        if TouchIDVault.shared.isConfigured { return TouchIDVault.shared.read(account) }
+        return lock.withLock { cache[account] }
     }
 
     /// Access already-authorized items without showing a system authentication prompt.
     static func readSilently(account: String) -> String? {
         if let value = cached(account: account) { return value }
-        if stub != nil { return nil }
-        let context = LAContext()
-        context.interactionNotAllowed = true
-        let query: [String: Any] = [
+        guard stub == nil, !TouchIDVault.shared.isConfigured, promptPolicyStatus == errSecSuccess else { return nil }
+        let (status, result) = legacyRead(account: account)
+        guard status == errSecSuccess, let value = result else { return nil }
+        lock.withLock { cache[account] = value; presence[account] = true }
+        return value
+    }
+
+    private static func legacyRead(account: String, allowInteraction: Bool = false) -> (OSStatus, String?) {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationContext as String: context,
         ]
+        if !allowInteraction {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data, let value = String(data: data, encoding: .utf8) else { return nil }
-        lock.withLock { cache[account] = .some(value); presence[account] = true }
-        return value
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        return (status, (item as? Data).flatMap { String(data: $0, encoding: .utf8) })
     }
 
     /// Whether an item exists, from its attributes only: never opens a password dialog.
     static func exists(account: String) -> Bool {
+        if stub == nil, TouchIDVault.shared.isConfigured { return TouchIDVault.shared.read(account) != nil }
         if let hit = lock.withLock({ presence[account] }) { return hit }
         let found: Bool
         if let query = presenceQueryOverride { found = query(account) }
@@ -141,6 +124,7 @@ enum KeychainStore {
     }
 
     private static func queryPresence(account: String) -> Bool {
+        guard promptPolicyStatus == errSecSuccess else { return false }
         let context = LAContext()
         context.interactionNotAllowed = true
         let query: [String: Any] = [
@@ -159,6 +143,8 @@ enum KeychainStore {
     static var stubAccountError = false
     static func accounts() -> [String]? {
         if let stub = stub { return stubAccountError ? nil : stub.keys.sorted() }
+        if TouchIDVault.shared.isConfigured { return TouchIDVault.shared.accounts() }
+        guard promptPolicyStatus == errSecSuccess else { return nil }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -184,6 +170,11 @@ enum KeychainStore {
             stub?[account] = value
             return true
         }
+        if TouchIDVault.shared.isConfigured {
+            lastStatus = TouchIDVault.shared.write(value, account: account, onlyIfAbsent: true)
+            return lastStatus == errSecSuccess
+        }
+        guard promptPolicyStatus == errSecSuccess else { lastStatus = promptPolicyStatus; return false }
         let item: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service, kSecAttrAccount as String: account,
@@ -191,7 +182,7 @@ enum KeychainStore {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         lastStatus = SecItemAdd(item as CFDictionary, nil)
-        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value); presence[account] = true } }
+        if lastStatus == errSecSuccess { lock.withLock { cache[account] = value; presence[account] = true } }
         return lastStatus == errSecSuccess
     }
 
@@ -202,6 +193,11 @@ enum KeychainStore {
             stub?[account] = value.isEmpty ? nil : value
             return true
         }
+        if TouchIDVault.shared.isConfigured {
+            lastStatus = TouchIDVault.shared.write(value.isEmpty ? nil : value, account: account)
+            return lastStatus == errSecSuccess
+        }
+        guard promptPolicyStatus == errSecSuccess else { lastStatus = promptPolicyStatus; return false }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -210,14 +206,14 @@ enum KeychainStore {
         if value.isEmpty {
             lastStatus = SecItemDelete(base as CFDictionary)
             guard lastStatus == errSecSuccess || lastStatus == errSecItemNotFound else { return false }
-            lock.withLock { cache[account] = .some(nil); presence[account] = false }
+            lock.withLock { cache[account] = nil; presence[account] = false }
             return true
         }
         // Update in place: a refused/failed save must leave the working key intact.
         let changes = [kSecValueData as String: Data(value.utf8)]
         lastStatus = SecItemUpdate(base as CFDictionary, changes as CFDictionary)
         if lastStatus == errSecItemNotFound { return create(value, account: account) }
-        if lastStatus == errSecSuccess { lock.withLock { cache[account] = .some(value); presence[account] = true } }
+        if lastStatus == errSecSuccess { lock.withLock { cache[account] = value; presence[account] = true } }
         return lastStatus == errSecSuccess
     }
 
@@ -225,6 +221,11 @@ enum KeychainStore {
     @discardableResult
     static func remove(account: String) -> Bool {
         if stub != nil { return stub?.removeValue(forKey: account) != nil }
+        if TouchIDVault.shared.isConfigured {
+            guard TouchIDVault.shared.read(account) != nil else { return false }
+            return TouchIDVault.shared.write(nil, account: account) == errSecSuccess
+        }
+        guard promptPolicyStatus == errSecSuccess else { return false }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -232,6 +233,66 @@ enum KeychainStore {
         ]
         lock.withLock { cache[account] = nil; presence[account] = nil }
         return SecItemDelete(base as CFDictionary) == errSecSuccess
+    }
+
+    private struct LegacyMigrationItems {
+        var values: [String: String] = [:]
+        var unreadable: [String] = []
+    }
+
+    /// This diagnostics mode produces only counts and never opens a Keychain dialog.
+    static func reportTouchIDMigrationReadiness() throws {
+        let items = try legacyMigrationItems()
+        print("Readable credentials: \(items.values.count). Denied credentials: \(items.unreadable.count).")
+        print("History key readable: \(items.values[HistorySeal.account] != nil).")
+        print("Active cleanup key readable: \(items.values[Settings.shared.llmPresetID] != nil).")
+    }
+
+    /// Invoked in the standalone migration process, which alone may allow legacy UI.
+    static func migrateToTouchID(authorizationLimit: Int) async throws -> Int {
+        var items = try legacyMigrationItems()
+        if let historyIndex = items.unreadable.firstIndex(of: HistorySeal.account) {
+            items.unreadable.swapAt(0, historyIndex)
+        }
+        var authorizations = 0
+        for account in items.unreadable {
+            var (status, value) = legacyRead(account: account)
+            if value == nil && authorizations < authorizationLimit {
+                authorizations += 1
+                print("Requesting legacy authorization for item \(authorizations).")
+                (status, value) = legacyReadWithConsent(account: account)
+            }
+            guard status == errSecSuccess, let value else {
+                throw NSError(domain: NSOSStatusErrorDomain, code: Int(status == errSecSuccess ? errSecDecode : status))
+            }
+            items.values[account] = value
+        }
+        if let historyKey = items.values[HistorySeal.account] {
+            guard Data(base64Encoded: historyKey)?.count == 32 else {
+                throw NSError(domain: NSOSStatusErrorDomain, code: Int(errSecDecode))
+            }
+        }
+        try await TouchIDVault.shared.provision(values: items.values)
+        return items.values.count
+    }
+
+    private static func legacyMigrationItems() throws -> LegacyMigrationItems {
+        guard !TouchIDVault.shared.isConfigured, let accounts = accounts() else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(errSecNotAvailable))
+        }
+        var items = LegacyMigrationItems()
+        for account in accounts {
+            let (_, value) = legacyRead(account: account)
+            if let value { items.values[account] = value } else { items.unreadable.append(account) }
+        }
+        return items
+    }
+
+    private static func legacyReadWithConsent(account: String) -> (OSStatus, String?) {
+        let status = SecKeychainSetUserInteractionAllowed(true)
+        guard status == errSecSuccess else { return (status, nil) }
+        defer { SecKeychainSetUserInteractionAllowed(false) }
+        return legacyRead(account: account, allowInteraction: true)
     }
 
 }
@@ -341,20 +402,13 @@ extension Settings {
 
     /// The route to send with a dictation, or nil when it is not complete yet
     /// (then the service inserts the tidied transcript, reason no-api-key).
-    var activeLLMRoute: LLMRoute? { llmRoute(allowInteraction: true) }
+    var activeLLMRoute: LLMRoute? { silentLLMRoute }
 
     /// Background work must not open a password dialog.
-    var silentLLMRoute: LLMRoute? { llmRoute(allowInteraction: false) }
-
-    private func llmRoute(allowInteraction: Bool) -> LLMRoute? {
+    var silentLLMRoute: LLMRoute? {
         let preset = LLMPreset.find(llmPresetID)
         guard !llmModel.isEmpty, LLMPreset.isAllowedBaseURL(llmBaseURL) else { return nil }
-        let key: String
-        if preset.needsKey && allowInteraction {
-            key = llmAPIKey
-        } else {
-            key = KeychainStore.readSilently(account: llmPresetID) ?? ""
-        }
+        let key = KeychainStore.readSilently(account: llmPresetID) ?? ""
         guard !preset.needsKey || !key.isEmpty else { return nil }
         return LLMRoute(baseURL: llmBaseURL, model: llmModel, apiKey: key)
     }

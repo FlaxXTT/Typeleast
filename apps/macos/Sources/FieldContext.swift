@@ -215,6 +215,17 @@ enum FieldContextReader {
         return copy(target, kAXFocusedUIElementAttribute)
     }
 
+    /// The reminder asks only about editability. It never retrieves text or its selection.
+    static func hasEditableFocus(in bundleId: String) -> Bool {
+        guard AXIsProcessTrusted(), let focus = focusedElement(ofApp: bundleId) else { return false }
+        AXUIElementSetMessagingTimeout(focus, 0.25)
+        let role: String = copy(focus, kAXRoleAttribute) ?? ""
+        let subrole: String = copy(focus, kAXSubroleAttribute) ?? ""
+        guard textFieldRoles.contains(role), subrole != kAXSecureTextFieldSubrole else { return false }
+        var settable = DarwinBoolean(false)
+        return AXUIElementIsAttributeSettable(focus, kAXValueAttribute as CFString, &settable) == .success && settable.boolValue
+    }
+
     /// Whether a paste need wait no longer: the user is at the starting field. Changes nothing,
     /// so it can be asked repeatedly while the user works elsewhere.
     static func isBackAtField(_ field: FocusedField) -> Bool {
