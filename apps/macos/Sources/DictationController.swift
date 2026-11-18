@@ -49,6 +49,7 @@ final class DictationController {
     private var pendingAppBundleId = ""
     private var pendingField: FocusedField?
     private var progressID = UUID()
+    private var onlineASRTask: Task<Void, Never>?
     private var pendingAssistant = false
     /// 提示词模式's draft copied from a browser, whose fields Accessibility cannot read.
     private var copiedSelection: String?
@@ -177,7 +178,9 @@ final class DictationController {
         }
         lastMicrophoneName = microphone
         lastMicrophoneActivityAt = now
-        setHint(serviceUp ? nil : (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem), warning: !serviceUp)
+        let localServiceNeeded = settings.onlineASRProvider == .local && !serviceUp
+        setHint(localServiceNeeded ? (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem) : nil,
+                warning: localServiceNeeded)
         playSound(start: true)
         if settings.muteWhileDictating {
             // The chime plays on the same output device: mute only after it (0.24 s) has played.
@@ -306,6 +309,8 @@ final class DictationController {
             updateIdleBar()
         case .thinking:
             progressID = UUID()
+            onlineASRTask?.cancel()
+            onlineASRTask = nil
             client.cancelGeneration()
             unregisterEscape(); stopTick(); recordingBar.hide()
             phase = .idle
@@ -360,31 +365,19 @@ final class DictationController {
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
         let profile = HistoryStore.shared.profile
         let ownPrompt = settings.customTranslatePrompt
+        let asrProvider = settings.onlineASRProvider
+        let usesOnlineASR = asrProvider != .local
         let progressID = UUID(); self.progressID = progressID
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            var outcome: Result<DictateResponse, Error>
-            do {
-                let data = try HistorySeal.readAudio(audioURL)
-                if data.count > Wav.maxBytes {
-                    throw ServiceError.transport(L10n.text("录音超过 24 MiB"))
-                }
-                outcome = .success(try self.client.dictateSync(wav: data, language: effectiveLanguage,
-                                                              appBundleId: appBundleId, strength: strength,
-                                                              fieldContext: context, llm: llm,
-                                                              betaSession: betaSession,
-                                                              translateTo: translateTo, variants: variants,
-                                                              profile: profile, baseline: baseline, translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver,
-                                                              onProgress: { [weak self] progress in DispatchQueue.main.async {
-                                                                  guard let self, self.phase == .thinking, self.progressID == progressID else { return }
-                                                                  self.recordingBar.showThinking(detail:progress.label)
-                                                              } }))
-            } catch {
-                outcome = .failure(error)
-            }
+        let complete: (Result<DictateResponse, Error>) -> Void = { [weak self] outcome in
             if deleteWhenDone { try? FileManager.default.removeItem(at: audioURL) }
             DispatchQueue.main.async {
-                guard self.progressID == progressID else { return }
+                guard let self, self.progressID == progressID else {
+                    if let path = keepAudioPath, !path.hasSuffix(".sealed") {
+                        try? FileManager.default.removeItem(atPath: path)
+                    }
+                    return
+                }
+                self.onlineASRTask = nil
                 self.withBackupIfNeeded(outcome, generation: progressID, language: effectiveLanguage, strength: strength,
                                         translateTo: translateTo, variants: variants, profile: profile, context: context,
                                         baseline: baseline, appBundleId: appBundleId, translatePrompt: ownPrompt,
@@ -392,8 +385,65 @@ final class DictationController {
                 self.finishRequest(resolved, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
                                    audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: usedRoute ?? llm, variants: variants,
                                    betaSession: betaSession, betaInfo: previousBeta?.info, translateTo: translateTo, baseline: baseline,
-                                   reviewContext: context, reviewProfile: profile, reviewTranslatePrompt: ownPrompt)
+                                   reviewContext: context, reviewProfile: profile, reviewTranslatePrompt: ownPrompt,
+                                   usesOnlineASR: usesOnlineASR)
                 }
+            }
+        }
+        let readAudio = {
+            let data = try HistorySeal.readAudio(audioURL)
+            guard data.count <= Wav.maxBytes else { throw ServiceError.transport(L10n.text("录音超过 24 MiB")) }
+            return data
+        }
+        let client = self.client
+        if usesOnlineASR {
+            let workspaceID = settings.funASRWorkspaceID
+            let ticket = client.generationTicket()
+            recordingBar.showThinking(detail: L10n.text("正在识别…"))
+            onlineASRTask = Task.detached(priority: .userInitiated) {
+                do {
+                    let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
+                    try Task.checkCancellation()
+                    let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID)
+                    let spoken = try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
+                    try Task.checkCancellation()
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let outcome = Result {
+                            do {
+                                var response = try client.polishSync(text: spoken, language: effectiveLanguage, strength: strength,
+                                    llm: llm, translateTo: translateTo, variants: variants, profile: profile,
+                                    fieldContext: context, betaSession: betaSession, translatePrompt: ownPrompt, baseline: baseline,
+                                    appHint: appBundleId, generationTicket: ticket, hasConfiguredBackups: canFailOver)
+                                if response.model == nil { response.model = asrProvider.label }
+                                return response
+                            } catch let error as ServiceError
+                                      where error.serviceUnavailable && translateTo == nil && strength != VoiceStrength.promptbeta.rawValue {
+                                var response = DictateResponse(text: spoken, raw: spoken, fallback: true)
+                                response.task = "dictation"
+                                response.model = asrProvider.label
+                                response.fallbackReason = "local-service-unavailable"
+                                return response
+                            }
+                        }
+                        complete(outcome)
+                    }
+                } catch {
+                    complete(.failure(error))
+                }
+            }
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                complete(Result {
+                    try client.dictateSync(wav: readAudio(), language: effectiveLanguage, appBundleId: appBundleId,
+                        strength: strength, fieldContext: context, llm: llm, betaSession: betaSession,
+                        translateTo: translateTo, variants: variants, profile: profile, baseline: baseline,
+                        translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver, onProgress: { progress in
+                            DispatchQueue.main.async {
+                                guard let self, self.phase == .thinking, self.progressID == progressID else { return }
+                                self.recordingBar.showThinking(detail: progress.label)
+                            }
+                        })
+                })
             }
         }
     }
@@ -586,7 +636,8 @@ final class DictationController {
                        strength: String, audioPath: String?, seconds: Double?, field: FocusedField?, insert: Bool,
                        llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false,
                        betaSession: String? = nil, betaInfo: BetaInfo? = nil, translateTo: String? = nil, baseline: String? = nil,
-                       reviewContext: Data? = nil, reviewProfile: String = "", reviewTranslatePrompt: String? = nil) {
+                       reviewContext: Data? = nil, reviewProfile: String = "", reviewTranslatePrompt: String? = nil,
+                       usesOnlineASR: Bool = false) {
         unregisterEscape()
         // A failed request or Beta question does not retain an untracked raw recording.
         defer {
@@ -602,8 +653,10 @@ final class DictationController {
         }
         switch outcome {
         case .success(let resp):
-            serviceUp = true
-            model.serviceProblem = ""
+            if !usesOnlineASR {
+                serviceUp = true
+                model.serviceProblem = ""
+            }
             if let review = resp.qualityReview {
                 // The pending history row has no text: neither the transcript nor
                 // the model draft can be pasted through “paste last” before review.
@@ -749,7 +802,7 @@ final class DictationController {
                 serviceUp = false
                 scheduleHealthRetry()
             }
-            recordingBar.showResult(serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), warning: true)
+            recordingBar.showResult(usesOnlineASR || serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), warning: true)
             if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("听写失败：") + (d?.description ?? error.localizedDescription), warning: true)
             applyState()
