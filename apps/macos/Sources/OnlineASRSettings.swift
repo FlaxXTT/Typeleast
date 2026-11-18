@@ -10,6 +10,10 @@ extension OnlineASRProvider {
     }
 
     var keychainAccount: String { "asr." + rawValue }
+
+    var recordingPrivacyText: String {
+        self == .local ? L10n.text("录音在本机识别。") : L10n.text("录音发往 {0}。", label)
+    }
 }
 
 struct OnlineASRSettings: View {
