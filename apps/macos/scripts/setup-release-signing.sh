@@ -25,8 +25,7 @@ printf '%s' "$MACOS_SIGNING_CERTIFICATE_BASE64" | /usr/bin/base64 --decode > "$s
 /usr/bin/openssl pkcs12 -in "$signing_work/identity.p12" -clcerts -nokeys \
   -passin env:MACOS_SIGNING_CERTIFICATE_PASSWORD -out "$signing_work/leaf.pem" 2>/dev/null
 /usr/bin/openssl x509 -in "$signing_work/leaf.pem" -checkend 0 -noout >/dev/null
-identity_hash="$(/usr/bin/openssl x509 -in "$signing_work/leaf.pem" -noout -fingerprint -sha1 | sed 's/^[^=]*=//; s/://g')"
-[[ "$identity_hash" =~ ^[0-9A-Fa-f]{40}$ ]] || { echo 'The signing certificate fingerprint is invalid.' >&2; exit 1; }
+identity_name='TypeLeast Publisher Signing (FlaxXTT/Typeleast)'
 
 signing_keychain_password="$(/usr/bin/openssl rand -hex 24)"
 /usr/bin/security list-keychains -d user | /usr/bin/python3 -c 'import shlex,sys; print("\n".join(shlex.split(sys.stdin.read())))' > "$signing_work/search-list"
@@ -43,7 +42,7 @@ else
   /usr/bin/security list-keychains -d user -s "$signing_keychain"
 fi
 
-if ! /usr/bin/security find-identity -v -p codesigning "$signing_keychain" | grep -Fiq "$identity_hash"; then
+if ! /usr/bin/security find-identity -v -p codesigning "$signing_keychain" | grep -Fq "\"$identity_name\""; then
   # A fixed private publisher CA is usable without Developer ID. Trust its root
   # only on this disposable build machine; never install trust on user Macs.
   /usr/bin/openssl pkcs12 -in "$signing_work/identity.p12" -cacerts -nokeys \
@@ -59,7 +58,7 @@ if ! /usr/bin/security find-identity -v -p codesigning "$signing_keychain" | gre
     -k /Library/Keychains/System.keychain "$signing_work/root.pem"
   touch "$signing_work/trust-added"
 fi
-/usr/bin/security find-identity -v -p codesigning "$signing_keychain" | grep -Fiq "$identity_hash" \
+/usr/bin/security find-identity -v -p codesigning "$signing_keychain" | grep -Fq "\"$identity_name\"" \
   || { echo 'No valid signing identity is available; publishing is stopped.' >&2; exit 1; }
-printf 'TYPELEAST_SIGN_IDENTITY=%s\nTYPELEAST_RELEASE_SIGNING_WORK=%s\n' "$identity_hash" "$signing_work" >> "$GITHUB_ENV"
+printf 'TYPELEAST_SIGN_IDENTITY=%s\nTYPELEAST_RELEASE_SIGNING_WORK=%s\n' "$identity_name" "$signing_work" >> "$GITHUB_ENV"
 echo 'Persistent publisher identity imported; release packaging will preserve it.'
