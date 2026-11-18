@@ -24,3 +24,7 @@ site/dist/
 
 # The moss-transcribe engine, built by apps/macos/scripts/build-moss.sh
 /service/native/
+
+# AOCI agent host integration (machine-bound; do not commit)
+.codex/config.toml
+.codex/config.toml.backup.*
