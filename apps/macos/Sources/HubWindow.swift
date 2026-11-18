@@ -152,7 +152,9 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 9) {
                 AppMarkView(size: 26).accessibilityHidden(true)
-                Text("TypeLeast").font(InterfaceTypography.english(20, emphasized: true)).tracking(-0.4)
+                Text("TYPELEAST").font(InterfaceTypography.sackers(19)).tracking(1)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .accessibilityLabel("TypeLeast")
                 Spacer(minLength: 0)
             }
             .padding(.bottom, 16)

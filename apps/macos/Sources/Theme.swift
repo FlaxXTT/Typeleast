@@ -84,12 +84,13 @@ struct InitialHeading: View {
     let initialSize: CGFloat
     let bodySize: CGFloat
     var typeface: (CGFloat) -> Font = { InterfaceTypography.english($0, emphasized: true) }
+    var tracking: CGFloat = -0.6
 
     var body: some View {
         let initial = Text(String(title.prefix(1))).font(typeface(initialSize))
         let rest = Text(String(title.dropFirst())).font(typeface(bodySize))
         Text("\(initial)\(rest)")
-            .tracking(-0.6)
+            .tracking(tracking)
             .accessibilityAddTraits(.isHeader)
     }
 }
