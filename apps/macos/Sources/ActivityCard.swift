@@ -12,7 +12,11 @@ private enum DashboardMotion {
     static let duration = gridDelay + maximumWave + columnDuration
 
     static func columnStart(_ column: Int, weeks: Int) -> Double {
-        gridDelay + Double(column) * min(columnStagger, maximumWave / Double(max(1, weeks - 1)))
+        let intervals = Double(max(1, weeks - 1))
+        let position = Double(column) / intervals
+        let wave = min(maximumWave, intervals * columnStagger)
+        // Invert the eased travel so the reveal slows near both ends of the grid.
+        return gridDelay + wave * acos(1 - 2 * position) / .pi
     }
 
     static func ease(_ progress: Double) -> Double {
@@ -36,8 +40,10 @@ struct InsightsPanel: View {
         let timingUnavailable = stats.dictations > 0 && !stats.hasTiming
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                InitialHeading(title: "Insight", initialSize: 50, bodySize: 31, typeface: InterfaceTypography.blackletter)
+                InitialHeading(title: "INSIGHT", initialSize: 45, bodySize: 31,
+                               typeface: InterfaceTypography.sackers, tracking: 1.8)
                     .foregroundColor(Theme.homeLabel)
+                    .accessibilityLabel("Insight")
                 Spacer()
                 ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
             }
@@ -441,6 +447,7 @@ struct ActivityCard: View {
             ForEach(0..<weeks, id: \.self) { column in
                 let weekStart = calendar.date(byAdding: .day, value: 7 * column, to: first) ?? first
                 let x = dayColumn + CGFloat(column) * step
+                let revealStart = DashboardMotion.columnStart(column, weeks: weeks)
                 ForEach(0..<7, id: \.self) { row in
                     let date = calendar.date(byAdding: .day, value: row, to: weekStart) ?? weekStart
                     Group {
@@ -451,7 +458,7 @@ struct ActivityCard: View {
                             if weekOffset == 0 {
                                 outlinedCell.overlay {
                                     square(level, size: cell).modifier(HeatmapColumnReveal(
-                                        elapsed: elapsed, start: DashboardMotion.columnStart(column, weeks: weeks)))
+                                        elapsed: elapsed, start: revealStart))
                                 }
                                 .help(description).accessibilityLabel(description)
                             } else {
@@ -524,9 +531,11 @@ private struct HeatmapColumnReveal: AnimatableModifier {
     }
 
     func body(content: Content) -> some View {
-        let progress = DashboardMotion.ease((elapsed - start) / DashboardMotion.columnDuration)
+        let phase = (elapsed - start) / DashboardMotion.columnDuration
+        let lift = DashboardMotion.ease(phase / 0.55)
+        let settle = DashboardMotion.ease((phase - 0.55) / 0.45)
         content
-            .opacity(progress)
-            .scaleEffect(0.94 + 0.06 * progress + 0.07 * sin(.pi * progress))
+            .opacity(DashboardMotion.ease(phase))
+            .scaleEffect(0.92 + 0.18 * lift - 0.10 * settle)
     }
 }

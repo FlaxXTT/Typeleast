@@ -10,9 +10,11 @@ enum InterfaceTypography {
     private static let myriadSemibold = NSFont(name: "MyriadPro-Semibold", size: 12) != nil
     private static let erasName = ["ErasITC-Medium", "ItcEras-Medium", "Eras Medium ITC"]
         .compactMap { NSFont(name: $0, size: 12)?.fontName }.first
+    private static let sackersName = ["SackersGothicLightAT", "Sackers Gothic Light AT", "SackersGothicStd-Light"]
+        .compactMap { NSFont(name: $0, size: 12)?.fontName }.first
 
-    static func blackletter(_ size: CGFloat) -> Font {
-        .custom("UnifrakturMaguntia", size: size)
+    static func sackers(_ size: CGFloat) -> Font {
+        .custom(sackersName ?? "AvenirNext-UltraLight", size: size)
     }
 
     static func english(_ size: CGFloat, emphasized: Bool = false) -> Font {
