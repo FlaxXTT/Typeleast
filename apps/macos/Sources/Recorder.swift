@@ -98,7 +98,7 @@ final class Recorder {
         return smoothedLevel
     }
 
-    /// FFT-derived voice energy; the renderer only copies this small snapshot.
+    /// Latest tap loudness; the waveform renderer only copies this small snapshot.
     func voiceLevel() -> VoiceLevel {
         lock.lock(); defer { lock.unlock() }
         return voice
@@ -258,9 +258,8 @@ final class Recorder {
               let conv = AudioConvert.makeConverter(from: inFormat) else {
             throw RecorderError.converterUnavailable
         }
-        let spectrum = VoiceSpectrum(sampleRate: inFormat.sampleRate)
         input.installTap(onBus: 0, bufferSize: 1024, format: inFormat) { [weak self] buffer, _ in
-            self?.consume(buffer, converter: conv, target: target, limit: limit, token: token, spectrum: spectrum)
+            self?.consume(buffer, converter: conv, target: target, limit: limit, token: token)
         }
         do {
             guard isCurrentCapture(token) else { throw RecorderError.cancelled }
@@ -352,8 +351,6 @@ final class Recorder {
         isRecording = true
         startedAt = Date()
         let chunkBytes = Recorder.bytesPerSecond / 20   // 50 ms
-        let spectrum = VoiceSpectrum(sampleRate: Self.targetSampleRate)
-        let quietChunk = Data(count: chunkBytes)
         var trailingTicks = 0
         demoTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] timer in
             guard let self = self, self.isRecording else { timer.invalidate(); return }
@@ -369,17 +366,18 @@ final class Recorder {
                         sum += v * v
                     }
                 }
-                let rms = count > 0 ? Float((sum / Double(count)).squareRoot()) : 0
-                spectrum.consumePCM16(chunk)
+                let sample = count > 0 ? Recorder.loudness(rms: Float((sum / Double(count)).squareRoot())) : 0
                 self.lock.lock()
-                self.voice = spectrum.latest
+                self.voice = VoiceLevel(volume: sample, hasAudio: count > 0)
                 self.pcm.append(chunk)
-                self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: Recorder.loudness(rms: rms))
+                self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: sample)
                 self.lock.unlock()
             } else {
                 // A moment of quiet after the last word, like a person about to press stop.
-                spectrum.consumePCM16(quietChunk)
-                self.lock.lock(); self.voice = spectrum.latest; self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: 0); self.lock.unlock()
+                self.lock.lock()
+                self.voice = VoiceLevel(hasAudio: true)
+                self.smoothedLevel = Recorder.smoothLevel(previous: self.smoothedLevel, sample: 0)
+                self.lock.unlock()
                 trailingTicks += 1
                 if trailingTicks == 8 {
                     timer.invalidate()
@@ -392,15 +390,14 @@ final class Recorder {
     // MARK: capture
 
     private func consume(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter,
-                         target: AVAudioFormat, limit: Int, token: UInt64, spectrum: VoiceSpectrum) {
+                         target: AVAudioFormat, limit: Int, token: UInt64) {
         guard isCurrentCapture(token), let chunk = AudioConvert.convert(buffer, using: converter, to: target) else { return }
-        spectrum.consume(buffer)
-        let sample = Recorder.rms(of: buffer)
+        let sample = Recorder.loudness(rms: Recorder.rms(of: buffer))
         let maxBytes = Recorder.bytesPerSecond * limit
         lock.lock()
         guard captureGeneration == token else { lock.unlock(); return }
-        voice = spectrum.latest
-        smoothedLevel = Recorder.smoothLevel(previous: smoothedLevel, sample: Recorder.loudness(rms: sample))
+        voice = VoiceLevel(volume: sample, hasAudio: buffer.frameLength > 0)
+        smoothedLevel = Recorder.smoothLevel(previous: smoothedLevel, sample: sample)
         if pcm.count < maxBytes {
             let room = min(chunk.count, maxBytes - pcm.count)
             pcm.append(chunk.prefix(room))

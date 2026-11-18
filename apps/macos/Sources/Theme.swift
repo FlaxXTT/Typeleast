@@ -79,8 +79,7 @@ enum Theme {
     static let homeDot = dynamic(referenceColour(0xD5D7DC), hex(0x444040))
     static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
     static let heatEmpty = dynamic(hex(0xF8F8F8), hex(0x2C2B2B))
-    static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
-                       dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(referenceColour(0x426AF6), hex(0x6E8BF5))]
+    static let heatActive = dynamic(referenceColour(0xBCCBFA), hex(0x40558F))
 }
 
 struct InitialHeading: View {

@@ -106,6 +106,14 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         !dismissSettingsIfVisible()
     }
 
+    func windowWillClose(_ notification: Notification) {
+        model.homePresentationSuspended = true
+    }
+
+    func windowWillMiniaturize(_ notification: Notification) {
+        model.homePresentationSuspended = true
+    }
+
     func windowDidDeminiaturize(_ notification: Notification) {
         let page = requestedRestorePage ?? .home
         requestedRestorePage = nil
@@ -113,6 +121,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     private func present(_ page: HubPage) {
+        model.homePresentationSuspended = false
         if page == .home {
             settingsWindow.closeImmediately()
             model.homePresentationID &+= 1

@@ -209,6 +209,7 @@ enum L10n {
         "活跃天数": "Active days",
         "天": "days",
         "没有活动": "No activity",
+        "有活动": "Active",
         "{0} 次 · {1} 字": "{0} dictations · {1} words",
         "关于 TypeLeast": "About TypeLeast",
         "隐藏 TypeLeast": "Hide TypeLeast",

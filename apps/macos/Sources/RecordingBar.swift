@@ -147,7 +147,7 @@ struct RecordingBarModel {
         self.level = value
         if elapsed.isFinite, elapsed >= 0 { self.elapsed = elapsed }
         history.append(value)
-        voice = VoiceLevel(volume: value, signal: value, response: VoiceResponse.height(value), hasAudio: true)
+        voice = VoiceLevel(volume: value, hasAudio: true)
     }
 
     mutating func update(voice: VoiceLevel, elapsed: Double) {
@@ -645,11 +645,12 @@ final class PillView: NSView {
         let origin = rect.midX - total / 2
         context.saveGState()
         context.clip(to: rect)
+        let restingHeight = CGFloat(VoiceWaveform.restingHeight)
+        PillView.ink.setFill()
         for index in 0..<Self.visibleBars {
-            let height = 2 + (CGFloat(waveform.heights[index]) - 2) * (1 - collapse)
+            let height = restingHeight + (CGFloat(waveform.heights[index]) - restingHeight) * (1 - collapse)
             let line = NSRect(x: origin + CGFloat(index) * (width + gap), y: rect.midY - height / 2,
                               width: width, height: height)
-            PillView.ink.withAlphaComponent(waveform.opacities[index]).setFill()
             NSBezierPath(roundedRect: line, xRadius: 1, yRadius: 1).fill()
         }
         context.restoreGState()

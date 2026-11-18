@@ -557,6 +557,22 @@ do {
     checkEq("waveform reset empties", history.count, 0)
     checkEq("waveform default capacity is 40 samples", LevelHistory.defaultCapacity, 40)
 
+    let tick = 1.0 / 60
+    let quiet = VoiceLevel(volume: Recorder.loudness(rms: 0.01), hasAudio: true)
+    let loud = VoiceLevel(volume: Recorder.loudness(rms: 0.1), hasAudio: true)
+    var waveform = VoiceWaveform()
+    check("an audio-free waveform stays at rest", !waveform.advance(level: VoiceLevel(), delta: tick, reduceMotion: false))
+    waveform.advance(level: loud, delta: tick, reduceMotion: false)
+    check("live peaks reach the centre on the first frame", waveform.heights[4] > waveform.heights[0] + 2)
+    checkEq("audio-driven bars mirror their other half", waveform.heights, Array(waveform.heights.reversed()))
+    for _ in 0..<90 { waveform.advance(level: VoiceLevel(hasAudio: true), delta: tick, reduceMotion: false) }
+    check("a pause returns every bar to rest", waveform.heights.allSatisfy { $0 == VoiceWaveform.restingHeight })
+    waveform.advance(level: quiet, delta: tick, reduceMotion: true)
+    let quietHeight = waveform.heights[4]
+    waveform.advance(level: loud, delta: tick, reduceMotion: true)
+    check("reduced motion still distinguishes quiet and loud input",
+          quietHeight > VoiceWaveform.restingHeight && waveform.heights[4] > quietHeight)
+
     // pill show/hide state machine
     var model = RecordingBarModel()
     checkEq("pill starts hidden", model.phase, RecordingBarModel.Phase.hidden)

@@ -2,22 +2,10 @@ import SwiftUI
 import AppKit
 import QuartzCore
 
-/// A single elapsed-time animation drives the readouts and week columns.
+/// A single elapsed-time animation drives the readouts and the activity grid.
 private enum DashboardMotion {
     static let countDuration = 0.250
-    static let gridDelay = 0.400
-    static let columnDuration = 0.300
-    static let columnStagger = 0.028
-    static let maximumWave = 0.520
-    static let duration = gridDelay + maximumWave + columnDuration
-
-    static func columnStart(_ column: Int, weeks: Int) -> Double {
-        let intervals = Double(max(1, weeks - 1))
-        let position = Double(column) / intervals
-        let wave = min(maximumWave, intervals * columnStagger)
-        // Invert the eased travel so the reveal slows near both ends of the grid.
-        return gridDelay + wave * acos(1 - 2 * position) / .pi
-    }
+    static let duration = 0.380
 
     static func ease(_ progress: Double) -> Double {
         let t = min(1, max(0, progress))
@@ -35,7 +23,7 @@ struct InsightsPanel: View {
 
     var body: some View {
         let stats = model.stats
-        let time = reduceMotion ? DashboardMotion.duration : elapsed
+        let time = reduceMotion ? DashboardMotion.duration : model.homePresentationSuspended ? 0 : elapsed
         GeometryReader { geometry in
             let headerHeight: CGFloat = 54
             let spacing: CGFloat = 14
@@ -64,16 +52,18 @@ struct InsightsPanel: View {
                 ActivityCard(elapsed: time).frame(height: activityHeight)
             }
         }
-        .task(id: reduceMotion) {
+        .onAppear {
             if reduceMotion {
                 elapsed = DashboardMotion.duration
                 return
             }
-            try? await Task.sleep(for: .milliseconds(60))
-            guard !Task.isCancelled, elapsed == 0 else { return }
+            guard !model.homePresentationSuspended, elapsed == 0 else { return }
             withAnimation(.linear(duration: DashboardMotion.duration)) {
                 elapsed = DashboardMotion.duration
             }
+        }
+        .onChange(of: reduceMotion) { _, reduced in
+            if reduced { elapsed = DashboardMotion.duration }
         }
     }
 
@@ -394,9 +384,10 @@ struct ActivityCard: View {
             }
             .padding(.top, 12)
             HStack(spacing: 6) {
-                Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-                ForEach(1..<5) { level in square(level, size: 13) }
-                Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+                square(active: false, size: 13)
+                Text(L10n.text("没有活动")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+                square(active: true, size: 13).padding(.leading, 4)
+                Text(L10n.text("有活动")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
             }
             .padding(.horizontal, 7)
             .padding(.top, 8)
@@ -454,22 +445,20 @@ struct ActivityCard: View {
             ForEach(0..<weeks, id: \.self) { column in
                 let weekStart = calendar.date(byAdding: .day, value: 7 * column, to: first) ?? first
                 let x = dayColumn + CGFloat(column) * columnStep
-                let revealStart = DashboardMotion.columnStart(column, weeks: weeks)
                 ForEach(0..<7, id: \.self) { row in
                     let date = calendar.date(byAdding: .day, value: row, to: weekStart) ?? weekStart
                     Group {
                         if date <= today {
                             let day = log.day(date)
-                            let level = ActivityLog.level(day.dictations)
+                            let active = day.dictations > 0
                             let description = tooltip(date, day)
-                            if weekOffset == 0 {
-                                outlinedCell(size: cell).overlay {
-                                    square(level, size: cell).modifier(HeatmapColumnReveal(
-                                        elapsed: elapsed, start: revealStart))
+                            if active && weekOffset == 0 {
+                                square(active: false, size: cell).overlay {
+                                    square(active: true, size: cell).modifier(HeatmapReveal(elapsed: elapsed))
                                 }
                                 .help(description).accessibilityLabel(description)
                             } else {
-                                square(level, size: cell).help(description).accessibilityLabel(description)
+                                square(active: active, size: cell).help(description).accessibilityLabel(description)
                             }
                         } else {
                             outlinedCell(size: cell).accessibilityHidden(true)
@@ -507,9 +496,9 @@ struct ActivityCard: View {
             .frame(width: size, height: size)
     }
 
-    private func square(_ level: Int, size: CGFloat) -> some View {
+    private func square(active: Bool, size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
-            .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
+            .fill(active ? Theme.heatActive : Theme.heatEmpty)
             .frame(width: size, height: size)
     }
 
@@ -532,28 +521,16 @@ struct ActivityCard: View {
     }
 }
 
-/// The slot stays fixed; only the fill fades and settles within it.
-private struct HeatmapColumnReveal: AnimatableModifier {
+/// Every active cell reveals at the same rate, without a size or brightness pulse.
+private struct HeatmapReveal: AnimatableModifier {
     var elapsed: Double
-    let start: Double
     var animatableData: Double {
         get { elapsed }
         set { elapsed = newValue }
     }
 
     func body(content: Content) -> some View {
-        let phase = (elapsed - start) / DashboardMotion.columnDuration
-        let lift = DashboardMotion.ease(phase / 0.45)
-        let settle = DashboardMotion.ease((phase - 0.45) / 0.55)
-        let highlightOpacity = 0.24 * lift * (1 - settle)
-        content
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
-                    .fill(Color.white.opacity(highlightOpacity))
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-            .opacity(DashboardMotion.ease(phase / 0.65))
-            .scaleEffect(1 + 0.14 * (lift - settle))
+        let time = min(1, max(0, elapsed / DashboardMotion.duration))
+        content.opacity(1 - pow(1 - time, 3))
     }
 }
