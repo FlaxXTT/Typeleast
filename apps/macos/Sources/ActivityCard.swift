@@ -45,10 +45,10 @@ struct InsightsPanel: View {
             let tileHeight = max(0, (contentHeight - activityHeight - tileGap) / 2)
             VStack(alignment: .leading, spacing: spacing) {
                 HStack {
-                    InitialHeading(title: "Insight", initialSize: Theme.homeHeadingSize,
+                    InitialHeading(title: "INstinct", initialSize: Theme.homeHeadingSize,
                                    bodySize: Theme.homeHeadingSize * Theme.homeRatio)
                         .foregroundColor(Theme.homeLabel)
-                        .accessibilityLabel("Insight")
+                        .accessibilityLabel("INstinct")
                     Spacer()
                     ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
                 }
@@ -87,31 +87,24 @@ struct InsightsPanel: View {
     private static func duration(_ seconds: Double) -> [InsightPart] {
         let total = max(0, Int(seconds.rounded()))
         if total < 60 { return [InsightPart(value: Double(total), unit: L10n.text("秒"))] }
-        let value = Double(total)
-        if total < 3600 { return [InsightPart(value: value, unit: L10n.text("分钟"), format: .minutes)] }
-        return [InsightPart(value: value, unit: L10n.text("小时"), format: .hours),
-                InsightPart(value: value, unit: L10n.text("分钟"), format: .minuteRemainder)]
+        let minutes = total / 60
+        if minutes < 60 { return [InsightPart(value: Double(minutes), unit: L10n.text("分钟"))] }
+        return [InsightPart(value: Double(minutes / 60), unit: L10n.text("小时")),
+                InsightPart(value: Double(minutes % 60), unit: L10n.text("分钟"))]
     }
 }
 
 private struct InsightPart {
-    enum Format { case whole, thousands, hours, minutes, minuteRemainder }
+    enum Format { case whole, thousands }
     let value: Double
     let unit: String
     var format: Format = .whole
-
-    var widthSample: String {
-        format == .minuteRemainder ? Formatters.number(59) : string(at: 1)
-    }
 
     func string(at progress: Double) -> String {
         let scaled = value * progress
         switch format {
         case .whole: return Formatters.number(Int(scaled))
         case .thousands: return String(format: "%.1f", locale: L10n.locale, scaled) + "K"
-        case .hours: return Formatters.number(Int(scaled) / 3600)
-        case .minutes: return Formatters.number(Int(scaled) / 60)
-        case .minuteRemainder: return Formatters.number((Int(scaled) / 60) % 60)
         }
     }
 }
@@ -127,7 +120,7 @@ private struct CountingNumber: View, Animatable {
 
     var body: some View {
         let progress = DashboardMotion.ease(elapsed / DashboardMotion.countDuration)
-        Text(part.widthSample).hidden()
+        Text(part.string(at: 1)).hidden()
             .overlay(alignment: .trailing) {
                 Text(part.string(at: progress))
                     .lineLimit(1).minimumScaleFactor(0.6)
@@ -147,13 +140,16 @@ private struct Figure: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 11) {
                 ForEach(parts.indices, id: \.self) { index in
-                    CountingNumber(part: parts[index], elapsed: elapsed, size: Theme.homeFigureSize)
-                        .tracking(-0.6)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    InterfaceTypography.text(parts[index].unit, size: Theme.homeSecondarySize, weight: .semibold)
-                        .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
+                    let part = parts[index]
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        CountingNumber(part: part, elapsed: elapsed, size: Theme.homeFigureSize)
+                            .tracking(-0.6)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                        InterfaceTypography.text(part.unit, size: Theme.homeSecondarySize, weight: .semibold)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
                 }
             }
             InterfaceTypography.text(label, size: Theme.homeSecondarySize)
