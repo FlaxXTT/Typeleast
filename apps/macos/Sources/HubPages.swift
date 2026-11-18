@@ -125,7 +125,7 @@ private struct ShortcutReferenceCard: View {
 
     private func shortcut(_ title: String, binding: HotKeyBinding) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(Theme.rowFont).foregroundColor(Theme.secondary)
+            InterfaceTypography.text(title, size: Theme.homeSecondarySize).foregroundColor(Theme.secondary)
             if binding.enabled {
                 ShortcutKeyLayout(spacing: 4) {
                     ForEach(Array(keys(binding).enumerated()), id: \.offset) { _, key in
@@ -320,7 +320,7 @@ private struct EngineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-            InterfaceTypography.text(value, size: Theme.homeFigureSize * Theme.homeRatio, weight: .medium)
+            InterfaceTypography.text(value, size: Theme.homeSecondarySize, weight: .medium)
                 .lineLimit(2).help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
