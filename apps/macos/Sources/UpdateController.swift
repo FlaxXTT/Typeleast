@@ -1,10 +1,6 @@
 import AppKit
 
-// UpdateController.swift - in-app updates as one piece: the quiet checks (20 s after launch,
-// then every six hours), the offer, the progress window and the install. The work itself is in
-// Updater.swift; the app is reached only through the small Host it is given, so this file does
-// not depend on the rest of AppDelegate.
-
+/// Background discovery and a single, user-initiated update dialog.
 final class UpdateController {
     static func blockingReason(practiceBusy: Bool, phase: AppPhase, promptPending: Bool,
                                meetingBusy: Bool) -> (title: String, text: String)? {
@@ -18,7 +14,7 @@ final class UpdateController {
     struct Host {
         /// Why an update cannot start now (dictating, Prompt Beta open), or nil.
         let busyReason: () -> (title: String, text: String)?
-        let setHint: (String?) -> Void
+        let dialogWindow: () -> NSWindow?
         /// Show (or clear, with nil) "有新版本" in the menu.
         let showAvailable: (String?) -> Void
         /// Last thing before the app quits for the installer.
@@ -27,148 +23,130 @@ final class UpdateController {
 
     private let host: Host
     private let progress = UpdateProgressWindow()
-    /// The version offered in this run: after 稍后 it is asked again at the next launch, not every six hours.
-    private var offered: String?
-    private var summary = ""
     private var checking = false
-    private var interactiveCheck = false
-    private var installing = false
+    private var available: Updater.Release?
+    private var downloadState: UpdateDialogState?
+    private var prepared: (version: String, app: URL, work: URL)?
+    private var restarting = false
 
     init(host: Host) {
         self.host = host
     }
 
-    /// `interactive`: the user asked, so say "already up to date" and show errors.
     func check(interactive: Bool) {
-        if installing {
-            if interactive { progress.bringToFront() }
-            return
-        }
-        guard !Updater.intelDiscontinued() else {
-            if interactive {
-                alert(L10n.text("Intel Mac 不再更新"),
-                      L10n.text("Intel Mac 不再更新。1.17.1 是最终版，可继续使用。"))
-            }
-            return
-        }
+        if !interactive && progress.isVisible { return }
         if interactive {
-            interactiveCheck = true
-            host.setHint(L10n.text("正在检查更新…"))
-            progress.showChecking()
+            if restarting { return }
+            if let prepared {
+                present(.ready(prepared.version))
+                return
+            }
+            if let downloadState {
+                present(downloadState)
+                return
+            }
+            if progress.isVisible { return }
+            if Updater.intelDiscontinued() {
+                present(.message(L10n.text("Intel Mac 不再更新"),
+                                 L10n.text("Intel Mac 不再更新。1.17.1 是最终版，可继续使用。")))
+                return
+            }
+            present(.checking)
         }
-        guard !checking else { return }
+        guard !checking, downloadState == nil, prepared == nil, !restarting, !Updater.intelDiscontinued() else { return }
         checking = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try Updater.latestRelease() }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                let interactive = self.interactiveCheck
-                self.interactiveCheck = false
-                self.checking = false
-                if interactive { self.host.setHint(nil); self.progress.close() }
-                switch result {
-                case .success(let release) where Updater.isNewer(release.version, than: Updater.currentVersion):
-                    let latest = release.version
-                    self.summary = release.summary
-                    self.host.showAvailable(latest)
-                    if Updater.shouldOffer(latest: latest, offered: self.offered, interactive: interactive,
-                                           busy: self.host.busyReason() != nil) {
-                        self.offered = latest
-                        self.offer(latest)
-                    }
-                case .success:
-                    self.host.showAvailable(nil)
-                    if interactive { self.alert(L10n.text("已是最新版本"), L10n.text("当前版本 ") + Updater.currentVersion + "。") }
-                case .failure(let error):
-                    if interactive { self.alert(L10n.text("检查更新失败"), error.localizedDescription) }
-                }
-            }
+            DispatchQueue.main.async { self?.finishedCheck(result) }
         }
     }
 
-    /// A look a little after launch, and every six hours for a Mac that stays on.
+    private func finishedCheck(_ result: Result<Updater.Release, Error>) {
+        checking = false
+        let state: UpdateDialogState
+        switch result {
+        case .success(let release) where Updater.isNewer(release.version, than: Updater.currentVersion):
+            available = release
+            host.showAvailable(release.version)
+            state = .available(release)
+        case .success:
+            available = nil
+            host.showAvailable(nil)
+            state = .latest
+        case .failure(let error):
+            state = .message(L10n.text("检查更新失败"), error.localizedDescription)
+        }
+        if progress.isVisible { progress.update(state) }
+    }
+
+    /// Check quietly after launch, then every six hours.
     func scheduleChecks() {
-        // Test and demo runs (a temporary TYPELEAST_HOME) never reach out to GitHub.
         guard ProcessInfo.processInfo.environment["TYPELEAST_HOME"] == nil else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.check(interactive: false) }
         let timer = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.check(interactive: false) }
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    private func offer(_ version: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = L10n.text("新版本 ") + version
-        var detail = L10n.text("当前版本 ") + Updater.currentVersion + L10n.text("。更新后 TypeLeast 重启，权限和 Key 保留。")
-        if !summary.isEmpty { detail = L10n.text("更新内容") + "\n" + summary + "\n\n" + detail }
-        if !Updater.hasStableRequirement(Updater.designatedRequirement(of: Bundle.main.bundleURL)), !Updater.hasSigningIdentity() {
-            detail += "\n\n" + L10n.text("首次使用本机签名证书时，macOS 可能要求授权。")
-        }
-        alert.informativeText = detail
-        alert.addButton(withTitle: L10n.text("立即更新"))
-        alert.addButton(withTitle: L10n.text("稍后"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        install(version)
+    private func present(_ state: UpdateDialogState) {
+        progress.present(in: host.dialogWindow(), state: state,
+                         download: { [weak self] in self?.download() },
+                         restart: { [weak self] in self?.restart() })
     }
 
-    private func install(_ version: String) {
-        // Restarting in the middle of a dictation or a Prompt Beta would lose it.
-        if let reason = host.busyReason() {
-            alert(reason.title, reason.text)
-            return
-        }
-        installing = true
-        host.setHint(L10n.text("正在下载更新 ") + version + "…")
-        progress.show(version: version, summary: summary)
-        let report: (UpdateStage) -> Void = { [weak self] stage in
-            DispatchQueue.main.async { self?.progress.update(stage) }
-        }
+    private func download() {
+        guard let release = available, downloadState == nil, prepared == nil, !restarting else { return }
+        let version = release.version
+        showProgress(.preparing, version: version)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result {
-                try Updater.prepare(version: version, stage: report)
+                try Updater.prepare(version: version) { stage in
+                    DispatchQueue.main.async {
+                        guard let self, self.downloadState != nil else { return }
+                        self.showProgress(stage, version: version)
+                    }
+                }
             }
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.downloadState = nil
                 switch result {
                 case .success(let ready):
-                    // Recording may have started while the archive downloaded.
-                    if let reason = self.host.busyReason() {
-                        self.installing = false
-                        self.host.setHint(nil)
-                        self.progress.close()
-                        try? FileManager.default.removeItem(at: ready.work)
-                        self.alert(reason.title, reason.text)
-                        return
-                    }
-                    do {
-                        try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
-                                                     newApp: ready.app, installed: Bundle.main.bundleURL, work: ready.work)
-                        self.host.setHint(L10n.text("正在安装更新，TypeLeast 会重新打开…"))
-                        self.progress.update(.installing)
-                        self.host.willQuit()
-                        NSApp.terminate(nil)
-                    } catch {
-                        self.fail(error)
-                    }
+                    self.prepared = (version, ready.app, ready.work)
+                    self.progress.update(.ready(version))
                 case .failure(let error):
-                    self.fail(error)
+                    self.progress.update(.message(L10n.text("更新失败"), error.localizedDescription))
                 }
             }
         }
     }
 
-    private func fail(_ error: Error) {
-        installing = false
-        host.setHint(nil)
-        progress.close()
-        alert(L10n.text("更新失败"), error.localizedDescription)
+    private func showProgress(_ stage: UpdateStage, version: String) {
+        let state = UpdateDialogState.progress(version, stage)
+        downloadState = state
+        progress.update(state)
     }
 
-    private func alert(_ title: String, _ text: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = text
-        alert.runModal()
+    private func restart() {
+        guard let prepared, !restarting else { return }
+        if let reason = host.busyReason() {
+            progress.update(.ready(prepared.version, note: reason.text))
+            return
+        }
+        do {
+            try Updater.replaceAfterExit(pid: ProcessInfo.processInfo.processIdentifier,
+                                         newApp: prepared.app, installed: Bundle.main.bundleURL, work: prepared.work) { [weak self] status in
+                guard let self, self.restarting else { return }
+                self.restarting = false
+                let state = UpdateDialogState.ready(prepared.version, note: L10n.text("未能退出 TypeLeast，请重试。"))
+                DiagnosticsLog.write("update.handoff.failed", ["status": String(status)])
+                if NSApp.isActive { self.present(state) }
+            }
+            restarting = true
+            progress.close()
+            host.willQuit()
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        } catch {
+            progress.update(.ready(prepared.version, note: error.localizedDescription))
+        }
     }
 }

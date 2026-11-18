@@ -26,9 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             return UpdateController.blockingReason(practiceBusy: self.onboarding.practice.busy,
                 phase: self.phase, promptPending: self.betaPending != nil, meetingBusy: self.model.meeting.busy)
         },
-        setHint: { [weak self] in self?.setHint($0) },
+        dialogWindow: { [weak self] in
+            self?.hub.updateDialogWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
+        },
         showAvailable: { [weak self] in self?.menuController.setUpdateAvailable($0) },
-        willQuit: { [weak self] in self?.recorder.cancel() }))
+        willQuit: { [weak self] in
+            self?.recorder.cancel()
+            self?.hub.prepareForUpdate()
+        }))
     lazy var hub = HubWindowController(model: model)
     lazy var onboarding = OnboardingWindowController(model: model)
     lazy var dictation = DictationController(host: .init(

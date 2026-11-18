@@ -1,147 +1,208 @@
 import AppKit
 import SwiftUI
 
-// Update checks use dual travelling bars; downloads use their measured fraction.
-
-final class UpdateProgressModel: ObservableObject {
-    @Published var version = ""
-    @Published var summary = ""
-    @Published var stage: UpdateStage = .preparing
-    @Published var checking = false
+enum UpdateDialogState {
+    case checking
+    case latest
+    case available(Updater.Release)
+    case progress(String, UpdateStage)
+    case ready(String, note: String? = nil)
+    case message(String, String)
 }
 
+final class UpdateProgressModel: ObservableObject {
+    @Published var state: UpdateDialogState = .checking
+}
+
+private final class UpdateDialogHost: NSHostingView<UpdateProgressView> {
+    var dismiss: (() -> Void)?
+    override var acceptsFirstResponder: Bool { true }
+
+    override func cancelOperation(_ sender: Any?) { dismiss?() }
+}
+
+/// Keep all stages in one dialog, anchored to the window that opened it.
 final class UpdateProgressWindow {
-    private var window: NSWindow?
     private let model = UpdateProgressModel()
+    private weak var parent: NSWindow?
+    private weak var previousResponder: NSResponder?
+    private var host: UpdateDialogHost?
+    private var standalone: NSWindow?
+    private var closeObserver: NSObjectProtocol?
 
-    func show(version: String, summary: String = "") {
-        model.version = version
-        model.summary = summary
-        model.stage = .preparing
-        model.checking = false
-        present()
-    }
+    var isVisible: Bool { host?.window?.isVisible == true }
 
-    func showChecking() {
-        model.checking = true
-        model.summary = ""
-        present()
-    }
-
-    private func present() {
-        let w: NSWindow
-        if let existing = window {
-            w = existing
-        } else {
-            w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 350, height: 500),
-                         styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
-            w.title = L10n.text("更新 TypeLeast")
-            w.titlebarAppearsTransparent = true
-            w.titleVisibility = .hidden
-            w.isMovableByWindowBackground = true
-            w.isReleasedWhenClosed = false
-            w.level = .floating
-            w.contentView = NSHostingView(rootView: UpdateProgressView(model: model))
-            window = w
+    func present(in owner: NSWindow?, state: UpdateDialogState,
+                 download: @escaping () -> Void, restart: @escaping () -> Void) {
+        model.state = state
+        if isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            host?.window?.makeKeyAndOrderFront(nil)
+            return
         }
-        let size = NSSize(width: 350, height: 500)
-        w.setContentSize(size)
-        AppWindowStyle.fixSize(w, to: size)
-        AppWindowStyle.round(w)
-        w.center()
-        NSApp.activate(ignoringOtherApps: true)
-        w.makeKeyAndOrderFront(nil)
+        close()
+        let view = UpdateProgressView(model: model, close: { [weak self] in self?.close() },
+                                      download: download, restart: restart)
+        let hosting = UpdateDialogHost(rootView: view)
+        hosting.dismiss = { [weak self] in self?.close() }
+        hosting.sizingOptions = []
+        host = hosting
+
+        if let owner, let content = owner.contentView, let frame = content.superview {
+            parent = owner
+            previousResponder = owner.firstResponder
+            hosting.frame = frame.convert(content.bounds, from: content)
+            hosting.autoresizingMask = [.width, .height]
+            frame.addSubview(hosting, positioned: .above, relativeTo: content)
+            NSApp.activate(ignoringOtherApps: true)
+            owner.makeKeyAndOrderFront(nil)
+            owner.makeFirstResponder(hosting)
+            closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
+                                                                   object: owner, queue: .main) { [weak self] _ in
+                self?.close()
+            }
+        } else {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 370),
+                                  styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+            window.title = L10n.text("更新 TypeLeast")
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isReleasedWhenClosed = false
+            window.contentView = hosting
+            standalone = window
+            window.center()
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
-    func update(_ stage: UpdateStage) { model.stage = stage }
-
-    func bringToFront() { window?.makeKeyAndOrderFront(nil) }
+    func update(_ state: UpdateDialogState) { model.state = state }
 
     func close() {
-        window?.orderOut(nil)
-        window?.contentView = nil
-        window = nil
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+            self.closeObserver = nil
+        }
+        if let host, let parent,
+           let focused = parent.firstResponder as? NSView,
+           focused === host || focused.isDescendant(of: host) {
+            parent.makeFirstResponder(previousResponder)
+        }
+        if let standalone { standalone.orderOut(nil); standalone.contentView = nil }
+        else { host?.removeFromSuperview() }
+        standalone = nil
+        host = nil
+        parent = nil
+        previousResponder = nil
     }
 }
 
 struct UpdateProgressView: View {
     @ObservedObject var model: UpdateProgressModel
+    let close: () -> Void
+    let download: () -> Void
+    let restart: () -> Void
 
     var body: some View {
-        HubScrollView(showsChrome: false) {
-        VStack(spacing: 18) {
-            AppMarkView(size: 64)
-                .padding(.top, 8)
-            VStack(spacing: 5) {
-                Text(model.checking ? L10n.text("正在检查更新…") : L10n.text("正在更新到 {0}", model.version))
-                    .font(.system(size: 14, weight: .semibold))
-                Text(model.checking ? L10n.text("当前版本 ") + Updater.currentVersion : model.stage.label)
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            LoadingLinearProgress(value: model.checking ? nil : model.stage.fraction)
-            if !model.checking {
-                if let fraction = model.stage.fraction {
-                    HStack {
-                        Text("\(Int((fraction * 100).rounded(.down)))%")
-                        Spacer()
-                        if let amount = model.stage.amount { Text(amount) }
-                    }
-                    .font(.system(size: 12)).foregroundColor(Theme.secondary).monospacedDigit()
+        ZStack {
+            Color.black.opacity(0.34).contentShape(Rectangle())
+                .onTapGesture {}
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    Text(title).font(.system(size: 20, weight: .semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24, action: close)
                 }
-                UpdateStepTrail(current: model.stage.step)
+                content
+                buttons
             }
-            if !model.summary.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text("更新内容")).font(.system(size: 12, weight: .semibold))
-                    Text(model.summary).font(.system(size: 12)).foregroundColor(Theme.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
+            .padding(22)
+            .frame(maxWidth: 420)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.tile))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.border))
+            .padding(20)
         }
-        .padding(EdgeInsets(top: 28, leading: 28, bottom: 24, trailing: 28))
-        }
-        .frame(width: 350, height: 500)
-        .background(Theme.window)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundColor(Theme.ink)
+        .onExitCommand(perform: close)
+        .accessibilityElement(children: .contain)
     }
-}
 
-/// 下载 · 核对 · 签名 · 安装: done steps ticked, the current one ringed.
-struct UpdateStepTrail: View {
-    let current: Int
+    private var title: String {
+        switch model.state {
+        case .latest: return L10n.text("已是最新版本")
+        case .available(let release): return L10n.text("新版本 ") + release.version
+        case .ready: return L10n.text("更新已就绪")
+        case .message(let title, _): return title
+        default: return L10n.text("更新 TypeLeast")
+        }
+    }
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(UpdateStage.steps.enumerated()), id: \.offset) { index, name in
-                VStack(spacing: 6) {
-                    ZStack {
-                        Circle()
-                            .fill(index < current ? Theme.accent : Color.clear)
-                            .overlay(Circle().stroke(index <= current ? Theme.accent : Theme.tertiary.opacity(0.6),
-                                                     lineWidth: index == current ? 2.5 : 1.5))
-                        if index < current {
-                            Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)).foregroundColor(.white)
-                        } else if index == current {
-                            Circle().fill(Theme.accent).frame(width: 6, height: 6)
-                        }
-                    }
-                    .frame(width: 16, height: 16)
-                    Text(L10n.text(name))
-                        .font(.system(size: 11, weight: index == current ? .semibold : .regular))
-                        .lineLimit(1).minimumScaleFactor(0.75)
-                        .foregroundColor(index <= current ? Theme.ink : Theme.tertiary)
+    @ViewBuilder private var content: some View {
+        switch model.state {
+        case .checking:
+            detail(L10n.text("正在检查更新…"))
+            LoadingLinearProgress()
+        case .latest:
+            detail(L10n.text("TypeLeast {0} 是当前最新版本。", Updater.currentVersion))
+        case .available(let release):
+            detail(L10n.text("当前版本 ") + Updater.currentVersion)
+            if !release.summary.isEmpty {
+                ViewThatFits(in: .vertical) {
+                    detail(release.summary).fixedSize(horizontal: false, vertical: true)
+                    HubScrollView(showsChrome: false) { detail(release.summary) }
                 }
-                .frame(width: 44)
-                if index < UpdateStage.steps.count - 1 {
-                    Rectangle()
-                        .fill(index < current ? Theme.accent : Theme.tertiary.opacity(0.35))
-                        .frame(height: 1.5)
-                        .padding(.top, 7)
+                .frame(maxHeight: 150, alignment: .topLeading)
+            }
+        case .progress(let version, let stage):
+            detail(L10n.text("正在更新到 {0}", version))
+            detail(stage.label)
+            LoadingLinearProgress(value: stage.fraction)
+            if let fraction = stage.fraction {
+                HStack {
+                    Text("\(Int(fraction * 100))%")
+                    Spacer()
+                    if let amount = stage.amount { Text(amount) }
+                }.font(Theme.captionFont.monospacedDigit()).foregroundColor(Theme.secondary)
+            }
+        case .ready(let version, let note):
+            detail(L10n.text("TypeLeast {0} 已下载，重启后完成安装。", version))
+            if let note { detail(note) }
+        case .message(_, let message):
+            detail(message).textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        switch model.state {
+        case .checking, .progress:
+            EmptyView()
+        case .available, .ready, .latest, .message:
+            HStack {
+                Spacer()
+                switch model.state {
+                case .available:
+                    later
+                    Button(L10n.text("立即更新"), action: download).buttonStyle(PrimaryButtonStyle())
+                case .ready:
+                    later
+                    Button(L10n.text("立即重启"), action: restart).buttonStyle(PrimaryButtonStyle())
+                default:
+                    Button(L10n.text("知道了"), action: close).buttonStyle(PrimaryButtonStyle())
+                        .keyboardShortcut(.defaultAction)
                 }
             }
         }
-        .frame(width: 300)
+    }
+
+    private var later: some View {
+        Button(L10n.text("稍后"), action: close).buttonStyle(SecondaryButtonStyle())
+    }
+
+    private func detail(_ text: String) -> some View {
+        Text(text).font(Theme.rowFont).foregroundColor(Theme.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

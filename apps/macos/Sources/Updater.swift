@@ -354,9 +354,15 @@ enum Updater {
     /// Swap the installed app for `newApp` once this process (`pid`) has quit, then open it.
     /// If the copy fails, the old app is put back; if the old app cannot even be moved aside
     /// (no write access to its folder), it is left exactly where it is.
-    static func replaceAfterExit(pid: Int32, newApp: URL, installed: URL, work: URL) throws {
+    static func replaceAfterExit(pid: Int32, newApp: URL, installed: URL, work: URL,
+                                 onFailure: @escaping (Int32) -> Void) throws {
         let script = """
-        while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
+        attempts=0
+        while kill -0 "$1" 2>/dev/null; do
+          [ "$attempts" -lt 150 ] || exit 75
+          sleep 0.2
+          attempts=$((attempts + 1))
+        done
         rm -rf "$3.old"
         if mv "$3" "$3.old"; then
           if /usr/bin/ditto "$2" "$3"; then rm -rf "$3.old"; else rm -rf "$3"; mv "$3.old" "$3"; fi
@@ -368,6 +374,10 @@ enum Updater {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", script, "typeleast-update", String(pid), newApp.path, installed.path, work.path]
+        p.terminationHandler = { process in
+            let status = process.terminationStatus
+            if status != 0 { DispatchQueue.main.async { onFailure(status) } }
+        }
         try p.run()
     }
 }

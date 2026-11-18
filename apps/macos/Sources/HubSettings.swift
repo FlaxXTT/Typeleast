@@ -70,7 +70,9 @@ struct SettingsPage: View {
                     .padding(.horizontal, 8).padding(.bottom, 12)
                 ForEach(categories.indices, id: \.self) { index in
                     let selected = model.settingsCategory == index
-                    Button { model.settingsCategory = index } label: {
+                    Button {
+                        if !selected { model.settingsCategory = index }
+                    } label: {
                         HStack(spacing: 8) {
                             Image(systemName: ["mic", "cpu", "gearshape"][index])
                                 .font(.system(size: 16)).frame(width: 16)
@@ -79,10 +81,13 @@ struct SettingsPage: View {
                         }
                         .foregroundColor(selected ? Theme.accent : Theme.secondary)
                         .padding(.horizontal, 8).frame(height: 36)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: Theme.radius)
                             .fill(selected ? Theme.selection : .clear))
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).hoverInteraction()
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
                 Spacer()
             }
