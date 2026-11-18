@@ -1215,7 +1215,7 @@ do {
     checkEq("an unknown variant reads as Simplified", s.zhVariant, "hans")
     s.translateTarget = "xx"
     checkEq("an unknown target reads as English", s.translateTarget, "en")
-    checkEq("the translate shortcut defaults to ⇧⌥Space", HotKeyBinding.translateDefault.modifiers, 512 | 2048)
+    checkEq("the translate shortcut defaults to Fn + Left Shift", HotKeyBinding.translateDefault.fnChord, .leftShift)
     s.zhVariant = saved.0; s.translateTarget = saved.1
 } catch {
     check("translate decoding", false, String(describing: error))
@@ -1811,7 +1811,7 @@ do {
     checkEq("Beta completion does not send cancellation", cancelled.count, 1)
 }
 
-// Keys: fn dictates, ⌥Space opens 提示词模式 (moved once off dictation's second slot).
+// Keys: Fn dictates and Fn + Space opens 提示词模式.
 do {
     struct Keys { let hotkeyMain, hotkeyAlt, hotkeyAssistant: HotKeyBinding }
     func fresh(_ setup: (UserDefaults) -> Void) -> Keys {
@@ -1826,15 +1826,22 @@ do {
     let new = fresh { _ in }
     check("a new install dictates with fn", new.hotkeyMain.isFn)
     check("…has no second dictation key", !new.hotkeyAlt.enabled)
-    checkEq("…and opens 提示词模式 with ⌥Space", new.hotkeyAssistant, space)
-    let upgraded = fresh { d in d.set(try! JSONEncoder().encode(space), forKey: "hk.alt.v2") }
+    checkEq("…and opens 提示词模式 with Fn + Space", new.hotkeyAssistant, .assistantDefault)
+    let upgraded = fresh { d in
+        let legacy = try! JSONEncoder().encode(space)
+        d.set(legacy, forKey: "hk.alt.v2")
+        var recordedLegacy = space
+        recordedLegacy.name = "⌥Space"
+        d.set(try! JSONEncoder().encode(recordedLegacy), forKey: "hk.assistant")
+    }
     check("an upgrade takes ⌥Space off dictation", !upgraded.hotkeyAlt.enabled)
-    checkEq("…and gives it to 提示词模式", upgraded.hotkeyAssistant, space)
+    checkEq("…and moves the old assistant default to Fn + Space", upgraded.hotkeyAssistant, .assistantDefault)
     let custom = HotKeyBinding(keyCode: 35, modifiers: 2048, enabled: true, name: "Option+P")
     let kept = fresh { d in d.set(try! JSONEncoder().encode(custom), forKey: "hk.assistant") }
     checkEq("a 提示词模式 key the user chose is kept", kept.hotkeyAssistant, custom)
     let main = fresh { d in d.set(try! JSONEncoder().encode(space), forKey: "hk.main.v2") }
-    check("⌥Space used for dictation itself is not taken", !main.hotkeyAssistant.enabled || main.hotkeyAssistant != space)
+    checkEq("⌥Space remains available as a dictation key", main.hotkeyMain, space)
+    checkEq("the assistant uses the separate Fn + Space chord", main.hotkeyAssistant, .assistantDefault)
 }
 
 // A selection is copied only in browsers, which copy nothing when nothing is selected.

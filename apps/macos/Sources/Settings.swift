@@ -112,15 +112,22 @@ struct HotKeyBinding: Codable, Equatable {
 
     /// kVK_Function = 63. Read through FnKeyMonitor, not Carbon (which never fires for it).
     static let fnDefault = HotKeyBinding(keyCode: 63, modifiers: 0, enabled: true, name: "Fn")
-    /// kVK_Space = 49, optionKey = 2048: 提示词模式 (Fn is for dictation only).
+    /// Previous default, retained to migrate existing installations.
     static let optionSpaceDefault = HotKeyBinding(keyCode: 49, modifiers: 2048, enabled: true, name: "Option+Space")
     static let unset = HotKeyBinding(keyCode: 0, modifiers: 0, enabled: false, name: "")
     /// kVK_ANSI_V = 9, cmdKey (256) | controlKey (4096): "paste last transcript".
     static let pasteLastDefault = HotKeyBinding(keyCode: 9, modifiers: 256 | 4096, enabled: true, name: "Control+Command+V")
-    /// kVK_Space with shiftKey (512) | optionKey (2048): 翻译, next to ⌥Space for 提示词模式.
-    static let translateDefault = HotKeyBinding(keyCode: 49, modifiers: 512 | 2048, enabled: true, name: "Shift+Option+Space")
+    private static let previousTranslateDefault = HotKeyBinding(keyCode: 49, modifiers: 512 | 2048, enabled: true, name: "Shift+Option+Space")
+    static let assistantDefault = FnChord.space.binding
+    static let translateDefault = FnChord.leftShift.binding
 
     var isFn: Bool { keyCode == 63 && modifiers == 0 }
+    var fnChord: FnChord? { modifiers == FnChord.modifier ? FnChord(rawValue: keyCode) : nil }
+    var wasDefaultTranslate: Bool { hasSameKeys(as: Self.previousTranslateDefault) }
+
+    func hasSameKeys(as other: HotKeyBinding) -> Bool {
+        enabled && other.enabled && keyCode == other.keyCode && modifiers == other.modifiers
+    }
 }
 
 final class Settings {
@@ -143,6 +150,7 @@ final class Settings {
             defaults.set(true,forKey:"voice.unifiedDictation.v1")
         }
         migratePromptKey()
+        migrateFnChords()
         removeDuplicateDictationFn()
     }
 
@@ -154,18 +162,23 @@ final class Settings {
         }
     }
 
-    /// Once: ⌥Space leaves dictation's second slot and becomes 提示词模式's key, unless another
-    /// shortcut already uses it. Fn stays the dictation key.
+    /// Retire the original alternate dictation default on older installations.
     private func migratePromptKey() {
         guard !d.bool(forKey: "hk.promptKey.v1") else { return }
         d.set(true, forKey: "hk.promptKey.v1")
         let space = HotKeyBinding.optionSpaceDefault
-        func isSpace(_ b: HotKeyBinding) -> Bool { b.enabled && b.keyCode == space.keyCode && b.modifiers == space.modifiers }
-        if isSpace(decodeBinding("hk.alt.v2") ?? space) { encodeBinding("hk.alt.v2", .unset) }
-        if decodeBinding("hk.assistant")?.enabled != true {
-            let taken = [hotkeyMain, hotkeyAlt, hotkeyTranslate, hotkeyPasteLast].contains(where: isSpace)
-            encodeBinding("hk.assistant", taken ? .unset : space)
+        if (decodeBinding("hk.alt.v2") ?? space).hasSameKeys(as: space) { encodeBinding("hk.alt.v2", .unset) }
+    }
+
+    private func migrateFnChords() {
+        guard !d.bool(forKey: "hk.fnChords.v2") else { return }
+        if decodeBinding("hk.assistant")?.hasSameKeys(as: .optionSpaceDefault) == true {
+            encodeBinding("hk.assistant", .assistantDefault)
         }
+        if decodeBinding("hk.translate")?.wasDefaultTranslate == true {
+            encodeBinding("hk.translate", .translateDefault)
+        }
+        d.set(true, forKey: "hk.fnChords.v2")
     }
 
     private func changed() {
@@ -192,9 +205,9 @@ final class Settings {
         set { encodeBinding("hk.alt.v2", newValue); changed() }
     }
 
-    /// 提示词模式: ⌥Space by default. With text selected, the selection is the draft to revise.
+    /// 提示词模式: Fn + Space by default.
     var hotkeyAssistant: HotKeyBinding {
-        get { decodeBinding("hk.assistant") ?? HotKeyBinding.optionSpaceDefault }
+        get { decodeBinding("hk.assistant") ?? HotKeyBinding.assistantDefault }
         set { encodeBinding("hk.assistant", newValue); changed() }
     }
 

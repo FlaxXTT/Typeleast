@@ -101,7 +101,7 @@ struct SettingsPage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
                 HubScrollView(key: "settings-" + String(model.settingsCategory), showsProgress: false) {
-                    VStack(alignment: .leading, spacing: 20) {
+                    LazyVStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
                         case 0: shortcuts; language; translatePrompt; audio; cleanup
                         case 1: ModelSection(); speech
@@ -563,6 +563,7 @@ struct HotkeyField: View {
     let slot: HotkeySlot
     @Binding var activeSlot: HotkeySlot?
     @State private var monitor: Any?
+    @State private var fnTap = FnTapDetector()
 
     private var recording: Bool { activeSlot == slot }
     private var binding: HotKeyBinding { model.settings[keyPath: slot.keyPath] }
@@ -603,6 +604,7 @@ struct HotkeyField: View {
 
     private var labels: [String] {
         if binding.isFn { return ["fn"] }
+        if let chord = binding.fnChord { return ["Fn", chord.keyLabel] }
         var out: [String] = []
         if binding.modifiers & 4096 != 0 { out.append("⌃") }
         if binding.modifiers & 2048 != 0 { out.append("⌥") }
@@ -614,16 +616,16 @@ struct HotkeyField: View {
 
     private func start() {
         removeMonitor()
+        fnTap = FnTapDetector()
         activeSlot = slot
+        FnKeyMonitor.shared.capturingShortcut = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             guard recording else { return event }
             if event.type == .flagsChanged {
-                // Fn alone is a dictation key only; 翻译 needs a real shortcut.
-                if event.keyCode == FnKeyMonitor.keyCode, !event.modifierFlags.contains(.function), slot != .translate && slot != .assistant {
-                    save(HotKeyBinding.fnDefault)
-                }
+                captureFlags(event)
                 return event
             }
+            fnTap.otherInput()
             switch Int(event.keyCode) {
             case 53: // Esc cancels
                 stop()
@@ -634,6 +636,12 @@ struct HotkeyField: View {
                     save(cleared)
                 } else { stop() }
             default:
+                if event.modifierFlags.contains(.function) {
+                    if UInt32(event.keyCode) == FnChord.space.rawValue, FnChord.matches(.space, flags: event.modifierFlags) {
+                        save(FnChord.space.binding)
+                    } else { NSSound.beep() }
+                    return nil
+                }
                 let modifiers = HotKeyCentre.carbonModifiers(from: event.modifierFlags)
                 // A bare letter would hijack normal typing; require a modifier or a function key.
                 let functionKeys: Set<UInt16> = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
@@ -642,6 +650,22 @@ struct HotkeyField: View {
                                    name: HotKeyCentre.describe(keyCode: UInt32(event.keyCode), modifiers: modifiers)))
             }
             return nil
+        }
+    }
+
+    private func captureFlags(_ event: NSEvent) {
+        if event.keyCode == FnKeyMonitor.keyCode {
+            if event.modifierFlags.contains(.function) {
+                let otherModifiers = event.modifierFlags.intersection(FnChord.standardModifiers)
+                fnTap.fnDown(at: Date(), otherModifiersHeld: !otherModifiers.isEmpty)
+            } else if fnTap.fnUp(at: Date()), slot == .main || slot == .alt {
+                save(.fnDefault)
+            }
+        } else {
+            fnTap.otherInput()
+            if UInt32(event.keyCode) == FnChord.leftShift.rawValue, FnChord.matches(.leftShift, flags: event.modifierFlags) {
+                save(FnChord.leftShift.binding)
+            }
         }
     }
 
@@ -663,7 +687,10 @@ struct HotkeyField: View {
     }
 
     private func stop() {
-        if recording { activeSlot = nil }
+        if recording {
+            activeSlot = nil
+            FnKeyMonitor.shared.capturingShortcut = false
+        }
         removeMonitor()
     }
 

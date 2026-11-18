@@ -14,10 +14,13 @@ struct HubScrollView<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            content.background(HubScrollAnchor(key: key, showsChrome: showsChrome,
-                                               showsProgress: showsProgress,
-                                               showsBottomFade: showsBottomFade,
-                                               followsBottom: followsBottom))
+            content.overlay(alignment: .topLeading) {
+                HubScrollAnchor(key: key, showsChrome: showsChrome, showsProgress: showsProgress,
+                                showsBottomFade: showsBottomFade, followsBottom: followsBottom)
+                    .frame(width: 0, height: 0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }
@@ -171,8 +174,25 @@ private final class HubScrollMarker: NSView {
         guard window != nil, scroll == nil, let scroll = enclosingScrollView else { return }
         self.scroll = scroll
         NativeScrollAppearance.apply(to: scroll)
-        // Plain modal surfaces need no scroll observations or display-link work.
-        guard showsChrome || key != nil || followsBottom else { return }
+        // A page that only remembers its position needs no live scroll observer.
+        if showsChrome || followsBottom { observeVisibleScroll(scroll) }
+
+        guard key != nil || followsBottom || showsChrome else { return }
+        DispatchQueue.main.async { [weak self, weak scroll] in
+            guard let self, let scroll, self.scroll === scroll else { return }
+            self.readGeometry(scroll)
+            if self.followsBottom {
+                self.move(scroll, to: self.extent)
+            } else if let key = self.key {
+                self.move(scroll, to: min(self.extent, max(0, HubScrollMemory.offsets[key] ?? 0)))
+            }
+            self.lastOffset = scroll.contentView.bounds.minY
+            self.nearBottom = self.extent - self.lastOffset <= 40
+            self.requestFrame()
+        }
+    }
+
+    private func observeVisibleScroll(_ scroll: NSScrollView) {
         let clip = scroll.contentView
         clip.postsBoundsChangedNotifications = true
         if showsChrome {
@@ -188,40 +208,28 @@ private final class HubScrollMarker: NSView {
 
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: NSView.boundsDidChangeNotification,
-                                             object: clip, queue: .main) { [weak self] _ in
+                                             object: clip, queue: nil) { [weak self] _ in
             // A passive observation: read no document sizes and rebuild no SwiftUI view.
             self?.requestFrame()
         })
         if let document = scroll.documentView {
             document.postsFrameChangedNotifications = true
             observers.append(center.addObserver(forName: NSView.frameDidChangeNotification,
-                                                 object: document, queue: .main) { [weak self] _ in
+                                                 object: document, queue: nil) { [weak self] _ in
                 self?.geometryDirty = true
                 self?.requestFrame()
             })
         }
-        observers.append(center.addObserver(forName: NSScrollView.willStartLiveScrollNotification,
-                                             object: scroll, queue: .main) { [weak self] _ in
-            self?.liveScrolling = true
-        })
-        observers.append(center.addObserver(forName: NSScrollView.didEndLiveScrollNotification,
-                                             object: scroll, queue: .main) { [weak self] _ in
-            self?.liveScrolling = false
-            self?.requestFrame()
-        })
-
-        // Let the initial SwiftUI layout finish before restoring an explicit page key.
-        DispatchQueue.main.async { [weak self, weak scroll] in
-            guard let self, let scroll, self.scroll === scroll else { return }
-            self.readGeometry(scroll)
-            if self.followsBottom {
-                self.move(scroll, to: self.extent)
-            } else if let key = self.key {
-                self.move(scroll, to: min(self.extent, max(0, HubScrollMemory.offsets[key] ?? 0)))
-            }
-            self.lastOffset = scroll.contentView.bounds.minY
-            self.nearBottom = self.extent - self.lastOffset <= 40
-            self.requestFrame()
+        if followsBottom {
+            observers.append(center.addObserver(forName: NSScrollView.willStartLiveScrollNotification,
+                                                 object: scroll, queue: nil) { [weak self] _ in
+                self?.liveScrolling = true
+            })
+            observers.append(center.addObserver(forName: NSScrollView.didEndLiveScrollNotification,
+                                                 object: scroll, queue: nil) { [weak self] _ in
+                self?.liveScrolling = false
+                self?.requestFrame()
+            })
         }
     }
 
@@ -237,6 +245,7 @@ private final class HubScrollMarker: NSView {
     }
 
     private func move(_ scroll: NSScrollView, to offset: CGFloat) {
+        guard abs(scroll.contentView.bounds.minY - offset) > 0.5 else { return }
         scroll.contentView.scroll(to: NSPoint(x: 0, y: offset))
         scroll.reflectScrolledClipView(scroll.contentView)
     }
@@ -255,7 +264,6 @@ private final class HubScrollMarker: NSView {
         }
         lastOffset = max(0, scroll.contentView.bounds.minY)
         nearBottom = extent - lastOffset <= 40
-        if let key { HubScrollMemory.offsets[key] = lastOffset }
         if showsChrome { chrome.update(offset: lastOffset, extent: extent) }
     }
 

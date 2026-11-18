@@ -326,6 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         guard !skipGlobalHotkeys else { return }
         let centre = HotKeyCentre.shared
         var fnWanted = false
+        var chords: [FnChord: () -> Void] = [:]
         var problems: [String: String] = [:]
         var taken = Set<String>()
         // A combination already used by an earlier slot, or refused by macOS (another app has it),
@@ -337,28 +338,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
                 problems[slot] = L10n.text("和其他快捷键重复")
                 return
             }
+            if binding.isFn || binding.fnChord != nil {
+                centre.unregister(slot: slot)
+                guard binding.enabled else { return }
+                if let chord = binding.fnChord {
+                    chords[chord] = action
+                } else if slot == "main" || slot == "alt" {
+                    fnWanted = true
+                } else {
+                    problems[slot] = L10n.text("Fn 单键用于听写")
+                    return
+                }
+                taken.insert(combo)
+                return
+            }
+            if binding.modifiers & FnChord.modifier != 0 {
+                centre.unregister(slot: slot)
+                if binding.enabled { problems[slot] = L10n.text("Fn 组合键仅支持左 Shift 或空格") }
+                return
+            }
             if centre.register(slot: slot, binding: binding, action: action) { taken.insert(combo) }
             else if binding.enabled { problems[slot] = L10n.text("被占用，请换一个") }
         }
         for (slot, binding) in [("main", settings.hotkeyMain), ("alt", settings.hotkeyAlt)] {
-            if binding.isFn {
-                centre.unregister(slot: slot)
-                fnWanted = fnWanted || binding.enabled
-            } else {
-                register(slot, binding) { [weak self] in self?.hotkeyPressed() }
-            }
+            register(slot, binding) { [weak self] in self?.hotkeyPressed() }
         }
-        if fnWanted { FnKeyMonitor.shared.start() } else { FnKeyMonitor.shared.stop() }
         register("pasteLast", settings.hotkeyPasteLast) { [weak self] in self?.pasteLast() }
-        // Fn is reserved for dictation; a translate binding of Fn is ignored.
-        let assistant = settings.hotkeyAssistant
-        if assistant.isFn { centre.unregister(slot:"assistant") } else {
-            register("assistant",assistant) { [weak self] in self?.startAssistant() }
-        }
-        let translate = settings.hotkeyTranslate
-        if translate.isFn { centre.unregister(slot: "translate") } else {
-            register("translate", translate) { [weak self] in self?.translateHotkeyPressed() }
-        }
+        register("assistant", settings.hotkeyAssistant) { [weak self] in self?.startAssistant() }
+        register("translate", settings.hotkeyTranslate) { [weak self] in self?.translateHotkeyPressed() }
+        FnKeyMonitor.shared.configure(bareFn: fnWanted, chords: chords)
         model.hotkeyProblems = problems
     }
 
@@ -503,6 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     @objc func onAppActivated(_ note: Notification) {
         let trusted = AXIsProcessTrusted()
+        if !skipGlobalHotkeys { FnKeyMonitor.shared.refreshEventSource() }
         if trusted != model.accessibilityTrusted {
             model.accessibilityTrusted = trusted
             if trusted, let h = hint, h.contains(L10n.text("辅助功能")) { setHint(L10n.text("辅助功能已允许，可以自动粘贴")) }

@@ -1,9 +1,14 @@
 import AppKit
+import Combine
 import SwiftUI
 
 private struct TransientHover: ViewModifier {
     @Binding var hovering: Bool
     @Environment(\.isEnabled) private var enabled
+    private static let resets = Publishers.MergeMany([
+        NSWindow.didResignKeyNotification, NSApplication.didResignActiveNotification,
+        NSMenu.didBeginTrackingNotification, NSMenu.didEndTrackingNotification
+    ].map { NotificationCenter.default.publisher(for: $0) }).share()
 
     func body(content: Content) -> some View {
         content
@@ -12,10 +17,7 @@ private struct TransientHover: ViewModifier {
                 if hovering != next { hovering = next }
             }
             .onChange(of: enabled) { _, _ in reset() }
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in reset() }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in reset() }
-            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in reset() }
-            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in reset() }
+            .onReceive(Self.resets) { _ in reset() }
             .onDisappear(perform: reset)
     }
 

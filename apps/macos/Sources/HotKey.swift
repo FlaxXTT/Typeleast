@@ -90,6 +90,9 @@ final class HotKeyCentre {
     // MARK: names
 
     static func describe(keyCode: UInt32, modifiers: UInt32) -> String {
+        if modifiers == FnChord.modifier, let chord = FnChord(rawValue: keyCode) {
+            return "Fn + " + chord.keyLabel
+        }
         var s = ""
         if modifiers & UInt32(cmdKey) != 0 { s += "⌘" }
         if modifiers & UInt32(shiftKey) != 0 { s += "⇧" }
