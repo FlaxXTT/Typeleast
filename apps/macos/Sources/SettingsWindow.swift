@@ -48,7 +48,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.close()
         return true
     }
-    func closeForUpdate() { window?.finishClose() }
+    func closeImmediately() { window?.finishClose() }
 
     func windowDidBecomeKey(_ notification: Notification) {
         if let window { AppWindowStyle.round(window, radius: Theme.settingsRadius) }

@@ -4,11 +4,11 @@ import QuartzCore
 
 /// A single elapsed-time animation drives the readouts and week columns.
 private enum DashboardMotion {
-    static let countDuration = 0.460
-    static let gridDelay = 0.260
+    static let countDuration = 0.250
+    static let gridDelay = 0.400
     static let columnDuration = 0.300
-    static let columnStagger = 0.052
-    static let maximumWave = 0.950
+    static let columnStagger = 0.028
+    static let maximumWave = 0.520
     static let duration = gridDelay + maximumWave + columnDuration
 
     static func columnStart(_ column: Int, weeks: Int) -> Double {
@@ -555,10 +555,17 @@ private struct HeatmapColumnReveal: AnimatableModifier {
 
     func body(content: Content) -> some View {
         let phase = (elapsed - start) / DashboardMotion.columnDuration
-        let lift = DashboardMotion.ease(phase / 0.55)
-        let settle = DashboardMotion.ease((phase - 0.55) / 0.45)
+        let lift = DashboardMotion.ease(phase / 0.45)
+        let settle = DashboardMotion.ease((phase - 0.45) / 0.55)
+        let highlightOpacity = 0.24 * lift * (1 - settle)
         content
-            .opacity(DashboardMotion.ease(phase))
-            .scaleEffect(0.92 + 0.18 * lift - 0.10 * settle)
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
+                    .fill(Color.white.opacity(highlightOpacity))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .opacity(DashboardMotion.ease(phase / 0.65))
+            .scaleEffect(1 + 0.14 * (lift - settle))
     }
 }
