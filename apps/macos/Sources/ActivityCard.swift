@@ -166,20 +166,20 @@ private struct Figure: View {
                         CountingNumber(part: parts[index], elapsed: elapsed, size: Theme.homeFigureSize)
                             .tracking(-0.6)
                             .lineLimit(1).minimumScaleFactor(0.6)
-                        InterfaceTypography.text(parts[index].unit, size: Theme.homeFigureSize * Theme.homeRatio, weight: .semibold)
+                        InterfaceTypography.text(parts[index].unit, size: Theme.homeSecondarySize, weight: .semibold)
                             .lineLimit(1).minimumScaleFactor(0.8).padding(.trailing, 2)
                     }
                 }
             }
             HStack(spacing: 5) {
-                InterfaceTypography.text(label, size: Theme.homeFigureSize * Theme.homeRatio)
+                InterfaceTypography.text(label, size: Theme.homeSecondarySize)
                     .lineLimit(1).minimumScaleFactor(0.85)
                 if let note {
                     Image(systemName: "info.circle").font(.system(size: 11))
                         .help(note).accessibilityLabel(note)
                 }
             }
-            .font(Theme.rowFont).foregroundColor(Theme.homeLabel)
+            .foregroundColor(Theme.homeLabel)
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -426,9 +426,9 @@ struct ActivityCard: View {
                 CountingNumber(part: InsightPart(value: Double(value), unit: L10n.text("天")),
                                elapsed: elapsed, size: Theme.homeFigureSize)
                     .tracking(-0.6)
-                InterfaceTypography.text(L10n.text("天"), size: Theme.homeFigureSize * Theme.homeRatio, weight: .semibold)
+                InterfaceTypography.text(L10n.text("天"), size: Theme.homeSecondarySize, weight: .semibold)
             }
-            InterfaceTypography.text(label, size: Theme.homeFigureSize * Theme.homeRatio)
+            InterfaceTypography.text(label, size: Theme.homeSecondarySize)
                 .foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
         }
