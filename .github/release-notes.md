@@ -3,25 +3,17 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 修正 Codex 正常打字时翻译提示闪现和停顿：隐藏时不再操作窗口，选区读取与复核移到后台，按键取消过期提示；被动划词不再强制展开其他应用的辅助功能树。
-- 翻译按钮改为 24×24 的透明小图案，仅保留实心手绘圆圈与两条横线；整块可点击，去掉底板、描边卡片和阴影。
-- 首页标题改为 Insight；右侧显示实际快捷键键帽、引擎信息和版本检查更新入口，侧栏增加信封“联系我们”、设置齿轮和帮助入口。
-- 滚动滑块悬停加亮、略微加宽；保留原生惯性，进度与渐隐使用独立图层，首页点阵仅在尺寸变化时重建，减少重复绘制。
-- 设置改为可独立拖动的 940×652 窗口，顶部 44 点拖拽区避开关闭按钮和滚动内容，窗口圆角增至 24；系统状态在后台加载，去掉顶部蓝色进度条。
-- 首页统计采用 250ms 从零递增；热力图按周列依次弹入，每列 300ms、间隔 40ms，配合 1→1.2→1 缩放与白色遮罩。
-- 设置淡入 225ms、淡出 195ms；统一 wave 骨架屏、双条更新进度和伸缩加载圆环，支持减少动态效果。
-- 沿用长期发布签名；本次直接打包发布，跳过测试和冒烟测试。
+- 首页统计卡改为等宽布局，调整圆角和热力图间距。打开、恢复或切回首页时，数字用 460ms 从零递增，热力图从左到右按周填色。
+- 设置侧栏的「听写」「模型」「通用」整行可点，主题动画期间可继续操作。
+- 明暗切换瓦片面积缩到约原来的八分之一，从左上到右下飞散、缩小并淡出。
+- 检查、下载进度和重启使用同一个更新弹窗。后台检查只更新菜单。安装前收起设置与其他弹窗，退出等待超时可重试。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Fix unwanted translation offers and pauses during typing in Codex. Hidden offers no longer touch windows. Selection reads and rechecks run in the background, typing cancels stale offers, and passive selection no longer forces other apps to expose a full accessibility tree.
-- Use a transparent 24×24 translation mark: a filled hand-drawn circle and two lines, with the full area clickable. Remove the plate, card border and shadow.
-- Rename the Home heading to Insight. Show configured shortcut keycaps, engine details and version/update controls on the right; add Contact Us, Settings and Help to the sidebar footer.
-- Brighten and slightly widen scroll thumbs on hover. Keep native momentum while progress/fade layers and retained Home dots reduce redraw work.
-- Make Settings an independently movable 940×652 window with a 44pt drag strip clear of controls and scrolling, 24pt window corners, background status loading and no blue top progress strip.
-- Count Home metrics up from zero in 250ms. Reveal heatmap week columns with a 300ms scale pulse and white cover, staggered by 40ms.
-- Fade Settings in over 225ms and out over 195ms. Share wave skeletons, dual-bar update progress and stretching circular loaders, with Reduce Motion support.
-- Retain the persistent publisher signature. Build and publish directly; skip tests and smoke tests.
+- Home uses equal-width metric cards with refined corners and grid spacing. Opening, restoring or returning to Home counts up over 460 ms and fills the heatmap by week from left to right.
+- Each Settings category is clickable across its full row and responds during theme transitions.
+- Light and dark theme tiles are about one eighth of their former area. They scatter, shrink and fade from top left to bottom right.
+- One update dialog shows the check, download progress and restart controls. Background checks update the menu. Settings and open sheets close before restart, and a quit timeout lets you retry.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation
