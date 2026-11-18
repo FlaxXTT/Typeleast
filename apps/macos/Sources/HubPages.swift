@@ -74,7 +74,7 @@ struct HomePage: View {
         GeometryReader { geometry in
             let gap: CGFloat = 14
             let width = max(0, geometry.size.width - gap)
-            let insightsWidth = width * Theme.homeRatio
+            let insightsWidth = width * 0.67
             HStack(alignment: .top, spacing: gap) {
                 InsightsPanel()
                     .id(model.homePresentationID)
