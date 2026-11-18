@@ -71,6 +71,7 @@ enum Theme {
     static let homeRatio: CGFloat = 0.618
     static let homeHeadingSize: CGFloat = 48
     static let homeFigureSize: CGFloat = 26
+    static let homeSecondarySize: CGFloat = 13
     static let tile = dynamic(hex(0xFFFFFF), hex(0x3C3B3B))
     static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
