@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-18T17:19:15Z",
-  "updated_at": "2026-11-19T18:43:21Z",
+  "updated_at": "2026-11-19T18:47:22Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -71,9 +71,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "89938b32324c4c298a662f87db8c3abf4b5ed109daa6588af21f13dcb8be5c86",
-      "size": 85222,
-      "normalized_sha256": "89938b32324c4c298a662f87db8c3abf4b5ed109daa6588af21f13dcb8be5c86"
+      "sha256": "1e3221d85ab9be7561043176cb74e84d3623685e98f89d19b7866a6b676f3200",
+      "size": 85276,
+      "normalized_sha256": "1e3221d85ab9be7561043176cb74e84d3623685e98f89d19b7866a6b676f3200"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -488,9 +488,9 @@
     },
     "apps/macos/Sources/RecordingBar.swift": {
       "role": "index",
-      "sha256": "9d8fed9ca76041466c7ede006ed6c88bcfd843a0ae2241c2489a0a4ee33a8fa7",
-      "size": 60101,
-      "normalized_sha256": "9d8fed9ca76041466c7ede006ed6c88bcfd843a0ae2241c2489a0a4ee33a8fa7"
+      "sha256": "b3b1753d61430398c6a6a981aa0df81165201719d0ad3bce20cd8d18d09af3e5",
+      "size": 59588,
+      "normalized_sha256": "b3b1753d61430398c6a6a981aa0df81165201719d0ad3bce20cd8d18d09af3e5"
     },
     "apps/macos/Sources/RecordingHints.swift": {
       "role": "index",

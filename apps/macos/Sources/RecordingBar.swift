@@ -1102,24 +1102,9 @@ final class RecordingBar {
         onMain {
             self.currentTake = nil
             self.cancelPendingFade()
-            self.stopTimer()
             self.stopPointerTracking()
             self.hideMicrophoneHint()
-            guard let panel = self.panelBox, panel.isVisible, !Self.prefersReducedMotion else {
-                self.dismiss()
-                return
-            }
-            panel.ignoresMouseEvents = true
-            self.isDismissing = true
-            let token = self.fadeToken
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = VoiceBarGeometry.opacityDuration
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                panel.animator().alphaValue = 0
-            } completionHandler: { [weak self] in
-                guard let self, self.fadeToken == token else { return }
-                self.dismiss()
-            }
+            self.fadeOut(phase: self.model.phase)
         }
     }
 
@@ -1313,26 +1298,26 @@ final class RecordingBar {
 
     private func fadeOut(phase: RecordingBarModel.Phase = .result, duration: TimeInterval = RecordingBar.fadeDuration) {
         stopTimer()
-        guard model.phase == phase, panelBox?.isVisible == true else {
+        guard model.phase == phase, let panel = panelBox, panel.isVisible, !Self.prefersReducedMotion else {
             dismiss()
             return
         }
-        if RecordingBar.prefersReducedMotion {
-            dismiss()
-            return
-        }
+        panel.ignoresMouseEvents = true
         fadeToken += 1
         isDismissing = true
         let token = fadeToken
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            self.panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
+        let finish = { [weak self] in
             // A newer state may have re-presented the pill while this fade was running.
             guard let self = self, self.fadeToken == token, self.model.phase == phase else { return }
             self.dismiss()
-        })
+        }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = 0
+        }, completionHandler: finish)
+        // AppKit can omit the completion when the window's animation is interrupted.
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.04, execute: finish)
     }
 
     private func dismiss() {
