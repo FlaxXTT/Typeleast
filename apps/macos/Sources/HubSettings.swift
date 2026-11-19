@@ -2,9 +2,7 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-// HubSettings.swift - the Settings page in three tabs: 听写 (shortcuts, language, audio, cleanup
-// options), 模型 (cleanup model, speech model) and 通用 (general, privacy, permissions, updates,
-// and 高级 for the local service and download sources), as titled sections of cards.
+// HubSettings.swift - Settings for dictation, translation, models and general preferences.
 
 /// ServiceManagement may contact a system service. Never query it from a view body
 /// or a Binding getter: SwiftUI can evaluate those repeatedly while laying out rows.
@@ -49,6 +47,7 @@ final class LoginItemStatus: ObservableObject {
 }
 
 struct SettingsPage: View {
+    static let sidebarWidth: CGFloat = 202
     var onClose: () -> Void = {}
     @EnvironmentObject var model: AppModel
     @StateObject private var meter = MicMeter()
@@ -56,8 +55,6 @@ struct SettingsPage: View {
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
     @State private var activeHotkeySlot: HotkeySlot?
-
-    private let categories = ["听写", "模型", "通用"]
 
     init(loginItemStatus: LoginItemStatus = LoginItemStatus(), onClose: @escaping () -> Void = {}) {
         _loginItemStatus = StateObject(wrappedValue: loginItemStatus)
@@ -70,15 +67,15 @@ struct SettingsPage: View {
                 InitialHeading(title: L10n.settingTitle, initialSize: 38, bodySize: 21)
                     .foregroundColor(Theme.ink)
                     .padding(.horizontal, 8).padding(.bottom, 12)
-                ForEach(categories.indices, id: \.self) { index in
-                    let selected = model.settingsCategory == index
+                ForEach(SettingsCategory.allCases) { category in
+                    let selected = model.settingsCategory == category
                     Button {
-                        if !selected { model.settingsCategory = index }
+                        if !selected { model.settingsCategory = category }
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: ["mic", "cpu", "gearshape"][index])
+                            Image(systemName: category.symbol)
                                 .font(.system(size: 16)).frame(width: 16)
-                            Text(L10n.text(categories[index])).font(Theme.rowFont)
+                            Text(category.title).font(Theme.rowFont)
                             Spacer()
                         }
                         .foregroundColor(selected ? Theme.accent : Theme.secondary)
@@ -94,18 +91,19 @@ struct SettingsPage: View {
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 20)
-            .frame(width: 202).background(Theme.sidebar)
+            .frame(width: Self.sidebarWidth).background(Theme.sidebar)
             Divider().overlay(Theme.border)
             VStack(alignment: .leading, spacing: 0) {
-                Text(L10n.text(categories[model.settingsCategory])).font(Theme.sectionTitleFont)
+                Text(model.settingsCategory.title).font(Theme.sectionTitleFont)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
-                HubScrollView(key: "settings-" + String(model.settingsCategory), showsProgress: false) {
+                HubScrollView(key: "settings-" + model.settingsCategory.rawValue, showsProgress: false) {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
-                        case 0: shortcuts; language; translatePrompt; audio; cleanup
-                        case 1: OnlineASRSettings(); speech; ModelSection()
-                        default: general; privacy; permissions; updates; advanced
+                        case .dictation: shortcuts; language; audio; cleanup
+                        case .translation: translationShortcut; selectionTranslation; translatePrompt
+                        case .models: OnlineASRSettings(); speech; ModelSection()
+                        case .general: general; privacy; permissions; updates; advanced
                         }
                     }
                     .padding(.horizontal, 36).padding(.bottom, 24)
@@ -155,9 +153,6 @@ struct SettingsPage: View {
                     HotkeyField(slot: .alt, activeSlot: $activeHotkeySlot)
                 }
             }
-            SettingRow(title: L10n.text("翻译"), detail: L10n.text("按一下开始，再按一下结束，插入{0}译文。选中文字时直接翻译选中内容。", TranslateLanguage(rawValue: model.settings.translateTarget)?.label ?? "English")) {
-                HotkeyField(slot: .translate, activeSlot: $activeHotkeySlot)
-            }
             SettingRow(title:L10n.text("提示词模式"),detail:L10n.text("按一下开始说需求，它先问清范围再写提示词。选中文字时，以选中内容为底稿修改。")) {
                 HotkeyField(slot: .assistant, activeSlot: $activeHotkeySlot)
             }
@@ -175,6 +170,34 @@ struct SettingsPage: View {
         }
     }
 
+    private var translationShortcut: some View {
+        SettingsSection(title: L10n.text("快捷键翻译")) {
+            SettingRow(title: L10n.text("翻译快捷键"),
+                       detail: L10n.text("有选区时在面板显示译文。无选区时按两次快捷键录音并插入译文。")) {
+                HotkeyField(slot: .translate, activeSlot: $activeHotkeySlot)
+            }
+            SettingRow(title: L10n.text("翻译成"), detail: nil) {
+                Picker(L10n.text("翻译成"), selection: model.setting(\.translateTarget)) {
+                    ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+                }.labelsHidden().frame(width: 180)
+            }
+        }
+    }
+
+    private var selectionTranslation: some View {
+        SettingsSection(title: SelectionTranslator.featureName) {
+            ToggleRow(title: L10n.text("显示翻译按钮"), detail: L10n.text("选中文本时显示。"),
+                      isOn: model.setting(\.selectionTranslate))
+            SettingRow(title: L10n.text("首选译文语言"), detail: L10n.text("原文已是首选语言时，译为中文或英文。")) {
+                Picker(L10n.text("首选译文语言"), selection: model.setting(\.selectionTranslateTarget)) {
+                    Text(L10n.text("跟随快捷键设置")).tag("")
+                    ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+                }.labelsHidden().frame(width: 180)
+                    .disabled(!model.settings.selectionTranslate)
+            }
+        }
+    }
+
     private var translatePrompt: some View {
         SettingsSection(title: L10n.text("翻译提示词")) { TranslatePromptEditor() }
     }
@@ -183,7 +206,7 @@ struct SettingsPage: View {
         SettingsSection(title: L10n.text("整理选项")) {
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("提示词模式推荐模型"), detail: L10n.text("生成提示词后，联网查当前软件现有的主推模型，推荐最适合这个任务的一个。"),
+            ToggleRow(title: L10n.text("提示词模式推荐模型"), detail: L10n.text("生成提示词后联网推荐。"),
                       isOn: model.setting(\.recommendModel))
         }
     }
@@ -215,13 +238,6 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(width: 150)
             }
-            SettingRow(title: L10n.text("翻译成"), detail: nil) {
-                Picker("", selection: model.setting(\.translateTarget)) {
-                    ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }.labelsHidden().frame(width: 150)
-            }
-            ToggleRow(title: L10n.text("选中即翻译"), detail: L10n.text("用鼠标选中文字，旁边出现「翻译」按钮，译文在气泡里显示。"),
-                      isOn: model.setting(\.selectionTranslate))
             SettingRow(title: L10n.text("中文字形"),
                        detail: onDevice && model.speech?.modelId == "mlx-fun-asr-nano-bf16"
                         ? L10n.text("此模型不会确认听写语言。选择中文时应用繁体；听写日语请选日语，以免只有汉字的日文被转换。自动模式不转换。") : nil) {
@@ -259,7 +275,7 @@ struct SettingsPage: View {
     }
 
     private var general: some View {
-        SettingsSection(title: L10n.text("通用")) {
+        SettingsSection {
             SettingRow(title: L10n.text("界面语言"), detail: L10n.text("重启后生效。")) {
                 Picker("", selection: model.setting(\.interfaceLanguage)) {
                     Text(L10n.text("跟随系统")).tag("system")
@@ -328,7 +344,7 @@ struct SettingsPage: View {
 
     private var updates: some View {
         SettingsSection(title: L10n.text("版本与更新")) {
-            SettingRow(title: L10n.text("当前版本 ") + Updater.currentVersion, detail: L10n.text("一键更新，权限保留。")) {
+            SettingRow(title: L10n.text("当前版本 ") + Updater.currentVersion, detail: nil) {
                 Button(L10n.text("检查更新")) { model.actions?.checkForUpdates(interactive: true) }.buttonStyle(SecondaryButtonStyle())
             }
         }
@@ -369,7 +385,7 @@ struct SettingsPage: View {
                 }.labelsHidden().frame(width: 220)
             }
             if let version = model.health?.version {
-                InterfaceTypography.text(L10n.text("服务版本 ") + version + " · App " + Updater.currentVersion, size: 11)
+                InterfaceTypography.text(L10n.text("服务版本 ") + version, size: 11)
                     .foregroundColor(Theme.tertiary)
             }
         }
@@ -383,7 +399,7 @@ struct SettingsPage: View {
     }
 
     private func refreshLoginStatus() {
-        if model.settingsCategory == 2 { loginItemStatus.refresh() }
+        if model.settingsCategory == .general { loginItemStatus.refresh() }
     }
 
     private func setLogin(_ on: Bool) {
@@ -403,12 +419,14 @@ struct SettingsPage: View {
 // MARK: - building blocks
 
 struct SettingsSection<Content: View>: View {
-    let title: String
+    var title: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            InterfaceTypography.text(title, size: 14, weight: .semibold).foregroundColor(Theme.secondary)
+            if let title {
+                InterfaceTypography.text(title, size: 14, weight: .semibold).foregroundColor(Theme.secondary)
+            }
             VStack(alignment: .leading, spacing: 8) { content }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)

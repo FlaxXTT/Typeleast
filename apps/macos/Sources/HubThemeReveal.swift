@@ -1,15 +1,22 @@
 import AppKit
+import QuartzCore
 
-/// Reveal the new appearance behind a mosaic of the previous appearance.
+/// Keep the old appearance in place until every participating window has repainted.
 enum HubThemeReveal {
-    private static var activeOverlays: [ThemeMosaicOverlay] = []
+    private static var activeOverlays: [ThemeRevealOverlay] = []
+    private static var pendingTransition: (() -> Void)?
 
     static func apply(_ appearance: NSAppearance?, in preferredWindow: NSWindow? = nil,
-                      additionalWindows: [NSWindow] = []) {
-        guard NSApp.appearance?.name != appearance?.name else { return }
-        let previous = activeOverlays
-        activeOverlays.removeAll()
-        previous.forEach { $0.finish() }
+                      additionalWindows: [NSWindow] = [], showsHome: Bool = true) {
+        let changesAppearance = NSApp.appearance?.name != appearance?.name
+        if !activeOverlays.isEmpty {
+            // Complete the visible transition, then apply only the latest selection.
+            pendingTransition = changesAppearance ? { [weak preferredWindow] in
+                apply(appearance, in: preferredWindow, additionalWindows: additionalWindows, showsHome: showsHome)
+            } : nil
+            return
+        }
+        guard changesAppearance else { return }
 
         var windows: [NSWindow] = []
         if let main = preferredWindow, main.isVisible {
@@ -22,12 +29,12 @@ enum HubThemeReveal {
             windows.append(window)
         }
 
-        var prepared: [(content: NSView, overlay: ThemeMosaicOverlay, oldTheme: NSAppearance.Name?)] = []
+        var prepared: [(content: NSView, overlay: ThemeRevealOverlay, oldTheme: NSAppearance.Name?)] = []
         let center = NotificationCenter.default
         for window in windows {
             guard let content = window.contentView, let container = content.superview,
                   let oldImage = snapshot(content) else { continue }
-            let overlay = ThemeMosaicOverlay(frame: container.convert(content.bounds, from: content), oldImage: oldImage,
+            let overlay = ThemeRevealOverlay(frame: container.convert(content.bounds, from: content), oldImage: oldImage,
                                              cornerRadius: window.identifier == SettingsWindowController.identifier || window.sheetParent != nil
                                                 ? Theme.settingsRadius : Theme.panelRadius)
             overlay.autoresizingMask = [.width, .height]
@@ -46,6 +53,11 @@ enum HubThemeReveal {
                 center.removeObserver(minimizeObserver)
                 center.removeObserver(hideObserver)
                 activeOverlays.removeAll { $0 === overlay }
+                if activeOverlays.isEmpty {
+                    let next = pendingTransition
+                    pendingTransition = nil
+                    next?()
+                }
             }
             activeOverlays.append(overlay)
             overlay.observeClose(of: window)
@@ -54,28 +66,47 @@ enum HubThemeReveal {
         }
         NSApp.appearance = appearance
 
-        // Setting appearance is not a completed SwiftUI render. Both the main
-        // window and separate Settings window wait for the new display frames.
-        for item in prepared {
-            let oldTheme = item.oldTheme
-            item.overlay.afterAppearanceRender { [weak content = item.content, weak overlay = item.overlay] in
-                guard let content, let overlay, activeOverlays.contains(where: { $0 === overlay }) else { return }
-                content.layoutSubtreeIfNeeded()
-                content.window?.displayIfNeeded()
-                guard oldTheme != content.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) else {
-                    overlay.finish()
-                    return
+        guard let clock = prepared.first?.overlay else { return }
+        let windowsToReveal = prepared
+        var started = false
+        let start = {
+            guard !started else { return }
+            started = true
+            let rendered = windowsToReveal.compactMap { item -> (ThemeRevealOverlay, ThemeRevealLayout, NSAppearance.Name)? in
+                guard activeOverlays.contains(where: { $0 === item.overlay }) else { return nil }
+                item.content.layoutSubtreeIfNeeded()
+                let current = item.content.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+                guard let window = item.content.window, window.isVisible, let current, current != item.oldTheme else {
+                    item.overlay.finish()
+                    return nil
                 }
-                if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                    overlay.crossfade()
+                window.displayIfNeeded()
+                let layout: ThemeRevealLayout
+                if window.identifier == SettingsWindowController.identifier {
+                    layout = .settings
+                } else if window === preferredWindow {
+                    layout = showsHome ? .home : .sidebar
                 } else {
-                    overlay.scatter()
+                    layout = .single
+                }
+                return (item.overlay, layout, current)
+            }
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                rendered.forEach { $0.0.crossfade() }
+            } else {
+                let startTime = CACurrentMediaTime() + 0.02
+                for (overlay, layout, theme) in rendered {
+                    overlay.reveal(layout: layout, toDark: theme == .darkAqua, startTime: startTime)
                 }
             }
         }
+        // A minimized or occluded display can throttle its display link.
+        clock.afterAppearanceRender(start)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: start)
     }
 
     private static func snapshot(_ content: NSView) -> NSImage? {
+        guard content.bounds.width > 0, content.bounds.height > 0 else { return nil }
         guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { return nil }
         content.effectiveAppearance.performAsCurrentDrawingAppearance {
             content.cacheDisplay(in: content.bounds, to: bitmap)

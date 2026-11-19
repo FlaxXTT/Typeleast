@@ -104,24 +104,34 @@ if let index = CommandLine.arguments.firstIndex(of: "--pill-ui-render"), Command
     guard output.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
     _ = NSApplication.shared
-    for name in ["recording", "translation", "countdown", "starting", "result"] {
+    for name in ["recording", "translation", "countdown", "starting", "thinking", "thinking-wave", "result", "selection-count"] {
         var model = RecordingBarModel()
         model.showRecording(destination: "fixture", badge: name == "translation" ? "翻译 →EN" : "")
         for (i, level) in [Float(0), 0.15, 0.42, 0.7, 0.4, 0.22, 0.8, 0.92, 0.5, 0.3, 0.1, 0.35, 0.6].enumerated() {
             model.update(level: level, elapsed: Double(i) * 0.05 + (name == "countdown" ? 108 : 0))
         }
-        if name == "starting" { model.showThinking(detail: L10n.text("正在打开麦克风…")) }
+        if name == "starting" { model.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true) }
+        if ["thinking", "thinking-wave"].contains(name) { model.processing() }
         if name == "result" { model.showResult("报告周四发，控制在三页以内。", warning: false) }
-        let logical = NSSize(width: PillView.width(for: model, limit: 120), height: PillView.height)
+        if name == "selection-count" { model.showSelectionCount(RecordingBarFormat.selectionCount("你好，TypeLeast is ready! 123")) }
+        let logical = NSSize(width: PillView.width(for: model, limit: 120),
+                             height: model.isStartingMicrophone ? VoiceBarGeometry.starting.height : PillView.height)
         for scale in [PillView.displayScale, CGFloat(1)] {
             let size = NSSize(width: (logical.width * scale).rounded(), height: logical.height * scale)
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
             let view = PillView(frame: NSRect(origin: .zero, size: size))
             window.contentView = view
             view.setBoundsSize(logical)
-            view.reduceMotion = true
+            view.reduceMotion = name != "thinking-wave"
             view.model = model
-            view.advance()
+            if name == "thinking-wave" {
+                let now = ProcessInfo.processInfo.systemUptime
+                for step in 1...5 { view.advance(at: now + Double(step) * 0.08) }
+            } else if model.phase == .recording {
+                view.receiveLevel(model.level)
+            } else {
+                view.advance()
+            }
             view.layoutSubtreeIfNeeded()
             guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
             view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -557,21 +567,81 @@ do {
     checkEq("waveform reset empties", history.count, 0)
     checkEq("waveform default capacity is 40 samples", LevelHistory.defaultCapacity, 40)
 
-    let tick = 1.0 / 60
-    let quiet = VoiceLevel(volume: Recorder.loudness(rms: 0.01), hasAudio: true)
-    let loud = VoiceLevel(volume: Recorder.loudness(rms: 0.1), hasAudio: true)
     var waveform = VoiceWaveform()
-    check("an audio-free waveform stays at rest", !waveform.advance(level: VoiceLevel(), delta: tick, reduceMotion: false))
-    waveform.advance(level: loud, delta: tick, reduceMotion: false)
-    check("live peaks reach the centre on the first frame", waveform.heights[4] > waveform.heights[0] + 2)
-    checkEq("audio-driven bars mirror their other half", waveform.heights, Array(waveform.heights.reversed()))
-    for _ in 0..<90 { waveform.advance(level: VoiceLevel(hasAudio: true), delta: tick, reduceMotion: false) }
+    let middle = waveform.heights.count / 2 - 1
+    let leftLead: (ClosedRange<Double>) -> Double = { max(0, $0.lowerBound) }
+    checkEq("recording draws ten bars", waveform.heights.count, 10)
+    checkEq("ten two-point bars and nine two-point gaps fill 38 points", VoiceBarGeometry.waveform.width, 38)
+    check("full-height columns fit inside the recording capsule", VoiceBarGeometry.waveform.height < PillView.height)
+    waveform.receive(0, at: 0, reduceMotion: false, random: leftLead)
+    check("an audio-free waveform stays at rest", !waveform.advance(at: 0.1))
+    waveform.receive(1, at: 1, reduceMotion: false, random: leftLead)
+    check("a pulse waits about 80 ms before reaching the centre", !waveform.advance(at: 1.079))
+    waveform.advance(at: 1.086)
+    check("the selected left side leads from the middle",
+          waveform.heights[middle] > 2 && waveform.heights[middle + 1] == 2)
+    waveform.advance(at: 1.090)
+    check("the middle two bars rise before the neighbouring pair",
+          waveform.heights[middle] > 2 && waveform.heights[middle + 1] > 2
+          && waveform.heights[middle - 1] == 2 && waveform.heights[middle + 2] == 2)
+    waveform.advance(at: 1.106)
+    let centerPeak = waveform.heights[middle]
+    check("the centre peaks at 26 points", abs(centerPeak - 26) < 0.0001)
+    waveform.advance(at: 1.116)
+    checkEq("the centre holds its peak briefly", waveform.heights[middle], 26)
+    check("the following side peaks lower for the same microphone sample",
+          abs(waveform.heights[middle + 1] - 21.2) < 0.0001)
+    waveform.advance(at: 1.123)
+    check("the third column follows the middle two at a lower peak",
+          abs(waveform.heights[middle - 1] - 15.0944) < 0.0001 && waveform.heights[middle + 2] < 9)
+    waveform.advance(at: 1.174)
+    check("the edge still peaks 17 ms per step later with 30 percent more excursion",
+          abs(waveform.heights[0] - (2 + (3.4784 - 2) * 1.30)) < 0.0001)
+    var flutter = VoiceWaveform()
+    flutter.receive(1, at: 1, reduceMotion: false) { $0 == 0.88...1.12 ? $0.upperBound : leftLead($0) }
+    flutter.advance(at: 1.116)
+    checkEq("outer variation does not change the central peak", flutter.heights[middle], 26)
+    flutter.advance(at: 1.174)
+    check("the same volume can move an outer column by a slightly different amount",
+          flutter.heights[0] > waveform.heights[0] && flutter.heights[0] < 4.5)
+    waveform.advance(at: 1.4)
     check("a pause returns every bar to rest", waveform.heights.allSatisfy { $0 == VoiceWaveform.restingHeight })
-    waveform.advance(level: quiet, delta: tick, reduceMotion: true)
-    let quietHeight = waveform.heights[4]
-    waveform.advance(level: loud, delta: tick, reduceMotion: true)
+    waveform.receive(1, at: 1.5, reduceMotion: false) { $0 == 0...1 ? 1 : leftLead($0) }
+    waveform.advance(at: 1.586)
+    check("the right side can lead the next pulse",
+          waveform.heights[middle] == 2 && waveform.heights[middle + 1] > 2)
+    waveform.advance(at: 1.623)
+    check("after a pause the third column can come in on the other side",
+          abs(waveform.heights[middle + 2] - 15.0944) < 0.0001 && waveform.heights[middle - 1] < 9)
+    waveform.advance(at: 1.9)
+    waveform.receive(0.2, at: 2, reduceMotion: false) { _ in 0.3 }
+    check("a quiet input can fall below the pulse probability", !waveform.advance(at: 2.100))
+    waveform.receive(0.2, at: 2.2, reduceMotion: false, random: leftLead)
+    waveform.advance(at: 2.306)
+    check("a quiet pulse moves the centre below a loud pulse",
+          waveform.heights[middle] > 2 && waveform.heights[middle] < centerPeak)
+    waveform.receive(0.2, at: 3, reduceMotion: true)
+    let quietHeight = waveform.heights[middle]
+    waveform.receive(0.55, at: 3.05, reduceMotion: true)
+    let softHeight = waveform.heights[middle]
+    waveform.receive(0.70, at: 3.10, reduceMotion: true)
+    let speechHeight = waveform.heights[middle]
+    check("the expanded display range keeps soft speech shorter and ordinary speech taller",
+          quietHeight < softHeight && softHeight < 10.8 && speechHeight > 13.2)
+    waveform.receive(0.8, at: 3.15, reduceMotion: true)
     check("reduced motion still distinguishes quiet and loud input",
-          quietHeight > VoiceWaveform.restingHeight && waveform.heights[4] > quietHeight)
+          quietHeight > VoiceWaveform.restingHeight && waveform.heights[middle] > quietHeight)
+    waveform.receive(1, at: 3.20, reduceMotion: true)
+    let taper = (0...middle).reversed().map { waveform.heights[$0] }
+    check("reduced motion keeps a lower third column and small tapered outer columns",
+          zip(taper, [26.0, 8.864, 7.304, 5.744, 4.184]).allSatisfy { abs($0 - $1) < 0.0001 }
+          && abs(waveform.heights[middle + 2] - 16.88) < 0.0001)
+    var overlap = VoiceWaveform()
+    overlap.receive(1, at: 4, reduceMotion: false, random: leftLead)
+    overlap.receive(1, at: 4.05, reduceMotion: false) { $0 == 0...1 ? 1 : leftLead($0) }
+    overlap.advance(at: 4.180)
+    check("overlapping pulses share one third column even when the leading side changes",
+          overlap.heights[middle - 1] > 10 && overlap.heights[middle + 2] < 9)
 
     // pill show/hide state machine
     var model = RecordingBarModel()
@@ -625,14 +695,12 @@ do {
 
 do {
     var capsule = RecordingBarModel()
-    capsule.processing(at: 20)
-    checkEq("capsule starts processing at zero", capsule.progress(at: 20), 0)
-    checkEq("capsule advances by elapsed time", capsule.progress(at: 21), 25)
-    checkEq("processing cannot claim completion", capsule.progress(at: 80), 99)
-    capsule.complete()
-    checkEq("real completion advances the capsule to 100", capsule.progress(at: 21), 100)
+    capsule.processing()
+    checkEq("capsule uses the Thinking phase after recording", capsule.phase, .thinking)
+    check("capture stays in processing until explicitly completed", capsule.isProcessingCapture)
+    checkEq("Thinking reserves room for the label and dots", PillView.width(for: capsule, limit: 120), 150)
     capsule.hide()
-    checkEq("cancel clears progress", capsule.progress(at: 80), nil)
+    check("dismissal clears capture processing", !capsule.isProcessingCapture)
 
     var typing = TypingHintWindow()
     check("60 key events do not trigger a tip", !typing.record(Array(repeating: 1, count: 60), in: "a", now: 1))
@@ -699,9 +767,35 @@ do {
     check("cancelled async recording releases its UI state and audio", !recorder.isStarting && !recorder.isRecording && recorder.byteCount == 0)
 }
 
-// MARK: 11. Recorder live level - smoothing, clamping and RMS without a microphone
+// MARK: 11. Recorder live level - voice-band FFT and RMS without a microphone
 
 do {
+    let sampleRate = 48_000.0
+    let samplesPerTick = 2_400
+    func tone(_ meter: VoiceCaptureMeter, hz: Double, amplitude: Float, ticks: Int) {
+        meter.append(count: ticks * samplesPerTick) {
+            amplitude * Float(sin(2 * .pi * hz * Double($0) / sampleRate))
+        }
+    }
+    if let quiet = VoiceCaptureMeter(sampleRate: sampleRate), let loud = VoiceCaptureMeter(sampleRate: sampleRate),
+       let hiss = VoiceCaptureMeter(sampleRate: sampleRate), let background = VoiceCaptureMeter(sampleRate: sampleRate) {
+        tone(quiet, hz: 440, amplitude: 0.012, ticks: 5)
+        tone(loud, hz: 440, amplitude: 0.12, ticks: 5)
+        tone(hiss, hz: 3_000, amplitude: 0.8, ticks: 5)
+        check("voice band preserves quiet speech and distinguishes louder speech",
+              quiet.level > 0.25 && quiet.level < loud.level && loud.level <= 1)
+        checkEq("strong sound outside the voice band is suppressed", hiss.level, 0)
+        tone(background, hz: 440, amplitude: 0.022, ticks: 10)
+        check("a new steady noise begins above the floor", background.level > 0)
+        tone(background, hz: 440, amplitude: 0.022, ticks: 100)
+        checkEq("the adaptive floor absorbs sustained background noise", background.level, 0)
+        tone(background, hz: 660, amplitude: 0.09, ticks: 6)
+        check("speech above the adapted floor still triggers the capsule", background.level > 0.5)
+        tone(loud, hz: 440, amplitude: 0, ticks: 25)
+        checkEq("a quiet pause clears the smoothed capture level", loud.level, 0)
+    } else {
+        check("system FFT setup is available", false)
+    }
     checkEq("recorder smoothing attack weight", Recorder.levelAttack, 0.6)
     checkEq("recorder smoothing release weight", Recorder.levelRelease, 0.3)
     checkEq("recorder smoothing attacks fast (0.6 of a rise)", Recorder.smoothLevel(previous: 0, sample: 1), 0.6)
@@ -915,6 +1009,46 @@ do {
     checkEq("selection: with a Chinese target, Chinese goes to English", SelectionTranslator.target(for: "今天开会", preferred: "zh"), "en")
     checkEq("selection: with a Chinese target, English goes to Chinese", SelectionTranslator.target(for: "Ship it today", preferred: "zh"), "zh")
     checkEq("selection: other targets are kept", SelectionTranslator.target(for: "Ship it today", preferred: "ja"), "ja")
+    checkEq("Quick Translate keeps its English name", SelectionTranslator.featureName, "Quick Translate")
+    checkEq("the shortcut starts English spoken translation when nothing is selected",
+            TranslationShortcutAction.resolve(selection: nil, speechTarget: "en", selectionTarget: "ja"), .speech(target: "en"))
+    checkEq("whitespace alone is not a translation selection",
+            TranslationShortcutAction.resolve(selection: " \n", speechTarget: "en", selectionTarget: "ja"), .speech(target: "en"))
+    checkEq("selected text uses its independent target and does not start recording",
+            TranslationShortcutAction.resolve(selection: "今天开会", speechTarget: "en", selectionTarget: "ja"), .selectedText(target: "ja"))
+    checkEq("the shortcut translates English selections back to Chinese when the target follows English",
+            TranslationShortcutAction.resolve(selection: "Ship it today", speechTarget: "en", selectionTarget: "en"), .selectedText(target: "zh"))
+    let translatedPreview = DictateResponse(text: "Send the report tomorrow.", raw: "明天发送报告。", fallback: false)
+    checkEq("the translation panel exclusively shows translated text",
+            DictationController.TranslationPreview.result(.success(translatedPreview)), .done("Send the report tomorrow."))
+    let failedPreview = DictateResponse(text: "明天发送报告。", raw: "明天发送报告。", fallback: true)
+    checkEq("a translation failure does not present the source as a successful translation",
+            DictationController.TranslationPreview.result(.success(failedPreview)),
+            .failed(ServiceError.translationFailed(reason: nil).description, partial: nil))
+    let partialPreview = TranslationProgress(text: "Send the report", completed: 1, total: 2)
+    let partialError = ServiceError.translationIncomplete(partialPreview)
+    checkEq("the translation panel can show a partial translation with its error",
+            DictationController.TranslationPreview.result(.failure(partialError)), .failed(partialError.description, partial: partialPreview.text))
+    check("ordinary dictation stays eligible for history",
+          DictationController.keepsHistory(translateTo: nil, response: translatedPreview))
+    check("an explicit voice or selection translation skips history even if it returns the source",
+          !DictationController.keepsHistory(translateTo: "en", response: failedPreview))
+    var markedTranslation = translatedPreview
+    markedTranslation.task = "translation"
+    check("a response marked as translation skips history without a saved target",
+          !DictationController.keepsHistory(translateTo: nil, response: markedTranslation))
+    markedTranslation.task = nil
+    markedTranslation.translated = "en"
+    check("an older response with only a translation language also skips history",
+          !DictationController.keepsHistory(translateTo: nil, response: markedTranslation))
+    checkEq("a mixed selection adds Han characters and English words into one count",
+            RecordingBarFormat.selectionCount("你好，TypeLeast is ready! 123 👋"), "5 words")
+    checkEq("supplementary Han characters count once",
+            RecordingBarFormat.selectionCount("𠮷，。"), "1 words")
+    checkEq("contractions, compounds and accented words each count once",
+            RecordingBarFormat.selectionCount("don't re-enter cafe\u{0301}"), "3 words")
+    checkEq("numbers, punctuation and emoji are excluded from the selection count",
+            RecordingBarFormat.selectionCount("42 · @# 🧪"), "0 words")
     checkEq("a rebuilt field: the cursor is found by the text around it", CaretAnchor.locate(before: "你好，", after: "世界", in: "前面的字你好，世界"), 7)
     checkEq("…and in an empty field there is one place", CaretAnchor.locate(before: "", after: "", in: ""), 0)
     checkEq("…but not in a field with other text", CaretAnchor.locate(before: "", after: "", in: "别的内容"), nil)
@@ -1146,6 +1280,9 @@ do {
     checkEq("manual English overrides system", L10n.resolve("en", preferred: ["zh-CN"]), "en")
     checkEq("saved Traditional Chinese UI preference migrates", L10n.resolve("zh-Hant", preferred: ["en-US"]), "zh-Hans")
     checkEq("translated label", L10n.render("设置", arguments: [], language: "en"), "Settings")
+    checkEq("the contact icon has a localized English label", L10n.render("联系我们", arguments: [], language: "en"), "Contact Us")
+    checkEq("the concise translation setting has an English label",
+            L10n.render("选中文本时显示。", arguments: [], language: "en"), "Appears beside selected text.")
     checkEq("content slots are not translated or expanded", L10n.render("常被识别成「{0}」", arguments: ["用户 {1}"], language: "en"), "Heard as “用户 {1}”")
     let previous = Settings.shared.interfaceLanguage
     Settings.shared.interfaceLanguage = "en"
@@ -1576,6 +1713,9 @@ do {
     let finished = DictateResponse(text: "整理结果", raw: "原文", fallback: false)
     let waiting = try JSONDecoder().decode(DictateResponse.self, from: Data(#"{"text":"","raw":"answer","beta":{"sessionId":"fictional-session"}}"#.utf8))
     check("reviewed fallback must return to review", DictationController.reviewNeedsRetry(.success(fallback)))
+    var unverified = DictateResponse(text: "原文", raw: "原文", fallback: true)
+    unverified.fallbackReason = "fact-check-unavailable"
+    check("an unavailable cleanup verifier does not reopen an already approved recognition", !DictationController.reviewNeedsRetry(.success(unverified)))
     check("reviewed empty result must return to review", DictationController.reviewNeedsRetry(.success(DictateResponse())))
     check("reviewed service error must return to review", DictationController.reviewNeedsRetry(.failure(ServiceError.transport("fictional failure"))))
     check("reviewed finished result can continue", !DictationController.reviewNeedsRetry(.success(finished)))
@@ -2100,13 +2240,13 @@ do {
     let entries = SettingsGuide.entries
     checkEq("the guide lists five places", entries.count, 5)
     check("every guide entry says where it is", entries.allSatisfy { !$0.place.isEmpty })
-    checkEq("the API key lives under Settings › Models", entries.first { $0.title == L10n.text("API Key") }?.category, 1)
-    checkEq("the speech model lives under Settings › Models", entries.first { $0.title == L10n.text("语音模型") }?.category, 1)
+    checkEq("the API key lives under Settings › Models", entries.first { $0.title == L10n.text("API Key") }?.category, .models)
+    checkEq("the speech model lives under Settings › Models", entries.first { $0.title == L10n.text("语音模型") }?.category, .models)
     let model = AppModel()
     model.navigate(to: .history)
     SettingsGuide.open(entries[1], in: model)
     check("opening an entry presents the Settings window on its tab",
-          model.settingsPresented && model.settingsCategory == 1)
+          model.settingsPresented && model.settingsCategory == .models)
     checkEq("the guide keeps the background page in place", model.page, .history)
     func speech(_ json: String) -> SpeechStatus { try! JSONDecoder().decode(SpeechStatus.self, from: Data(json.utf8)) }
     check("an unreachable host is a network failure", speech(#"{"phase":"error","error":"could not reach huggingface.co: fetch failed"}"#).networkFailure)
@@ -2203,8 +2343,8 @@ do {
     let earlier = bar.begin(handsFree: false)
     earlier.recording(destination: "fixture", badge: "")
     RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-    checkEq("a held shortcut reaches 70 by 34", bar.capsuleSize?.width.rounded(), 70)
-    checkEq("the listening capsule is 34 points high", bar.capsuleSize?.height.rounded(), 34)
+    checkEq("a held shortcut reaches 70 points wide", bar.capsuleSize?.width.rounded(), 70)
+    checkEq("the listening capsule is 38 points high", bar.capsuleSize?.height.rounded(), 38)
     earlier.processing()
     let latest = bar.begin(handsFree: true)
     earlier.done()
@@ -2215,13 +2355,50 @@ do {
     latest.level(0.8, elapsed: 1)
     RunLoop.current.run(until: Date().addingTimeInterval(0.25))
     checkEq("hands-free listening reaches 116 points wide", bar.capsuleSize?.width.rounded(), 116)
+    let recordingPanel = NSApplication.shared.windows.first {
+        $0.isVisible && $0.contentView is RecordingOverlayHost
+    }
+    let buttons = (recordingPanel?.contentView as? RecordingOverlayHost)?.pill.subviews.compactMap { $0 as? NSButton } ?? []
+    check("hands-free recording keeps its two controls", buttons.count == 2 && buttons.allSatisfy { !$0.isHidden })
+    latest.done()
+    checkEq("a completion callback cannot interrupt active recording", bar.phase, .recording)
     latest.processing()
+    check("Thinking hides both recording controls", buttons.count == 2 && buttons.allSatisfy { $0.isHidden })
+    check("Thinking passes mouse clicks through to the app below", recordingPanel?.ignoresMouseEvents == true)
     latest.recording(destination: "fixture", badge: "")
     checkEq("a late microphone callback cannot restart processing", bar.phase, .thinking)
     latest.done()
-    checkEq("successful transcription shows the completion phase", bar.phase, .completed)
-    RunLoop.current.run(until: Date().addingTimeInterval(0.70))
-    check("the completion capsule closes after its hold and shrink", !bar.isVisible)
+    check("success goes straight from Thinking to dismissal", bar.phase == .thinking || bar.phase == .hidden)
+    RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.1))
+    checkEq("Thinking closes at the end of its fade", bar.phase, .hidden)
+    check("the success callback leaves no visible result capsule", !bar.isVisible)
+
+    bar.flashSelectionCount(for: "你好，one two!")
+    let countPanel = NSApplication.shared.windows.first {
+        $0.isVisible && $0.contentView is RecordingOverlayHost
+    }
+    let countView = (countPanel?.contentView as? RecordingOverlayHost)?.pill
+    check("selection count appears immediately at full opacity",
+          bar.phase == .selectionCount && bar.isVisible && countPanel?.alphaValue == 1)
+    check("selection count never takes focus or hits",
+          countPanel?.canBecomeKey == false && countPanel?.ignoresMouseEvents == true)
+    checkEq("the capsule makes its text count accessible", countView?.accessibilityValue() as? String, "4 words")
+    let flash = RecordingBar.selectionCountHold + RecordingBar.selectionCountFade
+    func waitForCapsuleDismissal() -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while bar.isVisible && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        return !bar.isVisible
+    }
+    check("selection count dismisses on its own", waitForCapsuleDismissal())
+    bar.flashSelectionCount(for: "two words")
+    let afterCount = bar.begin(handsFree: false)
+    afterCount.recording(destination: "fixture", badge: "")
+    RunLoop.current.run(until: Date().addingTimeInterval(flash + 0.12))
+    checkEq("an earlier count cannot dismiss a new recording", bar.phase, .recording)
+    afterCount.cancel()
+    let capsuleDismissed = waitForCapsuleDismissal()
 
     let hintSuite = "typeleast.recording-hints." + UUID().uuidString
     let hintDefaults = UserDefaults(suiteName: hintSuite)!
@@ -2234,7 +2411,7 @@ do {
     check("welcome waits for permissions", !tips.isVisible && !hintSettings.recordingReadyHintShown)
     permissionsReady = true
     tips.permissionsChanged()
-    check("welcome can stay visible without the recording capsule", tips.isVisible && !bar.isVisible)
+    check("welcome can stay visible without the recording capsule", tips.isVisible && capsuleDismissed)
     check("welcome writes the durable marker at presentation", hintDefaults.bool(forKey: "app-onboarding.onboardingCompletedFloatingBarStart"))
     tips.stop()
     tips.permissionsChanged()

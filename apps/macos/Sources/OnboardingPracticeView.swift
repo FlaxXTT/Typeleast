@@ -101,6 +101,7 @@ private final class PracticeVoiceBarHost: NSView {
     func applyPhase() {
         guard let practice, phase != practice.phase else { return }
         phase = practice.phase
+        sampleTime = 0
         pill.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         switch practice.phase {
         case .recording: model.showRecording(destination: "tutorial")
@@ -131,7 +132,7 @@ private final class PracticeVoiceBarHost: NSView {
         stopAnimation()
         guard window != nil else { return }
         lastFrame = ProcessInfo.processInfo.systemUptime
-        let interval = pill.reduceMotion ? 0.05 : 1.0 / 60.0
+        let interval = pill.reduceMotion ? VoiceCaptureMeter.interval : 1.0 / 60.0
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -144,11 +145,12 @@ private final class PracticeVoiceBarHost: NSView {
         let now = ProcessInfo.processInfo.systemUptime
         sampleTime += min(0.1, max(0, now - lastFrame))
         lastFrame = now
-        if practice.phase == .recording, sampleTime >= 0.05 {
-            sampleTime.formTruncatingRemainder(dividingBy: 0.05)
+        if practice.phase == .recording, sampleTime >= VoiceCaptureMeter.interval {
+            sampleTime.formTruncatingRemainder(dividingBy: VoiceCaptureMeter.interval)
             let oldWidth = PillView.width(for: model, limit: 40)
-            model.update(voice: practice.voiceLevel, elapsed: practice.elapsed)
+            model.update(level: practice.voiceLevel, elapsed: practice.elapsed)
             pill.model = model
+            pill.receiveLevel(model.level, at: now)
             if oldWidth != PillView.width(for: model, limit: 40) { needsLayout = true }
         }
         let wasHoldingWidth = pill.holdsRecordingWidth

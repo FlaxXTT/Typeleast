@@ -3,6 +3,26 @@ import Foundation
 import SwiftUI
 
 func dashboardMotionTests() {
+    let homeDividers = ThemeRevealLayout.home.boundaries(in: 944)
+    checkEq("the home fade follows the sidebar and column boundaries", homeDividers, [0, 210, 695.32, 944])
+    checkEq("two-column windows use their own sidebar width", ThemeRevealLayout.settings.boundaries(in: 900),
+            [0, 202, 900])
+    checkEq("other hub pages split only at the sidebar", ThemeRevealLayout.sidebar.boundaries(in: 944),
+            [0, 210, 944])
+    checkEq("a sheet fades as one section", ThemeRevealLayout.single.boundaries(in: 480), [0, 480])
+    checkEq("short windows omit dividers outside their bounds", ThemeRevealLayout.home.boundaries(in: 210),
+            [0, 210])
+    let dayDelays = (0..<3).map { ThemeRevealLayout.delay(for: $0, count: 3, toDark: false) }
+    let nightDelays = (0..<3).map { ThemeRevealLayout.delay(for: $0, count: 3, toDark: true) }
+    checkEq("light fades from the sidebar to the engine", dayDelays, [0, 0.083, 0.166])
+    checkEq("dark fades through the same sections in reverse", nightDelays, Array(dayDelays.reversed()))
+    for toDark in [false, true] {
+        let delays = (0..<3).map { ThemeRevealLayout.delay(for: $0, count: 3, toDark: toDark) }
+        let settingsDelays = (0..<2).map { ThemeRevealLayout.delay(for: $0, count: 2, toDark: toDark) }
+        checkEq("overlapping hub and settings animations share their first and last fade",
+                settingsDelays, [delays[0], delays[2]])
+    }
+
     let start = Date(timeIntervalSinceReferenceDate: 0)
     var count = CountUpTransition(initial: nil)
     check("a fresh count has no target before data arrives", count.target == nil)
@@ -50,6 +70,7 @@ func dashboardWindowTests() {
     }
 
     dashboardCountRenderingTests()
+    cancelledTranscriptionToastTests()
 
     let model = AppModel(loadCacheImmediately: false)
     let hub = HubWindowController(model: model)
@@ -93,6 +114,45 @@ func dashboardWindowTests() {
     pending.finishUserCacheLoad()
     slowHub.userCacheDidLoad()
     check("a late cache completion still loads both dashboard sections", waitFor { pending.stats != nil && pending.activityReady })
+}
+
+private func cancelledTranscriptionToastTests() {
+    let language = L10n.language
+    let toast = LearnedToast()
+    defer {
+        toast.finish()
+        L10n.language = language
+    }
+
+    var previousPanel: NSPanel?
+    var previousWidth: CGFloat = 0
+    var expired = 0
+    for (locale, expected) in [("zh-Hans", "转录已取消"), ("en", "Transcription cancelled")] {
+        L10n.language = locale
+        toast.show(message: L10n.text("转录已取消"), undo: {}, expired: { expired += 1 })
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        guard let panel = NSApp.windows.first(where: { $0.isVisible && $0.contentView is NSHostingView<LearnedToastView> }) as? NSPanel,
+              let host = panel.contentView as? NSHostingView<LearnedToastView> else {
+            check("the cancelled transcription toast opens in \(locale)", false)
+            return
+        }
+        host.layoutSubtreeIfNeeded()
+        let fitting = host.fittingSize
+        checkEq("the cancellation message is localized in \(locale)", host.rootView.message, expected)
+        check("the cancellation panel fits its content in \(locale)",
+              host.bounds.width >= fitting.width && host.bounds.height >= fitting.height,
+              "bounds=\(host.bounds.size) fitting=\(fitting)")
+        check("the cancellation card is free of a native corner mask in \(locale)",
+              (host.layer?.cornerRadius ?? 0) == 0)
+        if let previousPanel {
+            check("the same panel grows to fit the longer English toast", previousPanel === panel && panel.frame.width > previousWidth)
+        }
+        previousPanel = panel
+        previousWidth = panel.frame.width
+    }
+    toast.finish()
+    check("replacing and dismissing the toast each expire one pending undo",
+          expired == 2 && previousPanel?.isVisible == false)
 }
 
 private func dashboardCountRenderingTests() {
@@ -158,6 +218,58 @@ private func dashboardCountRenderingTests() {
 }
 
 func performanceRegressionTests() {
+    let textField = NSRect(x: 0, y: 0, width: 280, height: 110)
+    let selectedRow = NSRect(x: 18, y: 50, width: 130, height: 18)
+    let followingRow = NSRect(x: 18, y: 32, width: 175, height: 18)
+    let previousRow = NSRect(x: 18, y: 68, width: 135, height: 18)
+    let rows = [selectedRow, followingRow, previousRow]
+    let pointer = NSPoint(x: 145, y: 60)
+    let offer = TranslationOfferPlacement.frame(near: pointer, anchor: selectedRow, in: textField, rows: rows)
+    checkEq("translation offer keeps an 18-point hit area", offer?.size, NSSize(width: 18, height: 18))
+    check("offer clears neighboring text as well as the selected row", offer.map { frame in
+        frame.minX >= followingRow.maxX + 3 && rows.allSatisfy { !frame.intersects($0) }
+    } ?? false)
+    let narrowField = NSRect(x: 15, y: 0, width: 183, height: 110)
+    check("no unoccupied margin means no floating translation offer",
+          TranslationOfferPlacement.frame(near: pointer, anchor: selectedRow, in: narrowField, rows: rows) == nil)
+    let thinLine = NSRect(x: 18, y: 55, width: 130, height: 14)
+    check("an isolated measured row cannot claim adjoining unknown space",
+          TranslationOfferPlacement.frame(near: pointer, anchor: thinLine, in: textField, rows: [thinLine]) == nil)
+    check("a short single line can still show the translation offer",
+          TranslationOfferPlacement.frame(near: pointer, anchor: thinLine, in: textField, rows: [thinLine], allVisibleRows: true) != nil)
+    let fullLine = NSRect(x: 18, y: 68, width: 167, height: 18)
+    let lineBelow = NSRect(x: 18, y: 20, width: 171, height: 18)
+    let separated = [fullLine, lineBelow]
+    let inGap = TranslationOfferPlacement.frame(near: NSPoint(x: 174, y: 70), anchor: fullLine,
+                                                 in: narrowField, rows: separated)
+    check("an empty band fits the complete button and leaves both text rows clear",
+          inGap.map { frame in
+              frame.minY >= lineBelow.maxY + 3 && frame.maxY <= fullLine.minY - 3 && narrowField.contains(frame)
+          } ?? false)
+
+    let screen = NSRect(x: 0, y: 0, width: 1440, height: 780)
+    let nearBottom = NSRect(x: 450, y: 65, width: 18, height: 30)
+    let nearTop = NSRect(x: 450, y: 700, width: 18, height: 30)
+    let loadingSize = NSSize(width: 456, height: 90)
+    let resultSize = NSSize(width: 456, height: 330)
+    for selection in [nearBottom, nearTop] {
+        let opening = TranslationBubblePlacement(near: selection, in: screen)
+        let loadingFrame = NSRect(origin: opening.origin(for: loadingSize), size: loadingSize)
+        let update = TranslationBubblePlacement(near: selection, in: screen, existing: loadingFrame, above: opening.above)
+        let resultFrame = NSRect(origin: update.origin(for: resultSize), size: resultSize)
+        check("translation grows away from the source line and stays on-screen",
+              screen.contains(resultFrame) && (opening.above
+                 ? resultFrame.minY == loadingFrame.minY && resultFrame.minY > selection.maxY
+                 : resultFrame.maxY == loadingFrame.maxY && resultFrame.maxY < selection.minY))
+    }
+
+    let draft = "👋 预算三月，周四发送。"
+    let quote = ReviewEditFocus.uniqueRange(of: "三月", in: draft)
+    checkEq("review selects an exact UTF-16 edit range", quote.map { (draft as NSString).substring(with: $0) }, "三月")
+    check("review never locates an ambiguous edit", ReviewEditFocus.uniqueRange(of: "aaa", in: "aaaa") == nil)
+    check("review does not select a quote already edited or missing",
+          ReviewEditFocus.uniqueRange(of: "三月", in: "预算三页") == nil && ReviewEditFocus.uniqueRange(of: "", in: draft) == nil)
+
     // Attributes only: repeated configured-state rendering must not query Keychain.
     do {
         let original = KeychainStore.stub

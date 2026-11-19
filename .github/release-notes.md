@@ -3,19 +3,19 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 长按录音，松键转写；点按进入免提。胶囊波形跟随音量，转写真正完成后才显示 100%。单独使用 Fn 长按时，需将 macOS 的 Fn 键动作设为「不执行操作」。
-- 新增独立的首次就绪提示和键入提醒。提醒仅在本机统计按键次数。
-- 打开或回到首页时，Instinct 字数和时长从 0 开始增长。活动图按周入场并保留频率色阶。
-- 切到云端 ASR 时释放本机模型，切回本机时再加载。文字整理继续可用。
-- 可将已有凭据迁移到 Touch ID 钥匙串。旧钥匙串授权只在显式迁移时请求。
+- 录音胶囊的中央两根先起，第三根稍低、稍晚跟上，外围随人声音量轻微抖动。处理完成后 Thinking 直接淡出，取消转录提示完整显示。
+- 默认 Fn + 左 Shift 根据选区分流。选中文字时在面板显示译文，无选区时把语音译文插入光标处。新翻译不写入历史。
+- 改进选词翻译按钮定位和译文排版。选词翻译的目标语言可以单独设置。
+- 首页与设置窗口分区切换主题。精简活动统计、就绪状态、联系入口和设置说明。
+- 减少整理确认弹窗，仅在有明确证据的内容冲突出现时提示。麦克风提示显示录音实际使用的设备。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Hold the shortcut to record and release to transcribe, or tap for hands-free recording. The live waveform follows the microphone level, and progress reaches 100% when transcription completes. Holding Fn by itself requires the macOS Fn key action to be set to Do Nothing.
-- Separate onboarding and typing reminders help you discover the shortcut. Typing reminders count key events locally.
-- Instinct counts up from zero when you open or return to Home, and the activity heatmap animates by week with frequency-based colors.
-- Switching to cloud ASR unloads the local model while keeping text cleanup available. The local model loads again when selected.
-- Existing credentials can be migrated to a Touch ID Keychain. The legacy Keychain asks for access only during explicit migration.
+- Two bars lead the recording waveform, followed by a shorter third bar. The outer bars move subtly with speech. The Thinking animation fades out on completion, and the cancellation toast fits in its window.
+- With the default Fn + Left Shift shortcut, selected text opens a translation panel. Without a selection, voice translation inserts at the cursor. New translations are excluded from history.
+- The selection translation button and result layout are easier to use, and selection translation has its own target language setting.
+- Home and Settings switch appearance section by section. Activity labels, service status, contact, and settings use less text.
+- Cleanup asks for confirmation when there is clear evidence of a content conflict. The microphone hint shows the device actually used to record.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

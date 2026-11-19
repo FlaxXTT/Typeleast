@@ -245,17 +245,10 @@ private struct Sidebar: View {
                 .padding(.bottom, 8)
             Divider().overlay(Theme.border).padding(.vertical, 8)
             HStack(spacing: 4) {
-                Button {
+                IconButton(symbol: "envelope", help: L10n.text("联系我们")) {
                     NSWorkspace.shared.open(URL(string: "https://github.com/FlaxXTT/Typeleast")!)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "envelope").font(.system(size: 16))
-                        Text(L10n.text("联系我们")).font(Theme.rowFont)
-                    }
-                    .frame(minHeight: 32)
                 }
-                .buttonStyle(FlatActionButtonStyle()).foregroundColor(Theme.secondary)
-                .help(L10n.text("联系我们"))
+                .accessibilityLabel(L10n.text("联系我们"))
                 Spacer(minLength: 0)
                 IconButton(symbol: "gearshape", help: L10n.settingTitle, size: 32) { model.navigate(to: .settings) }
                     .background(RoundedRectangle(cornerRadius: Theme.radius)
@@ -323,7 +316,7 @@ private struct ServiceBadge: View {
     @EnvironmentObject var model: AppModel
 
     private var badgeText: String {
-        if model.serviceUp { return L10n.text("本地服务就绪") }
+        if model.serviceUp { return "Ready" }
         if model.modelsDownloading {
             return L10n.text("正在下载模型 ") + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
         }

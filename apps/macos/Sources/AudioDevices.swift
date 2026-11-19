@@ -15,14 +15,7 @@ struct AudioInputDevice: Identifiable, Hashable {
 enum AudioDevices {
     /// Every device with at least one input channel.
     static func inputs() -> [AudioInputDevice] {
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
-                                                 mScope: kAudioObjectPropertyScopeGlobal,
-                                                 mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return [] }
-        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr else { return [] }
-        return ids.compactMap { id in
+        deviceIDs(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDevices).compactMap { id in
             guard inputChannels(id) > 0, let uid = string(id, kAudioDevicePropertyDeviceUID),
                   let name = string(id, kAudioObjectPropertyName) else { return nil }
             return AudioInputDevice(id: id, uid: uid, name: name)
@@ -35,8 +28,51 @@ enum AudioDevices {
         return inputs().first(where: { $0.uid == uid })?.id
     }
 
-    static func name(forDeviceID id: AudioDeviceID) -> String? {
-        string(id, kAudioObjectPropertyName)
+    /// Name from the engine's live route after it starts. Core Audio combines the
+    /// default microphone and speakers into a private aggregate for automatic input.
+    static func recordingInputName(for id: AudioDeviceID?,
+                                   inputName: (AudioDeviceID) -> String? = namedInput,
+                                   activeMembers: (AudioDeviceID) -> [AudioDeviceID] = activeSubdevices,
+                                   defaultInput: () -> AudioDeviceID? = systemDefaultInput) -> String? {
+        guard let id, let name = inputName(id) else { return nil }
+        guard name.hasPrefix("CADefaultDeviceAggregate-") else { return name }
+        let members = activeMembers(id).compactMap { member in
+            inputName(member).map { (id: member, name: $0) }
+        }
+        let defaultID = defaultInput()
+        if let matching = members.first(where: { $0.id == defaultID }) { return matching.name }
+        if members.count == 1 { return members.first?.name }
+        if members.isEmpty { return defaultID.flatMap(inputName) }
+        return nil
+    }
+
+    private static func namedInput(_ id: AudioDeviceID) -> String? {
+        guard inputChannels(id) > 0 else { return nil }
+        return string(id, kAudioObjectPropertyName)
+    }
+
+    private static func activeSubdevices(_ id: AudioDeviceID) -> [AudioDeviceID] {
+        deviceIDs(id, kAudioAggregateDevicePropertyActiveSubDeviceList)
+    }
+
+    private static func systemDefaultInput() -> AudioDeviceID? {
+        deviceIDs(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultInputDevice).first
+    }
+
+    private static func deviceIDs(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(mSelector: selector,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        let stride = MemoryLayout<AudioDeviceID>.stride
+        guard AudioObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr,
+              size > 0, Int(size).isMultiple(of: stride) else { return [] }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / stride)
+        let status = ids.withUnsafeMutableBytes { buffer in
+            AudioObjectGetPropertyData(object, &address, 0, nil, &size, buffer.baseAddress!)
+        }
+        guard status == noErr else { return [] }
+        return ids.prefix(Int(size) / stride).filter { $0 != kAudioObjectUnknown }
     }
 
     private static func inputChannels(_ id: AudioDeviceID) -> Int {

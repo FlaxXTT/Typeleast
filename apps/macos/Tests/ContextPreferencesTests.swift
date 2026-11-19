@@ -15,6 +15,19 @@ func contextPreferencesTests() {
     defaults.set("prompt", forKey: "voice.strength")
     check("existing installation is never forced through new tutorial", !Settings(defaults: defaults).needsPractice)
 
+    settings.translateTarget = "ja"
+    checkEq("selection translation follows the shortcut language by default", settings.preferredSelectionTranslateTarget, "ja")
+    settings.selectionTranslateTarget = "fr"
+    let reopened = Settings(defaults: defaults)
+    checkEq("selection translation keeps its independent language across restarts", reopened.preferredSelectionTranslateTarget, "fr")
+    checkEq("the selection language leaves the shortcut language intact", reopened.translateTarget, "ja")
+    settings.selectionTranslate = false
+    check("the selection button can stay disabled with a saved language", !reopened.selectionTranslate && reopened.selectionTranslateTarget == "fr")
+    settings.selectionTranslateTarget = ""
+    checkEq("resetting selection language follows the shortcut again", reopened.preferredSelectionTranslateTarget, "ja")
+    defaults.set("invalid", forKey: "voice.selectionTranslateTarget")
+    checkEq("an unknown selection translation language follows the shortcut", reopened.preferredSelectionTranslateTarget, "ja")
+
     // The onboarding recorder must use the selected input on every attempt,
     // including after the user changes it. No device is opened in this test.
     let practiceRecorder = Recorder()
@@ -37,6 +50,25 @@ func contextPreferencesTests() {
     checkEq("practice resolves the current microphone before each recording", resolvedUIDs, ["fictional-microphone", ""])
     check("practice applies the chosen input and then system default", appliedIDs.count == 2 && appliedIDs[0] == 42 && appliedIDs[1] == nil)
     check("practice applies input to its recording engine", usedExpectedEngine)
+
+    let inputNames: [AudioDeviceID: String] = [
+        10: "MacBook Pro麦克风", 20: "USB Mic", 30: "Studio Aggregate", 40: "CADefaultDeviceAggregate-100-0",
+    ]
+    func recordingInputName(_ id: AudioDeviceID?, members: [AudioDeviceID] = [], defaultID: AudioDeviceID = 10) -> String? {
+        AudioDevices.recordingInputName(for: id, inputName: { inputNames[$0] },
+                                        activeMembers: { _ in members }, defaultInput: { defaultID })
+    }
+    checkEq("automatic route names the microphone and skips its output member",
+            recordingInputName(40, members: [50, 10]), "MacBook Pro麦克风")
+    checkEq("an active input takes priority over a new system default",
+            recordingInputName(40, members: [20, 50]), "USB Mic")
+    checkEq("an aggregate with several active inputs prefers its system default member",
+            recordingInputName(40, members: [10, 20], defaultID: 20), "USB Mic")
+    checkEq("automatic route uses the default if active members are unavailable",
+            recordingInputName(40), "MacBook Pro麦克风")
+    checkEq("explicit input keeps its own name", recordingInputName(20), "USB Mic")
+    checkEq("a named aggregate keeps its own name", recordingInputName(30), "Studio Aggregate")
+    checkEq("an unreadable route does not claim to use a different microphone", recordingInputName(nil), nil)
 
     let practiceRaw = "报告周三发，不对，周四，不超过三页。"
     let practiceOutput = "报告周四发，不超过三月。"

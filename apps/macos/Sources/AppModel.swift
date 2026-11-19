@@ -6,6 +6,30 @@ import Combine
 
 enum AppPhase { case idle, starting, recording, thinking }
 
+enum SettingsCategory: String, CaseIterable, Identifiable {
+    case dictation, translation, models, general
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dictation: return L10n.text("听写")
+        case .translation: return L10n.text("翻译设置")
+        case .models: return L10n.text("模型")
+        case .general: return L10n.text("通用")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .dictation: return "mic"
+        case .translation: return "translate"
+        case .models: return "cpu"
+        case .general: return "gearshape"
+        }
+    }
+}
+
 enum HubPage: String, CaseIterable, Identifiable {
     case home, history, meetings, settings
     var id: String { rawValue }
@@ -38,6 +62,7 @@ protocol AppActions: AnyObject {
     func toggleDictation()
     func pasteLast()
     func copyEntry(id: String, raw: Bool)
+    func reviewEntry(id: String)
     func retryEntry(id: String)
     func deleteEntry(id: String)
     func clearHistory()
@@ -69,7 +94,7 @@ final class AppModel: ObservableObject {
     weak var actions: AppActions?
 
     @Published var page: HubPage = .home
-    @Published var settingsCategory = 0
+    @Published var settingsCategory: SettingsCategory = .dictation
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
     @Published var retryingHistoryID: String?

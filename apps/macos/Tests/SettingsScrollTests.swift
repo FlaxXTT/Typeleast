@@ -42,7 +42,7 @@ func settingsScrollTests(output: String) throws {
             }
             checkEq("constructing settings status performs no system query", queries, 0)
             let model = AppModel()
-            model.settingsCategory = 2
+            model.settingsCategory = .general
             let view = NSHostingView(rootView: SettingsPage(loginItemStatus: status)
                 .environmentObject(model).background(Theme.window)
                 .environment(\.colorScheme, dark ? .dark : .light))
@@ -81,13 +81,13 @@ func settingsScrollTests(output: String) throws {
             settle(view, until: { status.status == .requiresApproval && !status.isLoading })
             checkEq("returning from System Settings refreshes once", queries, baseline + 1)
             check("external login-item changes are reflected", status.status == .requiresApproval)
-            model.settingsCategory = 0
+            model.settingsCategory = .dictation
             settle(view)
             NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: app)
             settle(view)
             checkEq("other settings tabs do not query login items", queries, baseline + 1)
             systemStatus = .notRegistered
-            model.settingsCategory = 2
+            model.settingsCategory = .general
             settle(view, until: { status.status == .notRegistered && !status.isLoading })
             checkEq("returning to General refreshes once", queries, baseline + 2)
             check("returning to General receives the latest disabled state", status.status == .notRegistered)
@@ -99,7 +99,7 @@ func settingsScrollTests(output: String) throws {
                     KeychainStore.presenceQueryOverride = nil
                     KeychainStore.invalidatePresence()
                 }
-                model.settingsCategory = 1
+                model.settingsCategory = .models
                 settle(view)
                 checkEq("model form reads key metadata once", presenceQueries, 1)
                 if let modelScroll = scrollView(in: view), let document = modelScroll.documentView {

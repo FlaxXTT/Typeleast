@@ -25,7 +25,8 @@ final class LearnedToast {
             self?.hide()
         })
         let host = NSHostingView(rootView: view)
-        let size = host.fittingSize
+        let fitting = host.fittingSize
+        let size = NSSize(width: ceil(fitting.width), height: ceil(fitting.height))
         let p: NSPanel
         if let existing = panel {
             p = existing
@@ -46,7 +47,8 @@ final class LearnedToast {
         }
         p.contentView = host
         p.setContentSize(size)
-        AppWindowStyle.round(p)
+        // The SwiftUI card owns its corner shape. A window-radius mask cuts off its border.
+        p.invalidateShadow()
         // Bottom-centre of the screen the mouse is on, above the recording pill.
         let mouse = NSEvent.mouseLocation
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
@@ -107,6 +109,7 @@ struct LearnedToastView: View {
     let undo: () -> Void
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
         HStack(spacing: 10) {
             Image(systemName: "info.circle")
                 .font(.system(size: 15, weight: .medium))
@@ -121,7 +124,8 @@ struct LearnedToastView: View {
             .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.capsuleRadius))
         }
         .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Color(white: 0.1)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.white.opacity(0.12)))
+        .fixedSize()
+        .background(Color(white: 0.1), in: shape)
+        .overlay(shape.strokeBorder(Color.white.opacity(0.12)).allowsHitTesting(false))
     }
 }

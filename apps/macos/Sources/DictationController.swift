@@ -63,6 +63,45 @@ final class DictationController {
     private let quantityReview = QuantityReviewPanel()
     private var pendingReviewedRequest: ReviewedRequest?
     private var pendingTranslate: String?
+    private let translationPanel = SelectionPanel(allowsTextFocus: true)
+
+    struct TranslationPreview {
+        let target: String
+        let anchor: NSRect
+
+        static func selected(_ field: FocusedField, to target: String) -> Self {
+            let anchor = FieldContextReader.caretRect(field) ?? NSRect(origin: NSEvent.mouseLocation, size: .zero)
+            return Self(target: target, anchor: anchor)
+        }
+
+        static func result(_ outcome: Result<DictateResponse, Error>) -> SelectionBubble {
+            switch outcome {
+            case .success(let response):
+                if !response.fallback, DictationController.hasText(response.insertableText) {
+                    return .done(response.insertableText)
+                }
+                let message = response.fallback
+                    ? ServiceError.translationFailed(reason: response.fallbackReason).description
+                    : L10n.text("没有识别到内容")
+                return .failed(message, partial: response.translationProgress?.text)
+            case .failure(let error):
+                let serviceError = error as? ServiceError
+                if case .translationIncomplete(let partial)? = serviceError {
+                    return .failed(serviceError?.description ?? L10n.text("翻译失败"), partial: partial.text)
+                }
+                return .failed(serviceError?.description ?? L10n.text("翻译失败"), partial: nil)
+            }
+        }
+    }
+
+    private func showTranslation(_ state: SelectionBubble, preview: TranslationPreview, whileRunning generation: UUID? = nil) {
+        translationPanel.showBubble(state, target: preview.target, at: preview.anchor, title: SelectionTranslator.featureName, retry: nil) {
+            [weak self] in
+            guard let self else { return }
+            self.translationPanel.hide()
+            if self.progressID == generation, self.phase == .thinking { self.cancelDictation() }
+        }
+    }
 
     private var tickTimer: Timer?
     private var lastTickedSecond = -1
@@ -80,6 +119,7 @@ final class DictationController {
         case .idle:
             pendingAssistant = assistant
             pendingTranslate = translateTo
+            if translateTo != nil { translationPanel.hide() }
             startRecording()
         case .starting: cancelDictation()
         case .recording: stopRecording()
@@ -270,9 +310,8 @@ final class DictationController {
         let baseline = !pendingAssistant || betaPending != nil ? nil : Self.hasText(field?.selection) ? field?.selection : copiedSelection
         copiedSelection = nil
         pendingAssistant = false
-        // With "never keep history" nothing stays on disk, the recording included.
-        let keep = settings.keepAudio24h && settings.historyRetention.seconds != 0
         let translateTo = pendingTranslate
+        let keep = keepsRecording(forTranslationTo: translateTo)
         pendingTranslate = nil
         // A recording made while Prompt Beta's questions are open is the answer to them;
         // a translation is not, and leaves the questions waiting.
@@ -328,7 +367,7 @@ final class DictationController {
             // A dictation can be taken back for a few seconds; an assistant answer cannot.
             if !pendingAssistant, let r = try? recorder.finish() {
                 heldRecording = (r.url, r.seconds, pendingAppBundleId, pendingField, settings.recognitionLanguage(for: model.speech?.modelId),
-                                 settings.keepAudio24h && settings.historyRetention.seconds != 0, pendingTranslate)
+                                 keepsRecording(forTranslationTo: pendingTranslate), pendingTranslate)
                 cancelToast.show(message: L10n.text("转录已取消"),
                                  undo: { [weak self] in self?.resumeHeldRecording() },
                                  expired: { [weak self] in self?.discardHeldRecording() })
@@ -352,6 +391,7 @@ final class DictationController {
             onlineASRTask?.cancel()
             onlineASRTask = nil
             client.cancelGeneration()
+            translationPanel.hide()
             unregisterEscape(); stopTick()
             if let take { take.cancel() } else { recordingBar.hide() }
             phase = .idle
@@ -386,6 +426,14 @@ final class DictationController {
     }
 
     // MARK: server
+
+    private func keepsRecording(forTranslationTo target: String?) -> Bool {
+        target == nil && settings.keepAudio24h && settings.historyRetention.seconds != 0
+    }
+
+    static func keepsHistory(translateTo target: String?, response: DictateResponse) -> Bool {
+        target == nil && response.translated == nil && response.task != "translation"
+    }
 
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
@@ -495,6 +543,7 @@ final class DictationController {
                                     profile: String, context: Data?, baseline: String?, appBundleId: String,
                                     translatePrompt: String?, currentRoute: LLMRoute?, betaSession: String? = nil,
                                     source: String? = nil, originalText: String? = nil, betaSkip: Bool = false,
+                                    showsCapsule: Bool = true,
                                     completion: @escaping (Result<DictateResponse, Error>, LLMRoute?) -> Void) {
         guard case .success(let response) = outcome, response.offerFailover else { completion(outcome, nil); return }
         let isAssistant = strength == VoiceStrength.promptbeta.rawValue
@@ -504,7 +553,7 @@ final class DictationController {
         let routes = settings.backupLLMRoutes(excluding: currentRoute)
         guard progressID == generation else { return }
         guard let first = routes.first else { completion(outcome, nil); return }
-        recordingBar.showThinking(detail: L10n.text("正在切换备用模型…"))
+        if showsCapsule { recordingBar.showThinking(detail: L10n.text("正在切换备用模型…")) }
         let ticket = client.generationTicket()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -550,6 +599,7 @@ final class DictationController {
         let context: Data?
         let profile: String
         let translatePrompt: String?
+        let preview: TranslationPreview?
     }
 
     /// A non-modal panel can outlive a recording or an assistant round. Never let
@@ -656,9 +706,59 @@ final class DictationController {
                 }
                 self.finishRequest(resolved, appBundleId: request.appBundleId, language: request.language, strength: request.strength,
                                    audioPath: nil, seconds: nil, field: request.field, insert: request.insert,
-                                   llm: usedRoute ?? request.llm, variants: request.variants, betaSession: request.betaSession, translateTo: request.translateTo)
+                                   llm: usedRoute ?? request.llm, variants: request.variants, betaSession: request.betaSession,
+                                   translateTo: request.translateTo, preview: request.preview)
                 }
             }
+        }
+    }
+
+    func reviewHistoryEntry(id: String) {
+        guard let entry = HistoryStore.shared.entries.first(where: { $0.id == id }), let review = entry.qualityReview else { return }
+        presentQualityReview(entry, review: review, historyID: entry.id, insert: false, field: nil, showsCapsule: false)
+    }
+
+    private func presentQualityReview(_ entry: LocalHistoryEntry, review: QualityReview, historyID: String?, insert: Bool,
+                                      field: FocusedField?, showsCapsule: Bool, preview: TranslationPreview? = nil) {
+        quantityReview.show(id: entry.id, review: review, copiesResult: !insert, isTranslation: entry.task == "translation",
+                            showsPreview: preview != nil) { [weak self] choice in
+            guard let self else { return false }
+            guard self.phase == .idle else {
+                self.setHint(L10n.text("请先完成或取消当前操作。"), warning: true)
+                self.applyState()
+                return false
+            }
+            let isOriginal: Bool
+            let selected: String
+            switch choice {
+            case .original: isOriginal = true; selected = review.original
+            case .candidate(let edited): isOriginal = false; selected = edited
+            }
+            if let historyID {
+                HistoryStore.shared.update(id: historyID) {
+                    $0.raw = review.original; $0.text = selected
+                    $0.fallback = isOriginal; $0.fallbackReason = isOriginal ? entry.fallbackReason : nil
+                    $0.qualityReview = nil
+                }
+            }
+            if let preview {
+                let state: SelectionBubble = isOriginal ? .failed(L10n.text("原始识别"), partial: selected) : .done(selected)
+                self.showTranslation(state, preview: preview)
+                self.setHint(nil)
+                self.applyState()
+            } else if insert {
+                let counts = DictationStats.countWords(selected)
+                ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: entry.seconds,
+                                          typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
+                self.insertText(selected, fallback: isOriginal, entryId: historyID,
+                                appBundleId: entry.app ?? "", field: field, showsCapsule: showsCapsule,
+                                offersHistoryRecovery: historyID != nil)
+            } else {
+                Inserter.shared.setString(selected)
+                self.setHint(L10n.text("结果已复制"))
+                self.applyState()
+            }
+            return true
         }
     }
 
@@ -667,6 +767,7 @@ final class DictationController {
         case .failure: return true
         case .success(let response):
             if response.qualityReview != nil { return false }
+            if response.fallbackReason == "fact-check-unavailable", !response.insertableText.isEmpty { return false }
             return response.fallback || (!response.betaWaiting && response.insertableText.isEmpty)
         }
     }
@@ -678,12 +779,13 @@ final class DictationController {
                        llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false,
                        betaSession: String? = nil, betaInfo: BetaInfo? = nil, translateTo: String? = nil, baseline: String? = nil,
                        reviewContext: Data? = nil, reviewProfile: String = "", reviewTranslatePrompt: String? = nil,
-                       usesOnlineASR: Bool = false, take: RecordingBar.Take? = nil) {
+                       usesOnlineASR: Bool = false, take: RecordingBar.Take? = nil, preview: TranslationPreview? = nil) {
+        let insert = insert && preview == nil
         unregisterEscape()
         captureTake = nil
         let generation = progressID
         let showRequestResult: (String, Bool) -> Void = { [weak self] text, warning in
-            guard let self, take == nil, self.progressID == generation, self.phase == .idle else { return }
+            guard let self, preview == nil, take == nil, self.progressID == generation, self.phase == .idle else { return }
             self.recordingBar.showResult(text, warning: warning)
         }
         // A failed request or Beta question does not retain an untracked raw recording.
@@ -700,9 +802,18 @@ final class DictationController {
         }
         switch outcome {
         case .success(let resp):
+            let keepsHistory = Self.keepsHistory(translateTo: translateTo ?? preview?.target, response: resp)
+            func saveToHistory(_ entry: LocalHistoryEntry) -> String? {
+                guard keepsHistory else { return nil }
+                var entry = entry
+                let history = HistoryStore.shared
+                entry.audioPath = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: history.persistenceProblem == nil) }
+                history.add(entry)
+                return entry.id
+            }
             if resp.insertableText.isEmpty && resp.beta == nil && resp.qualityReview == nil && !resp.noiseSuspected {
                 take?.cancel()
-            } else {
+            } else if resp.qualityReview == nil {
                 take?.done()
             }
             if !usesOnlineASR {
@@ -710,75 +821,47 @@ final class DictationController {
                 model.serviceProblem = ""
             }
             if let review = resp.qualityReview {
+                if preview != nil { translationPanel.hide() }
                 // The pending history row has no text: neither the transcript nor
                 // the model draft can be pasted through “paste last” before review.
-                let keptAudio = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
                 var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                               language: language, strength: strength, raw: "", text: "",
                                               fallback: true, fallbackReason: resp.fallbackReason ?? "fact-review", model: resp.model,
-                                              msTotal: resp.ms?.total, audioPath: keptAudio, inserted: false, seconds: seconds)
-                entry.task = resp.task
+                                              msTotal: resp.ms?.total, audioPath: nil, inserted: false, seconds: seconds)
+                entry.task = keepsHistory ? resp.task : "translation"
                 entry.variants = variants
                 entry.qualityReview = review
-                HistoryStore.shared.add(entry)
-                showRequestResult(L10n.text("整理结果需要核对"), true)
-                setHint(L10n.text("请比较识别原文和整理结果，再选择要使用的内容。"), warning: true)
-                quantityReview.show(review: review) { [weak self] choice in
-                    guard let self else { return false }
-                    guard self.phase == .idle else {
-                        self.setHint(L10n.text("请先完成或取消当前操作。"), warning: true)
-                        self.applyState()
-                        return false
-                    }
-                    let original: Bool
-                    let selected: String
-                    switch choice {
-                    case .original: original = true; selected = review.original
-                    case .candidate(let edited): original = false; selected = edited
-                    }
-                    HistoryStore.shared.update(id: entry.id) {
-                        $0.raw = review.original; $0.text = selected
-                        $0.fallback = original; $0.fallbackReason = original ? (resp.fallbackReason ?? "fact-review") : nil
-                        $0.qualityReview = nil
-                    }
-                    if insert {
-                        let counts = DictationStats.countWords(selected)
-                        ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
-                                                  typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
-                        self.insertText(selected, fallback: original, entryId: entry.id, appBundleId: appBundleId, field: field, showsCapsule: take == nil)
-                    } else {
-                        Inserter.shared.setString(selected)
-                        showRequestResult(selected, original)
-                        self.setHint(L10n.text("重试完成，结果已复制"))
-                        self.applyState()
-                    }
-                    return true
-                }
+                let historyID = saveToHistory(entry)
+                let notice = L10n.text("整理结果需要核对")
+                if let take { take.needsReview(notice) }
+                else if preview == nil { recordingBar.showResult(notice, warning: true, requiresReview: true) }
+                setHint(notice, warning: true)
+                presentQualityReview(entry, review: review, historyID: historyID, insert: insert, field: field,
+                                     showsCapsule: take == nil, preview: preview)
                 applyState()
                 return
             }
             if resp.noiseSuspected {
+                if preview != nil { translationPanel.hide() }
                 let candidate = resp.noiseCandidate ?? ""
                 let repeated = resp.fallbackReason == "recognition-repetition"
                 if betaSession != nil, beta.pending?.sessionId == betaSession { beta.setBusy(nil) }
-                // Respect the same encrypted history and recording-retention settings
-                // as ordinary dictation. The result is explicitly marked uninserted.
-                let retainedAudio = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
+                // A saved recognition candidate is explicitly marked uninserted.
                 var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                               language: language, strength: strength, raw: candidate, text: candidate,
                                               fallback: true, fallbackReason: resp.fallbackReason, model: resp.model,
-                                              msTotal: resp.ms?.total, audioPath: retainedAudio, inserted: false,
+                                              msTotal: resp.ms?.total, audioPath: nil, inserted: false,
                                               seconds: seconds)
                 entry.task = resp.task
                 entry.variants = variants
                 entry.translated = translateTo
-                HistoryStore.shared.add(entry)
+                _ = saveToHistory(entry)
                 showRequestResult(L10n.text("识别结果待查看，未自动输入"), true)
                 setHint(L10n.text("请查看识别原文，或忽略后重新说。"), warning: true)
                 presentReviewedCandidate(ReviewedRequest(text: candidate, repeated: repeated, appBundleId: appBundleId,
                     language: language, strength: strength, field: field, insert: insert, llm: llm, variants: variants,
                     betaSession: betaSession, betaInfo: betaInfo, translateTo: translateTo, baseline: baseline,
-                    context: reviewContext, profile: reviewProfile, translatePrompt: reviewTranslatePrompt))
+                    context: reviewContext, profile: reviewProfile, translatePrompt: reviewTranslatePrompt, preview: preview))
                 applyState()
                 return
             }
@@ -800,13 +883,11 @@ final class DictationController {
                 beta.clear()
             }
             let text = resp.insertableText
-            // A kept recording is sealed before its path goes into the history.
-            let audioPath = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: HistoryStore.shared.persistenceProblem == nil) }
             var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                           language: language, strength: strength,
                                           raw: resp.raw, text: text, fallback: resp.fallback,
                                           fallbackReason: resp.fallbackReason, model: resp.model,
-                                          msTotal: resp.ms?.total, audioPath: audioPath, inserted: false,
+                                          msTotal: resp.ms?.total, audioPath: nil, inserted: false,
                                           seconds: seconds)
             entry.model = resp.model ?? resp.provider
             entry.translated = resp.translated
@@ -814,7 +895,18 @@ final class DictationController {
             entry.intention = resp.intention
             entry.variants = variants
             entry.task = resp.task
-            HistoryStore.shared.add(entry)
+            let historyID = saveToHistory(entry)
+            if let preview {
+                let state = TranslationPreview.result(outcome)
+                if case .failed(let message, _) = state {
+                    setHint(message, warning: true)
+                } else {
+                    setHint(nil)
+                }
+                showTranslation(state, preview: preview)
+                applyState()
+                return
+            }
             // The end of 提示词模式: which of this app's models suits the finished prompt.
             if strength == VoiceStrength.promptbeta.rawValue, !text.isEmpty, !resp.fallback, resp.translated == nil,
                settings.recommendModel, let route = llm ?? settings.activeLLMRoute {
@@ -826,13 +918,19 @@ final class DictationController {
                 applyState()
                 return
             }
-            let failedHint = resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
+            let failedHint: String
+            if resp.fallbackReason == "fact-check-unavailable" {
+                failedHint = L10n.text("未能核对整理结果，已使用原文。")
+            } else {
+                failedHint = resp.translated != nil ? L10n.text("翻译失败，已插入原文。") : L10n.text("已用原文（整理失败）")
+            }
             setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)
                 ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
                                           typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
-                insertText(text, fallback: resp.fallback, entryId: entry.id, appBundleId: appBundleId, field: field, showsCapsule: take == nil)
+                insertText(text, fallback: resp.fallback, entryId: historyID, appBundleId: appBundleId, field: field,
+                           showsCapsule: take == nil, offersHistoryRecovery: keepsHistory)
             } else {
                 Inserter.shared.setString(text)
                 showRequestResult(text, resp.fallback)
@@ -841,6 +939,7 @@ final class DictationController {
             }
         case .failure(let error):
             take?.cancel()
+            if let preview { showTranslation(TranslationPreview.result(outcome), preview: preview) }
             let d = error as? ServiceError
             if case .http(410, _, _)? = d, betaPending != nil {
                 dropBeta(notify: false)
@@ -864,7 +963,8 @@ final class DictationController {
 
     // MARK: insertion
 
-    func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?, showsCapsule: Bool = true) {
+    func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?,
+                    showsCapsule: Bool = true, offersHistoryRecovery: Bool = true) {
         let generation = progressID
         let text = Delivery.prepare(text, appBundleId: appBundleId, field: field)
         Delivery.deliver(text, appBundleId: appBundleId, field: field, onWaiting: { [weak self] _ in
@@ -884,9 +984,11 @@ final class DictationController {
                 if showsCapsule { self.recordingBar.showResult(text, warning: !result.ok || fallback) }
                 self.applyState()
             case .appChanged:
-                self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"), showsCapsule: showsCapsule)
+                self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"),
+                               showsCapsule: showsCapsule, offersHistoryRecovery: offersHistoryRecovery)
             case .fieldLost:
-                self.notPasted(entryId, L10n.text("没有回到原输入框"), L10n.text("等了一会儿没有回到原来的输入框，未粘贴。"), showsCapsule: showsCapsule)
+                self.notPasted(entryId, L10n.text("没有回到原输入框"), L10n.text("等了一会儿没有回到原来的输入框，未粘贴。"),
+                               showsCapsule: showsCapsule, offersHistoryRecovery: offersHistoryRecovery)
             case .superseded:
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
             }
@@ -894,8 +996,14 @@ final class DictationController {
     }
 
     /// Nothing was pasted: say why, and how to paste it from History.
-    private func notPasted(_ entryId: String?, _ short: String, _ long: String, showsCapsule: Bool) {
+    private func notPasted(_ entryId: String?, _ short: String, _ long: String, showsCapsule: Bool, offersHistoryRecovery: Bool) {
         if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
+        guard offersHistoryRecovery else {
+            if showsCapsule { recordingBar.showResult(short, warning: true) }
+            setHint(long, warning: true)
+            applyState()
+            return
+        }
         let paste = settings.hotkeyPasteLast
         let key = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
         if showsCapsule {
@@ -923,7 +1031,7 @@ final class DictationController {
     func startTick() {
         stopTick()
         let take = captureTake
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: VoiceCaptureMeter.interval, repeats: true) { [weak self] _ in
             guard let self, self.phase == .recording, self.captureTake === take else { return }
             take?.level(self.recorder.voiceLevel(), elapsed: self.recorder.elapsed)
             let second = Int(self.recorder.elapsed)
@@ -1050,19 +1158,26 @@ final class DictationController {
 
     // MARK: 翻译 of selected text
 
-    /// 翻译's key with text selected: the selection is translated and replaces itself; nothing is recorded.
+    /// The shortcut translates only the selection and shows the result beside it.
     func translateSelection(_ field: FocusedField, to target: String) {
         guard phase == .idle else { NSSound.beep(); return }
-        guard let route = settings.activeLLMRoute else { setHint(L10n.text("请先配置可用的整理模型。"), warning: true); applyState(); return }
+        let preview = TranslationPreview.selected(field, to: target)
+        translationPanel.hide()
+        let text = field.selection
+        idleBar.hide()
+        recordingBar.flashSelectionCount(for: text)
+        guard let route = settings.activeLLMRoute else {
+            showTranslation(.failed(L10n.text("请先配置可用的整理模型。"), partial: nil), preview: preview)
+            return
+        }
         cancelToast.finish()
         phase = .thinking
         registerEscape()
-        idleBar.hide()
-        recordingBar.showThinking(detail: L10n.text("正在翻译…") + "  " + SelectionTranslator.sourceCountLabel(field.selection))
-        applyState()
-        let text = field.selection, language = settings.language, variants = settings.variantsHeader
+        let language = settings.language, variants = settings.variantsHeader
         let profile = HistoryStore.shared.profile
         let generation = UUID(); progressID = generation
+        showTranslation(.loading, preview: preview, whileRunning: generation)
+        applyState()
         let ownPrompt = settings.customTranslatePrompt
         let canFailOver = settings.hasConfiguredBackupProviders
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1073,9 +1188,10 @@ final class DictationController {
                 guard self.progressID == generation else { return }
                 self.withBackupIfNeeded(outcome, generation: generation, language: language, strength: "prompt",
                     translateTo: target, variants: variants, profile: profile, context: nil, baseline: nil,
-                    appBundleId: field.bundleId, translatePrompt: ownPrompt, currentRoute: route, originalText: text) { resolved, usedRoute in
+                    appBundleId: field.bundleId, translatePrompt: ownPrompt, currentRoute: route, originalText: text, showsCapsule: false) { resolved, usedRoute in
                     self.finishRequest(resolved, appBundleId: field.bundleId, language: language, strength: "prompt", audioPath: nil,
-                                       seconds: nil, field: field, insert: true, llm: usedRoute ?? route, variants: variants)
+                                       seconds: nil, field: nil, insert: false, llm: usedRoute ?? route, variants: variants,
+                                       translateTo: target, preview: preview)
                 }
             }
         }

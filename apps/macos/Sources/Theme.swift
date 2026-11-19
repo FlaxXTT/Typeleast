@@ -34,7 +34,8 @@ enum Theme {
     static let secondary = dynamic(hex(0x111111, 0.75), hex(0xF2F1F0, 0.75))
     static let tertiary = dynamic(hex(0x111111, 0.55), hex(0xF2F1F0, 0.55))
     static let selection = dynamic(hex(0x1F5DF2, 0.07), hex(0x4F7BFF, 0.12))
-    static let accent = dynamic(hex(0x1F5DF2), hex(0x4F7BFF))
+    private static let royalCobalt = hex(0x1746C8)
+    static let accent = dynamic(royalCobalt, hex(0x4F7BFF))
     static let style = accent
     static let success = dynamic(hex(0x008770), hex(0x00957C))
     static let warning = dynamic(hex(0xEA4D00), hex(0xFF5B00))
@@ -80,7 +81,7 @@ enum Theme {
     static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
     static let heatEmpty = dynamic(hex(0xF8F8F8), hex(0x2C2B2B))
     static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
-                       dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(referenceColour(0x426AF6), hex(0x6E8BF5))]
+                       dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(royalCobalt, hex(0x6E8BF5))]
 }
 
 struct InitialHeading: View {

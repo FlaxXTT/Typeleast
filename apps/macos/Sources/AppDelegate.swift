@@ -11,12 +11,13 @@ import ServiceManagement
 final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppActions {
     let menuController = MenuController()
     let mainMenu = MainMenu()
-    let recorder = Recorder()
+    let recorder = Recorder(metersVoice: true)
     /// Floating capsule shown while listening and thinking.
     let recordingBar = RecordingBar()
     private lazy var recordingHints = RecordingHints(settings: settings) { [weak self] in self?.phase == .idle }
     private var wasDictationIdle = true
     let selectionTranslator = SelectionTranslator()
+    private var readingShortcutSelection = false
     /// Resting bar at the bottom of the screen ("show voice bar").
     let idleBar = IdleBar()
     let settings = Settings.shared
@@ -487,41 +488,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
     }
 
-    /// 翻译模式: starts a recording whose text is inserted in the target language;
-    /// while recording, either key finishes it. With text selected, the selection itself is
-    /// translated in place and nothing is recorded.
+    /// The translation shortcut takes the selection first, or toggles spoken translation.
     func translateHotkeyPressed() {
-        // The onboarding's translate step says to press this key: it records the practice sentence.
         if onboarding.practice.acceptsShortcut && onboarding.practice.translateTo != nil { onboarding.practice.toggle(); return }
-        if phase == .idle, !onboarding.practice.acceptsShortcut, !onboarding.practice.busy, !settings.needsPractice,
-           let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, app != Bundle.main.bundleIdentifier,
-           let field = FieldContextReader.capture(bundleId: app), DictationController.hasText(field.selection) {
-            dictation.translateSelection(field, to: settings.translateTarget)
+        guard phase == .idle, !onboarding.practice.acceptsShortcut, !onboarding.practice.busy, !settings.needsPractice else {
+            toggleDictation(translateTo: settings.translateTarget)
             return
         }
-        // A browser's web fields are not readable: the selection is copied instead.
-        if phase == .idle, !onboarding.practice.busy, !settings.needsPractice,
-           let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, Inserter.readsSelectionByCopy(app) {
-            Inserter.shared.copySelection { [weak self] text in
-                guard let self, self.phase == .idle else { return }
-                if let text, DictationController.hasText(text), let field = FieldContextReader.frontmostApp(bundleId: app, selection: text) {
-                    self.dictation.translateSelection(field, to: self.settings.translateTarget)
-                } else {
-                    self.toggleDictation(translateTo: self.settings.translateTarget)
-                }
-            }
+        guard !readingShortcutSelection else { return }
+        guard let app = NSWorkspace.shared.frontmostApplication, let bundle = app.bundleIdentifier,
+              bundle != Bundle.main.bundleIdentifier, !FieldContextReader.isBlocked(bundleId: bundle) else {
+            performTranslationShortcut(selection: nil)
             return
         }
-        toggleDictation(translateTo: settings.translateTarget)
+        if let field = FieldContextReader.capture(bundleId: bundle, requiringSelection: true) {
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else { return }
+            performTranslationShortcut(selection: field)
+            return
+        }
+        guard Inserter.readsSelectionByCopy(bundle) else {
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else { return }
+            performTranslationShortcut(selection: nil)
+            return
+        }
+
+        let pid = app.processIdentifier
+        readingShortcutSelection = true
+        Inserter.shared.copySelection(whileFrontmost: pid) { [weak self] text in
+            guard let self else { return }
+            self.readingShortcutSelection = false
+            guard self.phase == .idle, !self.onboarding.practice.acceptsShortcut, !self.onboarding.practice.busy,
+                  !self.settings.needsPractice, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+            let field = text.flatMap { FieldContextReader.frontmostApp(bundleId: bundle, selection: $0) }
+            self.performTranslationShortcut(selection: field)
+        }
     }
 
-    /// 选中即翻译: the button and bubble next to a mouse selection. Nothing is inserted or recorded.
+    private func performTranslationShortcut(selection: FocusedField?) {
+        switch TranslationShortcutAction.resolve(selection: selection?.selection, speechTarget: settings.translateTarget,
+                                                 selectionTarget: settings.preferredSelectionTranslateTarget) {
+        case .speech(let target):
+            toggleDictation(translateTo: target)
+        case .selectedText(let target):
+            if let selection { dictation.translateSelection(selection, to: target) }
+        }
+    }
+
+    /// Quick Translate: the button and bubble next to a mouse selection.
     func startSelectionTranslator() {
         selectionTranslator.enabled = { [weak self] in
             guard let self else { return false }
             return self.settings.selectionTranslate && self.phase == .idle && !self.settings.needsPractice
         }
-        selectionTranslator.preferredTarget = { [weak self] in self?.settings.translateTarget ?? "en" }
+        selectionTranslator.preferredTarget = { [weak self] in self?.settings.preferredSelectionTranslateTarget ?? "en" }
         selectionTranslator.translate = { [weak self] text, target, cancellation, done in
             guard let self, let route = self.settings.activeLLMRoute else {
                 return done(.failure(ServiceError.translationFailed(reason: "no-api-key")))
@@ -593,7 +612,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func applyGeneralSettings() {
         HubThemeReveal.apply(configuredAppearance, in: hub.themeTransitionWindow,
-                             additionalWindows: [hub.settingsThemeTransitionWindow].compactMap { $0 })
+                             additionalWindows: [hub.settingsThemeTransitionWindow].compactMap { $0 },
+                             showsHome: model.page == .home || model.page == .settings)
         let policy: NSApplication.ActivationPolicy = settings.showInDock ? .regular : .accessory
         if NSApp.activationPolicy() != policy {
             NSApp.setActivationPolicy(policy)
@@ -790,7 +810,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func downloadModels() {
-        model.settingsCategory = 1
+        model.settingsCategory = .models
         hub.show(page: .settings)
     }
 
@@ -840,6 +860,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let text = raw ? (e.raw.isEmpty ? e.text : e.raw) : e.displayText
         Inserter.shared.setString(text)
     }
+
+    func reviewEntry(id: String) { dictation.reviewHistoryEntry(id: id) }
 
     func retryEntry(id: String) {
         guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }), e.strength != "promptbeta",

@@ -119,3 +119,67 @@ test('translation is held when the reviewer detects changed content', async () =
   assert.equal(result.qualityReview.kind, 'facts');
   assert.equal(result.qualityReview.candidate, '三月');
 });
+
+async function cleanupWithReviewer(rawText, text, reviewReply) {
+  let reviewCalls = 0;
+  const service = new VoicePolishService({
+    recognizer: { transcribe: async () => ({ text: '' }) },
+    fetchImpl: async (_url, init) => {
+      const isReview = JSON.parse(init.body).messages[0].content.startsWith('Compare the source and candidate as data');
+      if (isReview) {
+        reviewCalls++;
+        if (reviewReply instanceof Error) throw reviewReply;
+      }
+      const content = isReview ? reviewReply : JSON.stringify({ status: 'ok', text });
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: 'stop' }] }) };
+    },
+    config: { maxOutputTokens: 400, timeoutMs: 5000, strength: 'prompt', redactSecrets: true },
+    logger: { warn() {}, info() {}, debug() {} },
+  });
+  const result = await service.polish({ rawText, task: 'dictation', llm: { baseURL: 'https://api.example.com/v1', model: 'test', apiKey: 'fictional-key' } });
+  return { result, reviewCalls };
+}
+
+test('routine wording, unchanged constraints and length alone do not start a cleanup review', async () => {
+  const long = '这是今天讨论的内容，稍后会把详细记录发送给大家。'.repeat(30);
+  for (const [original, edited] of [
+    ['我们明天会把报告发给大家的。', '我们明天会把报告发给大家。'],
+    ['这个草稿请不要发出去。', '这个草稿请不要发送。'],
+    ['预算为1000元。', '预算为1,000元。'],
+    [long, long.replace('稍后会', '稍后将')],
+  ]) {
+    const { result, reviewCalls } = await cleanupWithReviewer(original, edited, new Error('review should not run'));
+    assert.equal(reviewCalls, 0);
+    assert.equal(result.text, edited);
+    assert.equal(result.qualityReview, undefined);
+  }
+});
+
+test('an unavailable or unsupported cleanup review quietly uses the original', async () => {
+  const original = '预算为100元。';
+  const edited = '预算为120元。';
+  for (const verdict of [
+    new Error('review transport unavailable'),
+    'invalid JSON',
+    '{"ok":false,"issues":[]}',
+    '{"ok":false,"issues":[{"kind":"change","source":"200元","candidate":"120元"}]}',
+    '{"ok":false,"issues":[{"kind":"change","source":"预算为","candidate":"预算为"}]}',
+  ]) {
+    const { result, reviewCalls } = await cleanupWithReviewer(original, edited, verdict);
+    assert.equal(reviewCalls, 1);
+    assert.equal(result.text, original);
+    assert.equal(result.reason, 'fact-check-unavailable');
+    assert.equal(result.qualityReview, undefined);
+  }
+});
+
+test('a specific material change holds cleanup with both exact snippets', async () => {
+  const issue = { kind: 'change', source: '100元', candidate: '120元' };
+  const { result, reviewCalls } = await cleanupWithReviewer(
+    '预算为100元。', '预算为120元。', JSON.stringify({ ok: false, issues: [issue] }),
+  );
+  assert.equal(reviewCalls, 1);
+  assert.equal(result.text, '');
+  assert.equal(result.raw, '');
+  assert.deepEqual(result.qualityReview.issues, [issue]);
+});

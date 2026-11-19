@@ -320,6 +320,25 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.selectionTranslate"); changed() }
     }
 
+    /// Empty follows the language used by the translation shortcut.
+    var selectionTranslateTarget: String {
+        get { TranslateLanguage(rawValue: d.string(forKey: "voice.selectionTranslateTarget") ?? "")?.rawValue ?? "" }
+        set {
+            let key = "voice.selectionTranslateTarget"
+            if let language = TranslateLanguage(rawValue: newValue) {
+                d.set(language.rawValue, forKey: key)
+            } else {
+                d.removeObject(forKey: key)
+            }
+            changed()
+        }
+    }
+
+    var preferredSelectionTranslateTarget: String {
+        let target = selectionTranslateTarget
+        return target.isEmpty ? translateTarget : target
+    }
+
     /// Read the text around the cursor at dictation start and send it as context.
     var readFieldContext: Bool {
         // Off by default (as on Windows): when on, text near the cursor and the window
