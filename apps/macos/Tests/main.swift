@@ -2384,15 +2384,21 @@ do {
           countPanel?.canBecomeKey == false && countPanel?.ignoresMouseEvents == true)
     checkEq("the capsule makes its text count accessible", countView?.accessibilityValue() as? String, "4 words")
     let flash = RecordingBar.selectionCountHold + RecordingBar.selectionCountFade
-    RunLoop.current.run(until: Date().addingTimeInterval(flash + 0.12))
-    check("selection count dismisses on its own", !bar.isVisible)
+    func waitForCapsuleDismissal() -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while bar.isVisible && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        return !bar.isVisible
+    }
+    check("selection count dismisses on its own", waitForCapsuleDismissal())
     bar.flashSelectionCount(for: "two words")
     let afterCount = bar.begin(handsFree: false)
     afterCount.recording(destination: "fixture", badge: "")
     RunLoop.current.run(until: Date().addingTimeInterval(flash + 0.12))
     checkEq("an earlier count cannot dismiss a new recording", bar.phase, .recording)
     afterCount.cancel()
-    RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.12))
+    let capsuleDismissed = waitForCapsuleDismissal()
 
     let hintSuite = "typeleast.recording-hints." + UUID().uuidString
     let hintDefaults = UserDefaults(suiteName: hintSuite)!
@@ -2405,7 +2411,7 @@ do {
     check("welcome waits for permissions", !tips.isVisible && !hintSettings.recordingReadyHintShown)
     permissionsReady = true
     tips.permissionsChanged()
-    check("welcome can stay visible without the recording capsule", tips.isVisible && !bar.isVisible)
+    check("welcome can stay visible without the recording capsule", tips.isVisible && capsuleDismissed)
     check("welcome writes the durable marker at presentation", hintDefaults.bool(forKey: "app-onboarding.onboardingCompletedFloatingBarStart"))
     tips.stop()
     tips.permissionsChanged()

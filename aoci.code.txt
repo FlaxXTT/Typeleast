@@ -134,7 +134,7 @@ PerformanceRegressionTests.swift[TP4L]: F:覆盖异步刷新、首页窗口、�
 SettingsScrollTests.swift[TU4S]: F:以受控系统状态验证通用、听写与模型分类间的真实设置视图滚动行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:等待后台登录状态提交后才断言。滚动和模型更新不得触发额外系统查询。隔离历史且不注册登录项。
 StubServer.swift[TN4S]: F:给客户端契约测试提供最小回环HTTP桩 | R:code:apps/macos/Sources/ServiceClient.swift | A:StubServer、Request、Response | S:-
 build-mlx.sh[TV4T]: F:验证MLX构建脚本选择当前Xcode生成的Metal库 | R:code:apps/macos/scripts/build-mlx.sh | A:独立脚本入口 | S:-
-main.swift[TQ5L]: F:运行 Mac 服务契约、录音、快捷键翻译分流、翻译历史、选区字数及窗口回归 | R:code:apps/macos/test.sh,code:apps/macos/Tests/StubServer.swift,code:apps/macos/Tests/PerformanceRegressionTests.swift,code:apps/macos/Sources/VoiceCaptureMeter.swift,code:apps/macos/Sources/VoiceVisualization.swift | A:测试入口 | S:窗口测试在激活观察之后执行。固定随机源验证第三柱稍慢稍低、重叠保持三柱及外围振幅。语言回归覆盖联系图标的辅助名称和简短设置说明。覆盖翻译历史过滤、字数统计及实例隔离。
+main.swift[TQ5L]: F:运行 Mac 服务契约、录音、快捷键翻译分流、翻译历史、选区字数及窗口回归 | R:code:apps/macos/test.sh,code:apps/macos/Tests/StubServer.swift,code:apps/macos/Tests/PerformanceRegressionTests.swift,code:apps/macos/Sources/VoiceCaptureMeter.swift,code:apps/macos/Sources/VoiceVisualization.swift | A:测试入口 | S:窗口测试在激活观察之后执行，并等待 AppKit 确认胶囊淡出。固定随机源验证第三柱稍慢稍低、重叠保持三柱及外围振幅。语言回归覆盖联系图标的辅助名称和简短设置说明。覆盖翻译历史过滤、字数统计及实例隔离。
 package-names.sh[TV4T]: F:覆盖安全发布文件名和已有输出保护 | R:code:apps/macos/scripts/package-names.sh,code:apps/macos/package.sh | A:打包命名回归入口 | S:-
 package-runtime.mjs[TV4T]: F:使用包内Node和隔离状态目录验证随包服务 | R:code:apps/macos/package.sh,code:service/lib/server.js | A:独立运行时检查 | S:-
 publisher-setup.py[TV4S]: F:以模拟下载和鉴权覆盖Mac发布证书安装脚本 | R:code:apps/macos/scripts/setup-release-signing.sh | A:Python夹具入口 | S:-
