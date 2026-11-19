@@ -1,5 +1,15 @@
 import Foundation
 
+enum TranslationShortcutAction: Equatable {
+    case speech(target: String)
+    case selectedText(target: String)
+
+    static func resolve(selection: String?, speechTarget: String, selectionTarget: String) -> Self {
+        guard let selection, DictationController.hasText(selection) else { return .speech(target: speechTarget) }
+        return .selectedText(target: SelectionTranslator.target(for: selection, preferred: selectionTarget))
+    }
+}
+
 // UI and hotkey entry points remain stable; the controller owns the recording lifecycle.
 extension AppDelegate {
     func toggleDictation() {

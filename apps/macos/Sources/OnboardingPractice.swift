@@ -43,7 +43,7 @@ final class OnboardingPracticeController: ObservableObject {
     @Published private(set) var output = ""
     @Published private(set) var needsReview = false
     @Published private(set) var status = ""
-    private let recorder = Recorder()
+    private let recorder = Recorder(metersVoice: true)
     private let settings: Settings
     private let client: ServiceClient
     private var generation = 0
@@ -57,7 +57,7 @@ final class OnboardingPracticeController: ObservableObject {
         recorder.maxSeconds = 40
         recorder.onAutoStop = { [weak self] in self?.stop() }
     }
-    var voiceLevel: VoiceLevel { recorder.voiceLevel() }
+    var voiceLevel: Float { recorder.voiceLevel() }
     var elapsed: Double { recorder.elapsed }
     var complete: Bool { progress.complete }
     var busy: Bool { phase != .idle }

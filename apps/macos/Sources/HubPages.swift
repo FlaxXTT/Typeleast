@@ -69,12 +69,15 @@ enum Formatters {
 struct HomePage: View {
     @EnvironmentObject var model: AppModel
     @State private var showsSetup = false
+    static let horizontalInset: CGFloat = 12
+    static let columnGap: CGFloat = 14
+    static let insightsFraction: CGFloat = 0.67
 
     var body: some View {
         GeometryReader { geometry in
-            let gap: CGFloat = 14
+            let gap = Self.columnGap
             let width = max(0, geometry.size.width - gap)
-            let insightsWidth = width * 0.67
+            let insightsWidth = width * Self.insightsFraction
             HStack(alignment: .top, spacing: gap) {
                 InsightsPanel()
                     .frame(width: insightsWidth, height: geometry.size.height)
@@ -104,7 +107,7 @@ struct HomePage: View {
                 .padding(.top, 4)
             }
         }
-        .padding(EdgeInsets(top: 44, leading: 12, bottom: 20, trailing: 12))
+        .padding(EdgeInsets(top: 44, leading: Self.horizontalInset, bottom: 20, trailing: Self.horizontalInset))
         .background(Theme.window)
     }
 }
@@ -143,7 +146,7 @@ private struct ShortcutReferenceCard: View {
                 }
             } else {
                 Button(L10n.text("设置快捷键")) {
-                    model.settingsCategory = 0
+                    model.settingsCategory = .dictation
                     model.navigate(to: .settings)
                 }.buttonStyle(FlatActionButtonStyle()).font(Theme.captionFont).foregroundColor(Theme.accent)
             }
@@ -259,14 +262,14 @@ private struct SetupCard: View {
                 } else {
                     SetupRow(done: model.recognitionConfigured, title: model.settings.onlineASRProvider.label,
                              detail: L10n.text("待配置 API Key"), action: L10n.text("打开设置")) {
-                        model.settingsCategory = 1
+                        model.settingsCategory = .models
                         model.navigate(to: .settings)
                     }
                 }
                 SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
                          detail: model.llmConfigured ? model.modelSummary : "",
                          action: L10n.text("打开设置")) {
-                    model.settingsCategory = 1
+                    model.settingsCategory = .models
                     model.navigate(to: .settings)
                 }
             }
@@ -309,7 +312,7 @@ private struct EngineCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        let serviceStatus = model.serviceUp ? L10n.text("本地服务就绪") : L10n.text("本地服务未就绪")
+        let serviceStatus = model.serviceUp ? "Ready" : L10n.text("本地服务未就绪")
         let speech = model.speechEngineSummary
         let cleanup = model.cleanupEngineSummary
         VStack(alignment: .leading, spacing: 0) {
@@ -328,7 +331,7 @@ private struct EngineCard: View {
             }
             Spacer(minLength: 5)
             Button {
-                model.settingsCategory = 1
+                model.settingsCategory = .models
                 model.navigate(to: .settings)
             } label: {
                 HStack(spacing: 8) {
@@ -613,9 +616,10 @@ struct HistoryRow: View {
                 if model.retryingHistoryID == entry.id {
                     SkeletonWave(height: 24)
                 } else if entry.displayText.isEmpty || compact {
-                    Text(entry.displayText.isEmpty ? (entry.fallbackReason == "quantity-conflict" ? L10n.text("数量或单位待核对") : L10n.text("（没有识别到内容）")) : entry.displayText)
+                    Text(entry.qualityReview != nil ? L10n.text("待确认")
+                         : entry.displayText.isEmpty ? L10n.text("（没有识别到内容）") : entry.displayText)
                         .font(Theme.rowFont)
-                        .foregroundColor(Theme.ink)
+                        .foregroundColor(entry.qualityReview == nil ? Theme.ink : Theme.warning)
                         .lineLimit(compact ? 1 : (expanded ? nil : 4))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -647,13 +651,15 @@ struct HistoryRow: View {
                     Text(L10n.text("待核对整理结果") + "：" + review.candidate)
                         .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                    Button(L10n.text("查看并确认")) { model.actions?.reviewEntry(id: entry.id) }
+                        .buttonStyle(.link)
                 }
                 if !compact && (expanded || entry.fallback) {
                 HStack(spacing: 6) {
                     Text(AppNames.name(for: entry.app)).font(InterfaceTypography.localized(11)).foregroundColor(Theme.tertiary).lineLimit(1)
                     if let task = entry.task { Badge(text:L10n.text(task == "assistant" ? "提示词模式" : task == "translation" ? "翻译" : "听写"),tint:task == "assistant" ? Theme.style : Theme.accent).fixedSize() }
                     else if let mode { Badge(text: mode.label, tint: modeTint).fixedSize() }
-                    if entry.fallback {
+                    if entry.fallback && entry.qualityReview == nil {
                         let held = ["suspected-noise", "recognition-repetition", "quantity-conflict"].contains(entry.fallbackReason ?? "") && !entry.inserted
                         Badge(text: held ? L10n.text("未自动输入") : L10n.text("已用原文"), tint: Theme.warning).fixedSize()
                     }
@@ -663,9 +669,19 @@ struct HistoryRow: View {
             // Reserve the action width. Hover must not change the text wrapping
             // after AppKit has reported its height to SwiftUI.
                 HStack(spacing: 2) {
-                    IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? L10n.text("已复制") : L10n.text("复制"), symbolSize: 14) { copy(raw: false) }
+                    if entry.qualityReview != nil {
+                        IconButton(symbol: "pencil.line", help: L10n.text("查看并确认"), symbolSize: 14) {
+                            model.actions?.reviewEntry(id: entry.id)
+                        }
+                    } else {
+                        IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? L10n.text("已复制") : L10n.text("复制"), symbolSize: 14) { copy(raw: false) }
+                    }
                     if !compact {
-                        IconButton(symbol: "text.quote", help: L10n.text("复制原话"), symbolSize: 14) { copy(raw: true) }
+                        if entry.qualityReview == nil {
+                            IconButton(symbol: "text.quote", help: L10n.text("复制原话"), symbolSize: 14) { copy(raw: true) }
+                        } else {
+                            Color.clear.frame(width: 32, height: 32).accessibilityHidden(true)
+                        }
                         if canRetry {
                             IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试"), symbolSize: 14) { model.actions?.retryEntry(id: entry.id) }
                         } else {
@@ -744,21 +760,27 @@ private struct HistoryDetail: View {
                         Text(Formatters.dayTitle(entry.ts) + " · " + Formatters.time.string(from: entry.ts))
                             .font(InterfaceTypography.localized(11)).foregroundColor(Theme.tertiary)
                     }
-                    detailText(L10n.text("听写结果"), entry.displayText)
-                    if !entry.raw.isEmpty, entry.raw != entry.displayText { detailText(L10n.text("原始识别"), entry.raw) }
                     if let review = entry.qualityReview {
                         detailText(L10n.text("原始识别"), review.original)
                         detailText(L10n.text("待核对整理结果"), review.candidate)
+                    } else {
+                        detailText(L10n.text("听写结果"), entry.displayText)
+                        if !entry.raw.isEmpty, entry.raw != entry.displayText { detailText(L10n.text("原始识别"), entry.raw) }
                     }
                 }
                 .padding(24).frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider().overlay(Theme.border)
             HStack {
-                Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
-                    model.actions?.copyEntry(id: entry.id, raw: false)
-                    copyFeedback = UUID()
-                }.buttonStyle(PrimaryButtonStyle())
+                if entry.qualityReview != nil {
+                    Button(L10n.text("查看并确认")) { model.actions?.reviewEntry(id: entry.id) }
+                        .buttonStyle(PrimaryButtonStyle())
+                } else {
+                    Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
+                        model.actions?.copyEntry(id: entry.id, raw: false)
+                        copyFeedback = UUID()
+                    }.buttonStyle(PrimaryButtonStyle())
+                }
                 Spacer()
                 IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) {
                     model.actions?.deleteEntry(id: entry.id)

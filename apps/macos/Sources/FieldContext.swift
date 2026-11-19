@@ -110,7 +110,7 @@ enum FieldContextReader {
 
     /// Read the focused field of the frontmost app. Returns nil when not trusted, when
     /// nothing editable is focused, for secure fields and for blocked apps.
-    static func capture(bundleId: String) -> FocusedField? {
+    static func capture(bundleId: String, requiringSelection: Bool = false) -> FocusedField? {
         guard AXIsProcessTrusted(), !isBlocked(bundleId: bundleId) else { return nil }
         var focused = focusedElement(ofApp: bundleId)
         if exposeContent(bundleId: bundleId) {
@@ -126,9 +126,10 @@ enum FieldContextReader {
         let subrole: String? = copy(element, kAXSubroleAttribute)
         if subrole == (kAXSecureTextFieldSubrole as String) { return nil }
 
+        let selected: String = copy(element, kAXSelectedTextAttribute) ?? ""
+        if requiringSelection, !DictationController.hasText(selected) { return nil }
         let readable: String? = copy(element, kAXValueAttribute)
         let value = readable ?? ""
-        let selected: String = copy(element, kAXSelectedTextAttribute) ?? ""
         var before = ""
         var after = ""
         var anchor: CFRange?
@@ -314,7 +315,7 @@ enum FieldContextReader {
 
     // MARK: helpers
 
-    private static func copy<T>(_ element: AXUIElement, _ attribute: String) -> T? {
+    static func copy<T>(_ element: AXUIElement, _ attribute: String) -> T? {
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
               let value = raw else { return nil }
@@ -325,7 +326,7 @@ enum FieldContextReader {
         return value as? T
     }
 
-    private static func selectedRange(_ element: AXUIElement) -> CFRange? {
+    static func selectedRange(_ element: AXUIElement) -> CFRange? {
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &raw) == .success,
               let value = raw, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }

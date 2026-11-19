@@ -50,8 +50,9 @@ export async function runTranslation(ctx, target) {
     const translated = parts.join("\n");
     task.assertTime();
     if (!translated) return incomplete("empty-output");
-    if (!await reviewFacts(ctx, task, rawText, translated)) return ctx.fail({ ...base, raw: "", text: "", fallback: true,
-      reason: "fact-review", qualityReview: { kind: "facts", original: rawText, candidate: translated, issues: ctx.reviewEvidence ?? [] }, translated: target, ms: timing(started, 0), attempts });
+    const review = await reviewFacts(ctx, task, rawText, translated);
+    if (review.state !== "clear") return ctx.fail({ ...base, raw: "", text: "", fallback: true,
+      reason: "fact-review", qualityReview: { kind: "facts", original: rawText, candidate: translated, issues: review.issues ?? [] }, translated: target, ms: timing(started, 0), attempts });
     return ctx.done({ ...base, text: translated, translated: target, ms: timing(started, 0), attempts });
   } catch (error) {
     const reason = request.signal?.aborted ? "cancelled" : task.deadline.timedOut() ? "model-timeout" : failureReason(error);

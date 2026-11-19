@@ -70,9 +70,15 @@ export async function runDictation(ctx) {
         reason: "quantity-conflict", qualityReview: { kind: "quantity", original: rawText, candidate, issues: [quantityIssue] },
         ms: timing(started, 0), attempts: result.attempts });
     }
-    if (!await reviewFacts(ctx, task, rawText, candidate)) {
+    const review = await reviewFacts(ctx, task, rawText, candidate, { cleanup: true });
+    if (review.state === "conflict") {
       return await ctx.fail({ ...base, raw: "", text: "", fallback: true, reason: "fact-review",
-        qualityReview: { kind: "facts", original: rawText, candidate, issues: ctx.reviewEvidence ?? [] }, ms: timing(started, 0), attempts: result.attempts });
+        qualityReview: { kind: "facts", original: rawText, candidate, issues: review.issues }, ms: timing(started, 0), attempts: result.attempts });
+    }
+    if (review.state === "unverified") {
+      const original = tidy(rawText);
+      return await ctx.fail({ ...base, text: original.text, fallback: true, reason: "fact-check-unavailable",
+        ms: timing(started, 0), attempts: result.attempts, postprocess: original.applied });
     }
     return await ctx.done({
       ...base,

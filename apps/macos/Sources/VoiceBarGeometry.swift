@@ -8,7 +8,12 @@ enum VoiceBarGeometry {
     static let starting = CGSize(width: 54, height: 12)
     static let overlay = CGSize(width: 750, height: 500)
     static let bottomInset: CGFloat = 60 // room for the downward 25px shadow
-    static let waveform = CGSize(width: 38, height: 24)
+    static let waveformBarWidth: CGFloat = 2
+    static let waveformBarGap: CGFloat = 2
+    static let waveform = CGSize(
+        width: CGFloat(VoiceWaveform.count) * (waveformBarWidth + waveformBarGap) - waveformBarGap,
+        height: CGFloat(VoiceWaveform.peakHeight)
+    )
     static let shapeDuration: Double = 0.20
     static let opacityDuration: Double = 0.50
 

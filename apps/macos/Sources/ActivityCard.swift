@@ -413,9 +413,9 @@ struct ActivityCard: View {
         let revealReady = model.activityReady && !model.homePresentationSuspended
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 0) {
-                figure(log?.activeDays, L10n.text("活跃天数"))
-                figure(streaks?.current, L10n.text("当前连续天数"))
-                figure(streaks?.longest, L10n.text("最长连续天数"))
+                figure(log?.activeDays, "Active", description: L10n.text("活跃天数"))
+                figure(streaks?.current, "Streak", description: L10n.text("当前连续天数"))
+                figure(streaks?.longest, "Best", description: L10n.text("最长连续天数"))
             }
             .padding(.horizontal, 7)
             GeometryReader { geo in
@@ -470,7 +470,7 @@ struct ActivityCard: View {
         }
     }
 
-    private func figure(_ value: Int?, _ label: String) -> some View {
+    private func figure(_ value: Int?, _ label: String, description: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CountUpReadout(value.map(Double.init)) { number in
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -479,17 +479,19 @@ struct ActivityCard: View {
                         .font(InterfaceTypography.figure(Theme.homeFigureSize))
                         .tracking(-0.6)
                     if number != nil {
-                        InterfaceTypography.text(L10n.text("天"), size: Theme.homeSecondarySize, weight: .semibold)
+                        InterfaceTypography.text("d", size: Theme.homeSecondarySize, weight: .semibold)
                     }
                 }
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(value.map { L10n.formattedNumber(NSNumber(value: $0)) + " " + L10n.text("天") } ?? "--")
             InterfaceTypography.text(label, size: Theme.homeSecondarySize)
                 .foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(description)
+        .accessibilityValue(value.map { L10n.formattedNumber(NSNumber(value: $0)) + " " + L10n.text("天") } ?? "--")
+        .help(description)
     }
 
     private func weekdays(cell: CGFloat, rowStep: CGFloat) -> some View {

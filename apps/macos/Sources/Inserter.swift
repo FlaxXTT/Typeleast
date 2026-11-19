@@ -151,13 +151,17 @@ final class Inserter {
 
     /// The frontmost app's selection, read with a synthesised ⌘C once ⌥ ⇧ ⌃ are let go (so the
     /// app does not see ⌥⌘C); the clipboard is put back. nil when nothing was copied.
-    func copySelection(completion: @escaping (String?) -> Void) {
+    func copySelection(whileFrontmost pid: pid_t? = nil, completion: @escaping (String?) -> Void) {
         let held: CGEventFlags = [.maskAlternate, .maskShift, .maskControl, .maskCommand]
         func waitForRelease(_ tries: Int) {
             if CGEventSource.flagsState(.combinedSessionState).intersection(held).isEmpty || tries == 0 { copy() }
             else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { waitForRelease(tries - 1) } }
         }
         func copy() {
+            if let pid, NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
+                completion(nil)
+                return
+            }
             let pb = NSPasteboard.general
             let snap = snapshot()
             let before = pb.changeCount

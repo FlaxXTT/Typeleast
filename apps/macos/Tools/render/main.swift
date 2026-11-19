@@ -230,6 +230,10 @@ for (name, configure) in [
     let width = PillView.width(for: m, limit: 120)
     let pill = PillView(frame: NSRect(x: 30, y: 20, width: width, height: PillView.height))
     pill.model = m
+    if m.phase == .recording {
+        pill.reduceMotion = true
+        pill.receiveLevel(m.level)
+    }
     for _ in 0..<30 { pill.advance() }
     let backdrop = NSView(frame: NSRect(x: 0, y: 0, width: width + 60, height: 80))
     backdrop.wantsLayer = true
