@@ -56,6 +56,8 @@ struct SettingsPage: View {
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
     @State private var activeHotkeySlot: HotkeySlot?
+    // Keep category offsets only for the lifetime of this settings presentation.
+    @State private var scrollMemory = HubScrollMemory()
 
     init(loginItemStatus: LoginItemStatus = LoginItemStatus(), onClose: @escaping () -> Void = {}) {
         _loginItemStatus = StateObject(wrappedValue: loginItemStatus)
@@ -98,7 +100,7 @@ struct SettingsPage: View {
                 Text(model.settingsCategory.title).font(Theme.sectionTitleFont)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
-                HubScrollView(key: "settings-" + model.settingsCategory.rawValue, showsProgress: false) {
+                HubScrollView(key: model.settingsCategory.rawValue, memory: scrollMemory, showsProgress: false) {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
                         case .dictation: shortcuts; language; audio; cleanup
