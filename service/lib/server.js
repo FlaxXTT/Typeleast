@@ -57,6 +57,7 @@ export async function startService(options = {}) {
   const service = new VoicePolishService({
     recognizer,
     config,
+    stateDir,
     logger,
     version: VERSION,
   });

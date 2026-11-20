@@ -24,7 +24,9 @@ enum Theme {
     }
 
     static let window = dynamic(hex(0xFFFFFF), hex(0x242121))
-    static let sidebar = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
+    static let sidebarLightRGB: UInt32 = 0xF7F6F5
+    static let sidebarDarkRGB: UInt32 = 0x1D1A1A
+    static let sidebar = dynamic(hex(sidebarLightRGB), hex(sidebarDarkRGB))
     static let detail = dynamic(hex(0xFBFAF9), hex(0x1F1C1C))
     static let card = dynamic(hex(0xF2F1F0), hex(0x3C3B3B))
     static let cardHover = dynamic(hex(0x777777, 0.08), hex(0xF2F1F0, 0.06))

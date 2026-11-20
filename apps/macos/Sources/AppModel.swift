@@ -7,25 +7,27 @@ import Combine
 enum AppPhase { case idle, starting, recording, thinking }
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
-    case dictation, translation, models, general
+    case general, dictation, translation, prompts, models
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .general: return L10n.text("通用")
         case .dictation: return L10n.text("听写")
         case .translation: return L10n.text("翻译设置")
+        case .prompts: return L10n.text("个性化")
         case .models: return L10n.text("模型")
-        case .general: return L10n.text("通用")
         }
     }
 
     var symbol: String {
         switch self {
+        case .general: return "gearshape"
         case .dictation: return "mic"
         case .translation: return "translate"
+        case .prompts: return "doc.text"
         case .models: return "cpu"
-        case .general: return "gearshape"
         }
     }
 }
@@ -94,6 +96,7 @@ final class AppModel: ObservableObject {
     weak var actions: AppActions?
 
     @Published var page: HubPage = .home
+    @Published var sidebarBrandPalette = SidebarBrandPalette.random()
     @Published var settingsCategory: SettingsCategory = .dictation
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
@@ -103,7 +106,9 @@ final class AppModel: ObservableObject {
     @Published var homePresentationSuspended = false
     @Published private(set) var history: [LocalHistoryEntry] = []
     @Published private(set) var historyUnavailable = false
-    @Published var credentialsLocked = false
+    @Published var credentialsLocked = KeychainStore.requiresUnlock
+    @Published var credentialsUnlocking = false
+    @Published var credentialUnlockError: String?
     @Published private(set) var historyRevision = 0
     @Published private(set) var stats: DictationStats?
     @Published private(set) var activityReady = false
@@ -216,7 +221,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Display metadata is read off the main thread; views never contact Keychain services.
-    var llmKeyPresence: Bool? { savedKeyPresence[settings.llmPresetID] }
+    var llmKeyPresence: Bool? { credentialsLocked ? nil : savedKeyPresence[settings.llmPresetID] }
 
     func refreshLLMKeyPresence() {
         let account = settings.llmPresetID
@@ -224,16 +229,21 @@ final class AppModel: ObservableObject {
     }
 
     var onlineASRKeyPresence: Bool? {
-        savedKeyPresence[settings.onlineASRProvider.keychainAccount]
+        asrKeyPresence(for: settings.onlineASRProvider)
+    }
+
+    func asrKeyPresence(for provider: OnlineASRProvider) -> Bool? {
+        credentialsLocked ? nil : savedKeyPresence[provider.keychainAccount]
     }
 
     func refreshOnlineASRKeyPresence() {
-        let provider = settings.onlineASRProvider
-        if provider != .local { refreshKeyPresence(provider.keychainAccount) }
+        for provider in Set([settings.onlineASRProvider, settings.meetingASRProvider]) where provider != .local {
+            refreshKeyPresence(provider.keychainAccount)
+        }
     }
 
     private func refreshKeyPresence(_ account: String) {
-        guard pendingKeyPresence.insert(account).inserted else { return }
+        guard !credentialsLocked, pendingKeyPresence.insert(account).inserted else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let present = KeychainStore.exists(account: account)
             DispatchQueue.main.async {
@@ -284,6 +294,9 @@ final class AppModel: ObservableObject {
 
     var cleanupEngineSummary: (name: String, detail: String?) {
         let preset = LLMPreset.find(settings.llmPresetID)
+        if credentialsLocked && preset.needsKey {
+            return (preset.name, L10n.text("钥匙串已锁定"))
+        }
         guard llmConfigured else { return (L10n.text("没有整理模型（只去口头禅）"), nil) }
         return (preset.name, settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（你的 Key）")))
     }
@@ -305,7 +318,10 @@ final class AppModel: ObservableObject {
     var speechEngineSummary: (name: String, detail: String) {
         let provider = settings.onlineASRProvider
         if provider != .local {
-            let status = onlineASRKeyPresence == true ? L10n.text("已配置") : L10n.text("待配置 API Key")
+            let status: String
+            if credentialsLocked { status = L10n.text("钥匙串已锁定") }
+            else if let present = onlineASRKeyPresence { status = L10n.text(present ? "已配置" : "待配置 API Key") }
+            else { status = L10n.text("正在检查 API Key…") }
             return (provider.label, status)
         }
         let name = speech?.displayName ?? L10n.text("未选择语音模型")

@@ -8,16 +8,17 @@ import { randomUUID } from "node:crypto";
 import { cleanupParameters } from "../cleanup-task.js";
 import { failureReason, ModelCallError } from "../llm.js";
 import {
-  BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
-  cleanPromptReply, draftMessage, hasContent, interviewMessage, normaliseQuestions, parseJsonReply,
+  BETA_LIMITS, cleanPromptReply, defaultAssistantPrompt, draftMessage, hasContent, interviewMessage,
+  normaliseQuestions, parseJsonReply, savedAssistantPrompt,
 } from "../prompts/prompt-beta.js";
 import { unwrap } from "../validate.js";
 import { timing } from "./timing.js";
 
 /** The open clarifications: id -> { request, baseline, turns, questions, confirmed, goals, spec, created, busy }. */
 export class AssistantSessions {
-  constructor() {
+  constructor(stateDir) {
     this.map = new Map();
+    this.stateDir = stateDir;
   }
 
   /** Drop expired sessions and keep the map bounded. */
@@ -43,9 +44,14 @@ export class AssistantSessions {
   async run(ctx, skip) {
     const { request, base, started, config } = ctx;
     let rawText = ctx.rawText;
-    const call = async (system, user, maxTokens = 1800) => {
+    const call = async (stage, user, maxTokens = 1800) => {
+      const system = this.stateDir
+        ? await savedAssistantPrompt(stage, this.stateDir, ctx)
+        : defaultAssistantPrompt(stage);
+      const signal = AbortSignal.any([request.signal, session.controller.signal].filter(Boolean));
+      signal.throwIfAborted();
       const result = await ctx.complete({ system, user: ctx.redact(user), maxTokens, temperature: 0.2,
-        timeoutMs: Math.max(config.timeoutMs, 60000), signal: AbortSignal.any([request.signal, session.controller.signal].filter(Boolean)) });
+        timeoutMs: Math.max(config.timeoutMs, 60000), signal });
       request.signal?.throwIfAborted();
       return result.text;
     };
@@ -85,7 +91,8 @@ export class AssistantSessions {
     session.controller = new AbortController();
     try {
       if (!skip) {
-        const reply = parseJsonReply(await call(session.selection ? BETA_BREAKDOWN_PROMPT : BETA_INTERVIEW_PROMPT, interviewMessage(session.request, turns, session.baseline)));
+        const reply = parseJsonReply(await call(session.selection ? "breakdown" : "interview",
+          interviewMessage(session.request, turns, session.baseline)));
         if (!reply || !Array.isArray(reply.questions) || !Array.isArray(reply.confirmed)) {
           throw Object.assign(new Error("invalid clarification"), { code: "output-format" });
         }
@@ -103,7 +110,7 @@ export class AssistantSessions {
       }
       const material = { baseline: session.baseline, request: session.request, spec: session.spec, turns,
         questions: session.questions, skipped: true };
-      const draft = cleanPromptReply(await call(BETA_DRAFT_PROMPT, draftMessage(material), cleanupParameters(source, "prompt", config).maxTokens));
+      const draft = cleanPromptReply(await call("draft", draftMessage(material), cleanupParameters(source, "prompt", config).maxTokens));
       if (!draft) throw Object.assign(new Error("empty draft"), { code: "output-format" });
       if (this.map.get(id) !== session) throw new DOMException("Cancelled", "AbortError");
       request.signal?.throwIfAborted();

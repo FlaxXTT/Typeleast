@@ -125,6 +125,7 @@ struct InsightsPanel: View {
                         .font(.system(size: 36, weight: .medium, design: .serif))
                         .tracking(-0.65)
                         .foregroundColor(Theme.homeLabel)
+                        .padding(.leading, 8)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
                     ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
@@ -395,7 +396,7 @@ final class HoverShareButton: NSButton {
     }
 }
 
-/// Active days and streaks above the heatmap: weekdays down the side, months along the bottom.
+/// Total active days above the heatmap, with weekdays down the side and months along the bottom.
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -408,16 +409,11 @@ struct ActivityCard: View {
 
     var body: some View {
         let log = model.activityReady ? ActivityLog.shared : nil
-        let streaks = log?.streaks()
         let _ = model.activityRevision
         let revealReady = model.activityReady && !model.homePresentationSuspended
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 0) {
-                figure(log?.activeDays, "Active", description: L10n.text("活跃天数"))
-                figure(streaks?.current, "Streak", description: L10n.text("当前连续天数"))
-                figure(streaks?.longest, "Best", description: L10n.text("最长连续天数"))
-            }
-            .padding(.horizontal, 7)
+            activeDays(log?.activeDays)
+                .padding(.horizontal, 7)
             GeometryReader { geo in
                 let weeks = max(1, min(20, Int((geo.size.width - dayColumn + ActivityTrack.columnGap) / ActivityTrack.columnStep)))
                 let cell = ActivityTrack.columnStep - ActivityTrack.columnGap
@@ -470,8 +466,9 @@ struct ActivityCard: View {
         }
     }
 
-    private func figure(_ value: Int?, _ label: String, description: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func activeDays(_ value: Int?) -> some View {
+        let description = L10n.text("活跃天数")
+        return VStack(alignment: .leading, spacing: 6) {
             CountUpReadout(value.map(Double.init)) { number in
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     let digits = number.map { L10n.formattedNumber(NSNumber(value: $0.rounded())) } ?? "--"
@@ -483,7 +480,7 @@ struct ActivityCard: View {
                     }
                 }
             }
-            InterfaceTypography.text(label, size: Theme.homeSecondarySize)
+            InterfaceTypography.text("Active", size: Theme.homeSecondarySize)
                 .foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
         }

@@ -10,10 +10,6 @@ struct SpeechModelOptions: View {
             Text(L10n.text("语音模型")).font(InterfaceTypography.localized(13, weight: .semibold))
             if let catalog = model.speechCatalog {
                 let dictationModels = catalog.models.filter { $0.category != "meeting" }
-                if dictationModels.contains(where: { $0.id.hasPrefix("mlx-") && !$0.installed }) {
-                    Text(L10n.text("MLX 模型需重新下载。旧模型文件会保留，但不能用于 MLX 识别。"))
-                        .font(Theme.captionFont).foregroundColor(Theme.secondary)
-                }
                 if catalog.notice != nil {
                     Text(L10n.text("所选模型不可用，请重新选择。"))
                         .foregroundColor(Theme.warning).font(Theme.captionFont)
@@ -37,24 +33,24 @@ struct SpeechModelOptions: View {
             Button(L10n.text("取消"), role: .cancel) { deletion = nil }
         } message: { item in
             Text(partialOnly
-                 ? L10n.text("只删除 {0} 未完成的下载，下次可重新下载。", item.name)
-                 : L10n.text("删除 {0} 的模型文件后，使用前需要重新下载。历史、录音、设置和密钥不受影响。", item.name))
+                 ? L10n.text("清理 {0} 未完成的下载。", item.name)
+                 : L10n.text("再次使用 {0} 前需重新下载。", item.name))
         }
     }
 
     @ViewBuilder private func storageSection(_ catalog: SpeechModelCatalog) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.text("模型与存储")).font(InterfaceTypography.localized(13, weight: .semibold))
-            Text(L10n.text("只显示应用管理的模型文件和未完成的下载。历史、录音、个人偏好、密钥和其他文件不会在这里删除。"))
-                .font(Theme.captionFont).foregroundColor(Theme.secondary)
+            Text(L10n.text("本地听写模型文件")).font(InterfaceTypography.localized(13, weight: .semibold))
             if let items = catalog.storage, !items.isEmpty {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.name)
-                                Text(item.active ? L10n.text("当前使用中，请先切换模型") : item.legacy ? L10n.text("旧版模型，可删除；以后使用需重新下载") : L10n.text("模型文件，可重新下载"))
-                                    .font(Theme.captionFont).foregroundColor(Theme.secondary)
+                                if item.active || item.legacy {
+                                    Text(L10n.text(item.active ? "切换模型后可删除" : "旧版模型"))
+                                        .font(Theme.captionFont).foregroundColor(Theme.secondary)
+                                }
                             }
                             Spacer()
                             Text(ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)).font(Theme.captionFont)
@@ -75,10 +71,8 @@ struct SpeechModelOptions: View {
                     }
                 }
             } else {
-                Text(L10n.text("没有可管理的模型文件。")).font(Theme.captionFont).foregroundColor(Theme.secondary)
+                Text(L10n.text("无本地文件")).font(Theme.captionFont).foregroundColor(Theme.secondary)
             }
-            Text(L10n.text("会议模型和其他缓存未在此列出，不会被清理。"))
-                .font(Theme.captionFont).foregroundColor(Theme.secondary)
         }
     }
 
@@ -101,9 +95,6 @@ struct SpeechModelOptions: View {
                 Text(L10n.text("多语种 · 中英混说 · 较小体积")).font(Theme.captionFont)
             } else if entry.id == "mlx-qwen3-asr-1.7b-bf16" || entry.id == "mlx-qwen3-asr-1.7b-8bit" {
                 Text(L10n.text("多语种 · 中英混说 · 较大容量")).font(Theme.captionFont)
-            }
-            if entry.id == "mlx-qwen3-asr-1.7b-8bit" {
-                Text(L10n.text("尚未经本机识别验证")).font(Theme.captionFont).foregroundColor(Theme.secondary)
             }
             HStack(spacing: 10) {
                 if let precision = entry.precision { Text(precision.uppercased()) }

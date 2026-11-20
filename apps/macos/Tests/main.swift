@@ -484,6 +484,14 @@ do {
     checkEq("its length is in the header", state.lastRequest?.header("x-voice-meta-bytes"), String(some.metaBytes))
     let draft = ServiceClient.dictateBody(wav: wav, profile: "", baseline: "选中的提示词")
     checkEq("提示词模式's draft travels in the same JSON object", (try? JSONSerialization.jsonObject(with: draft.body.prefix(draft.metaBytes))) as? [String: String], ["baseline": "选中的提示词"])
+    let short = ShortDictationCleanup(maxUnits: 25, route: LLMRoute(baseURL: "https://example.com/v1", model: "small", apiKey: "fixture"),
+                                      fullAbove: 100, useSmallModel: true)
+    let routed = ServiceClient.dictateBody(wav: wav, profile: "", shortCleanup: short)
+    let metadata = (try? JSONSerialization.jsonObject(with: routed.body.prefix(routed.metaBytes))) as? [String: Any]
+    let routing = metadata?["shortCleanup"] as? [String: Any]
+    checkEq("audio dictation carries the short threshold in its metadata", routing?["maxUnits"] as? Int, 25)
+    checkEq("audio dictation carries the complete cleanup threshold", routing?["fullAbove"] as? Int, 100)
+    checkEq("audio dictation carries the small model's separate route", (routing?["route"] as? [String: String])?["model"], "small")
 } catch {
     check("description with dictation", false, String(describing: error))
 }
@@ -569,79 +577,80 @@ do {
 
     var waveform = VoiceWaveform()
     let middle = waveform.heights.count / 2 - 1
-    let leftLead: (ClosedRange<Double>) -> Double = { max(0, $0.lowerBound) }
+    let resting = VoiceWaveform.restingHeight
     checkEq("recording draws ten bars", waveform.heights.count, 10)
     checkEq("ten two-point bars and nine two-point gaps fill 38 points", VoiceBarGeometry.waveform.width, 38)
     check("full-height columns fit inside the recording capsule", VoiceBarGeometry.waveform.height < PillView.height)
-    waveform.receive(0, at: 0, reduceMotion: false, random: leftLead)
+    waveform.receive(0, at: 0, reduceMotion: false)
     check("an audio-free waveform stays at rest", !waveform.advance(at: 0.1))
-    waveform.receive(1, at: 1, reduceMotion: false, random: leftLead)
-    check("a pulse waits about 80 ms before reaching the centre", !waveform.advance(at: 1.079))
-    waveform.advance(at: 1.086)
-    check("the selected left side leads from the middle",
-          waveform.heights[middle] > 2 && waveform.heights[middle + 1] == 2)
-    waveform.advance(at: 1.090)
-    check("the middle two bars rise before the neighbouring pair",
-          waveform.heights[middle] > 2 && waveform.heights[middle + 1] > 2
-          && waveform.heights[middle - 1] == 2 && waveform.heights[middle + 2] == 2)
-    waveform.advance(at: 1.106)
-    let centerPeak = waveform.heights[middle]
-    check("the centre peaks at 26 points", abs(centerPeak - 26) < 0.0001)
-    waveform.advance(at: 1.116)
-    checkEq("the centre holds its peak briefly", waveform.heights[middle], 26)
-    check("the following side peaks lower for the same microphone sample",
-          abs(waveform.heights[middle + 1] - 21.2) < 0.0001)
-    waveform.advance(at: 1.123)
-    check("the third column follows the middle two at a lower peak",
-          abs(waveform.heights[middle - 1] - 15.0944) < 0.0001 && waveform.heights[middle + 2] < 9)
-    waveform.advance(at: 1.174)
-    check("the edge still peaks 17 ms per step later with 30 percent more excursion",
-          abs(waveform.heights[0] - (2 + (3.4784 - 2) * 1.30)) < 0.0001)
-    var flutter = VoiceWaveform()
-    flutter.receive(1, at: 1, reduceMotion: false) { $0 == 0.88...1.12 ? $0.upperBound : leftLead($0) }
-    flutter.advance(at: 1.116)
-    checkEq("outer variation does not change the central peak", flutter.heights[middle], 26)
-    flutter.advance(at: 1.174)
-    check("the same volume can move an outer column by a slightly different amount",
-          flutter.heights[0] > waveform.heights[0] && flutter.heights[0] < 4.5)
-    waveform.advance(at: 1.4)
-    check("a pause returns every bar to rest", waveform.heights.allSatisfy { $0 == VoiceWaveform.restingHeight })
-    waveform.receive(1, at: 1.5, reduceMotion: false) { $0 == 0...1 ? 1 : leftLead($0) }
-    waveform.advance(at: 1.586)
-    check("the right side can lead the next pulse",
-          waveform.heights[middle] == 2 && waveform.heights[middle + 1] > 2)
-    waveform.advance(at: 1.623)
-    check("after a pause the third column can come in on the other side",
-          abs(waveform.heights[middle + 2] - 15.0944) < 0.0001 && waveform.heights[middle - 1] < 9)
-    waveform.advance(at: 1.9)
-    waveform.receive(0.2, at: 2, reduceMotion: false) { _ in 0.3 }
-    check("a quiet input can fall below the pulse probability", !waveform.advance(at: 2.100))
-    waveform.receive(0.2, at: 2.2, reduceMotion: false, random: leftLead)
-    waveform.advance(at: 2.306)
-    check("a quiet pulse moves the centre below a loud pulse",
-          waveform.heights[middle] > 2 && waveform.heights[middle] < centerPeak)
-    waveform.receive(0.2, at: 3, reduceMotion: true)
+
+    waveform.receive(0.54, at: 1, reduceMotion: false)
+    waveform.advance(at: 1.008)
+    check("the first middle column responds within the initial frame",
+          waveform.heights[middle] > resting && waveform.heights[middle + 1] == resting)
+    waveform.advance(at: 1.022)
+    check("the third column has not yet caught the middle pair",
+          waveform.heights[middle] > waveform.heights[middle + 1]
+          && waveform.heights[middle + 1] > resting && waveform.heights[middle - 1] == resting)
+    waveform.receive(0.54, at: 1.05, reduceMotion: false)
+    waveform.advance(at: 1.09)
+    let quiet = waveform.heights[middle]
+    check("quiet samples keep the centre low and bring out the nearby outer bars",
+          (5...8).contains(quiet) && waveform.heights[middle + 2] > 3.5)
+
+    waveform.receive(0.74, at: 1.10, reduceMotion: false)
+    waveform.advance(at: 1.148)
+    let ordinary = waveform.heights[middle]
+    waveform.receive(0.98, at: 1.15, reduceMotion: false)
+    waveform.advance(at: 1.20)
+    let accent = waveform.heights[middle]
+    check("increasing input raises the centre during the same phrase",
+          ordinary > 16 && ordinary < accent && accent > 22 && accent <= VoiceWaveform.peakHeight)
+    check("strong speech leaves the third column shorter and the outer columns low",
+          waveform.heights[middle - 1] > 10 && waveform.heights[middle - 1] < accent - 7
+          && waveform.heights.enumerated().allSatisfy { (middle - 1...middle + 1).contains($0.offset) || $0.element < 7 })
+    let outer = waveform.heights[0]
+    waveform.receive(0.98, at: 1.21, reduceMotion: false)
+    waveform.advance(at: 1.26)
+    check("the outer columns vary gently during sustained speech",
+          waveform.heights[0] != outer && abs(waveform.heights[0] - outer) < 2)
+
+    waveform.receive(0, at: 1.27, reduceMotion: false)
+    waveform.advance(at: 1.32)
+    check("the centre falls as soon as a silence sample arrives",
+          waveform.heights[middle] < accent * 0.5)
+    waveform.receive(0, at: 1.36, reduceMotion: false)
+    waveform.advance(at: 1.60)
+    check("a pause returns every bar to rest", waveform.heights.allSatisfy { $0 == resting })
+
+    waveform.receive(0.89, at: 1.61, reduceMotion: false)
+    waveform.advance(at: 1.618)
+    check("after a pause the other side can lead",
+          waveform.heights[middle] == resting && waveform.heights[middle + 1] > resting)
+    waveform.advance(at: 1.72)
+    check("the third column reappears on the leading side",
+          waveform.heights[middle + 2] > 10 && waveform.heights[middle - 1] < 7)
+    waveform.advance(at: 2.20)
+    check("a missing capture update cannot hold the last peak indefinitely",
+          waveform.heights.allSatisfy { $0 == resting })
+
+    waveform.receive(.nan, at: 3, reduceMotion: true)
+    check("invalid input stays at rest in reduced motion", waveform.heights.allSatisfy { $0 == resting })
+    waveform.receive(0.54, at: 3.05, reduceMotion: true)
     let quietHeight = waveform.heights[middle]
-    waveform.receive(0.55, at: 3.05, reduceMotion: true)
-    let softHeight = waveform.heights[middle]
-    waveform.receive(0.70, at: 3.10, reduceMotion: true)
-    let speechHeight = waveform.heights[middle]
-    check("the expanded display range keeps soft speech shorter and ordinary speech taller",
-          quietHeight < softHeight && softHeight < 10.8 && speechHeight > 13.2)
-    waveform.receive(0.8, at: 3.15, reduceMotion: true)
-    check("reduced motion still distinguishes quiet and loud input",
-          quietHeight > VoiceWaveform.restingHeight && waveform.heights[middle] > quietHeight)
-    waveform.receive(1, at: 3.20, reduceMotion: true)
-    let taper = (0...middle).reversed().map { waveform.heights[$0] }
-    check("reduced motion keeps a lower third column and small tapered outer columns",
-          zip(taper, [26.0, 8.864, 7.304, 5.744, 4.184]).allSatisfy { abs($0 - $1) < 0.0001 }
-          && abs(waveform.heights[middle + 2] - 16.88) < 0.0001)
-    var overlap = VoiceWaveform()
-    overlap.receive(1, at: 4, reduceMotion: false, random: leftLead)
-    overlap.receive(1, at: 4.05, reduceMotion: false) { $0 == 0...1 ? 1 : leftLead($0) }
-    overlap.advance(at: 4.180)
-    check("overlapping pulses share one third column even when the leading side changes",
-          overlap.heights[middle - 1] > 10 && overlap.heights[middle + 2] < 9)
+    let quietOuterExcursion = waveform.heights[0] - resting
+    waveform.receive(1, at: 3.10, reduceMotion: true)
+    check("reduced motion immediately distinguishes quiet and loud input",
+          quietHeight > resting && waveform.heights[middle] == VoiceWaveform.peakHeight)
+    check("reduced motion keeps equal middle heights and a fixed, shorter third column",
+          waveform.heights[middle] == waveform.heights[middle + 1]
+          && abs(waveform.heights[middle + 2] - 15.44) < 0.0001
+          && waveform.heights[middle - 1] < 6)
+    check("the edges use more of their range during quiet speech than the centre",
+          quietOuterExcursion > 0.60 * (waveform.heights[0] - resting)
+          && quietHeight - resting < 0.25 * (VoiceWaveform.peakHeight - resting))
+    waveform.reset()
+    check("starting a new take clears the envelope", waveform.heights.allSatisfy { $0 == resting })
 
     // pill show/hide state machine
     var model = RecordingBarModel()
@@ -2278,6 +2287,59 @@ do {
     migrated.strength = "prompt"
     checkEq("later startups preserve chosen mode", Settings(defaults: defaults).strength, "prompt")
 }
+
+do {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let suite = "typeleast.tests.prompt-documents." + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer {
+        try? FileManager.default.removeItem(at: directory)
+        defaults.removePersistentDomain(forName: suite)
+    }
+    let settings = Settings(defaults: defaults, promptDirectory: directory)
+    let legacy = "  Translate to {{to}}.\n\nPreserve the paragraphs.  "
+    defaults.set(legacy, forKey: "voice.translatePrompt")
+    checkEq("existing translation preferences apply before opening the document",
+            settings.customTranslatePrompt, legacy.trimmingCharacters(in: .whitespacesAndNewlines))
+
+    let translation = try settings.preparePrompt(.translation)
+    let exported = try String(contentsOf: translation, encoding: .utf8)
+    checkEq("opening the translation document copies the previous prompt verbatim", exported, legacy)
+    check("the previous translation preference is retired after the file is written",
+          defaults.object(forKey: "voice.translatePrompt") == nil)
+
+    try "  Use short sentences in {{to}}.\n\nKeep headings.  ".write(to: translation, atomically: true, encoding: .utf8)
+    checkEq("the next translation reads an editor save without reopening settings",
+            settings.customTranslatePrompt, "Use short sentences in {{to}}.\n\nKeep headings.")
+    let reopened = try settings.preparePrompt(.translation)
+    checkEq("the translation document keeps the same path when reopened", reopened, translation)
+    checkEq("reopening a customized translation document leaves the edit in effect",
+            settings.customTranslatePrompt, "Use short sentences in {{to}}.\n\nKeep headings.")
+
+    let asr = PromptDocument(url: directory.appendingPathComponent(PromptKind.asrEngineering.filename))
+    try asr.prepare { "Original ASR instructions\n" }
+    try asr.write("保留原来的段落。\n\n保留术语。")
+    let asrOpened = try settings.preparePrompt(.asrEngineering)
+    checkEq("opening ASR preserves the path already used by the local service", asrOpened, asr.url)
+    let asrText = try asr.read()
+    checkEq("opening ASR keeps the existing multiline edit", asrText, "保留原来的段落。\n\n保留术语。")
+
+    let brief = PromptDocument(url: directory.appendingPathComponent("brief-cleanup.md"))
+    try brief.write("短段落保留语气。")
+    let briefOpened = try settings.preparePrompt(.briefCleanup)
+    checkEq("brief cleanup opens the document read by the local service", briefOpened, brief.url)
+    let briefText = try brief.read()
+    checkEq("reopening brief cleanup keeps the user's edit", briefText, "短段落保留语气。")
+
+    try settings.restorePrompt(.translation)
+    check("the restored translation document uses the built-in prompt", settings.customTranslatePrompt == nil)
+    let restored = try String(contentsOf: translation, encoding: .utf8)
+    checkEq("restoring translation also updates the file already open in the editor", restored, Settings.defaultTranslatePrompt)
+    let asrAfterRestore = try asr.read()
+    checkEq("restoring translation leaves the ASR document independent", asrAfterRestore, asrText)
+    let briefAfterRestore = try brief.read()
+    checkEq("restoring translation leaves the brief cleanup document independent", briefAfterRestore, briefText)
+} catch { check("external prompt documents", false, String(describing: error)) }
 
 do {
     state.mode = "ok"

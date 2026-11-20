@@ -91,14 +91,19 @@ func dashboardWindowTests() {
     check("the shell is visible before its dashboard deliveries", model.stats == nil && !model.activityReady)
     check("statistics and activity both reach the visible shell", waitFor { model.stats != nil && model.activityReady })
 
+    let initialPalette = model.sidebarBrandPalette
+    model.navigate(to: .history)
+    check("sidebar navigation keeps the current brand palette", model.sidebarBrandPalette == initialPalette)
     hub.show(page: .history)
     checkEq("explicit history navigation is preserved", model.page, .history)
     hub.openMainWindow()
     checkEq("opening the visible window goes Home", model.page, .home)
     hub.show(page: .history)
     window.close()
+    let previousPalette = model.sidebarBrandPalette
     hub.openMainWindow()
     check("closed window reopens at Home", window.isVisible && model.page == .home)
+    check("reopening the window draws a different brand palette", model.sidebarBrandPalette != previousPalette)
 
     let pending = AppModel(loadCacheImmediately: false)
     let slowHub = HubWindowController(model: pending)
@@ -306,13 +311,51 @@ func performanceRegressionTests() {
         check("deleting a key invalidates present-key metadata", !KeychainStore.exists(account: "presence-fixture"))
     }
 
-    // A slow health check must not fan a burst of window/menu refreshes into IPC.
     func settle(until condition: () -> Bool) {
         let deadline = Date().addingTimeInterval(3)
         while !condition(), Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         }
     }
+    do {
+        let originalStub = KeychainStore.stub
+        let settings = Settings.shared
+        let originalProvider = settings.onlineASRProvider
+        let originalPreset = settings.llmPresetID
+        defer {
+            KeychainStore.stub = originalStub
+            settings.onlineASRProvider = originalProvider
+            settings.llmPresetID = originalPreset
+        }
+        let provider = OnlineASRProvider.doubao
+        settings.onlineASRProvider = provider
+        settings.llmPresetID = "deepseek"
+        KeychainStore.stub = [provider.keychainAccount: "fixture-asr-key", settings.llmPresetID: "fixture-cleanup-key"]
+        let model = AppModel(loadCacheImmediately: false)
+        settle { model.onlineASRKeyPresence == true && model.llmKeyPresence == true }
+        check("saved ASR and cleanup keys are marked present when readable",
+              model.onlineASRKeyPresence == true && model.llmKeyPresence == true)
+
+        model.credentialsLocked = true
+        model.refreshOnlineASRKeyPresence()
+        model.refreshLLMKeyPresence()
+        check("a locked vault does not report saved keys as absent",
+              model.onlineASRKeyPresence == nil && model.llmKeyPresence == nil)
+        checkEq("speech setup shows the keychain lock", model.speechEngineSummary.detail, L10n.text("钥匙串已锁定"))
+        checkEq("cleanup setup shows the keychain lock", model.cleanupEngineSummary.detail, L10n.text("钥匙串已锁定"))
+
+        model.credentialsLocked = false
+        checkEq("unlocking shows the existing ASR configuration", model.speechEngineSummary.detail, L10n.text("已配置"))
+        check("unlocking exposes the saved cleanup key state", model.llmKeyPresence == true)
+        KeychainStore.stub = [:]
+        model.refreshOnlineASRKeyPresence()
+        model.refreshLLMKeyPresence()
+        settle { model.onlineASRKeyPresence == false && model.llmKeyPresence == false }
+        checkEq("an actually missing ASR key still asks for configuration", model.speechEngineSummary.detail, L10n.text("待配置 API Key"))
+        check("an actually missing cleanup key is reported as absent", model.llmKeyPresence == false)
+    }
+
+    // A slow health check must not fan a burst of window/menu refreshes into IPC.
     do {
         let gate = CoalescingRefresh<Int>()
         let release = DispatchSemaphore(value: 0)

@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Carbon.HIToolbox
+import LocalAuthentication
 import ServiceManagement
 
 // AppDelegate.swift - lifecycle, hotkeys, windows and the actions the UI calls.
@@ -82,7 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var healthRetryTimer: Timer?
     /// Polls quickly while the speech model loads or downloads, for the progress bar.
     private var progressPoll: DispatchWorkItem?
-    private var unlockingCredentials = false
+    private var attemptedCredentialUnlock = false
+    private var unlockWhenCacheReady = false
     private var pendingShortcut: (slot: String, work: DispatchWorkItem)?
     private var heldShortcutSlot: String?
     private let healthRefresh = CoalescingRefresh<(HealthResponse, SpeechModelCatalog?)>()
@@ -121,8 +123,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         let opensHome = true
         #endif
         NSApp.appearance = configuredAppearance
+        model.credentialsLocked = KeychainStore.requiresUnlock
         if opensHome, settings.onboardingDone, !launchedAsLoginItem { hub.openMainWindow() }
-        model.credentialsLocked = TouchIDVault.shared.isConfigured && !TouchIDVault.shared.isUnlocked
         if model.credentialsLocked, opensHome, !launchedAsLoginItem {
             authenticateCredentials { [weak self] _ in self?.beginUserCacheLoad(opensHome: opensHome) }
         } else {
@@ -152,13 +154,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     private func authenticateCredentials(completion: @escaping (Bool) -> Void) {
-        guard !unlockingCredentials else { return }
-        unlockingCredentials = true
+        guard !model.credentialsUnlocking else { return }
+        attemptedCredentialUnlock = true
+        model.credentialsUnlocking = true
+        model.credentialUnlockError = nil
         Task { @MainActor [weak self] in
-            do { try await TouchIDVault.shared.unlock() }
-            catch { DiagnosticsLog.write("keychain.touch-id.fail", ["status": String(TouchIDVault.status(error))]) }
             guard let self else { return }
-            self.unlockingCredentials = false
+            do { try await TouchIDVault.shared.unlock() }
+            catch {
+                let failure = error as NSError
+                DiagnosticsLog.write("keychain.touch-id.fail", ["status": String(TouchIDVault.status(error)), "code": String(failure.code)])
+                switch (error as? LAError)?.code {
+                case .userCancel, .systemCancel, .appCancel: break
+                case .biometryLockout: self.model.credentialUnlockError = L10n.text("请先用登录密码解锁 Mac，再试 Touch ID。")
+                default: self.model.credentialUnlockError = L10n.text("Touch ID 解锁失败，请重试。")
+                }
+            }
+            self.model.credentialsUnlocking = false
             let unlocked = TouchIDVault.shared.isUnlocked
             self.model.credentialsLocked = !unlocked
             if unlocked {
@@ -170,7 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func unlockCredentials() {
-        guard model.credentialsLocked, model.userCacheReady, phase == .idle else { return }
+        guard model.credentialsLocked, phase == .idle else { return }
+        guard model.userCacheReady else { unlockWhenCacheReady = true; return }
         authenticateCredentials { [weak self] unlocked in
             guard let self, unlocked else { return }
             HistoryStore.shared.retryAfterUnlock()
@@ -181,7 +194,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     private func openHomeFromOutside() {
         hub.openMainWindow()
-        if launchedAsLoginItem { unlockCredentials() }
+        requestInitialCredentialUnlock()
+    }
+
+    private func requestInitialCredentialUnlock() {
+        if !attemptedCredentialUnlock { unlockCredentials() }
     }
 
     private func finishLaunch(opensHome: Bool) {
@@ -225,6 +242,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         HistoryStore.shared.applyRetention(settings.historyRetention)
         applyState()
         startService()
+        if unlockWhenCacheReady {
+            unlockWhenCacheReady = false
+            requestInitialCredentialUnlock()
+        }
 
         if settings.warmUpPill && !settings.needsPractice {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.recordingBar.warmUp() }
@@ -268,6 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationWillTerminate(_ notification: Notification) {
         recordingHints.stop()
         HubFeedback.shared.dismissAll()
+        model.meeting.cancel()
         recorder.cancel()
         dictation.dropCancelledRecording()
         onboarding.practice.cancel()
@@ -960,7 +982,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuPasteLast() { pasteLast() }
     func menuOpenHub(_ page: HubPage) {
         if page == .home { openHomeFromOutside() }
-        else { hub.show(page: page) }
+        else {
+            hub.show(page: page)
+            requestInitialCredentialUnlock()
+        }
     }
     func menuRequestAccessibility() { requestAccessibility() }
     func menuRestartService() { restartService() }

@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import SwiftUI
 
-// Meeting.swift - record or import one meeting, send it to the service's MOSS job, and keep the
+// Meeting.swift - record or import one meeting, transcribe locally or online, and keep the
 // speaker-labelled transcript for copying or saving. The transcript lives in memory and
 // remains available while the app processes an imported file.
 
@@ -12,12 +12,40 @@ struct MeetingSegment: Codable, Equatable, Identifiable {
     var speaker: String
     var text: String
     var id: String { speaker + String(start) }
+    var labelledText: String { speaker.isEmpty ? text : speaker + ": " + text }
 }
 
 struct MeetingResult: Codable, Equatable {
     var segments: [MeetingSegment]
     var speakers: [String]
     var truncated: Bool?
+
+    static func online(_ transcript: OnlineASRTranscript, duration: Double) -> Self {
+        var speakerLabels: [String: String] = [:]
+        var speakers: [String] = []
+        var segments = transcript.utterances.sorted { $0.startMilliseconds < $1.startMilliseconds }.compactMap { item -> MeetingSegment? in
+            let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            var speaker = ""
+            if let id = item.speakerID, !id.isEmpty {
+                if let existing = speakerLabels[id] {
+                    speaker = existing
+                } else {
+                    speaker = String(format: "S%02d", speakers.count + 1)
+                    speakerLabels[id] = speaker
+                    speakers.append(speaker)
+                }
+            }
+            let start = min(duration, max(0, Double(item.startMilliseconds) / 1000))
+            let end = item.endMilliseconds.map { min(duration, max(start, Double($0) / 1000)) }
+            return MeetingSegment(start: start, end: end, speaker: speaker, text: text)
+        }
+        let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if segments.isEmpty, !text.isEmpty {
+            segments = [MeetingSegment(start: 0, end: duration, speaker: "", text: text)]
+        }
+        return Self(segments: segments, speakers: speakers)
+    }
 }
 
 /// Answer of `GET /meetings/status`.
@@ -46,7 +74,7 @@ enum MeetingFormat {
 
     /// `[01:15] S02: text`, one turn per line.
     static func text(_ result: MeetingResult) -> String {
-        result.segments.map { "[" + clock($0.start) + "] " + $0.speaker + ": " + $0.text }.joined(separator: "\n") + "\n"
+        result.segments.map { "[" + clock($0.start) + "] " + $0.labelledText }.joined(separator: "\n") + "\n"
     }
 
     private static func srtTime(_ seconds: Double) -> String {
@@ -57,7 +85,7 @@ enum MeetingFormat {
     /// Subtitles. A turn with no end time (the last one, when cut off) gets three seconds.
     static func srt(_ result: MeetingResult) -> String {
         result.segments.enumerated().map { index, turn in
-            String(index + 1) + "\n" + srtTime(turn.start) + " --> " + srtTime(turn.end ?? turn.start + 3) + "\n" + turn.speaker + ": " + turn.text + "\n"
+            String(index + 1) + "\n" + srtTime(turn.start) + " --> " + srtTime(turn.end ?? turn.start + 3) + "\n" + turn.labelledText + "\n"
         }.joined(separator: "\n")
     }
 }
@@ -117,6 +145,7 @@ private final class MeetingPreviewToken {
 /// What the Meetings page shows. The one meeting flow: audio in, job, transcript out.
 final class MeetingController: ObservableObject {
     enum Stage: Equatable { case idle, recording, converting, transcribing, done, failed }
+    typealias CloudRecognizer = @Sendable (Data, OnlineASRConfiguration) async throws -> OnlineASRTranscript
 
     struct Transcript: Identifiable {
         let id: String
@@ -138,6 +167,9 @@ final class MeetingController: ObservableObject {
     @Published private(set) var download: SpeechModelOperation?
 
     private let client: ServiceClient
+    private let settings: Settings
+    private let recognizeCloud: CloudRecognizer
+    private let cloudKey: @Sendable (OnlineASRProvider) -> String
     private let modelRefresh = CoalescingRefresh<SpeechModelCatalog>()
     private var modelPoll: DispatchWorkItem?
     let recorder = Recorder()
@@ -152,10 +184,17 @@ final class MeetingController: ObservableObject {
     private var finalToken: MeetingPreviewToken?
     private var liveJobID: String?
     private var finalAfterPreview: Data?
+    private var provider: OnlineASRProvider = .local
+    private var cloudTask: Task<Void, Never>?
     var pollInterval: TimeInterval = 2
 
-    init(client: ServiceClient = .shared, liveChunkBytes: Int = 320_000) {
+    init(client: ServiceClient = .shared, liveChunkBytes: Int = 320_000, settings: Settings = .shared,
+         recognizeCloud: @escaping CloudRecognizer = { try await OnlineASR.transcribeMeeting(wav: $0, configuration: $1) },
+         cloudKey: @escaping @Sendable (OnlineASRProvider) -> String = { KeychainStore.read(account: $0.keychainAccount) ?? "" }) {
         self.client = client
+        self.settings = settings
+        self.recognizeCloud = recognizeCloud
+        self.cloudKey = cloudKey
         self.liveChunkBytes = liveChunkBytes
         self.liveQueue = MeetingLiveQueue(chunkBytes: liveChunkBytes)
     }
@@ -163,6 +202,7 @@ final class MeetingController: ObservableObject {
     var busy: Bool { [.recording, .converting, .transcribing].contains(stage) }
     var canRetry: Bool { stage == .failed && audio != nil }
     var result: MeetingResult? { transcript?.result }
+    var usesLivePreview: Bool { provider == .local }
 
     // MARK: model
 
@@ -211,14 +251,15 @@ final class MeetingController: ObservableObject {
         recorder.onAutoStop = { [weak self] in self?.stopRecording() }
         do { try recorder.start() } catch { fail(String(describing: error)); return }
         reset()
+        provider = settings.meetingASRProvider
         transcript = nil
         stage = .recording
-        liveToken = MeetingPreviewToken()
+        if usesLivePreview { liveToken = MeetingPreviewToken() }
         meter = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.seconds = self.recorder.elapsed
             self.level = self.recorder.level()
-            self.updateLivePreview()
+            if self.usesLivePreview { self.updateLivePreview() }
         }
     }
 
@@ -244,7 +285,7 @@ final class MeetingController: ObservableObject {
                 }
             } else {
                 liveToken?.cancel()
-                send(wav)
+                send(wav, provider: provider)
             }
         } catch { recorder.cancel(); fail(String(describing: error)) }
     }
@@ -254,12 +295,14 @@ final class MeetingController: ObservableObject {
     func importFile(_ url: URL) {
         guard !busy else { return }
         reset()
+        let provider = settings.meetingASRProvider
+        self.provider = provider
         stage = .converting
         let run = generation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
                 let wav = try MeetingAudio.canonicalWav(from: url)
-                DispatchQueue.main.async { if self?.generation == run { self?.send(wav) } }
+                DispatchQueue.main.async { if self?.generation == run { self?.send(wav, provider: provider) } }
             } catch {
                 let text: String
                 switch error as? MeetingAudioError {
@@ -278,6 +321,8 @@ final class MeetingController: ObservableObject {
 
     func cancel() {
         generation += 1
+        cloudTask?.cancel()
+        cloudTask = nil
         liveToken?.cancel()
         finalToken?.cancel()
         liveToken = nil
@@ -356,7 +401,7 @@ final class MeetingController: ObservableObject {
                 if let final = self.finalAfterPreview {
                     self.finalAfterPreview = nil
                     token.cancel()
-                    self.send(final)
+                    self.send(final, provider: .local)
                 } else {
                     self.updateLivePreview()
                 }
@@ -364,19 +409,30 @@ final class MeetingController: ObservableObject {
         }
     }
 
-    func send(_ wav: Data) {
+    func send(_ wav: Data, provider selected: OnlineASRProvider? = nil) {
         audio = wav
         generation += 1
         let run = generation
+        cloudTask?.cancel()
+        cloudTask = nil
+        meter?.invalidate()
+        meter = nil
         finalToken?.cancel()
-        let token = MeetingPreviewToken()
-        finalToken = token
-        let requestID = UUID().uuidString.lowercased()
-        jobID = requestID
+        finalToken = nil
+        jobID = nil
+        provider = selected ?? settings.meetingASRProvider
         seconds = Double(max(0, wav.count - 44)) / Double(Recorder.bytesPerSecond)
         elapsed = 0
         message = ""
         stage = .transcribing
+        if provider != .local {
+            sendCloud(wav, provider: provider, run: run)
+            return
+        }
+        let token = MeetingPreviewToken()
+        finalToken = token
+        let requestID = UUID().uuidString.lowercased()
+        jobID = requestID
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
@@ -391,6 +447,52 @@ final class MeetingController: ObservableObject {
                 DispatchQueue.main.async { if self.generation == run { self.fail(Self.explain(error)) } }
             }
         }
+    }
+
+    private func sendCloud(_ wav: Data, provider: OnlineASRProvider, run: Int) {
+        let start = ProcessInfo.processInfo.systemUptime
+        let duration = seconds
+        let workspaceID = settings.funASRWorkspaceID
+        let speechSmoothing = settings.doubaoSpeechSmoothing
+        let hotwords = provider == .doubao ? settings.doubaoHotwords : ""
+        let recognize = recognizeCloud
+        let key = cloudKey
+        meter?.invalidate()
+        meter = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.elapsed = ProcessInfo.processInfo.systemUptime - start
+        }
+        cloudTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let configuration = OnlineASRConfiguration(provider: provider, apiKey: key(provider), workspaceID: workspaceID,
+                                                           doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
+                try Task.checkCancellation()
+                let response = try await recognize(wav, configuration)
+                try Task.checkCancellation()
+                let result = MeetingResult.online(response, duration: duration)
+                await MainActor.run { [weak self] in
+                    guard let self, self.generation == run else { return }
+                    self.finishCloud(started: start)
+                    self.transcript = Transcript(id: UUID().uuidString, result: result, seconds: duration, elapsed: self.elapsed)
+                    self.audio = nil
+                    self.stage = .done
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                let text = (error as? LocalizedError)?.errorDescription ?? L10n.text("联网会议转写失败，可以重试。")
+                await MainActor.run { [weak self] in
+                    guard let self, self.generation == run else { return }
+                    self.finishCloud(started: start)
+                    self.fail(text)
+                }
+            }
+        }
+    }
+
+    private func finishCloud(started: TimeInterval) {
+        meter?.invalidate()
+        meter = nil
+        cloudTask = nil
+        elapsed = ProcessInfo.processInfo.systemUptime - started
     }
 
     private func poll(id: String, run: Int, token: MeetingPreviewToken) {
@@ -441,6 +543,8 @@ final class MeetingController: ObservableObject {
 
     private func reset() {
         generation += 1
+        cloudTask?.cancel()
+        cloudTask = nil
         liveToken?.cancel()
         finalToken?.cancel()
         liveToken = nil

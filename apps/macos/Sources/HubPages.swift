@@ -117,7 +117,16 @@ private struct ShortcutReferenceCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            shortcut(L10n.text("口述"), binding: model.settings.hotkeyMain)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 8) {
+                    shortcut(L10n.text("口述"), binding: model.settings.hotkeyMain)
+                    ServiceBadge().fixedSize(horizontal: true, vertical: false)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    ServiceBadge()
+                    shortcut(L10n.text("口述"), binding: model.settings.hotkeyMain)
+                }
+            }
             shortcut(L10n.text("翻译"), binding: model.settings.hotkeyTranslate)
             shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
             Menu(L10n.text("试试听写")) {
@@ -164,6 +173,48 @@ private struct ShortcutReferenceCard: View {
         if binding.modifiers & 256 != 0 { result.append("Command") }
         result.append(HotKeyCentre.keyName(binding.keyCode))
         return result
+    }
+}
+
+private struct ServiceBadge: View {
+    @EnvironmentObject var model: AppModel
+
+    private var badgeText: String {
+        if model.serviceUp { return "Ready" }
+        if model.modelsDownloading {
+            return L10n.text("正在下载模型 ") + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
+        }
+        if model.modelsMissing { return L10n.text("语音模型未下载") }
+        if case .running = model.serviceState { return L10n.text("正在加载语音模型") }
+        return L10n.text("本地服务未就绪")
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(model.serviceUp ? Theme.success : Theme.warning)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            InterfaceTypography.text(badgeText, size: 12, weight: .medium)
+                .foregroundColor(Theme.secondary)
+                .lineLimit(1)
+                .help(badgeText)
+            if model.modelsMissing {
+                Button(L10n.text("下载模型")) { model.actions?.downloadModels() }
+                    .buttonStyle(FlatActionButtonStyle())
+                    .foregroundColor(Theme.accent)
+                    .fixedSize()
+            } else if !model.serviceUp && !model.modelsDownloading {
+                Button(L10n.text("重启")) { model.actions?.restartService() }
+                    .buttonStyle(FlatActionButtonStyle())
+                    .foregroundColor(Theme.accent)
+                    .fixedSize()
+            }
+        }
+        .font(Theme.captionFont)
+        .padding(.horizontal, 8)
+        .frame(minHeight: 22)
+        .background(Capsule().fill(Theme.window))
     }
 }
 
@@ -226,7 +277,7 @@ private struct SetupCard: View {
     @EnvironmentObject var model: AppModel
 
     static func pending(_ model: AppModel) -> Bool {
-        !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceState.isRunning
+        model.credentialsLocked || !model.accessibilityTrusted || model.micStatus != .authorized || !model.serviceState.isRunning
             || !model.recognitionConfigured || !model.llmConfigured
     }
 
@@ -234,6 +285,7 @@ private struct SetupCard: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Text(L10n.text("设置位置")).font(InterfaceTypography.localized(14, weight: .semibold))
+                if model.credentialsLocked { CredentialUnlockRow() }
                 SetupRow(done: model.micStatus == .authorized, title: L10n.text("麦克风"),
                          detail: "",
                          action: model.micStatus == .denied ? L10n.text("打开设置") : L10n.text("允许")) {
@@ -259,18 +311,20 @@ private struct SetupCard: View {
                         model.actions?.downloadModels()
                     }
                     if model.speech?.networkFailure == true { MirrorHint { model.retryModelDownload() } }
-                } else {
-                    SetupRow(done: model.recognitionConfigured, title: model.settings.onlineASRProvider.label,
+                } else if model.onlineASRKeyPresence == false {
+                    SetupRow(done: false, title: model.settings.onlineASRProvider.label,
                              detail: L10n.text("待配置 API Key"), action: L10n.text("打开设置")) {
                         model.settingsCategory = .models
                         model.navigate(to: .settings)
                     }
                 }
-                SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
-                         detail: model.llmConfigured ? model.modelSummary : "",
-                         action: L10n.text("打开设置")) {
-                    model.settingsCategory = .models
-                    model.navigate(to: .settings)
+                if !model.credentialsLocked || !LLMPreset.find(model.settings.llmPresetID).needsKey {
+                    SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
+                             detail: model.llmConfigured ? model.modelSummary : "",
+                             action: L10n.text("打开设置")) {
+                        model.settingsCategory = .models
+                        model.navigate(to: .settings)
+                    }
                 }
             }
         }
@@ -312,17 +366,10 @@ private struct EngineCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        let serviceStatus = model.serviceUp ? "Ready" : L10n.text("本地服务未就绪")
         let speech = model.speechEngineSummary
         let cleanup = model.cleanupEngineSummary
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 5) {
-                InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
-                Spacer(minLength: 2)
-                Circle().fill(model.serviceUp ? Theme.success : Theme.tertiary).frame(width: 5, height: 5)
-                InterfaceTypography.text(serviceStatus, size: 11)
-                    .foregroundColor(Theme.homeLabel).lineLimit(1).help(serviceStatus)
-            }
+            InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
             Spacer(minLength: 4)
             VStack(alignment: .leading, spacing: 9) {
                 EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: speech.name, detail: speech.detail)
@@ -482,7 +529,7 @@ struct HistoryPage: View {
 
     private var historyList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("历史"), subtitle: "") {
+            PageHeader(title: "History") {
                 HStack(spacing: 10) {
                     Picker(L10n.text("保留"), selection: model.setting(\.historyRetention, then: {
                         HistoryStore.shared.applyRetention(Settings.shared.historyRetention)
@@ -509,11 +556,15 @@ struct HistoryPage: View {
             if dayGroups.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    Text(L10n.text(model.historyUnavailable ? "无法打开听写历史，原有记录已保留。" : "没有听写记录"))
-                        .foregroundColor(Theme.secondary)
                     if model.credentialsLocked {
-                        Button(L10n.text("用 Touch ID 解锁")) { model.actions?.unlockCredentials() }
+                        Button(L10n.text(model.credentialsUnlocking ? "正在解锁…" : "用 Touch ID 解锁")) {
+                            model.actions?.unlockCredentials()
+                        }
                             .buttonStyle(SecondaryButtonStyle())
+                            .disabled(model.credentialsUnlocking || model.phase != .idle)
+                    } else {
+                        Text(L10n.text(model.historyUnavailable ? "无法读取历史" : "没有听写记录"))
+                            .foregroundColor(Theme.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

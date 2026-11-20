@@ -1,98 +1,99 @@
 import Foundation
 
-/// Receives capture levels at 20 Hz and renders outward pulses on the animation clock.
+/// Tracks capture levels on the animation clock and gives nearby columns a slight delay.
 struct VoiceWaveform {
     static let count = 10
     static let restingHeight: Double = 2
     static let peakHeight: Double = 26
-    private static let lead: TimeInterval = 0.080
-    private static let step: TimeInterval = 0.017
-    private static let jitter: TimeInterval = 0.002
-    private static let outerJitter: TimeInterval = 0.005
-    private static let outerVariation = 0.88...1.12
-    private static let attack: TimeInterval = 0.026
-    private static let releaseStart: TimeInterval = attack + 0.012
-    private static let decay: TimeInterval = 0.170
-    private static let trailingDelay: ClosedRange<TimeInterval> = 0.008...0.012
-    private static let trailingGain = 0.80...0.88
-    private static let leftAccentColumn = count / 2 - 2
-    private static let rightAccentColumn = count / 2 + 1
-    private static let distances = (0..<count).map { max(count / 2 - 1 - $0, $0 - count / 2) }
 
-    private struct Column {
-        let delay: TimeInterval
-        let gain: Double
-    }
+    private static let attack: TimeInterval = 0.020
+    private static let release: TimeInterval = 0.052
+    private static let sampleTimeout: TimeInterval = 0.12
+    private static let phrasePause: TimeInterval = 0.20
+    private static let minimumEnvelope = 0.008
+    private static let leftMiddle = count / 2 - 1
+    private static let rightMiddle = count / 2
+    private static let leftAccent = leftMiddle - 1
+    private static let rightAccent = rightMiddle + 1
+    private static let step: TimeInterval = 0.016
+    private static let longestDelay = step * Double(leftMiddle)
 
-    private struct Pulse {
-        let start: TimeInterval
-        let amplitude: Double
-        let columns: [Column]
-        let accentColumn: Int
+    /// Each level starts a continuous segment. Keep only the history the delayed columns need.
+    private struct Segment {
+        let time: TimeInterval
+        let from: Double
+        let target: Double
 
-        var end: TimeInterval { start + Self.lastOffset + VoiceWaveform.releaseStart + VoiceWaveform.decay }
-
-        private static let lastOffset = VoiceWaveform.step * Double(VoiceWaveform.count / 2 - 1)
-            + VoiceWaveform.outerJitter + VoiceWaveform.trailingDelay.upperBound
+        func value(at now: TimeInterval) -> Double {
+            let elapsed = max(0, now - time)
+            let response = target > from ? VoiceWaveform.attack : VoiceWaveform.release
+            let held = min(elapsed, VoiceWaveform.sampleTimeout)
+            let value = target + (from - target) * exp(-held / response)
+            let expired = max(0, elapsed - VoiceWaveform.sampleTimeout)
+            let amplitude = expired > 0 ? value * exp(-expired / VoiceWaveform.release) : value
+            return amplitude < VoiceWaveform.minimumEnvelope ? 0 : amplitude
+        }
     }
 
     private(set) var heights = [Double](repeating: restingHeight, count: count)
-    private var pulses: [Pulse] = []
     private var drawnHeights = [Double](repeating: restingHeight, count: count)
+    private var segments: [Segment] = []
+    private var lastVoiceAt: TimeInterval?
+    private var leadsOnLeft = true
 
     mutating func reset() { self = VoiceWaveform() }
 
-    mutating func receive(_ level: Float, at now: TimeInterval, reduceMotion: Bool,
-                          random: (ClosedRange<Double>) -> Double = { Double.random(in: $0) }) {
+    mutating func receive(_ level: Float, at now: TimeInterval, reduceMotion: Bool) {
         let volume = level.isFinite ? Double(min(1, max(0, level))) : 0
-        // Soft input stays compact. Blend smoothly into the taller range as speech gets stronger.
-        let blend = min(1, max(0, (volume - 0.54) / 0.22))
-        let heightGain = 0.42 + 0.58 * blend * blend * (3 - 2 * blend)
-        let amplitude = volume * heightGain * (Self.peakHeight - Self.restingHeight)
+        // The capture meter boosts quiet signals with a fourth root. Restore some
+        // of the dynamic range so quiet speech moves the middle columns only a little.
+        let calibratedLevel = volume * volume
+        let amplitude = pow(min(1, max(0, (calibratedLevel - 0.036) / 0.95)), 0.88)
         if reduceMotion {
-            pulses.removeAll(keepingCapacity: true)
-            for (index, distance) in Self.distances.enumerated() {
-                let gain = Self.gain(at: distance, isAccent: index == Self.rightAccentColumn)
-                heights[index] = Self.restingHeight + amplitude * gain
+            segments.removeAll(keepingCapacity: true)
+            lastVoiceAt = nil
+            leadsOnLeft = true
+            for index in heights.indices {
+                heights[index] = Self.columnHeight(amplitude, at: index, lead: Self.leftMiddle,
+                                                   accent: Self.rightAccent, texture: 0, reduceMotion: true)
             }
             return
         }
-        guard volume > 0, volume == 1 || random(0...1) < volume else { return }
-        // Choose the bias once per sound-driven pulse. The leading side keeps
-        // the measured peak; the following side is only delayed and softened.
-        let leadsOnLeft = random(0...1) < 0.5
-        let delay = random(Self.trailingDelay)
-        let gain = random(Self.trailingGain)
-        pulses.removeAll { $0.end <= now }
-        // Keep overlapping pulses on the same third column so they cannot light up a fourth.
-        let accentColumn = pulses.last?.accentColumn ?? (leadsOnLeft ? Self.leftAccentColumn : Self.rightAccentColumn)
-        let columns = Self.distances.enumerated().map { index, distance in
-            let follows = (index < Self.count / 2) != leadsOnLeft
-            let jitter = distance == 0 ? Self.jitter : Self.outerJitter
-            let variation = distance == 0 ? 1 : random(Self.outerVariation)
-            let spread = Double(distance) * Self.step + random(-jitter...jitter)
-            let spatialGain = Self.gain(at: distance, isAccent: index == accentColumn)
-            return Column(delay: spread + (follows ? delay : 0), gain: spatialGain * variation * (follows ? gain : 1))
+        let previous = segments.last
+        if let previous, now < previous.time { return }
+        if amplitude > 0 {
+            if let lastVoiceAt, now >= lastVoiceAt + Self.phrasePause {
+                leadsOnLeft.toggle()
+            }
+            lastVoiceAt = now
         }
-        pulses.append(Pulse(start: now + Self.lead, amplitude: amplitude, columns: columns, accentColumn: accentColumn))
+        let from = previous?.value(at: now) ?? 0
+        while segments.count > 1 && segments[1].time <= now - Self.longestDelay {
+            segments.removeFirst()
+        }
+        let segment = Segment(time: now, from: from, target: amplitude)
+        if previous?.time == now {
+            segments[segments.count - 1] = segment
+        } else {
+            segments.append(segment)
+        }
     }
 
     @discardableResult
     mutating func advance(at now: TimeInterval) -> Bool {
-        pulses.removeAll { $0.end <= now }
+        let lead = leadsOnLeft ? Self.leftMiddle : Self.rightMiddle
+        let follow = leadsOnLeft ? Self.rightMiddle : Self.leftMiddle
+        let accent = leadsOnLeft ? Self.leftAccent : Self.rightAccent
         for index in heights.indices {
-            var peak: Double = 0
-            for pulse in pulses {
-                let column = pulse.columns[index]
-                let age = now - pulse.start - column.delay
-                guard age > 0, age < Self.releaseStart + Self.decay else { continue }
-                let tail = 1 - max(0, age - Self.releaseStart) / Self.decay
-                let envelope = age < Self.attack ? age / Self.attack : tail * tail
-                peak = max(peak, pulse.amplitude * column.gain * envelope)
-            }
-            heights[index] = Self.restingHeight + peak
+            let delay = index == lead ? 0 : index == follow ? 0.012 : index == accent ? 0.030 :
+                Self.step * Double(Self.distance(fromMiddle: index))
+            let time = now - delay
+            let segment = segments.last { $0.time <= time }
+            let amplitude = segment?.value(at: time) ?? 0
+            let texture = amplitude > 0 && index != lead && index != follow && index != accent
+                ? sin(time * (9 + Double(index) * 0.71) + Double(index) * 2.33) : 0
+            heights[index] = Self.columnHeight(amplitude, at: index, lead: lead, accent: accent, texture: texture)
         }
-
         let dirty = zip(heights, drawnHeights).contains {
             abs($0 - $1) >= 0.05 || ($0 == Self.restingHeight && $1 != $0)
         }
@@ -100,9 +101,31 @@ struct VoiceWaveform {
         return dirty
     }
 
-    private static func gain(at distance: Int, isAccent: Bool) -> Double {
-        if distance == 0 { return 1 }
-        if isAccent { return 0.62 }
-        return 1.30 * max(0.07, 0.27 - 0.05 * Double(distance))
+    private static func distance(fromMiddle index: Int) -> Int {
+        max(leftMiddle - index, index - rightMiddle)
+    }
+
+    private static let centerLogRange = log(4.0)
+    private static let outerLogRange = log(25.0)
+
+    private static func columnHeight(_ amplitude: Double, at index: Int, lead: Int, accent: Int,
+                                     texture: Double, reduceMotion: Bool = false) -> Double {
+        let distance = distance(fromMiddle: index)
+        let excursion: Double
+        if distance == 0 || index == accent {
+            // Blend into the logarithmic response as speech reaches a moderate level.
+            let blend = min(1, max(0, (amplitude - 0.18) / 0.49))
+            let weight = blend * blend * (3 - 2 * blend)
+            let quiet = 0.5 * amplitude
+            let voiced = log1p(3 * amplitude) / centerLogRange
+            let gain = index == accent ? 0.56 : (index == lead || reduceMotion ? 1 : 0.89)
+            excursion = (quiet + (voiced - quiet) * weight) * gain
+        } else {
+            // A steeper logarithmic curve at the bottom makes quiet input visible at the edges.
+            let soft = log1p(24 * amplitude) / outerLogRange
+            let taper = max(0.05, 0.19 - Double(distance) * 0.035)
+            excursion = soft * taper * (1 + 0.17 * texture)
+        }
+        return restingHeight + (peakHeight - restingHeight) * excursion
     }
 }

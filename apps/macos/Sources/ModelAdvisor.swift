@@ -154,13 +154,7 @@ struct ModelRecommendationCard: View {
                     if recommendation.hasSupportedAdvice, recommendation.capabilityBasis == "verified-reference" {
                         Text(recommendation.capabilityDate.map { L10n.text("产品设置依据 {0} 查阅的资料。", $0) } ?? L10n.text("产品设置依据此前查阅的资料。"))
                             .font(InterfaceTypography.localized(12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
-                    } else if recommendation.hasSupportedAdvice, recommendation.capabilityBasis == "live-official" {
-                        Text(L10n.text("产品设置依据本次查阅的资料。"))
-                            .font(InterfaceTypography.localized(12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(L10n.text("仅供参考，具体模型和设置以目标应用及账户权限为准。"))
-                        .font(InterfaceTypography.localized(12)).foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)

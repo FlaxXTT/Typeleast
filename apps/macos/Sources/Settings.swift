@@ -1,6 +1,62 @@
+import CryptoKit
 import Foundation
 
 // Settings.swift - UserDefaults-backed configuration for TypeLeast.
+
+enum PromptKind {
+    case briefCleanup, asrEngineering, translation, promptClarify, promptBreakdown, promptDraft
+
+    var filename: String {
+        switch self {
+        case .briefCleanup: return "brief-cleanup.md"
+        case .asrEngineering: return "asr-engineering.md"
+        case .translation: return "translation-prompt.md"
+        case .promptClarify: return "prompt-mode-clarify.md"
+        case .promptBreakdown: return "prompt-mode-breakdown.md"
+        case .promptDraft: return "prompt-mode-draft.md"
+        }
+    }
+
+    func defaultText() throws -> String {
+        if self == .translation { return Settings.defaultTranslatePrompt }
+        guard let service = ServiceLocator.serviceDirectory(resources: Bundle.main.resourcePath,
+                                                            environment: ProcessInfo.processInfo.environment,
+                                                            exists: FileManager.default.fileExists(atPath:)) else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        let name = self == .asrEngineering ? "cleanup.md" : filename
+        let bundled = URL(fileURLWithPath: service, isDirectory: true).appendingPathComponent("lib/prompts/" + name)
+        return try String(contentsOf: bundled, encoding: .utf8)
+    }
+}
+
+/// Each task reads its own document for the next model request.
+struct PromptDocument {
+    let url: URL
+
+    func read() throws -> String? {
+        do {
+            return try String(contentsOf: url, encoding: .utf8)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            return nil
+        }
+    }
+
+    func prepare(initialText: () throws -> String) throws {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+            guard !isDirectory.boolValue else { throw CocoaError(.fileWriteFileExists) }
+        } else {
+            try write(initialText())
+        }
+    }
+
+    func write(_ text: String) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+}
 
 enum VoiceLanguage: String, CaseIterable {
     case auto, zh, en, yue, ja, ko
@@ -64,6 +120,17 @@ enum VoiceStrength: String, CaseIterable {
         if value == "promptbrief" || value == "promptify" { return .concise }
         if value == "off" { return .prompt }
         return VoiceStrength(rawValue: value ?? "") ?? .prompt
+    }
+}
+
+enum ShortDictationMode: String, CaseIterable {
+    case mainModel, smallModel
+
+    var label: String {
+        switch self {
+        case .smallModel: return L10n.text("用小模型整理")
+        case .mainModel: return L10n.text("用常用模型整理")
+        }
     }
 }
 
@@ -135,9 +202,13 @@ final class Settings {
     static let didChange = Notification.Name("DshVoiceSettingsDidChange")
 
     private let d: UserDefaults
+    private let promptDirectory: URL
+    private static let legacyTranslatePromptKey = "voice.translatePrompt"
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         promptDirectory: URL = URL(fileURLWithPath: ServiceClient.stateDirectory, isDirectory: true)) {
         d = defaults
+        self.promptDirectory = promptDirectory
         if defaults.object(forKey: "ui.practiceGate.v1") == nil {
             let existing = defaults.dictionaryRepresentation().keys.contains { key in
                 key.hasPrefix("voice.") || key.hasPrefix("llm.") || key.hasPrefix("ui.onboardingDone") || key.hasPrefix("hk.")
@@ -239,6 +310,48 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: "voice.onlineASRProvider"); changed() }
     }
 
+    var meetingASRProvider: OnlineASRProvider {
+        get { OnlineASRProvider(rawValue: d.string(forKey: "meeting.asrProvider") ?? "") ?? .local }
+        set { d.set(newValue.rawValue, forKey: "meeting.asrProvider"); changed() }
+    }
+
+    var doubaoSpeechSmoothing: Bool {
+        get { bool("voice.doubaoSpeechSmoothing", default: true) }
+        set { d.set(newValue, forKey: "voice.doubaoSpeechSmoothing"); changed() }
+    }
+
+    var doubaoHotwords: String {
+        get { d.string(forKey: "voice.doubaoHotwords") ?? "" }
+        set { d.set(newValue, forKey: "voice.doubaoHotwords"); changed() }
+    }
+
+    var dictationCleanupEnabled: Bool {
+        get { bool("voice.dictationCleanupEnabled", default: true) }
+        set { d.set(newValue, forKey: "voice.dictationCleanupEnabled"); changed() }
+    }
+
+    var shortDictationMode: ShortDictationMode {
+        get { ShortDictationMode(rawValue: d.string(forKey: "voice.shortDictationMode") ?? "") ?? .mainModel }
+        set { d.set(newValue.rawValue, forKey: "voice.shortDictationMode"); changed() }
+    }
+
+    var shortDictationProvider: String {
+        get { d.string(forKey: "voice.shortDictationProvider") ?? llmPresetID }
+        set { d.set(newValue, forKey: "voice.shortDictationProvider"); changed() }
+    }
+
+    var shortDictationModel: String {
+        get { d.string(forKey: "voice.shortDictationModel." + shortDictationProvider) ?? "" }
+        set { d.set(newValue, forKey: "voice.shortDictationModel." + shortDictationProvider); changed() }
+    }
+
+    var shortDictationCleanup: ShortDictationCleanup? {
+        guard dictationCleanupEnabled else { return nil }
+        let useSmallModel = shortDictationMode == .smallModel
+        let route = useSmallModel ? savedLLMRoute(presetID: shortDictationProvider, model: shortDictationModel) : nil
+        return ShortDictationCleanup(maxUnits: 25, route: route, fullAbove: 100, useSmallModel: useSmallModel)
+    }
+
     var funASRWorkspaceID: String {
         get { d.string(forKey: "voice.funASRWorkspaceID") ?? "" }
         set { d.set(newValue, forKey: "voice.funASRWorkspaceID"); changed() }
@@ -295,18 +408,44 @@ final class Settings {
     /// The service's default translation prompt, shown for editing (a service test keeps them equal).
     static let defaultTranslatePrompt = "Translate academic and research content into {{to}} using precise disciplinary terminology and a formal scholarly register. Preserve the scope, uncertainty, complexity, and logical force of claims without simplifying or strengthening them. Treat quantitative expressions and author-year citations as protected source spans: copy formulas, statistical labels, values, brackets, ASCII punctuation, and author strings exactly as written, including forms such as `β = 0.42`, `95% CI [0.10, 0.74]`, `p < 0.05`, and `Smith et al. (2021)`; translate only the surrounding prose. Keep scientific notation, symbols, references, bibliographic data, abbreviations, and named methods accurate, using established target-language terminology where available outside those protected spans.\n{{title_prompt}}{{summary_prompt}}{{terms_prompt}}"
 
-    /// 翻译's system prompt as saved in Settings; {{to}} is the target language.
-    var translatePrompt: String {
-        get { d.string(forKey: "voice.translatePrompt") ?? Settings.defaultTranslatePrompt }
-        set {
-            let isDefault = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newValue == Settings.defaultTranslatePrompt
-            if isDefault { d.removeObject(forKey: "voice.translatePrompt") } else { d.set(newValue, forKey: "voice.translatePrompt") }
-            changed()
-        }
+    private func promptDocument(_ kind: PromptKind) -> PromptDocument {
+        PromptDocument(url: promptDirectory.appendingPathComponent(kind.filename))
     }
 
-    /// What requests carry: nil while the default is in use.
-    var customTranslatePrompt: String? { d.string(forKey: "voice.translatePrompt") }
+    func preparePrompt(_ kind: PromptKind) throws -> URL {
+        let document = promptDocument(kind)
+        try document.prepare {
+            if kind == .translation, let legacy = d.string(forKey: Self.legacyTranslatePromptKey),
+               !legacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return legacy }
+            return try kind.defaultText()
+        }
+        if kind == .asrEngineering, let text = try document.read() {
+            let hash = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+            if hash == "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b" {
+                try document.write(kind.defaultText())
+            }
+        }
+        if kind == .translation { d.removeObject(forKey: Self.legacyTranslatePromptKey) }
+        return document.url
+    }
+
+    func restorePrompt(_ kind: PromptKind) throws {
+        try promptDocument(kind).write(kind.defaultText())
+        if kind == .translation { d.removeObject(forKey: Self.legacyTranslatePromptKey) }
+    }
+
+    /// Read the latest editor save. Older preferences are used until the translation document is created.
+    var customTranslatePrompt: String? {
+        let value: String?
+        do {
+            value = try promptDocument(.translation).read() ?? d.string(forKey: Self.legacyTranslatePromptKey)
+        } catch {
+            return nil
+        }
+        let text = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let text, !text.isEmpty, text != Self.defaultTranslatePrompt else { return nil }
+        return text
+    }
 
     /// After 提示词模式 delivers a prompt, recommend one of the current app's models.
     var recommendModel: Bool {

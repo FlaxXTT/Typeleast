@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
 import ServiceManagement
+import UniformTypeIdentifiers
 
-// HubSettings.swift - Settings for dictation, translation, models and general preferences.
+// HubSettings.swift - Settings for dictation, translation, prompts, models and general preferences.
 
 /// ServiceManagement may contact a system service. Never query it from a view body
 /// or a Binding getter: SwiftUI can evaluate those repeatedly while laying out rows.
@@ -101,8 +102,15 @@ struct SettingsPage: View {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         switch model.settingsCategory {
                         case .dictation: shortcuts; language; audio; cleanup
-                        case .translation: translationShortcut; selectionTranslation; translatePrompt
-                        case .models: OnlineASRSettings(); speech; ModelSection()
+                        case .translation: translationShortcut; selectionTranslation
+                        case .prompts: promptFiles
+                        case .models:
+                            if model.credentialsLocked {
+                                SettingsSection { CredentialUnlockRow() }
+                            }
+                            OnlineASRSettings()
+                            speech
+                            ModelSection()
                         case .general: general; privacy; permissions; updates; advanced
                         }
                     }
@@ -153,13 +161,13 @@ struct SettingsPage: View {
                     HotkeyField(slot: .alt, activeSlot: $activeHotkeySlot)
                 }
             }
-            SettingRow(title:L10n.text("提示词模式"),detail:L10n.text("按一下开始说需求，它先问清范围再写提示词。选中文字时，以选中内容为底稿修改。")) {
+            SettingRow(title: L10n.text("提示词模式"), detail: nil) {
                 HotkeyField(slot: .assistant, activeSlot: $activeHotkeySlot)
             }
             SettingRow(title: L10n.text("粘贴上一条"), detail: nil) {
                 HotkeyField(slot: .pasteLast, activeSlot: $activeHotkeySlot)
             }
-            SettingRow(title: L10n.text("取消听写"), detail: L10n.text("按 Esc，或点语音条上的 ✕")) {
+            SettingRow(title: L10n.text("取消听写"), detail: nil) {
                 Keycap(label: "esc")
             }
             if model.settings.hotkeyMain.isFn || model.settings.hotkeyAlt.isFn {
@@ -186,7 +194,7 @@ struct SettingsPage: View {
 
     private var selectionTranslation: some View {
         SettingsSection(title: SelectionTranslator.featureName) {
-            ToggleRow(title: L10n.text("显示翻译按钮"), detail: L10n.text("选中文本时显示。"),
+            ToggleRow(title: L10n.text("显示翻译按钮"), detail: nil,
                       isOn: model.setting(\.selectionTranslate))
             SettingRow(title: L10n.text("首选译文语言"), detail: L10n.text("原文已是首选语言时，译为中文或英文。")) {
                 Picker(L10n.text("首选译文语言"), selection: model.setting(\.selectionTranslateTarget)) {
@@ -198,16 +206,62 @@ struct SettingsPage: View {
         }
     }
 
-    private var translatePrompt: some View {
-        SettingsSection(title: L10n.text("翻译提示词")) { TranslatePromptEditor() }
-    }
-
     private var cleanup: some View {
         SettingsSection(title: L10n.text("整理选项")) {
+            ToggleRow(title: L10n.text("听写后用 AI 整理"), detail: nil,
+                      isOn: model.setting(\.dictationCleanupEnabled))
+            if model.settings.dictationCleanupEnabled { shortDictationSettings }
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
             ToggleRow(title: L10n.text("提示词模式推荐模型"), detail: L10n.text("生成提示词后联网推荐。"),
                       isOn: model.setting(\.recommendModel))
+        }
+    }
+
+    @ViewBuilder private var shortDictationSettings: some View {
+        let settings = model.settings
+        SettingRow(title: L10n.text("简要整理模型"),
+                   detail: L10n.text("25 以内直出，26–100 简要整理，101 起完整整理。中日韩按字，其他语言按词。")) {
+            Picker("", selection: model.setting(\.shortDictationMode)) {
+                ForEach(ShortDictationMode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .labelsHidden().frame(width: 180)
+        }
+        if settings.shortDictationMode == .smallModel {
+            SettingRow(title: L10n.text("小模型服务商"), detail: L10n.text("使用在「模型」中配置的接口和 Key。")) {
+                Picker("", selection: model.setting(\.shortDictationProvider)) {
+                    ForEach(LLMPreset.all) { Text($0.name).tag($0.id) }
+                }
+                .labelsHidden().frame(width: 180)
+            }
+            SettingRow(title: L10n.text("小模型 ID"), detail: L10n.text("小模型不可用时直接输出。")) {
+                TextField(L10n.text("模型 ID"), text: model.setting(\.shortDictationModel))
+                    .textFieldStyle(.plain).capsuleInput()
+                    .frame(width: 180)
+            }
+        }
+    }
+
+    private var promptFiles: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SettingsSection {
+                PromptFileRow(kind: .briefCleanup, title: L10n.text("简要整理提示词"), detail: L10n.text("26–100 字或词"))
+                Divider()
+                PromptFileRow(kind: .asrEngineering, title: L10n.text("ASR Engineering 提示词"))
+            }
+            SettingsSection {
+                PromptFileRow(kind: .translation, title: L10n.text("翻译提示词"),
+                              detail: L10n.text("{{to}} 代表目标语言。"))
+            }
+            SettingsSection(title: L10n.text("提示词模式")) {
+                PromptFileRow(kind: .promptClarify, title: L10n.text("澄清问题"))
+                Divider()
+                PromptFileRow(kind: .promptBreakdown, title: L10n.text("拆解选中的提示词"))
+                Divider()
+                PromptFileRow(kind: .promptDraft, title: L10n.text("生成最终提示词"))
+            }
         }
     }
 
@@ -417,6 +471,27 @@ struct SettingsPage: View {
 }
 
 // MARK: - building blocks
+
+struct CredentialUnlockRow: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Label(L10n.text("钥匙串已锁定"), systemImage: "lock").font(Theme.rowFont)
+                Spacer()
+                Button(L10n.text(model.credentialsUnlocking ? "正在解锁…" : "用 Touch ID 解锁")) {
+                    model.actions?.unlockCredentials()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.credentialsUnlocking || model.phase != .idle)
+            }
+            if let message = model.credentialUnlockError {
+                Text(message).font(Theme.captionFont).foregroundColor(Theme.warning)
+            }
+        }
+    }
+}
 
 struct SettingsSection<Content: View>: View {
     var title: String? = nil
@@ -739,22 +814,29 @@ struct ModelSection: View {
 
     private var settings: Settings { model.settings }
     private var keySaved: Bool { model.llmKeyPresence == true }
-    private var keyLoading: Bool { preset.needsKey && model.llmKeyPresence == nil }
+    private var keyLocked: Bool { preset.needsKey && model.credentialsLocked }
+    private var keyLoading: Bool { preset.needsKey && !keyLocked && model.llmKeyPresence == nil }
     private var preset: LLMPreset { LLMPreset.find(settings.llmPresetID) }
     private var normalizedKeyDraft: String { keyDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var requestContext: [String] { [settings.llmPresetID, settings.llmBaseURL, settings.llmModel, normalizedKeyDraft] }
 
     var body: some View {
         SettingsSection(title: L10n.text("整理模型")) {
-                SettingRow(title: L10n.text("服务商"), detail: preset.keyPage.isEmpty ? nil : L10n.text("在这里创建 Key：") + preset.keyPage) {
-                    Picker("", selection: Binding(get: { settings.llmPresetID }, set: { id in
-                        settings.llmPresetID = id
-                        reloadForPreset()
-                    })) {
-                        ForEach(LLMPreset.all) { Text($0.name).tag($0.id) }
+                SettingRow(title: L10n.text("服务商"), detail: nil) {
+                    HStack(spacing: 8) {
+                        if !preset.keyPage.isEmpty, !keyLocked, !keySaved, let url = URL(string: preset.keyPage) {
+                            Link(L10n.text(preset.needsKey ? "获取 API Key" : "官网"), destination: url)
+                                .font(Theme.captionFont)
+                        }
+                        Picker("", selection: Binding(get: { settings.llmPresetID }, set: { id in
+                            settings.llmPresetID = id
+                            reloadForPreset()
+                        })) {
+                            ForEach(LLMPreset.all) { Text($0.name).tag($0.id) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
                     }
-                    .labelsHidden()
-                    .frame(width: 220)
                 }
                 SettingRow(title: L10n.text("接口地址"), detail: LLMPreset.isAllowedBaseURL(settings.llmBaseURL) ? nil : L10n.text("需要 https（本机可用 http://127.0.0.1）")) {
                     TextField("https://…/v1", text: model.setting(\.llmBaseURL))
@@ -762,9 +844,9 @@ struct ModelSection: View {
                         .frame(width: 300)
                 }
                 if preset.needsKey {
-                    SettingRow(title: "API Key", detail: keySaved && normalizedKeyDraft.isEmpty ? L10n.text("已存入钥匙串") : (keyDraft.isEmpty ? L10n.text("粘贴 Key，再保存或测试。") : L10n.text("未保存。请点「保存」或测试")), loading: keyLoading) {
+                    SettingRow(title: "API Key", detail: nil, loading: keyLoading) {
                         HStack(spacing: 8) {
-                            SecureField(keySaved ? L10n.text("已保存，留空保持不变") : "sk-…", text: $keyDraft)
+                            SecureField(keyLocked ? L10n.text("钥匙串已锁定") : keySaved ? L10n.text("已保存，留空保持不变") : "sk-…", text: $keyDraft)
                                 .textFieldStyle(.plain).capsuleInput()
                                 .frame(width: 220)
                             // Deletion is an explicit action; a blank draft keeps the saved key.
@@ -774,9 +856,10 @@ struct ModelSection: View {
                             .buttonStyle(SecondaryButtonStyle())
                             .disabled(keyLoading || (normalizedKeyDraft.isEmpty && !keySaved))
                         }
+                        .disabled(keyLocked)
                     }
                 }
-                SettingRow(title: L10n.text("模型"), detail: models.isEmpty ? L10n.text("填模型 ID，或点「获取列表」") : L10n.text("共 {0} 个", models.count)) {
+                SettingRow(title: L10n.text("模型"), detail: nil) {
                     HStack(spacing: 8) {
                         TextField(preset.modelHint, text: model.setting(\.llmModel))
                             .textFieldStyle(.plain).capsuleInput()
@@ -791,10 +874,23 @@ struct ModelSection: View {
                         }
                         Button(L10n.text("获取列表")) { fetchModels() }
                             .buttonStyle(SecondaryButtonStyle())
-                            .disabled(busy)
+                            .disabled(busy || keyLocked)
                     }
                 }
-                ToggleRow(title: L10n.text("服务故障时自动切换"), detail: L10n.text("当前服务不可用时，自动尝试已保存的备用 Key，不弹出密码框。本次文字会发给备用服务商；系统拒绝静默访问的 Key 会被跳过。"), isOn: model.setting(\.automaticProviderFallback))
+                if settings.supportsCleanupThinking {
+                    ToggleRow(title: L10n.text("完整整理时开启思考"), detail: nil, isOn: model.setting(\.cleanupThinking))
+                    if settings.cleanupThinking {
+                        SettingRow(title: L10n.text("推理强度"), detail: nil) {
+                            Picker("", selection: model.setting(\.cleanupReasoningEffort)) {
+                                ForEach(CleanupReasoningEffort.allCases, id: \.self) { effort in
+                                    Text(effort.label).tag(effort)
+                                }
+                            }
+                            .labelsHidden().frame(width: 180)
+                        }
+                    }
+                }
+                ToggleRow(title: L10n.text("服务故障时自动切换"), detail: L10n.text("文字会发给备用服务商。"), isOn: model.setting(\.automaticProviderFallback))
                 HStack(spacing: 10) {
                     if busy { LoadingCircularProgress(size: 20) }
                     Button(busy ? L10n.text("测试中…") : L10n.text("测试连接")) { test() }
@@ -806,7 +902,7 @@ struct ModelSection: View {
                     }
                     Spacer()
                 }
-                if !keyLoading && !model.llmConfigured {
+                if !keyLocked && !keyLoading && !model.llmConfigured {
                     Text(missingParts() + L10n.text("。可以听写，但不整理。"))
                         .font(Theme.captionFont).foregroundColor(Theme.warning)
                 }
@@ -835,7 +931,7 @@ struct ModelSection: View {
 
     /// Rendering the page only uses saved-state metadata, never the key value.
     private var canTestRoute: Bool {
-        LLMPreset.isAllowedBaseURL(settings.llmBaseURL) && !settings.llmModel.isEmpty
+        !keyLocked && LLMPreset.isAllowedBaseURL(settings.llmBaseURL) && !settings.llmModel.isEmpty
             && (!preset.needsKey || !normalizedKeyDraft.isEmpty || keySaved)
     }
 
@@ -991,36 +1087,77 @@ struct ModelSection: View {
     }
 }
 
-/// Edits 翻译's system prompt; nothing changes until 保存.
-struct TranslatePromptEditor: View {
-    @State private var draft = Settings.shared.translatePrompt
-    @State private var saved = false
+/// Opens the same document that will be read for the next request.
+private struct PromptFileRow: View {
+    let kind: PromptKind
+    let title: String
+    var detail: String? = nil
+    @State private var codeEditor: URL?
+    @State private var message: String?
+    @State private var restoring = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.text("说话翻译和选中翻译都用它。{{to}} 代表目标语言。"))
-                .font(InterfaceTypography.localized(12)).foregroundColor(.secondary)
-            CapsuleTextEditor(text: $draft)
-                .font(Theme.rowFont)
-                .frame(height: 150)
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).stroke(Color.primary.opacity(0.12)))
-                .onChange(of: draft) { _ in saved = false }
-            HStack {
-                Button(L10n.text("恢复默认")) {
-                    Settings.shared.translatePrompt = Settings.defaultTranslatePrompt
-                    draft = Settings.defaultTranslatePrompt
-                    saved = true
+        VStack(alignment: .leading, spacing: 4) {
+            SettingRow(title: title, detail: detail) {
+                Menu(L10n.text("打开编辑")) {
+                    Button(L10n.text("使用系统默认编辑器")) { open() }
+                    if let codeEditor {
+                        Button("Visual Studio Code") { open(in: codeEditor) }
+                    }
+                    Button(L10n.text("选择其他应用…")) { chooseEditor() }
+                    Divider()
+                    Button(L10n.text("恢复默认…")) { restoring = true }
                 }
-                Spacer()
-                if saved { Text(L10n.text("已保存")).font(InterfaceTypography.localized(12)).foregroundColor(.secondary) }
-                Button(L10n.text("保存")) {
-                    Settings.shared.translatePrompt = draft
-                    draft = Settings.shared.translatePrompt
-                    saved = true
-                }
-                .disabled(draft == Settings.shared.translatePrompt)
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel(L10n.text("编辑 {0}", title))
+            }
+            if let message {
+                Text(message).font(Theme.captionFont).foregroundColor(Theme.secondary)
             }
         }
-        .padding(12)
+        .onAppear {
+            codeEditor = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.VSCode")
+        }
+        .confirmationDialog(L10n.text("恢复默认提示词？"), isPresented: $restoring, titleVisibility: .visible) {
+            Button(L10n.text("恢复默认"), role: .destructive) { restore() }
+        }
+    }
+
+    private func open(in editor: URL? = nil) {
+        do {
+            let file = try Settings.shared.preparePrompt(kind)
+            message = nil
+            if let editor {
+                NSWorkspace.shared.open([file], withApplicationAt: editor, configuration: .init()) { _, error in
+                    if error != nil {
+                        DispatchQueue.main.async { message = L10n.text("无法打开提示词文件。") }
+                    }
+                }
+            } else if !NSWorkspace.shared.open(file) {
+                message = L10n.text("无法打开提示词文件。")
+            }
+        } catch {
+            message = L10n.text("无法准备提示词文件。")
+        }
+    }
+
+    private func chooseEditor() {
+        let panel = NSOpenPanel()
+        panel.title = L10n.text("选择编辑器")
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            if response == .OK, let editor = panel.url { open(in: editor) }
+        }
+    }
+
+    private func restore() {
+        do {
+            try Settings.shared.restorePrompt(kind)
+            message = L10n.text("已恢复默认提示词。")
+        } catch {
+            message = L10n.text("无法恢复默认提示词。")
+        }
     }
 }

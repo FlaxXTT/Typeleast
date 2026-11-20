@@ -84,6 +84,26 @@ test("the service listens on loopback, publishes its port, and serves the contra
         headers: { ...auth, "content-type": "audio/wav", "x-voice-meta-bytes": String(meta.length) }, body: Buffer.concat([meta, wav(0.5)]) });
       assert.equal(withMeta.status, 200);
       assert.notEqual(withMeta.json.text, "");
+      const skip = Buffer.from(JSON.stringify({ skipCleanup: true }));
+      const transcription = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
+        headers: { ...auth, "content-type": "audio/wav", "x-voice-meta-bytes": String(skip.length) },
+        body: Buffer.concat([skip, wav(0.5)]) });
+      assert.equal(transcription.status, 200);
+      assert.equal(transcription.json.fallback, false);
+      assert.equal(transcription.json.text, transcription.json.raw);
+      const shortCleanup = { maxUnits: 12 };
+      const shortMeta = Buffer.from(JSON.stringify({ shortCleanup }));
+      const localShort = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
+        headers: { ...auth, "content-type": "audio/wav", "x-voice-meta-bytes": String(shortMeta.length) },
+        body: Buffer.concat([shortMeta, wav(0.5)]) });
+      assert.equal(localShort.status, 200);
+      assert.equal(localShort.json.fallback, false);
+      assert.equal(localShort.json.text, localShort.json.raw);
+      const cloudShort = await raw(handle.port, { method: "POST", path: "/api/voice-polish/polish",
+        headers: { ...auth, "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ text: "确认收到。", shortCleanup })) });
+      assert.equal(cloudShort.status, 200);
+      assert.equal(cloudShort.json.fallback, false);
+      assert.equal(cloudShort.json.text, "确认收到。");
       for (const bad of ["-1", "2"]) {
         const refused = await raw(handle.port, { method: "POST", path: "/api/voice-polish/dictate",
           headers: { ...auth, "content-type": "audio/wav", "x-voice-meta-bytes": bad }, body: wav(0.5) });

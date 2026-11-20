@@ -9,8 +9,10 @@ const requests = [];
 const service = new VoicePolishService({
   recognizer: { snapshot: () => ({ ready: true }), transcribe: async () => ({ text: '' }) },
   fetchImpl: async (_url, init) => {
-    const system = JSON.parse(init.body).messages.find(message => message.role === 'system')?.content ?? '';
-    requests.push({ body: init.body, system, authorization: new Headers(init.headers).get('authorization') });
+    const { messages } = JSON.parse(init.body);
+    const system = messages.find(message => message.role === 'system')?.content ?? '';
+    const user = JSON.parse(messages.find(message => message.role === 'user')?.content ?? '{}');
+    requests.push({ body: init.body, system, user, authorization: new Headers(init.headers).get('authorization') });
     const content = system.includes('Compare the source and candidate')
       ? '{"ok":true,"issues":[]}'
       : '{"status":"ok","text":"My API key is [redacted-key] and the password is [redacted].","reason":"redacted"}';
@@ -30,7 +32,7 @@ await service.polish({
   fieldContext: { before: 'token is ghp_abcdefghijklmnop', selected: '', after: '', windowTitle: '' },
 });
 
-const cleanup = requests.find(request => request.system.includes('ASR post-processing expert'));
+const cleanup = requests.find(request => typeof request.user?.raw_asr_transcript === 'string');
 const review = requests.find(request => request.system.includes('Compare the source and candidate'));
 const checks = [
   ['the general cleanup request was sent', Boolean(cleanup)],
