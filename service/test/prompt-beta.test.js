@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { VoicePolishService } from '../lib/service.js';
 import { BETA_BREAKDOWN_PROMPT, BETA_DRAFT_PROMPT, BETA_INTERVIEW_PROMPT, BETA_LIMITS,
   hasContent, normaliseQuestions, parseJsonReply } from '../lib/prompts/prompt-beta.js';
@@ -22,15 +25,53 @@ function provider(script = {}) {
   };
   return { calls, fetchImpl };
 }
-function serviceFor(p, history = []) {
+function serviceFor(p, history = [], stateDir) {
   return new VoicePolishService({
     recognizer: { snapshot: () => ({ ready: true }) }, fetchImpl: p.fetchImpl,
+    stateDir,
     config: { maxOutputTokens: 800, timeoutMs: 12000, strength: 'prompt', redactSecrets: true, dictionary: [], maxAudioBytes: 4194304, maxDurationSeconds: 120 },
     logger: { warn() {}, info() {} },
   });
 }
 const send = (service, rawText = REQUEST, extra = {}) => service.polish({ rawText, strength: 'promptbeta', llm: ROUTE, ...extra });
 const finish = (service, id) => send(service, '', { betaSession: id, betaSkip: true });
+
+test('prompt mode reads each stage from its own editor file on the next turn', async t => {
+  const stateDir = await mkdtemp(join(tmpdir(), 'typeleast-prompt-mode-'));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  const save = (stage, text) => writeFile(join(stateDir, `prompt-mode-${stage}.md`), text);
+  const systems = [];
+  const service = serviceFor({
+    fetchImpl: async (_url, init) => {
+      const [system, user] = JSON.parse(init.body).messages;
+      systems.push(system.content);
+      const input = JSON.parse(user.content);
+      const content = input.instruction ? DRAFT : interview();
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content }, finish_reason: 'stop' }] }) };
+    },
+  }, [], stateDir);
+
+  await save('clarify', '澄清草稿一');
+  await save('breakdown', '分析所选的底稿');
+  await save('draft', '按要点写最终提示词');
+  const first = await send(service);
+  assert.match(systems.at(-1), /^澄清草稿一/);
+  assert.match(systems.at(-1), /confirmed 和 questions 是字符串数组/);
+
+  await save('clarify', '已修改的澄清规则');
+  await send(service, '交付用 Markdown', { betaSession: first.beta.sessionId });
+  assert.match(systems.at(-1), /^已修改的澄清规则/);
+
+  const selected = await send(service, '按团队风格改写', { baseline: '为团队撰写一篇关于会议记录的文章。' });
+  assert.match(systems.at(-1), /^分析所选的底稿/);
+  assert.match(systems.at(-1), /goals、confirmed 和 questions 是字符串数组/);
+  assert.equal((await finish(service, selected.beta.sessionId)).text, DRAFT);
+  assert.match(systems.at(-1), /^按要点写最终提示词/);
+
+  await save('clarify', '  \n');
+  await send(service);
+  assert.equal(systems.at(-1), BETA_INTERVIEW_PROMPT);
+});
 
 test('clear information waits for explicit generate and still accepts more context', async () => {
   const p = provider({ interview: calls => interview(calls.length === 1 ? [] : ['客户是哪个群体？']) });

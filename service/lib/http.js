@@ -259,6 +259,8 @@ export function createHandler(options) {
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const result = await service.polish({
           rawText: body.text,
+          skipCleanup: body.skipCleanup === true,
+          shortCleanup: body.shortCleanup,
           betaSession: typeof body.betaSession === "string" ? body.betaSession : null,
           betaSkip: body.betaSkip === true,
           retryInitial: body.retryInitial === true,
@@ -335,6 +337,8 @@ export function createHandler(options) {
         }
         const audio = body.subarray(metaBytes);
         const result = await service.transcribeAndPolish({
+          skipCleanup: meta.skipCleanup === true,
+          shortCleanup: meta.shortCleanup,
           profile: typeof meta.profile === "string" ? meta.profile : "",
           baseline: typeof meta.baseline === "string" ? meta.baseline : null,
           translatePrompt: typeof meta.translatePrompt === "string" ? meta.translatePrompt : "",

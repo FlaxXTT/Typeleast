@@ -3,12 +3,29 @@
  * user's work, and (when the app may read it) the text already in the field being typed into.
  */
 import { cleanupSystemPrompt } from "./prompts/cleanup.js";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-11-01.1-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-11-20.1-dictation+assistant+translate";
 
-/** The only prompt source. Kept as a list so an old profile value still validates. */
+const previousCleanupHash = "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b";
+
+/** The built-in prompt source, retained for compatibility. */
 export const PROMPT_SOURCES = ["typeleast"];
+
+/** The native Settings editor stores overrides alongside the other local state. */
+export async function readSavedPrompt(stateDir, filename, logger) {
+  try {
+    const text = await readFile(join(stateDir, filename), "utf8");
+    if (filename === "asr-engineering.md" && createHash("sha256").update(text).digest("hex") === previousCleanupHash) return "";
+    return text.trim();
+  } catch (error) {
+    if (error?.code !== "ENOENT") logger?.warn?.("typeleast: could not read a custom prompt");
+    return "";
+  }
+}
 
 /** The version recorded in history, so a stored result can be traced to the instructions that produced it. */
 export function promptVersionFor() {
@@ -38,8 +55,8 @@ export function harnessAddendum({ fieldContext } = {}) {
 }
 
 /** The system prompt for one dictation. */
-export function systemPromptFor({ fieldContext, profile } = {}) {
-  return cleanupSystemPrompt(profile) + harnessAddendum({ fieldContext });
+export function systemPromptFor({ fieldContext, profile, cleanupOverride } = {}) {
+  return cleanupSystemPrompt(profile, cleanupOverride) + harnessAddendum({ fieldContext });
 }
 
 /** The user message, in the shape the prompt's examples use. */

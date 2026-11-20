@@ -10,15 +10,16 @@ struct MeetingsPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader(title: L10n.text("会议"), subtitle: L10n.text("录音时查看实时文字，结束后按说话人整理。"))
+            PageHeader(title: "Meetings")
             VStack(alignment: .leading, spacing: 14) {
-                if meeting.modelInstalled == false { MeetingModelCard() }
                 MeetingControls()
+                if model.settings.meetingASRProvider == .local && meeting.modelInstalled == false { MeetingModelCard() }
                 if let transcript = meeting.transcript {
                     MeetingTranscriptView(result: transcript.result, seconds: transcript.seconds, elapsed: transcript.elapsed)
                         .id(transcript.id)
-                } else if meeting.stage == .recording ||
-                            ([.transcribing, .failed].contains(meeting.stage) && (!meeting.liveTranscript.isEmpty || meeting.liveWarning)) {
+                } else if meeting.usesLivePreview &&
+                            (meeting.stage == .recording ||
+                             ([.transcribing, .failed].contains(meeting.stage) && (!meeting.liveTranscript.isEmpty || meeting.liveWarning))) {
                     MeetingLiveTranscriptView()
                 } else {
                     Spacer()
@@ -27,7 +28,9 @@ struct MeetingsPage: View {
             .padding(.horizontal, Theme.pageInset)
             .padding(.bottom, 24)
         }
-        .onAppear { meeting.refreshModel() }
+        .onChange(of: model.settings.meetingASRProvider, initial: true) { _, provider in
+            if provider == .local { meeting.refreshModel() }
+        }
     }
 }
 
@@ -38,11 +41,8 @@ private struct MeetingLiveTranscriptView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.text("实时文字"))
                 .font(InterfaceTypography.localized(14, weight: .medium))
-            Text(L10n.text("这是临时结果，结束录音后会替换为按说话人整理的完整记录。"))
-                .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             if meeting.liveWarning {
-                Text(L10n.text("部分实时文字未能转写，结束后仍会尝试完整转写。"))
+                Text(L10n.text("实时转写不完整，录音结束后会重新转写。"))
                     .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -69,7 +69,7 @@ private struct MeetingModelCard: View {
     var body: some View {
         Card(padding: 24) {
             HStack(spacing: 12) {
-                Text(L10n.text("转写用 MOSS 模型，需要下载 0.65 GB。听写模型不变。")).font(InterfaceTypography.localized(14))
+                Text("MOSS · 0.65 GB").font(InterfaceTypography.localized(14))
                 Spacer()
                 if let download = meeting.download {
                     Text(L10n.text("正在下载 {0}%", download.total > 0 ? Int(Double(download.received) * 100 / Double(download.total)) : 0))
@@ -87,10 +87,24 @@ private struct MeetingControls: View {
     @EnvironmentObject var meeting: MeetingController
 
     private var limit: Int { MeetingLimits.maxSeconds / 60 }
+    private var provider: OnlineASRProvider { model.settings.meetingASRProvider }
 
     var body: some View {
         Card(padding: 24) {
             VStack(alignment: .leading, spacing: 8) {
+                SettingRow(title: L10n.text("会议模型"),
+                           detail: provider == .local ? nil : L10n.text("录音结束或导入后上传，可能按用量计费。")) {
+                    ASRProviderPicker(selection: model.setting(\.meetingASRProvider), localLabel: "MOSS · " + L10n.text("本地"))
+                        .disabled(meeting.busy)
+                }
+                if provider != .local {
+                    Button(L10n.text("管理模型")) {
+                        model.settingsCategory = .models
+                        model.navigate(to: .settings)
+                    }
+                    .buttonStyle(.link)
+                }
+                Divider().padding(.vertical, 4)
                 HStack(spacing: 10) {
                     switch meeting.stage {
                     case .recording:
@@ -121,9 +135,10 @@ private struct MeetingControls: View {
                 if !meeting.message.isEmpty {
                     Text(meeting.message).font(InterfaceTypography.localized(14)).foregroundColor(Color.red)
                 }
-                Text(meeting.stage == .transcribing ? L10n.text("可以关闭这个窗口，别退出 TypeLeast。听写不受影响。")
-                     : L10n.text("只录麦克风。戴耳机开会时，对方的声音录不到，请导入会议软件的录音。上限 {0} 分钟，M5 Pro 上转完约需 5 分钟。", limit))
-                    .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                if !meeting.busy {
+                    Text(L10n.text("仅录麦克风 · 最长 {0} 分钟", limit))
+                        .font(Theme.captionFont).foregroundColor(Theme.secondary)
+                }
             }
         }
     }
@@ -151,7 +166,9 @@ struct MeetingTranscriptView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(L10n.text("{0} 位说话人 · {1} 的录音，用时 {2}", result.speakers.count, MeetingFormat.clock(seconds), MeetingFormat.clock(elapsed)))
+                Text(result.speakers.isEmpty
+                     ? L10n.text("{0} 的录音，用时 {1}", MeetingFormat.clock(seconds), MeetingFormat.clock(elapsed))
+                     : L10n.text("{0} 位说话人 · {1} 的录音，用时 {2}", result.speakers.count, MeetingFormat.clock(seconds), MeetingFormat.clock(elapsed)))
                     .font(InterfaceTypography.localized(14, weight: .medium))
                 Spacer()
                 Button(L10n.text(copyFeedback == nil ? "复制" : "已复制")) {
@@ -166,16 +183,17 @@ struct MeetingTranscriptView: View {
                 Text(L10n.text("结果在中途被截断，后面的内容缺失。")).font(InterfaceTypography.localized(14)).foregroundColor(Color.red)
             }
             if result.segments.isEmpty {
-                Text(L10n.text("这段录音里没有听到说话。")).font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary)
+                Text(L10n.text("未检测到语音")).font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary)
                 Spacer()
             } else {
-                Text(L10n.text("说话人标签只区分这一段录音里的声音，可能有误，不代表真实身份。")).font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary)
                 HubScrollView(showsChrome: false) {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(result.segments) { turn in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Text(MeetingFormat.clock(turn.start)).font(InterfaceTypography.localized(12)).monospacedDigit().foregroundColor(Theme.secondary).frame(width: 52, alignment: .leading)
-                                Text(turn.speaker).font(InterfaceTypography.localized(12, weight: .semibold)).foregroundColor(color(turn.speaker)).frame(width: 34, alignment: .leading)
+                                if !result.speakers.isEmpty {
+                                    Text(turn.speaker).font(InterfaceTypography.localized(12, weight: .semibold)).foregroundColor(color(turn.speaker)).frame(width: 34, alignment: .leading)
+                                }
                                 Text(turn.text).font(InterfaceTypography.localized(14)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }

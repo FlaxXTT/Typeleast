@@ -19,9 +19,9 @@ Small icons render from vectors at their own resolution.
 - Light: radial white at 5% opacity, from above-left; no linear gradient.
 - Edge: 1 design-pixel inner stroke, `#111111` at 6% opacity.
 - Bars, left to right: heights `0.30 / 0.58 / 1.00 / 0.72 / 0.42` of 509.232px,
-  each approximately 83.87px wide with 22.47px spacing; centred vertically and horizontally.
-  The waveform occupies 509.232 × 509.232px, exactly 61.8% of the tile's width
-  and height, leaving 157.384px on each side. `waveformOccupancy` controls this ratio.
+  each approximately 83.87px wide with 26.96px spacing. The waveform is centred
+  and occupies approximately 527.20 × 509.23px. `waveformOccupancy` sets the bar
+  dimensions, and `barGapScale` scales the gaps independently.
 - First four bars: `#1D1A1A`; rightmost bar: `#1F5DF2`.
 - No baked-in shadow. The artwork keeps the same palette in both app themes.
 

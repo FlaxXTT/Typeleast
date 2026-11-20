@@ -3,19 +3,17 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 录音胶囊的中央两根先起，第三根稍低、稍晚跟上，外围随人声音量轻微抖动。处理完成后 Thinking 直接淡出，取消转录提示完整显示。
-- 默认 Fn + 左 Shift 根据选区分流。选中文字时在面板显示译文，无选区时把语音译文插入光标处。新翻译不写入历史。
-- 改进选词翻译按钮定位和译文排版。选词翻译的目标语言可以单独设置。
-- 首页与设置窗口分区切换主题。精简活动统计、就绪状态、联系入口和设置说明。
-- 减少整理确认弹窗，仅在有明确证据的内容冲突出现时提示。麦克风提示显示录音实际使用的设备。
+- 普通听写按长度分流。25 字或词以内直接输出，26–100 简要整理，101 起完整整理。简要整理可指定小模型，DeepSeek 的完整整理可选择思考与推理强度。
+- 「个性化」可分别编辑、恢复简要整理、完整整理、翻译和提示词模式的提示词。默认完整整理更精简，有并列需求时按意思分点。
+- 听写与会议可各自选择本地或联网语音识别。豆包支持语义顺滑开关和自定义热词。使用联网听写时可删除闲置的本地模型权重。
+- 已保存的 API Key 在钥匙串锁定时显示为待解锁。调整首页统计、侧栏字标、设置分类和录音波形。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Two bars lead the recording waveform, followed by a shorter third bar. The outer bars move subtly with speech. The Thinking animation fades out on completion, and the cancellation toast fits in its window.
-- With the default Fn + Left Shift shortcut, selected text opens a translation panel. Without a selection, voice translation inserts at the cursor. New translations are excluded from history.
-- The selection translation button and result layout are easier to use, and selection translation has its own target language setting.
-- Home and Settings switch appearance section by section. Activity labels, service status, contact, and settings use less text.
-- Cleanup asks for confirmation when there is clear evidence of a content conflict. The microphone hint shows the device actually used to record.
+- Dictation inserts transcripts of up to 25 characters or words directly, uses brief cleanup for 26–100, and runs full cleanup from 101. Brief cleanup can use a small model. DeepSeek full cleanup has optional thinking and reasoning effort.
+- Personalization now lets you edit or restore the prompts for brief cleanup, full cleanup, translation, and prompt mode independently. The default full cleanup prompt is shorter and groups distinct requests into numbered items.
+- Choose local or online recognition separately for dictation and meetings. Doubao supports optional speech smoothing and custom hotwords. You can remove unused local model weights while using online dictation.
+- Saved API keys show when they are waiting for Keychain unlock. Home statistics, the sidebar wordmark, Settings categories, and the recording waveform have been refined.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

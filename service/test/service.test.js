@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
-import { CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
+import { BRIEF_CLEANUP_PROMPT, CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
 import { readdirSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const RAW = "um so we should send the report on tuesday, no wait, wednesday";
 const ROUTE = { baseURL: "https://api.example.com/v1", model: "chat-model", apiKey: "sk-test-123456789012" };
@@ -45,9 +48,10 @@ function fakeRecognizer(text = "we should send the report on tuesday, no wait, w
   };
 }
 
-function makeService({ model, recognizer, config = {} } = {}) {
+function makeService({ model, recognizer, stateDir, config = {} } = {}) {
   return new VoicePolishService({
     recognizer: recognizer ?? fakeRecognizer(),
+    stateDir,
     fetchImpl: (model ?? fakeModel("Send the report on Wednesday.")).fetchImpl,
     config: { maxOutputTokens: 400, timeoutMs: 5000, strength: "prompt", redactSecrets: true, maxAudioBytes: 4194304, maxDurationSeconds: 120, dictionary: [], ...config },
     logger: { info: () => {}, warn: () => {}, debug: () => {} },
@@ -117,6 +121,74 @@ test("the model gets the cleanup prompt, the learned description and the transcr
   assert.equal(user.role, "user");
   assert.deepEqual(JSON.parse(user.content), { raw_asr_transcript: RAW });
   assert.equal(model.calls[0].body.messages.length, 2);
+});
+
+test("saving the ASR Engineering prompt changes the next dictation on both recognition paths", async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "typeleast-asr-prompt-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  const file = join(stateDir, "asr-engineering.md");
+  const model = fakeModel('{"text":"Send the report on Wednesday."}');
+  const service = makeService({ model, stateDir });
+  const input = { rawText: RAW, llm: ROUTE };
+  const currentPrompt = () => model.calls.at(-1).body.messages[0].content;
+
+  await service.polish(input);
+  assert.equal(currentPrompt(), CLEANUP_PROMPT);
+
+  await writeFile(file, "  Preserve the original paragraph breaks.  ");
+  await service.polish({ ...input, profile: "研究者", fieldContext: { before: "项目邮件" } });
+  assert.match(currentPrompt(), /^Preserve the original paragraph breaks\./);
+  assert.match(currentPrompt(), /User background .*研究者/);
+  assert.match(currentPrompt(), /Return a JSON object with a string "text"/);
+  assert.match(currentPrompt(), /Text before the cursor: "项目邮件"/);
+  assert.doesNotMatch(currentPrompt(), /# Core Strategies/);
+
+  await writeFile(file, "Keep each sentence short.");
+  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE });
+  assert.equal(result.fallback, false);
+  assert.match(currentPrompt(), /^Keep each sentence short\./);
+
+  await service.polish({ ...input, translateTo: "en" });
+  assert.doesNotMatch(currentPrompt(), /Keep each sentence short/);
+
+  await rm(file);
+  await service.polish(input);
+  assert.equal(currentPrompt(), CLEANUP_PROMPT);
+});
+
+test("the brief prompt reloads from its own file for both recognition paths", async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "typeleast-brief-prompt-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  const file = join(stateDir, "brief-cleanup.md");
+  const rawText = "请把测试结果和原始截图一起发给项目组，保留图表的标题和说明，等大家看完之后再约时间讨论，今天不用先下结论。";
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  const model = fakeModel(JSON.stringify({ text: rawText }));
+  const service = makeService({ model, stateDir, recognizer: fakeRecognizer(rawText) });
+  const currentPrompt = () => model.calls.at(-1).body.messages[0].content;
+  const input = { rawText, llm: ROUTE, shortCleanup };
+
+  await service.polish(input);
+  assert.equal(currentPrompt(), BRIEF_CLEANUP_PROMPT);
+
+  await writeFile(file, "Keep the speaker's pauses as short sentences.");
+  await service.polish({ ...input, profile: "Private profile", fieldContext: { before: "Private cursor context" } });
+  assert.match(currentPrompt(), /^Keep the speaker's pauses as short sentences\./);
+  assert.match(currentPrompt(), /Return one JSON object with a string "text"/);
+  assert.doesNotMatch(currentPrompt(), /Private profile|Private cursor context/);
+
+  await writeFile(file, "Keep only paragraph breaks at topic changes.");
+  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, shortCleanup });
+  assert.match(currentPrompt(), /^Keep only paragraph breaks at topic changes\./);
+
+  await writeFile(join(stateDir, "asr-engineering.md"), "Use the separate full cleanup prompt.");
+  await service.polish({ ...input, rawText: rawText + rawText + rawText });
+  assert.match(currentPrompt(), /^Use the separate full cleanup prompt\./);
+
+  for (const restored of [BRIEF_CLEANUP_PROMPT, "  \n "]) {
+    await writeFile(file, restored);
+    await service.polish(input);
+    assert.equal(currentPrompt(), BRIEF_CLEANUP_PROMPT);
+  }
 });
 
 test("a success reply inserts its text; corrections and intention come back for the history", async () => {
@@ -278,6 +350,109 @@ test("retired strength=off uses natural cleanup instead of skipping the model", 
   assert.equal(result.fallback, false);
   assert.equal(result.reason, null);
   assert.equal(model.calls.length, 1);
+});
+
+test("a dictation-only cleanup switch preserves the transcript without contacting the model", async () => {
+  const model = fakeModel("Send the report on Wednesday.");
+  const service = makeService({ model });
+  const result = await service.polish({ rawText: RAW, llm: ROUTE, skipCleanup: true });
+  assert.equal(result.text, RAW);
+  assert.equal(result.fallback, false);
+  assert.equal(model.calls.length, 0);
+  await service.polish({ rawText: RAW, llm: ROUTE, task: "translation", translateTo: "en", skipCleanup: true });
+  assert.ok(model.calls.length > 0);
+});
+
+test("short dictation uses the recognized length, ignoring punctuation and counting mixed scripts", async () => {
+  const model = fakeModel('{"text":"我用 TypeLeast。"}');
+  const spoken = "我用 TypeLeast！";
+  const service = makeService({ model, recognizer: fakeRecognizer(spoken) });
+  const request = { audio: wavOfSilence(), llm: ROUTE, shortCleanup: { maxUnits: 3 } };
+  const short = await service.transcribeAndPolish(request);
+  assert.equal(short.text, spoken);
+  assert.equal(short.fallback, false);
+  assert.equal(model.calls.length, 0);
+  const long = await service.transcribeAndPolish({ ...request, shortCleanup: { maxUnits: 2 } });
+  assert.equal(long.model, ROUTE.model);
+  assert.equal(model.calls.length, 1);
+});
+
+test("the small model gets only the short transcript and can lightly format it", async () => {
+  const model = fakeModel('{"text":"Meet at 14:30."}');
+  const service = makeService({ model });
+  const small = { baseURL: "https://small.example.com/v1", model: "small-model", apiKey: "test-key" };
+  const result = await service.polish({ rawText: "meet at 14:30", llm: ROUTE,
+    shortCleanup: { maxUnits: 4, route: small }, profile: "profile stays private", fieldContext: { before: "private" } });
+  assert.equal(result.text, "Meet at 14:30.");
+  assert.equal(result.model, small.model);
+  assert.equal(model.calls.length, 1);
+  assert.equal(model.calls[0].url, `${small.baseURL}/chat/completions`);
+  assert.equal(model.calls[0].body.model, small.model);
+  assert.deepEqual(JSON.parse(model.calls[0].body.messages[1].content), { transcript: "meet at 14:30" });
+  assert.ok(!JSON.stringify(model.calls[0].body).includes("private"));
+});
+
+test("small model failures, expansion, and changed numbers return the transcript with no model failover", async () => {
+  const rawText = "明天14:30开会";
+  const small = { ...ROUTE, model: "small-model" };
+  const request = { rawText, llm: ROUTE, shortCleanup: { maxUnits: 12, route: small },
+    llmBackups: [{ ...ROUTE, model: "backup" }], hasConfiguredBackups: true };
+  for (const model of [fakeModel("", { status: 503 }), fakeModel('{"text":"明天下午14:30开会，请提前准备好所有的资料。"}'),
+    fakeModel('{"text":"明天1430开会。"}')]) {
+    const result = await makeService({ model }).polish(request);
+    assert.equal(result.text, rawText);
+    assert.equal(result.fallback, false);
+    assert.equal(result.offerFailover, undefined);
+    assert.deepEqual(model.calls.map(call => call.body.model), [small.model]);
+  }
+  const model = fakeModel("unexpected call");
+  const result = await makeService({ model }).polish({ ...request, shortCleanup: { maxUnits: 12, route: ROUTE } });
+  assert.equal(result.text, rawText);
+  assert.equal(model.calls.length, 0);
+});
+
+test("short dictation routing leaves explicit translation and assistant on the configured model", async () => {
+  for (const task of ["translation", "assistant"]) {
+    const model = fakeModel('{"text":"Ready"}');
+    const service = makeService({ model });
+    await service.polish({ rawText: "准备好了", task, translateTo: task === "translation" ? "en" : undefined,
+      llm: ROUTE, shortCleanup: { maxUnits: 12 } });
+    assert.ok(model.calls.length > 0);
+    assert.ok(model.calls.every(call => call.body.model === ROUTE.model));
+  }
+});
+
+test("three-tier dictation uses its brief prompt at 26 and 100 and its full prompt at 101", async () => {
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  const llm = { baseURL: "https://api.deepseek.com", model: "deepseek-flash", apiKey: "test-key", reasoningEffort: "low" };
+  for (const units of [25, 26, 100, 101]) {
+    const rawText = "字".repeat(units) + "。";
+    const model = fakeModel(JSON.stringify({ text: rawText }));
+    const result = await makeService({ model }).polish({ rawText, llm, shortCleanup, profile: "test profile" });
+    assert.equal(result.text, rawText);
+    assert.equal(model.calls.length, units === 25 ? 0 : 1);
+    if (units === 25) continue;
+    const body = model.calls[0].body;
+    assert.equal(body.thinking.type, units <= 100 ? "disabled" : "enabled");
+    assert.equal(body.reasoning_effort, units <= 100 ? undefined : "low");
+    assert.match(body.messages[0].content, units <= 100 ? /Lightly organize/ : /# Core Strategies/);
+    assert.match(body.messages[0].content, /1\..*2\..*3\./);
+    assert.equal(body.messages[0].content.includes("test profile"), units > 100);
+  }
+});
+
+test("a brief tier configured for a small model never forwards failures to the main model", async () => {
+  const rawText = "字".repeat(26);
+  const model = fakeModel("", { status: 503 });
+  const briefModel = { ...ROUTE, model: "small-model" };
+  const shortCleanup = { maxUnits: 25, fullAbove: 100, useSmallModel: true, route: briefModel };
+  const service = makeService({ model });
+  const request = { rawText, llm: ROUTE, shortCleanup, hasConfiguredBackups: true };
+  const result = await service.polish(request);
+  assert.equal(result.text, rawText);
+  assert.equal(result.fallback, false);
+  await service.polish({ ...request, shortCleanup: { ...shortCleanup, route: null } });
+  assert.deepEqual(model.calls.map(call => call.body.model), [briefModel.model]);
 });
 
 test("an empty transcript is reported without calling the model", async () => {

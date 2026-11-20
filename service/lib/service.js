@@ -20,7 +20,7 @@
 import { canonicalStrength, LANGUAGES } from "./config.js";
 import { taskFor } from "./dictation-task.js";
 import { redactSecrets } from "./context.js";
-import { promptVersionFor } from "./prompt.js";
+import { promptVersionFor, readSavedPrompt } from "./prompt.js";
 import { completeOpenAI, normalizeRoute, routeLabel } from "./openai-compat.js";
 import { modelCompletion, modelRoutes } from "./model-failover.js";
 import { createDeadline } from "./llm.js";
@@ -29,7 +29,7 @@ import { validateWav } from "./wav.js";
 import { hasRepetitionLoop } from "./asr-review.js";
 import { TRANSLATE_LANGUAGES } from "./prompts/translate.js";
 import { applyVariants, parseVariants } from "./variants.js";
-import { runDictation } from "./tasks/dictation.js";
+import { runDictation, runShortDictation, shortDictationUnits } from "./tasks/dictation.js";
 import { runTranslation } from "./tasks/translation.js";
 import { AssistantSessions } from "./tasks/assistant.js";
 import { buildProfile } from "./tasks/profile.js";
@@ -62,6 +62,7 @@ export class VoicePolishService {
   constructor(options) {
     this.recognizer = options.recognizer;
     this.config = options.config;
+    this.stateDir = options.stateDir;
     /** fetch for model calls; injected in tests. */
     this.fetchImpl = options.fetchImpl;
     this.logger = options.logger ?? { info: () => {}, warn: () => {}, debug: () => {} };
@@ -77,7 +78,7 @@ export class VoicePolishService {
     /** Newest first; only attempts that reached the model and fell back. */
     this.recentFailures = [];
     /** Prompt mode's open clarifications. */
-    this.assistant = new AssistantSessions();
+    this.assistant = new AssistantSessions(this.stateDir);
     this.recommender = new ModelRecommender({ complete: (o) => this.complete(o), redact: (text) => this.redactDetail(text), fetchImpl: this.fetchImpl });
     this.progress = new Map();
     this.meetings = new MeetingJobs({ recognizer: () => this.recognizer.meetingRecognizer(), logger: this.logger });
@@ -149,7 +150,8 @@ export class VoicePolishService {
     request.strength = taskKind === "assistant" ? "promptbeta" : "prompt";
     const started = Date.now();
     const originalText = String(request.rawText ?? "").trim();
-    if (Array.from(originalText).length > TEXT_LIMIT) return this.recordAndReturn(request,{
+    const skipCleanup = taskKind === "dictation" && request.skipCleanup === true;
+    if (!skipCleanup && Array.from(originalText).length > TEXT_LIMIT) return this.recordAndReturn(request,{
       task:taskKind,raw:originalText,text:tidy(originalText).text,fallback:true,reason:'text-too-long',ms:timing(started,0),
     });
     const strength = canonicalStrength(request.strength ?? this.strength);
@@ -170,25 +172,50 @@ export class VoicePolishService {
       if (strength === "promptbeta") return { ...base, text: "", fallback: true, reason: "empty-transcript" };
       return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
     }
-    // The model and the user's own API key come with the request. Without a
-    // usable route there is nothing to call: the tidied transcript is inserted.
-    const custom = request.llm ? normalizeRoute(request.llm) : null;
+    if (skipCleanup) {
+      return await this.recordAndReturn(request, base);
+    }
+    const policy = request.shortCleanup;
+    const limit = policy?.maxUnits;
+    const fullAbove = policy?.fullAbove;
+    const tiered = Number.isInteger(fullAbove) && fullAbove > limit && fullAbove <= 400;
+    const units = taskKind === "dictation" && Number.isInteger(limit) && limit >= 1 && limit <= 40
+      ? shortDictationUnits(rawText) : Infinity;
+    const short = Number.isFinite(units) && units <= limit;
+    if (short && tiered) return await this.recordAndReturn(request, base);
+    const brief = tiered && units > limit && units <= fullAbove;
+    const lighter = short || brief;
+    const useSmall = short || (brief && policy.useSmallModel === true);
+    const mainRoute = normalizeRoute(request.llm);
+    const custom = useSmall ? normalizeRoute(policy.route) : mainRoute;
+    const sameModel = useSmall && custom?.model.toLowerCase() === mainRoute?.model.toLowerCase();
+    if (lighter && (!custom || sameModel || (short && rawText.length > 512))) {
+      return await this.recordAndReturn(request, base);
+    }
+    // Without a usable main route, insert the deterministically tidied transcript.
     if (!custom) {
       const tidyOnly = tidy(rawText);
       return await this.recordAndReturn(request, { ...base, text: tidyOnly.text, fallback: true, reason: "no-api-key", postprocess: tidyOnly.applied });
     }
+    if (lighter || taskKind !== "dictation") delete custom.reasoningEffort;
     base.provider = routeLabel(custom);
     base.model = custom.model;
     this.lastRoute = { provider: base.provider, model: base.model };
 
-    const routes = modelRoutes(custom, request.llmBackups);
-    const deferred = request.hasConfiguredBackups === true;
+    const routes = modelRoutes(custom, lighter ? [] : request.llmBackups);
+    const deferred = !lighter && request.hasConfiguredBackups === true;
     const ctx = this.taskContext({ request, base, route: custom, routes, deferred, started, rawText });
+    if (short) return await runShortDictation(ctx);
+    if (brief) {
+      const cleanupOverride = this.stateDir ? await readSavedPrompt(this.stateDir, "brief-cleanup.md", this.logger) : "";
+      return await runDictation(ctx, { cleanupOverride, brief: true });
+    }
     // 翻译模式 has its own hotkey and prompt: one call cleans up and translates.
     const translateTo = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
     if (translateTo) return await runTranslation(ctx, translateTo);
     if (strength === "promptbeta") return await this.assistant.run(ctx, betaSkip);
-    return await runDictation(ctx);
+    const cleanupOverride = this.stateDir ? await readSavedPrompt(this.stateDir, "asr-engineering.md", this.logger) : "";
+    return await runDictation(ctx, { cleanupOverride });
   }
 
   /**
@@ -213,7 +240,7 @@ export class VoicePolishService {
       logger: this.logger,
       stats: this.stats,
       complete: invoke,
-      reviewComplete: (options) => this.complete({ ...options, route: successfulRoute }),
+      reviewComplete: (options) => this.complete({ ...options, route: { ...successfulRoute, reasoningEffort: undefined } }),
       redact: (text) => {
         let output = this.redactDetail(text);
         for (const item of routes) if (item.apiKey) output = output.split(item.apiKey).join("[redacted-key]");
@@ -356,6 +383,8 @@ export class VoicePolishService {
       }
       const polished = await this.polish({
         task: request.task,
+        skipCleanup: request.skipCleanup,
+        shortCleanup: request.shortCleanup,
         requestId: request.requestId,
         rawText: spoken.text,
         language: spoken.language ?? language,

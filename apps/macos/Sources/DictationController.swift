@@ -444,16 +444,19 @@ final class DictationController {
         if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
         idleBar.hide()
         applyState()
+        let ordinaryDictation = translateTo == nil && strength != VoiceStrength.promptbeta.rawValue
+        let skipCleanup = ordinaryDictation && !settings.dictationCleanupEnabled
+        let shortCleanup = ordinaryDictation ? settings.shortDictationCleanup : nil
         // The field's text goes to the model's provider only when the user turned that on.
-        let context = settings.readFieldContext ? field?.context.encoded() : nil
+        let context = !skipCleanup && settings.readFieldContext ? field?.context.encoded() : nil
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let previousBeta = betaSession == nil ? nil : betaPending
-        let llm = previousBeta?.llm ?? settings.activeLLMRoute
+        let llm = skipCleanup ? nil : (ordinaryDictation ? settings.cleanupLLMRoute : previousBeta?.llm ?? settings.activeLLMRoute)
         let canFailOver = llm != nil && settings.hasConfiguredBackupProviders
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
-        let profile = HistoryStore.shared.profile
-        let ownPrompt = settings.customTranslatePrompt
+        let profile = skipCleanup ? "" : HistoryStore.shared.profile
+        let ownPrompt = translateTo == nil ? nil : settings.customTranslatePrompt
         let asrProvider = settings.onlineASRProvider
         let usesOnlineASR = asrProvider != .local
         let progressID = UUID(); self.progressID = progressID
@@ -487,30 +490,41 @@ final class DictationController {
         let client = self.client
         if usesOnlineASR {
             let workspaceID = settings.funASRWorkspaceID
+            let speechSmoothing = settings.doubaoSpeechSmoothing
+            let hotwords = asrProvider == .doubao ? settings.doubaoHotwords : ""
             let ticket = client.generationTicket()
             recordingBar.showThinking(detail: L10n.text("正在识别…"))
             onlineASRTask = Task.detached(priority: .userInitiated) {
                 do {
                     let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
                     try Task.checkCancellation()
-                    let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID)
+                    let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID,
+                                                               doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
                     let spoken = try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
                     try Task.checkCancellation()
+                    if skipCleanup && variants == nil {
+                        var response = DictateResponse(text: spoken, raw: spoken, fallback: false)
+                        response.task = "dictation"
+                        response.model = asrProvider.label
+                        complete(.success(response))
+                        return
+                    }
                     DispatchQueue.global(qos: .userInitiated).async {
                         let outcome = Result {
                             do {
                                 var response = try client.polishSync(text: spoken, language: effectiveLanguage, strength: strength,
                                     llm: llm, translateTo: translateTo, variants: variants, profile: profile,
                                     fieldContext: context, betaSession: betaSession, translatePrompt: ownPrompt, baseline: baseline,
-                                    appHint: appBundleId, generationTicket: ticket, hasConfiguredBackups: canFailOver)
+                                    appHint: appBundleId, generationTicket: ticket, hasConfiguredBackups: canFailOver,
+                                    skipCleanup: skipCleanup, shortCleanup: shortCleanup)
                                 if response.model == nil { response.model = asrProvider.label }
                                 return response
                             } catch let error as ServiceError
                                       where error.serviceUnavailable && translateTo == nil && strength != VoiceStrength.promptbeta.rawValue {
-                                var response = DictateResponse(text: spoken, raw: spoken, fallback: true)
+                                var response = DictateResponse(text: spoken, raw: spoken, fallback: !skipCleanup)
                                 response.task = "dictation"
                                 response.model = asrProvider.label
-                                response.fallbackReason = "local-service-unavailable"
+                                if !skipCleanup { response.fallbackReason = "local-service-unavailable" }
                                 return response
                             }
                         }
@@ -526,7 +540,8 @@ final class DictationController {
                     try client.dictateSync(wav: readAudio(), language: effectiveLanguage, appBundleId: appBundleId,
                         strength: strength, fieldContext: context, llm: llm, betaSession: betaSession,
                         translateTo: translateTo, variants: variants, profile: profile, baseline: baseline,
-                        translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver, onProgress: { progress in
+                        translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver, skipCleanup: skipCleanup,
+                        shortCleanup: shortCleanup, onProgress: { progress in
                             DispatchQueue.main.async {
                                 guard let self, self.phase == .thinking, self.progressID == progressID else { return }
                                 self.recordingBar.showThinking(detail: progress.label)

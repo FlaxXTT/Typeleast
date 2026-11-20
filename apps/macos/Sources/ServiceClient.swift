@@ -890,28 +890,33 @@ final class ServiceClient {
     func dictateSync(wav: Data, language: String, appBundleId: String, strength: String,
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
                      translateTo: String? = nil, variants: String? = nil, profile: String = "", baseline: String? = nil, translatePrompt: String? = nil, hasConfiguredBackups: Bool = false,
+                     skipCleanup: Bool = false, shortCleanup: ShortDictationCleanup? = nil,
                      onProgress: ((TaskProgress) -> Void)? = nil) throws -> DictateResponse {
         let generation = epoch()
         return try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
                                             translateTo: translateTo, variants: variants, profile: profile, baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups,
-                                            onProgress:onProgress, generation:generation) }
+                                            skipCleanup: skipCleanup, shortCleanup: shortCleanup, onProgress:onProgress, generation:generation) }
     }
 
     /// The body of /dictate: a JSON object (its length in x-voice-meta-bytes), then the WAV.
     /// `baseline`: 提示词模式's draft, the text that was selected when it started.
-    static func dictateBody(wav: Data, profile: String, baseline: String? = nil, translatePrompt: String? = nil, hasConfiguredBackups: Bool = false) -> (body: Data, metaBytes: Int) {
+    static func dictateBody(wav: Data, profile: String, baseline: String? = nil, translatePrompt: String? = nil,
+                            hasConfiguredBackups: Bool = false, skipCleanup: Bool = false,
+                            shortCleanup: ShortDictationCleanup? = nil) -> (body: Data, metaBytes: Int) {
         var meta: [String: Any] = [:]
         if !profile.isEmpty { meta["profile"] = profile }
         if let baseline, !baseline.isEmpty { meta["baseline"] = baseline }
         if let translatePrompt, !translatePrompt.isEmpty { meta["translatePrompt"] = translatePrompt }
         if hasConfiguredBackups { meta["hasConfiguredBackups"] = true }
+        if skipCleanup { meta["skipCleanup"] = true }
+        if let shortCleanup { meta["shortCleanup"] = shortCleanup.requestObject }
         guard !meta.isEmpty, let json = try? JSONSerialization.data(withJSONObject: meta) else { return (wav, 0) }
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false, cancellation: ServiceRequestCancellation? = nil) throws -> DictateResponse {
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false, skipCleanup: Bool = false, shortCleanup: ShortDictationCleanup? = nil, cancellation: ServiceRequestCancellation? = nil) throws -> DictateResponse {
         let generation = generationTicket ?? epoch()
         return try withPortRetry { try withTokenRetry { token in
             var body: [String: Any] = ["text": text, "language": language, "strength": strength, "task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation"]
@@ -920,6 +925,8 @@ final class ServiceClient {
             if hasConfiguredBackups { body["hasConfiguredBackups"] = true }
             if retryInitial { body["retryInitial"] = true }
             if betaSkip { body["betaSkip"] = true }
+            if skipCleanup { body["skipCleanup"] = true }
+            if let shortCleanup { body["shortCleanup"] = shortCleanup.requestObject }
             if let fieldContext, let context = try? JSONSerialization.jsonObject(with: fieldContext) { body["fieldContext"] = context }
             if let translateTo { body["translateTo"] = translateTo }
             if let variants { body["variants"] = variants }
@@ -965,7 +972,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, skipCleanup: Bool, shortCleanup: ShortDictationCleanup?, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
         try withTokenRetry { token in
             let requestID = UUID().uuidString
             var headers: [String: String] = [
@@ -987,7 +994,7 @@ final class ServiceClient {
             if let variants { headers["x-voice-variants"] = variants }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
-            let payload = ServiceClient.dictateBody(wav: wav, profile: profileFilter(profile), baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups)
+            let payload = ServiceClient.dictateBody(wav: wav, profile: profileFilter(profile), baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups, skipCleanup: skipCleanup, shortCleanup: shortCleanup)
             headers["x-voice-meta-bytes"] = String(payload.metaBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)
@@ -1132,12 +1139,31 @@ struct LLMRoute: Codable, Equatable {
     var baseURL: String
     var model: String
     var apiKey: String
+    var reasoningEffort: String? = nil
 
     /// Model ids from an OpenAI-compatible `/models` body: `{"data": [{"id": …}]}`.
     static func modelIDs(from data: Data) -> [String] {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let list = object["data"] as? [[String: Any]] else { return [] }
         return list.compactMap { $0["id"] as? String }.sorted()
+    }
+}
+
+/// A short transcript uses only this route, or goes straight to insertion when it is nil.
+struct ShortDictationCleanup: Equatable {
+    let maxUnits: Int
+    let route: LLMRoute?
+    var fullAbove: Int? = nil
+    var useSmallModel = false
+
+    var requestObject: [String: Any] {
+        var policy: [String: Any] = ["maxUnits": maxUnits]
+        if let fullAbove {
+            policy["fullAbove"] = fullAbove
+            policy["useSmallModel"] = useSmallModel
+        }
+        if let route { policy["route"] = ["baseURL": route.baseURL, "model": route.model, "apiKey": route.apiKey] }
+        return policy
     }
 }
 

@@ -43,7 +43,13 @@ export function normalizeRoute(value) {
   if (url.username || url.password) return null;
   // A remote service needs a key; a local server may not.
   if (!apiKey && !loopback) return null;
-  return { baseURL, model, apiKey, host: url.host };
+  const effort = deepSeekEffort(url.host, model, value.reasoningEffort);
+  return { baseURL, model, apiKey, host: url.host, ...(effort ? { reasoningEffort: effort } : {}) };
+}
+
+function deepSeekEffort(host, model, effort) {
+  return host === "api.deepseek.com" && ["deepseek-flash", "deepseek-v4-pro"].includes(model.toLowerCase())
+    && ["low", "high", "max"].includes(effort) ? effort : undefined;
 }
 
 /**
@@ -130,6 +136,8 @@ export async function completeOpenAI(options) {
   const thinkingKey = `${route.host}\u0000${route.model}`;
   // DeepSeek explicitly supports this switch; dropping it enables thinking by default.
   let extra = !isDeepSeekHost(route.host) && thinkingSwitchRejected.has(thinkingKey) ? {} : noThinkingFields(route.host, route.model);
+  const effort = deepSeekEffort(route.host, modelName, route.reasoningEffort);
+  if (effort) extra = { thinking: { type: "enabled" }, reasoning_effort: effort };
   let triedWithoutThinkingSwitch = false;
   let budget = maxTokens;
   let widened = false;
@@ -151,7 +159,7 @@ export async function completeOpenAI(options) {
             { role: "user", content: user },
           ],
           ...(budget === undefined ? {} : openAIQuick ? { max_completion_tokens: budget } : { max_tokens: budget }),
-          ...(temperature === undefined || kimiK3 ? {} : { temperature }),
+          ...(temperature === undefined || kimiK3 || effort ? {} : { temperature }),
           ...(openAIQuick ? { reasoning_effort: "none" } : kimiK3 ? { reasoning_effort: "low" } : {}),
           ...extra,
           stream: false,

@@ -13,6 +13,8 @@ enum AppIconArtwork {
     static let canvasSize: CGFloat = 1024
     static let barRatios: [CGFloat] = [0.30, 0.58, 1.00, 0.72, 0.42]
     static let waveformOccupancy: CGFloat = 0.618
+    static let barGapScale: CGFloat = 1.20
+    static let waveformInk: UInt32 = 0x1D1A1A
 
     static func outline(in rect: CGRect) -> CGPath {
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
@@ -111,18 +113,18 @@ enum AppIconArtwork {
         context.strokePath()
         context.restoreGState()
 
-        // The waveform's bounding box fills exactly 61.8% of the tile's width and
-        // height. Keep the established relative bar widths and gaps.
+        // The 61.8% scale sets the bar dimensions. The gap is adjusted separately,
+        // with the resulting waveform centred in the tile.
         let waveformWidth = tile.width * waveformOccupancy
         let barWidth = waveformWidth * 112 / 680
-        let gap = waveformWidth * 30 / 680
+        let gap = waveformWidth * 30 / 680 * barGapScale
         let maximumHeight = tile.height * waveformOccupancy
         let totalWidth = CGFloat(barRatios.count) * barWidth + CGFloat(barRatios.count - 1) * gap
         for (index, ratio) in barRatios.enumerated() {
             let height = maximumHeight * ratio
             let bar = CGRect(x: tile.midX - totalWidth / 2 + CGFloat(index) * (barWidth + gap),
                              y: tile.midY - height / 2, width: barWidth, height: height)
-            context.setFillColor(colour(index == 4 ? 0x1F5DF2 : 0x1D1A1A))
+            context.setFillColor(colour(index == barRatios.count - 1 ? 0x1F5DF2 : waveformInk))
             context.addPath(CGPath(roundedRect: bar, cornerWidth: barWidth / 2,
                                   cornerHeight: barWidth / 2, transform: nil))
             context.fillPath()

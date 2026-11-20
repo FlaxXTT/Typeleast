@@ -18,11 +18,63 @@ extension OnlineASRProvider {
 
 struct OnlineASRSettings: View {
     @EnvironmentObject private var model: AppModel
+
+    private var cloudProviders: [OnlineASRProvider] {
+        let dictation = model.settings.onlineASRProvider
+        let meeting = model.settings.meetingASRProvider
+        return (dictation == meeting ? [dictation] : [dictation, meeting]).filter { $0 != .local }
+    }
+
+    var body: some View {
+        SettingsSection(title: L10n.text("语音识别来源")) {
+            SettingRow(title: L10n.text("听写模型"),
+                       detail: model.settings.onlineASRProvider == .local ? nil : L10n.text("录音结束后上传，可能按用量计费。")) {
+                ASRProviderPicker(selection: model.setting(\.onlineASRProvider))
+            }
+            SettingRow(title: L10n.text("会议模型"),
+                       detail: model.settings.meetingASRProvider == .local ? nil : L10n.text("录音结束或导入后上传，可能按用量计费。")) {
+                ASRProviderPicker(selection: model.setting(\.meetingASRProvider), localLabel: "MOSS · " + L10n.text("本地"))
+            }
+            ForEach(cloudProviders, id: \.self) { provider in
+                OnlineASRCredentials(provider: provider)
+                if provider == .doubao {
+                    ToggleRow(title: L10n.text("豆包语义顺滑"),
+                              detail: L10n.text("在识别时去除中文和英文的语气词与重复。"),
+                              isOn: model.setting(\.doubaoSpeechSmoothing))
+                    SettingRow(title: L10n.text("豆包热词"), detail: L10n.text("每行一个词，随录音发给豆包。")) {
+                        TextField(L10n.text("人名、品牌或术语"), text: model.setting(\.doubaoHotwords), axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(1...4)
+                            .frame(width: 225)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ASRProviderPicker: View {
+    @Binding var selection: OnlineASRProvider
+    var localLabel: String? = nil
+
+    var body: some View {
+        Picker("", selection: $selection) {
+            ForEach(OnlineASRProvider.allCases, id: \.self) { option in
+                Text(option == .local ? localLabel ?? option.label : option.label).tag(option)
+            }
+        }
+        .labelsHidden()
+        .frame(width: 225)
+    }
+}
+
+private struct OnlineASRCredentials: View {
+    @EnvironmentObject private var model: AppModel
+    let provider: OnlineASRProvider
     @State private var apiKey = ""
     @State private var workspaceID = ""
     @State private var saveMessage = ""
 
-    private var provider: OnlineASRProvider { model.settings.onlineASRProvider }
     private var keyDraft: String { apiKey.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var workspaceDraft: String { workspaceID.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var workspaceChanged: Bool {
@@ -30,40 +82,30 @@ struct OnlineASRSettings: View {
     }
 
     var body: some View {
-        SettingsSection(title: L10n.text("语音识别来源")) {
-            SettingRow(title: L10n.text("听写模型"),
-                       detail: L10n.text("选用联网模型后，听写录音会在结束时发送给所选服务商，并按其规则计费。")) {
-                Picker("", selection: model.setting(\.onlineASRProvider)) {
-                    ForEach(OnlineASRProvider.allCases, id: \.self) { option in
-                        Text(option.label).tag(option)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 225)
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            SettingRow(title: provider.label + " · API Key",
+                       detail: model.asrKeyPresence(for: provider) == true ? L10n.text("已保存在本机钥匙串") : nil) {
+                SecureField(model.credentialsLocked ? L10n.text("钥匙串已锁定") : "API Key", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 225)
+                    .disabled(model.credentialsLocked)
             }
-            if provider != .local {
-                SettingRow(title: "API Key",
-                           detail: model.onlineASRKeyPresence == true ? L10n.text("已保存在本机钥匙串") : nil) {
-                    SecureField("API Key", text: $apiKey)
+            if provider == .funASR {
+                SettingRow(title: L10n.text("百炼业务空间 ID"), detail: L10n.text("北京默认业务空间可留空。")) {
+                    TextField("Workspace ID", text: $workspaceID)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 225)
                 }
-                if provider == .funASR {
-                    SettingRow(title: L10n.text("百炼业务空间 ID"), detail: L10n.text("北京默认业务空间可留空。")) {
-                        TextField("Workspace ID", text: $workspaceID)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 225)
-                    }
+            }
+            HStack {
+                if !saveMessage.isEmpty {
+                    Text(saveMessage).font(Theme.captionFont).foregroundColor(Theme.secondary)
                 }
-                HStack {
-                    if !saveMessage.isEmpty {
-                        Text(saveMessage).font(Theme.captionFont).foregroundColor(Theme.secondary)
-                    }
-                    Spacer()
-                    Button(L10n.text("保存")) { save() }
-                        .buttonStyle(SecondaryButtonStyle())
-                        .disabled(keyDraft.isEmpty && !workspaceChanged)
-                }
+                Spacer()
+                Button(L10n.text("保存")) { save() }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(model.credentialsLocked || (keyDraft.isEmpty && !workspaceChanged))
             }
         }
         .onChange(of: provider, initial: true) { _, _ in

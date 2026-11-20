@@ -156,6 +156,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     private func present(_ page: HubPage) {
         model.homePresentationSuspended = false
+        model.sidebarBrandPalette = SidebarBrandPalette.random(excluding: model.sidebarBrandPalette)
         if page == .home {
             settingsWindow.closeImmediately()
             model.settingsPresented = false
@@ -221,17 +222,9 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 9) {
-                sidebarWaveform
-                Text("TypeLeast")
-                    .font(InterfaceTypography.localized(Theme.homeHeadingSize * Theme.homeRatio * Theme.homeRatio, weight: .semibold))
-                    .tracking(-0.6)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .accessibilityLabel("TypeLeast")
-                Spacer(minLength: 0)
-            }
-            .padding(.bottom, 16)
-            .overlay { if !model.settingsPresented { WindowDragRegion() } }
+            SidebarBrand(palette: model.sidebarBrandPalette)
+                .padding(.bottom, 16)
+                .overlay { if !model.settingsPresented { WindowDragRegion() } }
 
             ForEach([HubPage.home, .history, .meetings]) { page in
                 SidebarItem(page: page).disabled(model.settings.needsPractice)
@@ -240,8 +233,6 @@ private struct Sidebar: View {
             Spacer()
 
             SidebarModes()
-                .padding(.bottom, 8)
-            ServiceBadge()
                 .padding(.bottom, 8)
             Divider().overlay(Theme.border).padding(.vertical, 8)
             HStack(spacing: 4) {
@@ -261,19 +252,6 @@ private struct Sidebar: View {
         .padding(EdgeInsets(top: 44, leading: 12, bottom: 8, trailing: 12))
     }
 
-    private var sidebarWaveform: some View {
-        let size: CGFloat = 26
-        let ratios = AppIconArtwork.barRatios
-        return HStack(spacing: size * 0.03) {
-            ForEach(ratios.indices, id: \.self) { index in
-                Capsule()
-                    .fill(index == ratios.count - 1 ? Theme.accent : Theme.ink)
-                    .frame(width: size * 0.10, height: size * AppIconArtwork.waveformOccupancy * ratios[index])
-            }
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-    }
 }
 
 private struct SidebarItem: View {
@@ -311,61 +289,18 @@ private struct SidebarItem: View {
     }
 }
 
-/// Compact service state at the bottom of the sidebar.
-private struct ServiceBadge: View {
-    @EnvironmentObject var model: AppModel
-
-    private var badgeText: String {
-        if model.serviceUp { return "Ready" }
-        if model.modelsDownloading {
-            return L10n.text("正在下载模型 ") + (model.speech?.downloadFraction.map { String(Int($0 * 100)) + "%" } ?? "…")
-        }
-        if model.modelsMissing { return L10n.text("语音模型未下载") }
-        if case .running = model.serviceState { return L10n.text("正在加载语音模型") }
-        return L10n.text("本地服务未就绪")
-    }
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(model.serviceUp ? Theme.success : Theme.warning)
-                .frame(width: 7, height: 7)
-            InterfaceTypography.text(badgeText, size: 14, weight: .medium)
-                .foregroundColor(Theme.secondary)
-                .lineLimit(1)
-            Spacer()
-            if model.modelsMissing {
-                Button(L10n.text("下载模型")) { model.actions?.downloadModels() }
-                    .buttonStyle(FlatActionButtonStyle())
-                    .font(InterfaceTypography.localized(12, weight: .semibold))
-                    .foregroundColor(Theme.ink)
-            } else if !model.serviceUp && !model.modelsDownloading {
-                Button(L10n.text("重启")) { model.actions?.restartService() }
-                    .buttonStyle(FlatActionButtonStyle())
-                    .font(InterfaceTypography.localized(12, weight: .semibold))
-                    .foregroundColor(Theme.ink)
-            }
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 30)
-        .background(Capsule().fill(Theme.card))
-    }
-}
-
 /// Large page title plus optional trailing controls.
 struct PageHeader<Trailing: View>: View {
     let title: String
-    var subtitle: String? = nil
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(Theme.titleFont).tracking(-0.6).frame(height: 40, alignment: .leading)
-                if let subtitle = subtitle, !subtitle.isEmpty {
-                    Text(subtitle).font(Theme.captionFont).foregroundColor(Theme.secondary)
-                }
-            }
+            Text(verbatim: title)
+                .font(.system(size: 36, weight: .medium, design: .serif))
+                .tracking(-0.65)
+                .frame(height: 40, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             trailing
         }
@@ -376,8 +311,8 @@ struct PageHeader<Trailing: View>: View {
 }
 
 extension PageHeader where Trailing == EmptyView {
-    init(title: String, subtitle: String? = nil) {
-        self.init(title: title, subtitle: subtitle) { EmptyView() }
+    init(title: String) {
+        self.init(title: title) { EmptyView() }
     }
 }
 

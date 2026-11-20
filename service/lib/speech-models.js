@@ -317,7 +317,7 @@ export class SpeechModels {
         partialBytes += (await this.storageFile(file.path, true))?.size ?? 0;
       }
       if (bytes || partialBytes) items.push({ id: model.id, name: model.name, bytes, partialBytes,
-        active: model.id === selected, legacy: this.mlxOnly && model.engine !== 'mlx' });
+        active: this.localEnabled && model.id === selected, legacy: this.mlxOnly && model.engine !== 'mlx' });
     }
     return items;
   }
@@ -326,12 +326,15 @@ export class SpeechModels {
     if (id === MEETING_MODEL_ID || this.local.has(id)) throw fail('invalid-model', 'model cannot be removed here');
     if (this.storageBusy || (this.operation && ['downloading', 'loading', 'waiting', 'committing'].includes(this.operation.phase)))
       throw fail('model-busy', 'another model operation is in progress');
+    // A request queued while local recognition was on must not bypass its worker's release.
+    const startedWithLocalASR = this.localEnabled;
     this.storageBusy = true;
     try {
       return await this.enqueue(async () => {
         let selected = this.activeId;
         try { selected ||= JSON.parse(await readFile(this.selectionPath, 'utf8')).modelId; } catch {}
-        if (!partialOnly && id === selected) throw fail('model-busy', 'switch models before deleting the active model');
+        if (!partialOnly && id === selected && (startedWithLocalASR || this.localEnabled))
+          throw fail('model-busy', 'switch models before deleting the active model');
         for (const file of definition.files) {
           for (const partial of partialOnly ? [true] : [false, true]) {
             const entry = await this.storageFile(file.path, partial);

@@ -64,6 +64,10 @@ enum KeychainStore {
     static var presenceQueryOverride: ((String) -> Bool)?
     private static var presence: [String: Bool] = [:]
 
+    static var requiresUnlock: Bool {
+        stub == nil && TouchIDVault.shared.isConfigured && !TouchIDVault.shared.isUnlocked
+    }
+
     /// Call on app activation so edits in Keychain Access are reflected. Values
     /// already authorized in this process remain separate from display metadata.
     static func invalidatePresence() { lock.withLock { presence.removeAll() } }
@@ -364,6 +368,18 @@ enum KeychainHandoff {
     }
 }
 
+enum CleanupReasoningEffort: String, CaseIterable {
+    case low, high, max
+
+    var label: String {
+        switch self {
+        case .low: return L10n.text("低")
+        case .high: return L10n.text("高")
+        case .max: return L10n.text("最高")
+        }
+    }
+}
+
 extension Settings {
     /// Allow configured providers to handle a dictation if the active provider is unavailable.
     var automaticProviderFallback: Bool {
@@ -404,13 +420,43 @@ extension Settings {
     /// (then the service inserts the tidied transcript, reason no-api-key).
     var activeLLMRoute: LLMRoute? { silentLLMRoute }
 
+    var supportsCleanupThinking: Bool {
+        let endpoint = URL(string: llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines))
+        return endpoint?.host?.lowercased() == "api.deepseek.com"
+            && ["deepseek-flash", "deepseek-v4-pro"].contains(llmModel.lowercased())
+    }
+
+    private var cleanupThinkingKey: String { "llm.cleanupThinking." + llmPresetID + "." + llmModel.lowercased() }
+
+    var cleanupThinking: Bool {
+        get { UserDefaults.standard.bool(forKey: cleanupThinkingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: cleanupThinkingKey); notifyChanged() }
+    }
+
+    var cleanupReasoningEffort: CleanupReasoningEffort {
+        get { CleanupReasoningEffort(rawValue: UserDefaults.standard.string(forKey: cleanupThinkingKey + ".effort") ?? "") ?? .low }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: cleanupThinkingKey + ".effort"); notifyChanged() }
+    }
+
+    var cleanupLLMRoute: LLMRoute? {
+        guard var route = activeLLMRoute else { return nil }
+        if supportsCleanupThinking && cleanupThinking { route.reasoningEffort = cleanupReasoningEffort.rawValue }
+        return route
+    }
+
     /// Background work must not open a password dialog.
     var silentLLMRoute: LLMRoute? {
-        let preset = LLMPreset.find(llmPresetID)
-        guard !llmModel.isEmpty, LLMPreset.isAllowedBaseURL(llmBaseURL) else { return nil }
-        let key = KeychainStore.readSilently(account: llmPresetID) ?? ""
+        savedLLMRoute(presetID: llmPresetID, model: llmModel)
+    }
+
+    func savedLLMRoute(presetID: String, model: String) -> LLMRoute? {
+        let preset = LLMPreset.find(presetID)
+        let base = UserDefaults.standard.string(forKey: "llm.baseURL." + presetID) ?? preset.baseURL
+        let name = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, LLMPreset.isAllowedBaseURL(base) else { return nil }
+        let key = KeychainStore.readSilently(account: presetID) ?? ""
         guard !preset.needsKey || !key.isEmpty else { return nil }
-        return LLMRoute(baseURL: llmBaseURL, model: llmModel, apiKey: key)
+        return LLMRoute(baseURL: base, model: name, apiKey: key)
     }
 
     /// Saved keys are used if macOS permits access without an authentication prompt.

@@ -26,6 +26,39 @@ func meetingTests() {
     let status = try? JSONDecoder().decode(MeetingStatus.self, from: Data(#"{"id":"a","phase":"done","seconds":6,"elapsedMs":900,"result":{"segments":[{"start":0.1,"end":null,"speaker":"S01","text":"x"}],"speakers":["S01"],"text":"x","truncated":true}}"#.utf8))
     checkEq("a finished status carries labelled turns", status?.result?.segments.first?.speaker, "S01")
 
+    let doubaoPayload = Data(#"""
+        {"result":{"text":"Hello. Thanks. Yes.","utterances":[
+          {"text":"Hello.","start_time":300,"end_time":900,"additions":{"speaker_id":"0"}},
+          {"text":"Thanks.","start_time":900,"end_time":1400,"additions":{"speaker_id":"1"}},
+          {"text":"Yes.","start_time":1500,"end_time":1900,"additions":{"speaker_id":"0"}}
+        ]}}
+        """#.utf8)
+    let doubao = try? JSONDecoder().decode(OnlineASR.DoubaoEnvelope.self, from: doubaoPayload)
+    let speakerTurns = doubao?.result.map { MeetingResult.online($0.transcript, duration: 2) }
+    checkEq("Doubao meeting speaker labels remain stable", speakerTurns?.segments.map(\.speaker), ["S01", "S02", "S01"])
+    checkEq("Doubao meeting turns preserve timestamps", speakerTurns?.segments.map(\.start), [0.3, 0.9, 1.5])
+    let smoothingOff = OnlineASR.doubaoRequest(language: "auto", meeting: true, speechSmoothing: false)["request"] as? [String: Any]
+    checkEq("Doubao requests explicitly disable smoothing", smoothingOff?["enable_ddc"] as? Bool, false)
+    checkEq("smoothing off keeps automatic punctuation", smoothingOff?["enable_punc"] as? Bool, true)
+    checkEq("smoothing off keeps speaker information", smoothingOff?["enable_speaker_info"] as? Bool, true)
+    let smoothingOn = OnlineASR.doubaoRequest(language: "en", meeting: false, speechSmoothing: true)["request"] as? [String: Any]
+    checkEq("Doubao sends smoothing for English when enabled", smoothingOn?["enable_ddc"] as? Bool, true)
+    checkEq("Doubao uses automatic punctuation by default", smoothingOn?["enable_punc"] as? Bool, true)
+    checkEq("Doubao uses numeric normalization by default", smoothingOn?["enable_itn"] as? Bool, true)
+    check("Doubao leaves out an empty hotword list", smoothingOn?["corpus"] == nil)
+    let withHotwords = OnlineASR.doubaoRequest(language: "auto", meeting: false, speechSmoothing: true,
+                                             hotwords: " TypeLeast \n\n语音识别\nTypeLeast")["request"] as? [String: Any]
+    let corpus = withHotwords?["corpus"] as? [String: String]
+    let terms = corpus?["context"].flatMap { try? JSONDecoder().decode([String: [[String: String]]].self, from: Data($0.utf8)) }
+    checkEq("Doubao sends the deduplicated hotwords inside a serialized corpus context", terms?["hotwords"],
+            [["word": "TypeLeast"], ["word": "语音识别"]])
+    let japanese = OnlineASR.doubaoRequest(language: "ja", meeting: false, speechSmoothing: true)["request"] as? [String: Any]
+    checkEq("Doubao keeps smoothing off for Japanese", japanese?["enable_ddc"] as? Bool, false)
+    let plainResult = MeetingResult.online(OnlineASRTranscript(text: "Full transcript."), duration: 3)
+    checkEq("a provider result without timing keeps the full transcript", plainResult.segments,
+            [MeetingSegment(start: 0, end: 3, speaker: "", text: "Full transcript.")])
+    checkEq("copy without a speaker omits the label", MeetingFormat.text(plainResult), "[00:00] Full transcript.\n")
+
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("meeting-tests-" + UUID().uuidString)
     try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: folder) }
@@ -35,6 +68,7 @@ func meetingTests() {
         let wav = try MeetingAudio.canonicalWav(from: m4a)
         check("an imported m4a becomes the canonical WAV", Wav.isCanonical(wav), Wav.describe(wav))
         check("the import keeps the length", abs((Wav.parse(wav)?.durationSeconds ?? 0) - 3) < 0.2)
+        onlineMeetingTest(importURL: m4a)
 
         let aiff = folder.appendingPathComponent("long.aiff")
         try writeTone(to: aiff, seconds: 3, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsBigEndianKey: true, AVLinearPCMIsFloatKey: false])
@@ -55,4 +89,82 @@ func meetingTests() {
     checkEq("the client's limit matches the service's", MeetingLimits.maxSeconds, 600)
     checkEq("a missing model is explained", MeetingController.explain(code: "model-not-installed"), "还没有下载 MOSS 模型。")
     checkEq("meeting copy is translated", L10n.render("录音太短。", arguments: [], language: "en"), "The recording is too short.")
+}
+
+private func onlineMeetingTest(importURL: URL) {
+    let suite = "typeleast-meeting-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let settings = Settings(defaults: defaults)
+    checkEq("existing settings keep Doubao smoothing on", settings.doubaoSpeechSmoothing, true)
+    checkEq("existing settings keep AI cleanup on", settings.dictationCleanupEnabled, true)
+    checkEq("dictation defaults to direct through 25 and brief through 100", settings.shortDictationCleanup,
+            ShortDictationCleanup(maxUnits: 25, route: nil, fullAbove: 100))
+    defaults.set("direct", forKey: "voice.shortDictationMode")
+    checkEq("legacy direct preference adopts the three tiers", settings.shortDictationMode, .mainModel)
+    settings.shortDictationMode = .smallModel
+    checkEq("optional small model uses the same tier boundaries", settings.shortDictationCleanup?.useSmallModel, true)
+    checkEq("the small model preference persists", Settings(defaults: defaults).shortDictationMode, .smallModel)
+    settings.doubaoHotwords = "TypeLeast"
+    checkEq("the user's Doubao hotwords persist", Settings(defaults: defaults).doubaoHotwords, "TypeLeast")
+    settings.doubaoSpeechSmoothing = false
+    settings.dictationCleanupEnabled = false
+    checkEq("the master cleanup switch takes priority over short routing", settings.shortDictationCleanup, nil)
+    checkEq("Doubao smoothing choice persists", Settings(defaults: defaults).doubaoSpeechSmoothing, false)
+    checkEq("AI cleanup choice persists", Settings(defaults: defaults).dictationCleanupEnabled, false)
+    checkEq("existing installations keep on-device meeting recognition", settings.meetingASRProvider, .local)
+    settings.meetingASRProvider = .doubao
+    checkEq("the meeting model keeps its own setting", Settings(defaults: defaults).meetingASRProvider, .doubao)
+    checkEq("changing the meeting provider leaves dictation on device", settings.onlineASRProvider, .local)
+    settings.funASRWorkspaceID = "test-workspace"
+
+    enum ProviderFailure: LocalizedError {
+        case unavailable, invalidConfiguration
+        var errorDescription: String? {
+            self == .unavailable ? "Fixture provider unavailable" : "Fixture invalid configuration"
+        }
+    }
+    let meeting = MeetingController(settings: settings, recognizeCloud: { wav, configuration in
+        if configuration.provider == .doubao {
+            if configuration.doubaoSpeechSmoothing || configuration.doubaoHotwords != "TypeLeast" { throw ProviderFailure.invalidConfiguration }
+            throw ProviderFailure.unavailable
+        }
+        guard configuration.provider == .funASR, configuration.apiKey == "fixture-funASR",
+              configuration.workspaceID == "test-workspace", Wav.isCanonical(wav) else {
+            throw ProviderFailure.invalidConfiguration
+        }
+        try await Task.sleep(for: .milliseconds(30))
+        return OnlineASRTranscript(text: "Recognized.", utterances: [
+            OnlineASRUtterance(startMilliseconds: 1200, endMilliseconds: 1800, speakerID: nil, text: "Recognized.")
+        ])
+    }, cloudKey: { "fixture-" + $0.rawValue })
+
+    func wait(for stage: MeetingController.Stage) {
+        let deadline = Date().addingTimeInterval(2)
+        while meeting.stage != stage && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+    }
+
+    meeting.importFile(importURL)
+    settings.meetingASRProvider = .funASR
+    wait(for: .failed)
+    checkEq("meeting import uses the provider selected when it started", meeting.stage, .failed)
+    checkEq("meeting uses the saved Doubao smoothing preference", meeting.message, "Fixture provider unavailable")
+    check("online failure retains the audio for retry", meeting.canRetry)
+
+    meeting.retry()
+    checkEq("retry switches to the newly selected cloud provider", meeting.stage, .transcribing)
+    check("cloud meetings do not use the local live preview", !meeting.usesLivePreview)
+    wait(for: .done)
+    checkEq("retry produces a timed online transcript", meeting.result?.segments.first,
+            MeetingSegment(start: 1.2, end: 1.8, speaker: "", text: "Recognized."))
+    checkEq("a provider without speaker attribution leaves the speaker list empty", meeting.result?.speakers, [])
+
+    let prior = meeting.transcript?.id
+    meeting.send(Wav.header(dataBytes: 32_000) + Data(count: 32_000))
+    meeting.cancel()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    checkEq("cancelling online transcription returns to the prior result", meeting.stage, .done)
+    checkEq("a cancelled online request cannot replace the prior result", meeting.transcript?.id, prior)
 }

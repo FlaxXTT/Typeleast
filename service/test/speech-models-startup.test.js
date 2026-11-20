@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { SpeechModels } from '../lib/speech-models.js';
 import { MLX_DEFAULT_MODEL_ID, MLX_MODELS } from '../lib/mlx-models.js';
+import { filesForModel } from '../lib/models.js';
 import { startService } from '../lib/server.js';
 
 const deferred = () => {
@@ -94,21 +95,29 @@ test('a failed verification ends loading and retains the saved selection on disk
   assert.deepEqual(JSON.parse(await readFile(models.selectionPath, 'utf8')), { modelId: MLX_DEFAULT_MODEL_ID });
 });
 
-test('cloud startup and switching off local ASR preserve the text service and saved model', async t => {
+test('cloud ASR permits deleting saved local weights while keeping the text service and model preference', async t => {
   const selected = 'mlx-qwen3-asr-0.6b-bf16';
   const f = await fixture(t, selected, false);
+  const weights = join(f.dir, ...filesForModel(selected).find(file => file.path.at(-1).endsWith('.safetensors')).path);
+  const unrelated = join(dirname(weights), 'notes.txt');
+  await mkdir(dirname(weights), { recursive: true });
+  await writeFile(weights, 'test weights');
+  await writeFile(unrelated, 'keep this file');
   const handle = await startService({ stateDir: f.dir, recognizer: f.models, logger: {} });
   t.after(() => handle.close());
   const token = (await readFile(join(f.dir, 'api-token'), 'utf8')).trim();
   const request = (path, method = 'GET', body) => fetch(
     `http://127.0.0.1:${handle.port}/api/voice-polish${path}`,
     { method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const item = async () => (await (await request('/models')).json()).storage.find(model => model.id === selected);
+  const remove = () => request('/models/storage/delete', 'POST', { modelId: selected, partialOnly: false });
   await f.models.serial;
   const pausedHealth = await (await request('/health')).json();
   assert.equal(pausedHealth.ok, true);
   assert.equal(pausedHealth.speech.phase, 'disabled');
   assert.equal(pausedHealth.speech.modelId, selected);
   assert.equal(f.loads(), 0);
+  assert.equal((await item()).active, false);
   await assert.rejects(f.models.transcribe(Buffer.alloc(0), 'auto'), { code: 'speech-not-ready' });
 
   const enabled = await request('/models/local-asr', 'PUT', { enabled: true });
@@ -119,6 +128,11 @@ test('cloud startup and switching off local ASR preserve the text service and sa
   await f.models.serial;
   assert.equal(f.models.snapshot().ready, true);
   assert.equal(f.loads(), 1);
+  assert.equal((await item()).active, true);
+  const protectedModel = await remove();
+  assert.equal(protectedModel.status, 409);
+  assert.equal((await protectedModel.json()).code, 'model-busy');
+  assert.equal(await readFile(weights, 'utf8'), 'test weights');
 
   const disabled = await request('/models/local-asr', 'PUT', { enabled: false });
   assert.equal(disabled.status, 200);
@@ -128,11 +142,21 @@ test('cloud startup and switching off local ASR preserve the text service and sa
   assert.equal(health.ok, true);
   assert.equal(health.pid, pausedHealth.pid);
   assert.equal(health.speech.phase, 'disabled');
+  assert.equal((await item()).active, false);
+  assert.equal((await remove()).status, 200);
+  assert.equal(await item(), undefined);
+  await assert.rejects(readFile(weights), { code: 'ENOENT' });
+  assert.equal(await readFile(unrelated, 'utf8'), 'keep this file');
   const polish = await request('/polish', 'POST', { text: 'The report is ready.', strength: 'prompt' });
   assert.equal(polish.status, 200);
   assert.equal((await polish.json()).text, 'The report is ready.');
   assert.equal(f.loads(), 1);
   assert.deepEqual(JSON.parse(await readFile(f.models.selectionPath, 'utf8')), { modelId: selected });
+  f.models.verify = async () => { await readFile(weights); };
+  assert.equal((await request('/models/local-asr', 'PUT', { enabled: true })).status, 200);
+  await f.models.serial;
+  assert.equal(f.models.snapshot().phase, 'missing-model');
+  assert.equal(f.loads(), 1);
 });
 
 test('rapid cloud and local switches cancel stale model startup and load the latest mode', async t => {
