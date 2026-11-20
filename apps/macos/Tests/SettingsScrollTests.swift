@@ -116,4 +116,55 @@ func settingsScrollTests(output: String) throws {
             window.orderOut(nil)
         }
     }
+
+    let model = AppModel()
+    model.settingsCategory = .dictation
+    let settings = SettingsWindowController(model: model)
+    defer { settings.closeImmediately() }
+
+    func showSettings() throws -> NSView {
+        model.settingsPresented = true
+        settings.show(relativeTo: nil)
+        guard let view = settings.visibleWindow?.contentView else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        settle(view, until: { scrollView(in: view)?.documentView != nil })
+        settle(view)
+        return view
+    }
+
+    func offset(in view: NSView) -> CGFloat { scrollView(in: view)?.contentView.bounds.minY ?? -1 }
+
+    var settingsView = try showSettings()
+    guard let scroll = scrollView(in: settingsView), let document = scroll.documentView else {
+        check("reopening fixture has a native scroll view", false)
+        return
+    }
+    let targetOffset = min(180, document.frame.height - scroll.contentView.bounds.height)
+    check("reopening fixture has enough content to scroll", targetOffset > 100)
+    scroll.contentView.scroll(to: NSPoint(x: 0, y: targetOffset))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    check("settings can scroll away from the top", offset(in: settingsView) > 100)
+
+    model.settingsCategory = .translation
+    settle(settingsView)
+    model.settingsCategory = .dictation
+    settle(settingsView, until: { offset(in: settingsView) > 100 })
+    check("switching categories during one visit restores the position", offset(in: settingsView) > 100)
+
+    settings.close()
+    settle(settingsView, until: { settings.visibleWindow == nil })
+    check("settings finish closing", settings.visibleWindow == nil)
+    settingsView = try showSettings()
+    checkEq("reopening keeps the selected category", model.settingsCategory, .dictation)
+    check("reopening resets the scroll to the top", abs(offset(in: settingsView)) < 0.5)
+
+    if let reopenedScroll = scrollView(in: settingsView) {
+        reopenedScroll.contentView.scroll(to: NSPoint(x: 0, y: targetOffset))
+        reopenedScroll.reflectScrolledClipView(reopenedScroll.contentView)
+    }
+    check("settings are scrolled before reopening during close", offset(in: settingsView) > 100)
+    settings.close()
+    settingsView = try showSettings()
+    check("reopening immediately after close also starts at the top", abs(offset(in: settingsView)) < 0.5)
 }
