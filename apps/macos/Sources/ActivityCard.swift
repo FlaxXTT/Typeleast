@@ -9,7 +9,7 @@ private func animationFrames(from start: Date, duration: TimeInterval) -> [Date]
 }
 
 struct CountUpTransition {
-    static let duration = 0.250
+    static let duration = 0.320
     private var from: Double
     private(set) var target: Double?
     private(set) var startedAt: Date?
@@ -436,7 +436,9 @@ struct ActivityCard: View {
                         }
                     }
                     .frame(width: width, height: navigationY + navigationHeight, alignment: .topLeading)
+                    .padding(.top, ActivityTrack.revealHeadroom)
                     .clipped()
+                    .padding(.top, -ActivityTrack.revealHeadroom)
                     .offset(x: dayColumn)
                     navigation(log: log, weeks: weeks)
                         .frame(width: dayColumn + width)
@@ -468,21 +470,20 @@ struct ActivityCard: View {
 
     private func activeDays(_ value: Int?) -> some View {
         let description = L10n.text("活跃天数")
-        return VStack(alignment: .leading, spacing: 6) {
-            CountUpReadout(value.map(Double.init)) { number in
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    let digits = number.map { L10n.formattedNumber(NSNumber(value: $0.rounded())) } ?? "--"
-                    Text(verbatim: digits)
-                        .font(InterfaceTypography.figure(Theme.homeFigureSize))
-                        .tracking(-0.6)
-                    if number != nil {
-                        InterfaceTypography.text("d", size: Theme.homeSecondarySize, weight: .semibold)
-                    }
+        return CountUpReadout(value.map(Double.init)) { number in
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                let digits = number.map { L10n.formattedNumber(NSNumber(value: $0.rounded())) } ?? "--"
+                Text(verbatim: digits)
+                    .font(InterfaceTypography.figure(Theme.homeFigureSize))
+                    .tracking(-0.6)
+                if number != nil {
+                    InterfaceTypography.text("d", size: Theme.homeSecondarySize, weight: .semibold)
                 }
+                InterfaceTypography.text("Active", size: Theme.homeSecondarySize)
+                    .foregroundColor(Theme.homeLabel)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .padding(.leading, 3)
             }
-            InterfaceTypography.text("Active", size: Theme.homeSecondarySize)
-                .foregroundColor(Theme.homeLabel)
-                .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
@@ -550,6 +551,7 @@ private struct ActivityTrack: View, Animatable {
     static let scrollWeeks = 4
     static let columnStep: CGFloat = 22
     static let columnGap: CGFloat = 3
+    static let revealHeadroom: CGFloat = 6
     let log: ActivityLog?
     let weeks: Int
     let rowStep: CGFloat
@@ -580,10 +582,12 @@ private struct ActivityTrack: View, Animatable {
             ForEach(first...(first + weeks), id: \.self) { week in
                 let date = calendar.date(byAdding: .day, value: 7 * week, to: thisWeek) ?? thisWeek
                 let x = (Double(week) - firstWeek) * Self.columnStep
-                let motion = HeatmapMotion.sample(elapsed: elapsed, column: max(0, week + weeks - 1))
+                let column = max(0, week + weeks - 1)
+                let motion = HeatmapMotion.sample(elapsed: elapsed, column: column)
                 ForEach(0..<7, id: \.self) { row in
                     let day = calendar.date(byAdding: .day, value: row, to: date) ?? date
-                    cellView(date: day, today: today, size: cell, motion: motion)
+                    let depth = HeatmapMotion.depth(elapsed: elapsed, column: column, row: row)
+                    cellView(date: day, today: today, size: cell, motion: motion, depth: depth)
                         .offset(x: x, y: CGFloat(row) * rowStep)
                         .accessibilityHidden(x <= -cell || x >= CGFloat(weeks) * Self.columnStep)
                 }
@@ -599,9 +603,10 @@ private struct ActivityTrack: View, Animatable {
     }
 
     @ViewBuilder
-    private func cellView(date: Date, today: Date, size: CGFloat, motion: HeatmapMotion.Sample) -> some View {
+    private func cellView(date: Date, today: Date, size: CGFloat, motion: HeatmapMotion.Sample,
+                          depth: Double) -> some View {
         if let log {
-            Group {
+            let face = Group {
                 if date <= today {
                     let day = log.day(date)
                     let description = tooltip(date, day)
@@ -621,6 +626,22 @@ private struct ActivityTrack: View, Animatable {
                 }
             }
             .scaleEffect(motion.scale)
+            if depth > 0 {
+                face
+                    .rotation3DEffect(.degrees(24 * depth), axis: (x: 1, y: -0.3, z: 0), perspective: 0.45)
+                    .offset(y: -3 * depth)
+                    .background {
+                        RoundedRectangle(cornerRadius: Theme.heatCellRadius)
+                            .fill(.black.opacity(0.28 * depth))
+                            .frame(width: size, height: size)
+                            .blur(radius: 2 * depth)
+                            .offset(x: depth, y: 2 * depth)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+            } else {
+                face
+            }
         } else {
             Self.square(0, size: size).accessibilityHidden(true)
         }
@@ -650,8 +671,9 @@ private struct ActivityTrack: View, Animatable {
 }
 
 enum HeatmapMotion {
-    static let columnDelay = 0.020
-    static let cellDuration = 0.300
+    static let columnDelay = 0.025
+    static let cellDuration = 0.375
+    private static let rowDelay = 0.00625
 
     struct Sample: Equatable {
         let scale: Double
@@ -660,6 +682,16 @@ enum HeatmapMotion {
 
     static func finishTime(columns: Int) -> Double {
         max(0, Double(columns - 1)) * columnDelay + cellDuration
+    }
+
+    static func depth(elapsed: Double, column: Int, row: Int) -> Double {
+        let delay = Double(row) * rowDelay
+        let time = elapsed - Double(column) * columnDelay - delay
+        let duration = cellDuration - delay
+        guard time > 0, time < duration else { return 0 }
+        // A staggered rise and fall makes the pulse travel down the tile faces.
+        let rise = sin(.pi * time / duration)
+        return rise * rise
     }
 
     static func sample(elapsed: Double, column: Int) -> Sample {

@@ -2,13 +2,11 @@ import AppKit
 import SwiftUI
 import QuartzCore
 
-// LearnedToast.swift - a short message with 撤销, shown for a few seconds: "转录已取消" after a
-// cancelled recording, "已把「DeepSeek」加入词典" after the edit learner adds a word. A
-// non-activating panel above the recording pill, so the app being typed into keeps focus.
+// A non-activating undo capsule above the recording pill keeps focus in the target app.
 
 final class LearnedToast {
-    static let duration: TimeInterval = 6
-    private static let fadeDuration: TimeInterval = 1
+    private static let undoDuration: TimeInterval = 2.5
+    private static let fadeDuration: TimeInterval = 0.25
 
     private var panel: NSPanel?
     private var hideTimer: Timer?
@@ -56,7 +54,7 @@ final class LearnedToast {
             p.setFrameOrigin(NSPoint(x: f.midX - size.width / 2, y: f.minY + 110))
         }
         p.orderFrontRegardless()
-        let t = Timer(timeInterval: LearnedToast.duration, repeats: false) { [weak self] _ in self?.fadeOut() }
+        let t = Timer(timeInterval: Self.undoDuration, repeats: false) { [weak self] _ in self?.fadeOut() }
         RunLoop.main.add(t, forMode: .common)
         hideTimer = t
     }
@@ -83,7 +81,7 @@ final class LearnedToast {
         }
     }
 
-    /// Keep the six-second undo window, then fade the whole card over one second.
+    /// Disable undo when its window expires, then fade the card.
     private func fadeOut() {
         hideTimer = nil
         let done = expired
@@ -109,23 +107,29 @@ struct LearnedToastView: View {
     let undo: () -> Void
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
-        HStack(spacing: 10) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(Color(red: 0.45, green: 0.55, blue: 1.0))
+        let shape = Capsule(style: .circular)
+        let ink = Color(nsColor: VoiceBarPalette.ink)
+        HStack(spacing: 6) {
             Text(message)
-                .font(InterfaceTypography.localized(14, weight: .semibold)).foregroundColor(.white).lineLimit(1)
+                .font(InterfaceTypography.localized(12, weight: .semibold))
+                .foregroundColor(ink)
+                .lineLimit(1)
             Button(action: undo) {
-                Text(L10n.text("撤销")).font(InterfaceTypography.localized(14, weight: .medium)).foregroundColor(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(Capsule(style: .circular).fill(Color.white.opacity(0.16)))
+                Text(L10n.text("撤销"))
+                    .font(InterfaceTypography.localized(12, weight: .medium))
+                    .foregroundColor(ink)
+                    .padding(.horizontal, 8)
+                    .frame(height: 28)
+                    .background(shape.fill(ink.opacity(0.16)))
             }
             .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.capsuleRadius))
         }
-        .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
+        .padding(.leading, 10)
+        .padding(.trailing, 5)
+        .frame(minWidth: RecordingBarMode.handsFree.width)
+        .frame(height: PillView.height)
         .fixedSize()
-        .background(Color(white: 0.1), in: shape)
-        .overlay(shape.strokeBorder(Color.white.opacity(0.12)).allowsHitTesting(false))
+        .background(Color(nsColor: VoiceBarPalette.surfaceTop), in: shape)
+        .overlay(shape.strokeBorder(Color(nsColor: VoiceBarPalette.edge)).allowsHitTesting(false))
     }
 }

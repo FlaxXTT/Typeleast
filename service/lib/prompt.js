@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-11-20.1-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-11-20.4-dictation+assistant+translate";
 
 const previousCleanupHash = "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b";
 
@@ -59,7 +59,7 @@ export function systemPromptFor({ fieldContext, profile, cleanupOverride } = {})
   return cleanupSystemPrompt(profile, cleanupOverride) + harnessAddendum({ fieldContext });
 }
 
-/** The user message, in the shape the prompt's examples use. */
+/** The quoted transcript supplied to the system prompt. */
 export function buildUserMessage(input) {
   return JSON.stringify({ raw_asr_transcript: String(input?.rawText ?? "") }, null, 2);
 }

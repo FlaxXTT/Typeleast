@@ -104,14 +104,17 @@ if let index = CommandLine.arguments.firstIndex(of: "--pill-ui-render"), Command
     guard output.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
     _ = NSApplication.shared
-    for name in ["recording", "translation", "countdown", "starting", "thinking", "thinking-wave", "result", "selection-count"] {
+    for name in ["recording", "translation", "countdown", "starting", "thinking", "thinking-wave", "thinking-prompt", "result", "selection-count"] {
         var model = RecordingBarModel()
+        let movingThought = name == "thinking-wave" || name == "thinking-prompt"
         model.showRecording(destination: "fixture", badge: name == "translation" ? "翻译 →EN" : "")
         for (i, level) in [Float(0), 0.15, 0.42, 0.7, 0.4, 0.22, 0.8, 0.92, 0.5, 0.3, 0.1, 0.35, 0.6].enumerated() {
             model.update(level: level, elapsed: Double(i) * 0.05 + (name == "countdown" ? 108 : 0))
         }
         if name == "starting" { model.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true) }
-        if ["thinking", "thinking-wave"].contains(name) { model.processing() }
+        if name == "thinking" || movingThought {
+            model.processing(activity: name == "thinking-prompt" ? .prompt : .transcription)
+        }
         if name == "result" { model.showResult("报告周四发，控制在三页以内。", warning: false) }
         if name == "selection-count" { model.showSelectionCount(RecordingBarFormat.selectionCount("你好，TypeLeast is ready! 123")) }
         let logical = NSSize(width: PillView.width(for: model, limit: 120),
@@ -122,10 +125,15 @@ if let index = CommandLine.arguments.firstIndex(of: "--pill-ui-render"), Command
             let view = PillView(frame: NSRect(origin: .zero, size: size))
             window.contentView = view
             view.setBoundsSize(logical)
-            view.reduceMotion = name != "thinking-wave"
+            view.reduceMotion = !movingThought
             view.model = model
-            if name == "thinking-wave" {
+            if movingThought {
                 let now = ProcessInfo.processInfo.systemUptime
+                view.advance(at: now)
+                if name == "thinking-wave" {
+                    _ = model.beginCertification()
+                    view.model = model
+                }
                 for step in 1...5 { view.advance(at: now + Double(step) * 0.08) }
             } else if model.phase == .recording {
                 view.receiveLevel(model.level)
@@ -584,53 +592,56 @@ do {
     waveform.receive(0, at: 0, reduceMotion: false)
     check("an audio-free waveform stays at rest", !waveform.advance(at: 0.1))
 
-    waveform.receive(0.54, at: 1, reduceMotion: false)
-    waveform.advance(at: 1.008)
-    check("the first middle column responds within the initial frame",
-          waveform.heights[middle] > resting && waveform.heights[middle + 1] == resting)
-    waveform.advance(at: 1.022)
-    check("the third column has not yet caught the middle pair",
-          waveform.heights[middle] > waveform.heights[middle + 1]
-          && waveform.heights[middle + 1] > resting && waveform.heights[middle - 1] == resting)
+    let left = middle - 1
+    let right = middle + 1
+    waveform.receive(0.54, at: 1, reduceMotion: false, drawEndpointLift: { false })
+    waveform.advance(at: 1.010)
+    check("the leading edge starts on the left", waveform.heights[0] > resting && waveform.heights[left] == resting)
+    waveform.advance(at: 1.032)
+    check("the left main column starts before the other two",
+          waveform.heights[left] > resting && waveform.heights[middle] == resting && waveform.heights[right] == resting)
+    waveform.advance(at: 1.056)
+    check("the middle column responds next",
+          waveform.heights[middle] > resting && waveform.heights[right] == resting)
+    waveform.advance(at: 1.078)
+    check("the right main column responds last",
+          waveform.heights[right] > resting && waveform.heights[9] == resting)
     waveform.receive(0.54, at: 1.05, reduceMotion: false)
-    waveform.advance(at: 1.09)
+    waveform.advance(at: 1.13)
     let quiet = waveform.heights[middle]
-    check("quiet samples keep the centre low and bring out the nearby outer bars",
-          (5...8).contains(quiet) && waveform.heights[middle + 2] > 3.5)
+    check("quiet samples keep the centre low and the edges visible",
+          (5...8).contains(quiet) && waveform.heights[9] > resting)
 
-    waveform.receive(0.74, at: 1.10, reduceMotion: false)
-    waveform.advance(at: 1.148)
+    waveform.receive(0.74, at: 1.15, reduceMotion: false)
+    waveform.advance(at: 1.238)
     let ordinary = waveform.heights[middle]
-    waveform.receive(0.98, at: 1.15, reduceMotion: false)
-    waveform.advance(at: 1.20)
+    waveform.receive(0.98, at: 1.25, reduceMotion: false)
+    waveform.advance(at: 1.337)
     let accent = waveform.heights[middle]
     check("increasing input raises the centre during the same phrase",
-          ordinary > 16 && ordinary < accent && accent > 22 && accent <= VoiceWaveform.peakHeight)
-    check("strong speech leaves the third column shorter and the outer columns low",
-          waveform.heights[middle - 1] > 10 && waveform.heights[middle - 1] < accent - 7
-          && waveform.heights.enumerated().allSatisfy { (middle - 1...middle + 1).contains($0.offset) || $0.element < 7 })
+          ordinary > 14 && ordinary < accent && (18...20).contains(accent))
+    check("strong speech leaves the two end columns near rest",
+          waveform.heights[left] > 14 && waveform.heights[right] > 15
+          && waveform.heights[right] < accent
+          && waveform.heights[0] < 3.5 && waveform.heights[9] < 3.5)
     let outer = waveform.heights[0]
-    waveform.receive(0.98, at: 1.21, reduceMotion: false)
-    waveform.advance(at: 1.26)
+    waveform.receive(0.98, at: 1.30, reduceMotion: false)
+    waveform.advance(at: 1.372)
     check("the outer columns vary gently during sustained speech",
           waveform.heights[0] != outer && abs(waveform.heights[0] - outer) < 2)
 
-    waveform.receive(0, at: 1.27, reduceMotion: false)
-    waveform.advance(at: 1.32)
-    check("the centre falls as soon as a silence sample arrives",
-          waveform.heights[middle] < accent * 0.5)
-    waveform.receive(0, at: 1.36, reduceMotion: false)
-    waveform.advance(at: 1.60)
+    waveform.receive(0, at: 1.35, reduceMotion: false)
+    waveform.advance(at: 1.408)
+    check("a falling envelope also travels left to right",
+          waveform.heights[left] < waveform.heights[right] && waveform.heights[middle] > waveform.heights[left])
+    waveform.receive(0, at: 1.40, reduceMotion: false)
+    waveform.advance(at: 1.73)
     check("a pause returns every bar to rest", waveform.heights.allSatisfy { $0 == resting })
-
-    waveform.receive(0.89, at: 1.61, reduceMotion: false)
-    waveform.advance(at: 1.618)
-    check("after a pause the other side can lead",
-          waveform.heights[middle] == resting && waveform.heights[middle + 1] > resting)
-    waveform.advance(at: 1.72)
-    check("the third column reappears on the leading side",
-          waveform.heights[middle + 2] > 10 && waveform.heights[middle - 1] < 7)
-    waveform.advance(at: 2.20)
+    waveform.receive(0.89, at: 1.75, reduceMotion: false)
+    waveform.advance(at: 1.783)
+    check("a new phrase starts on the left again",
+          waveform.heights[left] > resting && waveform.heights[middle] == resting && waveform.heights[right] == resting)
+    waveform.advance(at: 2.40)
     check("a missing capture update cannot hold the last peak indefinitely",
           waveform.heights.allSatisfy { $0 == resting })
 
@@ -639,18 +650,95 @@ do {
     waveform.receive(0.54, at: 3.05, reduceMotion: true)
     let quietHeight = waveform.heights[middle]
     let quietOuterExcursion = waveform.heights[0] - resting
+    waveform.receive(0.74, at: 3.08, reduceMotion: true)
+    check("ordinary speech uses distinct, lower heights across the three middle columns",
+          (10...12).contains(waveform.heights[left]) && (15...16).contains(waveform.heights[middle])
+          && (13...14).contains(waveform.heights[right]))
     waveform.receive(1, at: 3.10, reduceMotion: true)
     check("reduced motion immediately distinguishes quiet and loud input",
-          quietHeight > resting && waveform.heights[middle] == VoiceWaveform.peakHeight)
-    check("reduced motion keeps equal middle heights and a fixed, shorter third column",
-          waveform.heights[middle] == waveform.heights[middle + 1]
-          && abs(waveform.heights[middle + 2] - 15.44) < 0.0001
-          && waveform.heights[middle - 1] < 6)
+          quietHeight > resting && (19...20).contains(waveform.heights[middle]))
+    check("reduced motion keeps the center pair above both shoulders",
+          waveform.heights[middle] > waveform.heights[right] && waveform.heights[right] > waveform.heights[left]
+          && waveform.heights[right] > waveform.heights[6])
+    check("the three main peaks retain more than two points of height difference",
+          waveform.heights[middle] - waveform.heights[right] >= 2
+          && waveform.heights[right] - waveform.heights[left] >= 2)
+    let previousEdgeHeights = [5.528, 6.752, 7.976]
+    check("each outer column is shorter and the two sides taper down to the endpoints",
+          previousEdgeHeights.enumerated().allSatisfy { index, oldHeight in
+              let mirrored = VoiceWaveform.count - 1 - index
+              return waveform.heights[index] < oldHeight && waveform.heights[index] < waveform.heights[index + 1]
+                  && waveform.heights[mirrored] < oldHeight && waveform.heights[mirrored] < waveform.heights[mirrored - 1]
+          })
     check("the edges use more of their range during quiet speech than the centre",
           quietOuterExcursion > 0.60 * (waveform.heights[0] - resting)
           && quietHeight - resting < 0.25 * (VoiceWaveform.peakHeight - resting))
     waveform.reset()
     check("starting a new take clears the envelope", waveform.heights.allSatisfy { $0 == resting })
+
+    func moderateSpeechFrames(edgePhases: SIMD3<Double>) -> [[Double]] {
+        var sample = VoiceWaveform()
+        sample.reset(edgePhases: edgePhases)
+        return (0...50).compactMap { tick in
+            let time = Double(tick) * 0.05
+            sample.receive(0.74, at: time, reduceMotion: false, drawEndpointLift: { false })
+            sample.advance(at: time)
+            return tick >= 20 ? Array(sample.heights[left...right]) : nil
+        }
+    }
+    let firstTake = moderateSpeechFrames(edgePhases: SIMD3(0.2, 2.3, 4.8))
+    let nextTake = moderateSpeechFrames(edgePhases: SIMD3(2.1, 4.0, 0.8))
+    checkEq("different edge phases cannot change the same voice in the middle", firstTake, nextTake)
+    check("a steady moderate voice preserves a clear, steady height hierarchy in the middle",
+          firstTake.allSatisfy { frame in
+              frame[1] - frame[2] > 1.5 && frame[2] - frame[0] > 1.5
+                && zip(frame, firstTake[0]).allSatisfy { abs($0 - $1) < 0.001 }
+          })
+
+    func endpointHeights(left: Bool, right: Bool) -> (heights: [Double], draws: Int) {
+        var sample = VoiceWaveform()
+        var draws = 0
+        for tick in 0...5 {
+            let time = Double(tick) * 0.05
+            sample.receive(tick == 0 ? 0 : 1, at: time, reduceMotion: false, drawEndpointLift: {
+                draws += 1
+                return draws == 1 ? left : right
+            })
+            sample.advance(at: time)
+        }
+        return (sample.heights, draws)
+    }
+    let idleEnds = endpointHeights(left: false, right: false)
+    let liftedLeftEnd = endpointHeights(left: true, right: false)
+    let liftedRightEnd = endpointHeights(left: false, right: true)
+    let last = VoiceWaveform.count - 1
+    check("each outermost column gets one independent draw per phrase",
+          idleEnds.draws == 2 && liftedLeftEnd.draws == 2 && liftedRightEnd.draws == 2
+          && Array(liftedLeftEnd.heights.dropFirst()) == Array(idleEnds.heights.dropFirst())
+          && Array(liftedRightEnd.heights.dropLast()) == Array(idleEnds.heights.dropLast()))
+    check("a lifted endpoint stays just below four points and shorter than its neighbor",
+          (idleEnds.heights[0]..<4).contains(liftedLeftEnd.heights[0])
+          && liftedLeftEnd.heights[0] > idleEnds.heights[0]
+          && liftedLeftEnd.heights[0] < liftedLeftEnd.heights[1]
+          && (idleEnds.heights[last]..<4).contains(liftedRightEnd.heights[last])
+          && liftedRightEnd.heights[last] > idleEnds.heights[last]
+          && liftedRightEnd.heights[last] < liftedRightEnd.heights[last - 1])
+
+    var microphoneHints = MicrophoneHintPolicy()
+    check("an unnamed input does not announce a device", !microphoneHints.shouldShow("", at: 0))
+    check("the first successful recording announces an input without drawing a reminder",
+          microphoneHints.shouldShow("Built-in", at: 1, drawReminder: { false }))
+    check("the same input stays quiet before the reminder interval",
+          !microphoneHints.shouldShow("Built-in", at: 599, drawReminder: { true }))
+    check("an eligible reminder only shows when the random draw succeeds",
+          !microphoneHints.shouldShow("Built-in", at: 601, drawReminder: { false })
+          && microphoneHints.shouldShow("Built-in", at: 602, drawReminder: { true }))
+    check("a reminder restarts the quiet interval",
+          !microphoneHints.shouldShow("Built-in", at: 603, drawReminder: { true }))
+    check("a real input change announces at the next recording even during the quiet interval",
+          microphoneHints.shouldShow("USB", at: 604, drawReminder: { false })
+          && microphoneHints.shouldShow("Built-in", at: 605, drawReminder: { false }))
+
 
     // pill show/hide state machine
     var model = RecordingBarModel()
@@ -704,12 +792,67 @@ do {
 
 do {
     var capsule = RecordingBarModel()
-    capsule.processing()
+    capsule.processing(activity: .prompt)
     checkEq("capsule uses the Thinking phase after recording", capsule.phase, .thinking)
     check("capture stays in processing until explicitly completed", capsule.isProcessingCapture)
     checkEq("Thinking reserves room for the label and dots", PillView.width(for: capsule, limit: 120), 150)
+    capsule.showThinking(detail: "Recording progress")
+    checkEq("a capture progress update keeps the stacked task label", capsule.thinkingActivity, .prompt)
     capsule.hide()
-    check("dismissal clears capture processing", !capsule.isProcessingCapture)
+    check("dismissal clears capture processing and the task label", !capsule.isProcessingCapture && capsule.thinkingActivity == nil)
+    checkEq("normal dictation always starts in recognition",
+            DictationController.thinkingActivity(strength: "prompt", translateTo: nil), .transcription)
+    checkEq("voice translation displays Translation",
+            DictationController.thinkingActivity(strength: "prompt", translateTo: "en"), .translation)
+    checkEq("prompt mode displays Prompt",
+            DictationController.thinkingActivity(strength: "promptbeta", translateTo: nil), .prompt)
+
+    capsule.processing(activity: .transcription)
+    check("recognition leaves the second line empty", capsule.thinkingSubtitle == nil)
+    let recognitionWidth = PillView.width(for: capsule, limit: 120)
+    let liveView = PillView(frame: NSRect(x: 0, y: 0, width: recognitionWidth, height: PillView.height))
+    liveView.reduceMotion = false
+    liveView.model = capsule
+    let now = ProcessInfo.processInfo.systemUptime
+    liveView.advance(at: now)
+    checkEq("recognition centers the full-size title", liveView.certificationMotion.lift, 0)
+    checkEq("recognition uses the full title size", liveView.certificationMotion.titleScale, 1)
+    check("cleanup starts only once", capsule.beginCertification() && !capsule.beginCertification())
+    checkEq("cleanup keeps the same capsule width", PillView.width(for: capsule, limit: 120), recognitionWidth)
+    liveView.model = capsule
+    checkEq("the cleanup word starts at zero opacity", liveView.certificationMotion.reveal, 0)
+    liveView.reduceMotion = true
+    check("reduced motion settles immediately",
+          liveView.certificationMotion.lift == 8 && liveView.certificationMotion.reveal == 1)
+    liveView.reduceMotion = false
+    liveView.advance(at: now + 0.08)
+    liveView.advance(at: now + 0.16)
+    check("Thinking moves up before the word appears",
+          liveView.certificationMotion.lift > 0 && liveView.certificationMotion.reveal == 0)
+    liveView.advance(at: now + 0.24)
+    check("the cleanup word fades in while Thinking is active",
+          liveView.certificationMotion.reveal > 0 && liveView.certificationMotion.reveal < 1)
+    liveView.advance(at: now + 0.27)
+    let peak = liveView.certificationMotion.lift
+    liveView.advance(at: now + 0.35)
+    check("Thinking eases down from a small overshoot",
+          peak > liveView.certificationMotion.lift && liveView.certificationMotion.lift > 8)
+    liveView.advance(at: now + 0.43)
+    checkEq("the title finishes at the stacked position", liveView.certificationMotion.lift, 8)
+    checkEq("the cleanup word finishes fading in", liveView.certificationMotion.reveal, 1)
+
+    var words = [capsule.thinkingSubtitle ?? ""]
+    for _ in 0..<24 {
+        capsule.hide()
+        capsule.processing()
+        _ = capsule.beginCertification()
+        words.append(capsule.thinkingSubtitle ?? "")
+    }
+    checkEq("the cleanup word pool contains all eleven choices", Set(RecordingBarModel.cleanupSubtitles).count, 11)
+    check("only cleanup words from the list are drawn", words.allSatisfy { RecordingBarModel.cleanupSubtitles.contains($0) })
+    check("consecutive cleanup stages use different words", zip(words, words.dropFirst()).allSatisfy { $0.0 != $0.1 })
+    capsule.processing(activity: .prompt)
+    check("prompt mode keeps its own label", !capsule.beginCertification() && capsule.thinkingSubtitle == "Prompt")
 
     var typing = TypingHintWindow()
     check("60 key events do not trigger a tip", !typing.record(Array(repeating: 1, count: 60), in: "a", now: 1))
@@ -774,6 +917,63 @@ do {
     checkEq("cancelled recorder startup never turns ready later", cancelledReady, 0)
     recorder.cancel()
     check("cancelled async recording releases its UI state and audio", !recorder.isStarting && !recorder.isRecording && recorder.byteCount == 0)
+}
+
+// A silent recorder fixture exercises take boundaries without contacting Doubao.
+do {
+    func pumpLive(_ ready: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(4)
+        while !ready(), Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }
+        return ready()
+    }
+    let recorder = Recorder()
+    let fixture = Data((0..<16_000).map { UInt8(truncatingIfNeeded: $0) })
+    recorder.demoPCM = fixture
+    let lock = NSLock()
+    var received = Data()
+    var terminalPackets = 0
+    var completed = false
+
+    try recorder.start()
+    let audio = DoubaoLiveAudio(recorder: recorder)
+    let task = Task.detached {
+        try await audio.send { packet, final in
+            lock.withLock {
+                received.append(packet)
+                if final && !packet.isEmpty { terminalPackets += 1 }
+            }
+        }
+        lock.withLock { completed = true }
+    }
+    check("Doubao sends PCM before the recording stops", pumpLive { lock.withLock { received.count >= 3_200 } })
+    check("Doubao does not finalize a live recording", lock.withLock { !completed && terminalPackets == 0 })
+    check("Doubao fixture reaches an exact packet boundary", pumpLive { recorder.byteCount == fixture.count })
+    let finish = try recorder.finish()
+    defer { try? FileManager.default.removeItem(at: finish.url) }
+    audio.finish(byteCount: finish.bytes)
+    check("Doubao flushes the final packet at stop", pumpLive { lock.withLock { completed } })
+    checkEq("Doubao sends every captured byte once and in order", lock.withLock { received }, fixture)
+    checkEq("Doubao sends one nonempty terminal packet", lock.withLock { terminalPackets }, 1)
+    task.cancel()
+
+    try recorder.start()
+    let cancelledAudio = DoubaoLiveAudio(recorder: recorder)
+    var sentWhileRecording = false
+    var cancelledWithoutFinalizing = false
+    let cancelled = Task.detached {
+        do {
+            try await cancelledAudio.send { _, final in
+                lock.withLock { if !final { sentWhileRecording = true } }
+            }
+        } catch is CancellationError {
+            lock.withLock { cancelledWithoutFinalizing = true }
+        }
+    }
+    check("the next Doubao take streams independently", pumpLive { lock.withLock { sentWhileRecording } })
+    cancelled.cancel()
+    recorder.cancel()
+    check("cancelling a Doubao take stops the uploader without finalizing it",
+          pumpLive { lock.withLock { cancelledWithoutFinalizing } })
 }
 
 // MARK: 11. Recorder live level - voice-band FFT and RMS without a microphone
@@ -1112,8 +1312,8 @@ do {
     checkEq("route header decodes to the route", decoded, route)
     checkEq("no route means no header", ServiceClient.encodeRouteHeader(nil), nil)
     let body = Data(#"{"object":"list","data":[{"id":"b-model"},{"id":"a-model"},{"x":1}]}"#.utf8)
-    checkEq("model ids come sorted from /models", LLMRoute.modelIDs(from: body), ["a-model", "b-model"])
-    checkEq("a malformed /models body gives no ids", LLMRoute.modelIDs(from: Data("nope".utf8)), [String]())
+    checkEq("model ids come sorted from /models", LLMCatalogModel.decode(body, baseURL: route.baseURL).map(\.id), ["a-model", "b-model"])
+    checkEq("a malformed /models body gives no ids", LLMCatalogModel.decode(Data("nope".utf8), baseURL: route.baseURL), [])
     check("https base URLs may carry a key", LLMPreset.isAllowedBaseURL("https://api.deepseek.com/v1"))
     check("plain http to another host may not", !LLMPreset.isAllowedBaseURL("http://api.example.com/v1"))
     check("plain http to this Mac may (Ollama)", LLMPreset.isAllowedBaseURL("http://127.0.0.1:11434/v1"))
@@ -1786,6 +1986,61 @@ do {
         checkEq("cancelled review does not send a request", state.requestCount, requestsBeforeCancelledReview)
     }
 } catch { check("reviewed task request encoding", false, String(describing: error)) }
+
+do {
+    let catalog = Data(#"{"data":[{"id":"from-metadata","effort":{"supported_levels":["low","high","max"],"default_level":"high"}},{"id":"no-metadata"}]}"#.utf8)
+    let entries = LLMCatalogModel.decode(catalog, baseURL: "https://api.deepseek.com")
+    checkEq("catalog exposes documented thinking levels for an unfamiliar model id",
+            entries.first?.thinking, LLMThinkingCapability(mode: .toggle, control: .thinking,
+                                                          effortLevels: ["low", "high", "max"], defaultEffort: "high"))
+    checkEq("a model without catalog metadata has no thinking switch", entries.last?.thinking, nil)
+    checkEq("effort metadata alone on an unrelated endpoint does not establish a switch",
+            LLMCatalogModel.decode(catalog, baseURL: "https://example.com").first?.thinking?.mode, .observed)
+    let suite = "typeleast-thinking-test-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let cache = LLMThinkingCache(defaults: defaults)
+    let now = Date()
+    let verified = LLMThinkingCapability(mode: .toggle, control: .enableThinking)
+    cache.store(["fixture-model": verified], for: "https://EXAMPLE.com/v1/", now: now)
+    checkEq("verified controls survive reopening settings", LLMThinkingCache(defaults: defaults)
+        .capabilities(for: "https://example.com/v1", now: now)["fixture-model"], verified)
+    check("capabilities do not carry across different API paths",
+          cache.capabilities(for: "https://example.com/v2", now: now).isEmpty)
+    cache.store(["fixture-model": .init(mode: .observed, effortLevels: ["low"])],
+                for: "https://example.com/v1", now: now)
+    checkEq("partial metadata adds levels without replacing a verified control",
+            cache.capabilities(for: "https://example.com/v1", now: now)["fixture-model"],
+            LLMThinkingCapability(mode: .toggle, control: .enableThinking, effortLevels: ["low"]))
+    check("stale capabilities return to unverified",
+          cache.capabilities(for: "https://example.com/v1", now: now.addingTimeInterval(8 * 24 * 60 * 60)).isEmpty)
+}
+
+// The model catalog is requested directly, even with the secure local channel enabled.
+do {
+    let provider = try StubServer { request in
+        guard request.method == "GET", request.path == "/v4/models" else {
+            return .json("{}", status: 404)
+        }
+        guard request.header("authorization") == "Bearer provider-fixture" else {
+            return .json("{}", status: 401)
+        }
+        return .json(#"{"data":[{"id":"glm-5.3-flashx"},{"id":"glm-5.3"}]}"#)
+    }
+    provider.start()
+    defer { provider.stop() }
+    let owned = ServiceClient(managedChild: true)
+    owned.secureTransport = true
+    owned.proofKey = String(repeating: "cd", count: 32)
+    let route = LLMRoute(baseURL: provider.baseURL.absoluteString + "/v4/", model: "", apiKey: "provider-fixture")
+    checkEq("model discovery uses the provider catalog while local transport is secure",
+            try owned.listModelsSync(route: route), ["glm-5.3", "glm-5.3-flashx"])
+    checkEq("model discovery sends one direct GET", provider.requests.map { $0.method + " " + $0.path }, ["GET /v4/models"])
+    checkEq("model discovery sends only the provider credential",
+            provider.requests.first?.header("authorization"), "Bearer provider-fixture")
+    checkEq("model discovery sends no local channel header",
+            provider.requests.first?.header("x-typeleast-request"), "")
+} catch { check("model discovery succeeds independently of the secure local channel", false, String(describing: error)) }
 
 // MARK: 28. the service proves it is ours before anything is sent to it
 checkEq("HMAC proof matches the service's (RFC 4231 case 2 key)",

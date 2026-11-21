@@ -21,10 +21,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             panel.title = L10n.settingTitle
             panel.isMovable = false
             panel.isMovableByWindowBackground = false
-            let host = NSHostingController(rootView:
-                SettingsPage(onClose: { [weak self] in self?.close() }).environmentObject(model))
-            host.sizingOptions = []
-            panel.contentViewController = host
+            installSettingsPage(in: panel)
             AppWindowStyle.fixSize(panel, to: size)
             panel.collectionBehavior.insert(.fullScreenNone)
             panel.isReleasedWhenClosed = false
@@ -37,11 +34,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             AppWindowStyle.round(panel, radius: Theme.settingsRadius)
         }
         guard let window else { return }
+        if window.isClosing { installSettingsPage(in: window) }
         NSApp.activate(ignoringOtherApps: true)
         window.present()
         if let parent, parent.isVisible, !parent.isMiniaturized, window.parent !== parent {
             parent.addChildWindow(window, ordered: .above)
         }
+    }
+
+    private func installSettingsPage(in window: NSWindow) {
+        let host = NSHostingController(rootView:
+            SettingsPage(onClose: { [weak self] in self?.close() }).environmentObject(model))
+        host.sizingOptions = []
+        window.contentViewController = host
     }
 
     func close() { window?.close() }
@@ -69,7 +74,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
 private final class SettingsDialogWindow: NSWindow {
     private var fadeGeneration = 0
-    private var closing = false
+    private(set) var isClosing = false
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
@@ -79,7 +84,7 @@ private final class SettingsDialogWindow: NSWindow {
 
     func present() {
         fadeGeneration &+= 1
-        closing = false
+        isClosing = false
         ignoresMouseEvents = false
         let appearing = !isVisible
         if appearing { alphaValue = 0 }
@@ -91,9 +96,9 @@ private final class SettingsDialogWindow: NSWindow {
     }
 
     override func close() {
-        guard !closing else { return }
+        guard !isClosing else { return }
         if !isVisible || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { super.close(); return }
-        closing = true
+        isClosing = true
         ignoresMouseEvents = true
         fadeGeneration &+= 1
         let generation = fadeGeneration
@@ -101,13 +106,13 @@ private final class SettingsDialogWindow: NSWindow {
             context.duration = 0.195
             animator().alphaValue = 0
         } completionHandler: { [weak self] in
-            guard let self, self.closing, self.fadeGeneration == generation else { return }
+            guard let self, self.isClosing, self.fadeGeneration == generation else { return }
             self.finishClose()
         }
     }
 
     func finishClose() {
-        closing = false
+        isClosing = false
         super.close()
     }
 }

@@ -4,10 +4,11 @@ import Foundation
 // Settings.swift - UserDefaults-backed configuration for TypeLeast.
 
 enum PromptKind {
-    case briefCleanup, asrEngineering, translation, promptClarify, promptBreakdown, promptDraft
+    case minimalCleanup, briefCleanup, asrEngineering, translation, promptClarify, promptBreakdown, promptDraft
 
     var filename: String {
         switch self {
+        case .minimalCleanup: return "minimal-cleanup.md"
         case .briefCleanup: return "brief-cleanup.md"
         case .asrEngineering: return "asr-engineering.md"
         case .translation: return "translation-prompt.md"
@@ -19,14 +20,30 @@ enum PromptKind {
 
     func defaultText() throws -> String {
         if self == .translation { return Settings.defaultTranslatePrompt }
+        let name = self == .asrEngineering ? "cleanup.md" : filename
+        return try String(contentsOf: bundledFile(name), encoding: .utf8)
+    }
+
+    private func bundledFile(_ name: String) throws -> URL {
         guard let service = ServiceLocator.serviceDirectory(resources: Bundle.main.resourcePath,
                                                             environment: ProcessInfo.processInfo.environment,
                                                             exists: FileManager.default.fileExists(atPath:)) else {
             throw CocoaError(.fileReadNoSuchFile)
         }
-        let name = self == .asrEngineering ? "cleanup.md" : filename
-        let bundled = URL(fileURLWithPath: service, isDirectory: true).appendingPathComponent("lib/prompts/" + name)
-        return try String(contentsOf: bundled, encoding: .utf8)
+        return URL(fileURLWithPath: service, isDirectory: true).appendingPathComponent("lib/prompts/" + name)
+    }
+
+    var isCleanup: Bool { [.minimalCleanup, .briefCleanup, .asrEngineering].contains(self) }
+
+    func wasBundledDefault(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hash = SHA256.hash(data: Data(trimmed.utf8)).map { String(format: "%02x", $0) }.joined()
+        if self == .asrEngineering, hash == "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b" {
+            return true
+        }
+        guard let data = try? Data(contentsOf: bundledFile("default-revisions.json")),
+              let revisions = try? JSONDecoder().decode([String: [String]].self, from: data) else { return false }
+        return revisions[filename]?.contains(hash) == true
     }
 }
 
@@ -348,7 +365,8 @@ final class Settings {
     var shortDictationCleanup: ShortDictationCleanup? {
         guard dictationCleanupEnabled else { return nil }
         let useSmallModel = shortDictationMode == .smallModel
-        let route = useSmallModel ? savedLLMRoute(presetID: shortDictationProvider, model: shortDictationModel) : nil
+        let route = useSmallModel ? savedLLMRoute(presetID: shortDictationProvider, model: shortDictationModel)
+            .map { configuredCleanupRoute($0, full: false) } : nil
         return ShortDictationCleanup(maxUnits: 25, route: route, fullAbove: 100, useSmallModel: useSmallModel)
     }
 
@@ -419,11 +437,8 @@ final class Settings {
                !legacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return legacy }
             return try kind.defaultText()
         }
-        if kind == .asrEngineering, let text = try document.read() {
-            let hash = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
-            if hash == "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b" {
-                try document.write(kind.defaultText())
-            }
+        if kind.isCleanup, let text = try document.read(), kind.wasBundledDefault(text) {
+            try document.write(kind.defaultText())
         }
         if kind == .translation { d.removeObject(forKey: Self.legacyTranslatePromptKey) }
         return document.url

@@ -368,18 +368,6 @@ enum KeychainHandoff {
     }
 }
 
-enum CleanupReasoningEffort: String, CaseIterable {
-    case low, high, max
-
-    var label: String {
-        switch self {
-        case .low: return L10n.text("低")
-        case .high: return L10n.text("高")
-        case .max: return L10n.text("最高")
-        }
-    }
-}
-
 extension Settings {
     /// Allow configured providers to handle a dictation if the active provider is unavailable.
     var automaticProviderFallback: Bool {
@@ -420,27 +408,48 @@ extension Settings {
     /// (then the service inserts the tidied transcript, reason no-api-key).
     var activeLLMRoute: LLMRoute? { silentLLMRoute }
 
-    var supportsCleanupThinking: Bool {
-        let endpoint = URL(string: llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines))
-        return endpoint?.host?.lowercased() == "api.deepseek.com"
-            && ["deepseek-flash", "deepseek-v4-pro"].contains(llmModel.lowercased())
+    var cleanupThinkingCapability: LLMThinkingCapability? {
+        LLMThinkingCache().capabilities(for: llmBaseURL)[llmModel.lowercased()]
     }
 
-    private var cleanupThinkingKey: String { "llm.cleanupThinking." + llmPresetID + "." + llmModel.lowercased() }
+    private var cleanupThinkingKey: String {
+        let endpoint = LLMThinkingCache.endpoint(llmBaseURL)
+        let defaultEndpoint = LLMThinkingCache.endpoint(LLMPreset.find(llmPresetID).baseURL)
+        let suffix = endpoint == defaultEndpoint ? "" : "." + endpoint
+        return "llm.cleanupThinking." + llmPresetID + "." + llmModel.lowercased() + suffix
+    }
 
     var cleanupThinking: Bool {
         get { UserDefaults.standard.bool(forKey: cleanupThinkingKey) }
         set { UserDefaults.standard.set(newValue, forKey: cleanupThinkingKey); notifyChanged() }
     }
 
-    var cleanupReasoningEffort: CleanupReasoningEffort {
-        get { CleanupReasoningEffort(rawValue: UserDefaults.standard.string(forKey: cleanupThinkingKey + ".effort") ?? "") ?? .low }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: cleanupThinkingKey + ".effort"); notifyChanged() }
+    var cleanupReasoningEffort: String {
+        get {
+            let saved = UserDefaults.standard.string(forKey: cleanupThinkingKey + ".effort")
+            if let saved, cleanupThinkingCapability?.effortLevels?.contains(saved) == true { return saved }
+            return ""
+        }
+        set { UserDefaults.standard.set(newValue, forKey: cleanupThinkingKey + ".effort"); notifyChanged() }
     }
 
     var cleanupLLMRoute: LLMRoute? {
-        guard var route = activeLLMRoute else { return nil }
-        if supportsCleanupThinking && cleanupThinking { route.reasoningEffort = cleanupReasoningEffort.rawValue }
+        activeLLMRoute.map { configuredCleanupRoute($0, full: true) }
+    }
+
+    /// Brief cleanup keeps the lightweight behavior, independent of the full cleanup control.
+    func configuredCleanupRoute(_ original: LLMRoute, full: Bool) -> LLMRoute {
+        var route = original
+        let capability = LLMThinkingCache().capabilities(for: route.baseURL)[route.model.lowercased()]
+        route.thinkingMode = .providerDefault
+        route.thinkingControl = capability?.control
+        if capability?.mode == .toggle {
+            route.thinkingMode = full && cleanupThinking ? .enabled : .disabled
+        }
+        if full && (route.thinkingMode == .enabled || capability?.mode == .alwaysOn) {
+            let effort = cleanupReasoningEffort
+            if !effort.isEmpty { route.reasoningEffort = effort }
+        }
         return route
     }
 

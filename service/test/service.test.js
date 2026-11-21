@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
-import { BRIEF_CLEANUP_PROMPT, CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
+import { BRIEF_CLEANUP_PROMPT, CLEANUP_PROMPT, MINIMAL_CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
 import { readdirSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -68,6 +68,45 @@ function wavOfSilence(seconds = 0.2) {
   buffer.write("data", 36, "ascii"); buffer.writeUInt32LE(samples * 2, 40);
   return buffer;
 }
+
+test("progress retains new requests and recently updated requests at capacity", () => {
+  const service = makeService();
+  for (let index = 0; index < 20; index++) {
+    service.setProgress(`request-${index}`, { stage: "recognizing", completed: 0, total: 0 });
+  }
+  service.setProgress("request-0", { stage: "generating", completed: 0, total: 1 });
+  service.setProgress("request-20", { stage: "generating", completed: 0, total: 1 });
+  assert.equal(service.taskProgress("request-0").stage, "generating");
+  assert.equal(service.taskProgress("request-1").stage, "waiting");
+  assert.equal(service.taskProgress("request-20").stage, "generating");
+  assert.equal(service.progress.size, 20);
+});
+
+test("short cleanup progress only starts when either input path invokes the model", async () => {
+  const rawText = "send the report on tuesday";
+  const model = fakeModel(JSON.stringify({ text: "Send the report on Tuesday.", corrections: [] }));
+  const fetch = model.fetchImpl;
+  let requestId = "local";
+  const modelStages = [];
+  model.fetchImpl = (...args) => {
+    modelStages.push(service.taskProgress(requestId).stage);
+    return fetch(...args);
+  };
+  const recognizer = fakeRecognizer(rawText);
+  recognizer.transcribe = async () => {
+    assert.equal(service.taskProgress(requestId).stage, "recognizing");
+    return { text: rawText };
+  };
+  const service = makeService({ model, recognizer });
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, shortCleanup, requestId });
+  requestId = "online";
+  await service.polish({ rawText, llm: ROUTE, shortCleanup, requestId });
+  requestId = "raw-only";
+  await service.polish({ rawText, llm: ROUTE, shortCleanup, requestId, skipCleanup: true });
+  assert.deepEqual(modelStages, ["generating", "generating"]);
+  assert.equal(service.taskProgress("raw-only").stage, "waiting");
+});
 
 test('language conversion uses the recognizer\'s effective language, not an unsupported saved hint', async () => {
   const recognizer = { transcribe: async () => ({ text: '会社の設定', language: 'auto', detectedLanguage: null }) };
@@ -422,7 +461,7 @@ test("short dictation routing leaves explicit translation and assistant on the c
   }
 });
 
-test("three-tier dictation uses its brief prompt at 26 and 100 and its full prompt at 101", async () => {
+test("three-tier dictation uses a separate prompt at 25, 26–100, and 101", async () => {
   const shortCleanup = { maxUnits: 25, fullAbove: 100 };
   const llm = { baseURL: "https://api.deepseek.com", model: "deepseek-flash", apiKey: "test-key", reasoningEffort: "low" };
   for (const units of [25, 26, 100, 101]) {
@@ -430,14 +469,70 @@ test("three-tier dictation uses its brief prompt at 26 and 100 and its full prom
     const model = fakeModel(JSON.stringify({ text: rawText }));
     const result = await makeService({ model }).polish({ rawText, llm, shortCleanup, profile: "test profile" });
     assert.equal(result.text, rawText);
-    assert.equal(model.calls.length, units === 25 ? 0 : 1);
-    if (units === 25) continue;
+    assert.equal(model.calls.length, 1);
     const body = model.calls[0].body;
     assert.equal(body.thinking.type, units <= 100 ? "disabled" : "enabled");
     assert.equal(body.reasoning_effort, units <= 100 ? undefined : "low");
-    assert.match(body.messages[0].content, units <= 100 ? /Lightly organize/ : /# Core Strategies/);
-    assert.match(body.messages[0].content, /1\..*2\..*3\./);
+    if (units === 25) assert.equal(body.messages[0].content, MINIMAL_CLEANUP_PROMPT);
+    else {
+      assert.match(body.messages[0].content, units <= 100 ? /Number only distinct/ : /numbered points/);
+    }
+    assert.match(body.messages[0].content, /fix clear ASR errors|repair ASR errors supported by context/i);
+    assert.match(body.messages[0].content, /read naturally|make their logic clear|logic easy to follow/i);
     assert.equal(body.messages[0].content.includes("test profile"), units > 100);
+  }
+});
+
+test("minimal cleanup smooths local wording without rewriting the dictation", async () => {
+  const llm = ROUTE;
+  const shortCleanup = { maxUnits: 25, fullAbove: 100, useSmallModel: true, route: { ...ROUTE, model: "small" } };
+  const fix = (asr_error, corrected_term) => ({ asr_error, corrected_term });
+  const cases = [
+    ["呃，快递的乌流有点怪。", "呃，快递的物流有点怪。", [fix("乌流", "物流")], true],
+    ["呃，想把文见，早尽移过来。", "想把文件尽早移过来。", [fix("文见", "文件"), fix("早尽", "尽早")], true],
+    ["呃，今天见", "今天见。", [], true],
+    ["这个方案有点野。", "这个方案有点野。", [], true],
+    ["请查快递的乌流！", "请查询快递的物流。", [fix("乌流", "物流")], false],
+    ["明天不开会。", "明天要开会。", [fix("不", "要")], false],
+    ["明天有 3 场会。", "明天有 4 场会。", [fix("3", "4")], false],
+    ["明天可能开会。", "明天一定开会。", [fix("可能", "一定")], false],
+    ["请把项目交给服务台。", "项目已经交给服务台。", [fix("请把项目交给", "项目已经交给")], false],
+    ['原话是「快递的乌流」。', '原话是「快递的物流」。', [fix("乌流", "物流")], false],
+  ];
+  for (const [rawText, text, corrections, accepted] of cases) {
+    const model = fakeModel(JSON.stringify({ text, corrections }));
+    const service = makeService({ model });
+    const result = await service.polish({ rawText, llm, shortCleanup, fieldContext: { before: "Private cursor context" } });
+    assert.equal(result.text, accepted ? text : rawText);
+    assert.equal(model.calls.length, 1);
+    assert.equal(model.calls[0].body.model, llm.model);
+    assert.deepEqual(JSON.parse(model.calls[0].body.messages[1].content), { raw_asr_transcript: rawText });
+    assert.equal(result.corrections, undefined);
+  }
+});
+
+test("the minimal prompt reloads from its own file", async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "typeleast-minimal-prompt-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  await writeFile(join(stateDir, "minimal-cleanup.md"), "Use related terminology to read a short transcript.");
+  const rawText = "这是原话。";
+  const model = fakeModel(JSON.stringify({ text: rawText, corrections: [] }));
+  const service = makeService({ model, stateDir, recognizer: fakeRecognizer(rawText) });
+  await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE, shortCleanup: { maxUnits: 25, fullAbove: 100 } });
+  const prompt = model.calls[0].body.messages[0].content;
+  assert.match(prompt, /^Use related terminology/);
+  assert.match(prompt, /Fix clear ASR errors and local grammar while preserving meaning/);
+});
+
+test("a verified thinking toggle applies to full cleanup and keeps brief cleanup lightweight", async () => {
+  const llm = { ...ROUTE, baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    thinkingMode: "enabled", thinkingControl: "enableThinking" };
+  for (const units of [26, 101]) {
+    const rawText = "字".repeat(units) + "。";
+    const model = fakeModel(JSON.stringify({ text: rawText }));
+    const service = makeService({ model });
+    await service.polish({ rawText, llm, shortCleanup: { maxUnits: 25, fullAbove: 100 } });
+    assert.equal(model.calls[0].body.enable_thinking, units > 100);
   }
 });
 

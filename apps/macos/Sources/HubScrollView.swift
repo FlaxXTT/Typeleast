@@ -6,6 +6,7 @@ import QuartzCore
 /// behaviour. Only the optional progress/fade chrome observes their positions.
 struct HubScrollView<Content: View>: View {
     var key: String? = nil
+    var memory = HubScrollMemory.shared
     var showsChrome = true
     var showsProgress = true
     var showsBottomFade = true
@@ -15,7 +16,7 @@ struct HubScrollView<Content: View>: View {
     var body: some View {
         ScrollView {
             content.overlay(alignment: .topLeading) {
-                HubScrollAnchor(key: key, showsChrome: showsChrome, showsProgress: showsProgress,
+                HubScrollAnchor(key: key, memory: memory, showsChrome: showsChrome, showsProgress: showsProgress,
                                 showsBottomFade: showsBottomFade, followsBottom: followsBottom)
                     .frame(width: 0, height: 0)
                     .allowsHitTesting(false)
@@ -85,23 +86,25 @@ private final class HoverScroller: NSScroller {
     override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
 }
 
-private enum HubScrollMemory {
-    static var offsets: [String: CGFloat] = [:]
+final class HubScrollMemory {
+    static let shared = HubScrollMemory()
+    fileprivate var offsets: [String: CGFloat] = [:]
 }
 
 private struct HubScrollAnchor: NSViewRepresentable {
     let key: String?
+    let memory: HubScrollMemory
     let showsChrome: Bool
     let showsProgress: Bool
     let showsBottomFade: Bool
     let followsBottom: Bool
 
     func makeNSView(context: Context) -> HubScrollMarker {
-        HubScrollMarker(key: key, showsChrome: showsChrome, showsProgress: showsProgress,
+        HubScrollMarker(key: key, memory: memory, showsChrome: showsChrome, showsProgress: showsProgress,
                         showsBottomFade: showsBottomFade, followsBottom: followsBottom)
     }
     func updateNSView(_ view: HubScrollMarker, context: Context) {
-        view.use(key: key, showsChrome: showsChrome, showsProgress: showsProgress,
+        view.use(key: key, memory: memory, showsChrome: showsChrome, showsProgress: showsProgress,
                  showsBottomFade: showsBottomFade, followsBottom: followsBottom)
     }
     static func dismantleNSView(_ view: HubScrollMarker, coordinator: ()) { view.detach() }
@@ -115,6 +118,7 @@ private final class ScrollFrameTarget: NSObject {
 
 private final class HubScrollMarker: NSView {
     private var key: String?
+    private var memory: HubScrollMemory
     private var showsChrome: Bool
     private var followsBottom: Bool
     private weak var scroll: NSScrollView?
@@ -129,8 +133,9 @@ private final class HubScrollMarker: NSView {
     private var nearBottom = true
     private var liveScrolling = false
 
-    init(key: String?, showsChrome: Bool, showsProgress: Bool, showsBottomFade: Bool, followsBottom: Bool) {
+    init(key: String?, memory: HubScrollMemory, showsChrome: Bool, showsProgress: Bool, showsBottomFade: Bool, followsBottom: Bool) {
         self.key = key
+        self.memory = memory
         self.showsChrome = showsChrome
         self.followsBottom = followsBottom
         super.init(frame: .zero)
@@ -140,7 +145,7 @@ private final class HubScrollMarker: NSView {
     required init?(coder: NSCoder) { fatalError("Created in code") }
     deinit { detach() }
 
-    func use(key: String?, showsChrome: Bool, showsProgress: Bool, showsBottomFade: Bool, followsBottom: Bool) {
+    func use(key: String?, memory: HubScrollMemory, showsChrome: Bool, showsProgress: Bool, showsBottomFade: Bool, followsBottom: Bool) {
         if chrome.showsProgress != showsProgress {
             chrome.showsProgress = showsProgress
         }
@@ -148,9 +153,10 @@ private final class HubScrollMarker: NSView {
             chrome.showsBottomFade = showsBottomFade
             requestFrame()
         }
-        if self.key != key || self.showsChrome != showsChrome || self.followsBottom != followsBottom {
+        if self.key != key || self.memory !== memory || self.showsChrome != showsChrome || self.followsBottom != followsBottom {
             detach()
             self.key = key
+            self.memory = memory
             self.showsChrome = showsChrome
             self.followsBottom = followsBottom
         }
@@ -184,7 +190,7 @@ private final class HubScrollMarker: NSView {
             if self.followsBottom {
                 self.move(scroll, to: self.extent)
             } else if let key = self.key {
-                self.move(scroll, to: min(self.extent, max(0, HubScrollMemory.offsets[key] ?? 0)))
+                self.move(scroll, to: min(self.extent, max(0, self.memory.offsets[key] ?? 0)))
             }
             self.lastOffset = scroll.contentView.bounds.minY
             self.nearBottom = self.extent - self.lastOffset <= 40
@@ -268,7 +274,7 @@ private final class HubScrollMarker: NSView {
     }
 
     func detach() {
-        if let scroll, let key { HubScrollMemory.offsets[key] = scroll.contentView.bounds.minY }
+        if let scroll, let key { memory.offsets[key] = scroll.contentView.bounds.minY }
         frameLink?.invalidate()
         frameLink = nil
         observers.forEach(NotificationCenter.default.removeObserver)

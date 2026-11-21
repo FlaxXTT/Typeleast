@@ -28,7 +28,7 @@ struct OnlineASRSettings: View {
     var body: some View {
         SettingsSection(title: L10n.text("语音识别来源")) {
             SettingRow(title: L10n.text("听写模型"),
-                       detail: model.settings.onlineASRProvider == .local ? nil : L10n.text("录音结束后上传，可能按用量计费。")) {
+                       detail: dictationUploadDetail) {
                 ASRProviderPicker(selection: model.setting(\.onlineASRProvider))
             }
             SettingRow(title: L10n.text("会议模型"),
@@ -49,6 +49,14 @@ struct OnlineASRSettings: View {
                     }
                 }
             }
+        }
+    }
+
+    private var dictationUploadDetail: String? {
+        switch model.settings.onlineASRProvider {
+        case .local: return nil
+        case .doubao: return L10n.text("录音时上传，结束后返回最终转写。可能按用量计费。")
+        case .funASR: return L10n.text("录音结束后上传，可能按用量计费。")
         }
     }
 }
@@ -74,11 +82,17 @@ private struct OnlineASRCredentials: View {
     @State private var apiKey = ""
     @State private var workspaceID = ""
     @State private var saveMessage = ""
+    @State private var connectionTest: Task<Void, Never>?
+    @State private var testMessage = ""
+    @State private var testFailed = false
 
     private var keyDraft: String { apiKey.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var workspaceDraft: String { workspaceID.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var workspaceChanged: Bool {
         provider == .funASR && workspaceDraft != model.settings.funASRWorkspaceID
+    }
+    private var canTest: Bool {
+        !model.credentialsLocked && (!keyDraft.isEmpty || model.asrKeyPresence(for: provider) == true)
     }
 
     var body: some View {
@@ -99,21 +113,71 @@ private struct OnlineASRCredentials: View {
                 }
             }
             HStack {
-                if !saveMessage.isEmpty {
+                if !testMessage.isEmpty {
+                    Text(testMessage).font(Theme.captionFont)
+                        .foregroundColor(testFailed ? Theme.warning : Theme.secondary)
+                } else if !saveMessage.isEmpty {
                     Text(saveMessage).font(Theme.captionFont).foregroundColor(Theme.secondary)
                 }
                 Spacer()
+                Button(L10n.text(connectionTest == nil ? "测试连接" : "测试中…")) { test() }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(!canTest || connectionTest != nil)
                 Button(L10n.text("保存")) { save() }
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(model.credentialsLocked || (keyDraft.isEmpty && !workspaceChanged))
             }
         }
         .onChange(of: provider, initial: true) { _, _ in
+            clearTest()
             apiKey = ""
             workspaceID = model.settings.funASRWorkspaceID
             saveMessage = ""
             model.refreshOnlineASRKeyPresence()
         }
+        .onChange(of: keyDraft) { _, _ in clearTest() }
+        .onChange(of: workspaceDraft) { _, _ in clearTest() }
+        .onChange(of: model.credentialsLocked) { _, locked in
+            if locked { clearTest() }
+        }
+        .onDisappear { clearTest() }
+    }
+
+    private func test() {
+        let provider = provider
+        let key = keyDraft
+        let workspace = workspaceDraft
+        saveMessage = ""
+        testMessage = ""
+        testFailed = false
+        connectionTest = Task { @MainActor in
+            let probe = Task.detached(priority: .userInitiated) {
+                let credential = key.isEmpty ? (KeychainStore.read(account: provider.keychainAccount) ?? "") : key
+                try Task.checkCancellation()
+                return try await OnlineASR.testConnection(configuration: OnlineASRConfiguration(
+                    provider: provider, apiKey: credential, workspaceID: workspace
+                ))
+            }
+            do {
+                let milliseconds = try await withTaskCancellationHandler {
+                    try await probe.value
+                } onCancel: { probe.cancel() }
+                guard !Task.isCancelled else { return }
+                testMessage = L10n.text("连接成功，用时 ") + String(milliseconds) + L10n.text(" 毫秒")
+            } catch {
+                guard !Task.isCancelled else { return }
+                testMessage = error.localizedDescription
+                testFailed = true
+            }
+            connectionTest = nil
+        }
+    }
+
+    private func clearTest() {
+        connectionTest?.cancel()
+        connectionTest = nil
+        testMessage = ""
+        testFailed = false
     }
 
     private func save() {
@@ -122,6 +186,7 @@ private struct OnlineASRCredentials: View {
             return
         }
         if workspaceChanged { model.settings.funASRWorkspaceID = workspaceDraft }
+        clearTest()
         apiKey = ""
         saveMessage = L10n.text("已保存")
         model.refreshOnlineASRKeyPresence()

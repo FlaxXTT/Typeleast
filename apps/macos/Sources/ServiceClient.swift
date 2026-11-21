@@ -399,6 +399,7 @@ struct TaskProgress: Codable {
     var total: Int
     var sourceCharacters: Int?
     var sourceWords: Int?
+    var cleanupModelStarted: Bool { stage == "generating" || stage == "reviewing" }
     var label: String {
         switch stage {
         case "recognizing": return L10n.text("正在识别…")
@@ -745,9 +746,28 @@ final class ServiceClient {
             wire.setValue("application/octet-stream", forHTTPHeaderField: "content-type")
             wire.httpBody = combined
         }
+        let (data, r) = try sendSync(wire, timeout: timeout, generation: generation, cancellation: cancellation)
+        if let key = channelKey {
+            do {
+                guard r.statusCode == 200,
+                      proofLock.withLock({ endpointEpoch == identity.1 && proofKeyValue == identity.0 }) else { throw ServiceError.untrusted }
+                let clear = try AES.GCM.open(AES.GCM.SealedBox(combined: data), using: key,
+                                            authenticating: Data("typeleast-v1:response:\(requestID)".utf8))
+                guard let object = try JSONSerialization.jsonObject(with: clear) as? [String: Any],
+                      let status = object["status"] as? Int, (100...599).contains(status),
+                      let encoded = object["body"] as? String, let body = Data(base64Encoded: encoded),
+                      let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil) else { throw ServiceError.untrusted }
+                return (body, response)
+            } catch { throw ServiceError.untrusted }
+        }
+        return (data, r)
+    }
+
+    private func sendSync(_ request: URLRequest, timeout: TimeInterval, generation: Int? = nil,
+                          cancellation: ServiceRequestCancellation? = nil) throws -> (Data, HTTPURLResponse) {
         let sem = DispatchSemaphore(value: 0)
         let box = Box()
-        let task = session.dataTask(with: wire) { d, r, e in
+        let task = session.dataTask(with: request) { d, r, e in
             box.data = d
             box.response = r as? HTTPURLResponse
             box.error = e
@@ -768,19 +788,6 @@ final class ServiceClient {
         }
         if let e = box.error { throw ServiceError.transport(e.localizedDescription) }
         guard let r = box.response else { throw ServiceError.transport("no response") }
-        if let key = channelKey {
-            do {
-                guard r.statusCode == 200, let data = box.data,
-                      proofLock.withLock({ endpointEpoch == identity.1 && proofKeyValue == identity.0 }) else { throw ServiceError.untrusted }
-                let clear = try AES.GCM.open(AES.GCM.SealedBox(combined: data), using: key,
-                                            authenticating: Data("typeleast-v1:response:\(requestID)".utf8))
-                guard let object = try JSONSerialization.jsonObject(with: clear) as? [String: Any],
-                      let status = object["status"] as? Int, (100...599).contains(status),
-                      let encoded = object["body"] as? String, let body = Data(base64Encoded: encoded),
-                      let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil) else { throw ServiceError.untrusted }
-                return (body, response)
-            } catch { throw ServiceError.untrusted }
-        }
         return (box.data ?? Data(), r)
     }
 
@@ -891,13 +898,14 @@ final class ServiceClient {
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
                      translateTo: String? = nil, variants: String? = nil, profile: String = "", baseline: String? = nil, translatePrompt: String? = nil, hasConfiguredBackups: Bool = false,
                      skipCleanup: Bool = false, shortCleanup: ShortDictationCleanup? = nil,
-                     onProgress: ((TaskProgress) -> Void)? = nil) throws -> DictateResponse {
+                     onProgress: ((TaskProgress) -> Void)? = nil, onCleanupStart: (() -> Void)? = nil) throws -> DictateResponse {
         let generation = epoch()
         return try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
                                             translateTo: translateTo, variants: variants, profile: profile, baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups,
-                                            skipCleanup: skipCleanup, shortCleanup: shortCleanup, onProgress:onProgress, generation:generation) }
+                                            skipCleanup: skipCleanup, shortCleanup: shortCleanup, onProgress: onProgress,
+                                            onCleanupStart: onCleanupStart, generation: generation) }
     }
 
     /// The body of /dictate: a JSON object (its length in x-voice-meta-bytes), then the WAV.
@@ -916,10 +924,12 @@ final class ServiceClient {
         return (json + wav, json.count)
     }
 
-    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false, skipCleanup: Bool = false, shortCleanup: ShortDictationCleanup? = nil, cancellation: ServiceRequestCancellation? = nil) throws -> DictateResponse {
+    func polishSync(text: String, language: String, strength: String, llm: LLMRoute?, translateTo: String?, variants: String?, profile: String = "", fieldContext: Data? = nil, betaSession: String? = nil, source: String? = nil, translatePrompt: String? = nil, baseline: String? = nil, appHint: String? = nil, generationTicket: Int? = nil, llmBackups: [LLMRoute] = [], hasConfiguredBackups: Bool = false, retryInitial: Bool = false, betaSkip: Bool = false, skipCleanup: Bool = false, shortCleanup: ShortDictationCleanup? = nil, cancellation: ServiceRequestCancellation? = nil, onCleanupStart: (() -> Void)? = nil) throws -> DictateResponse {
         let generation = generationTicket ?? epoch()
         return try withPortRetry { try withTokenRetry { token in
             var body: [String: Any] = ["text": text, "language": language, "strength": strength, "task": translateTo == nil ? (strength == "promptbeta" ? "assistant" : "dictation") : "translation"]
+            let requestID = onCleanupStart == nil ? nil : UUID().uuidString
+            if let requestID { body["requestId"] = requestID }
             if let llm, let data = try? JSONEncoder().encode(llm), let route = try? JSONSerialization.jsonObject(with: data) { body["llm"] = route }
             if !llmBackups.isEmpty, let data = try? JSONEncoder().encode(llmBackups), let routes = try? JSONSerialization.jsonObject(with: data) { body["llmBackups"] = routes }
             if hasConfiguredBackups { body["hasConfiguredBackups"] = true }
@@ -939,6 +949,8 @@ final class ServiceClient {
             if let translatePrompt, !translatePrompt.isEmpty { body["translatePrompt"] = translatePrompt }
             let req = try makeRequest(path: "/api/voice-polish/polish", method: "POST", token: token,
                                       headers: ["content-type": "application/json"], body: JSONSerialization.data(withJSONObject: body), timeout: dictateTimeout)
+            let timer = requestID.flatMap { watchTaskProgress(requestID: $0, token: token, generation: generation, onCleanupStart: onCleanupStart) }
+            defer { timer?.cancel() }
             let (data, response) = try performSync(req, timeout: dictateTimeout, generation: generation, cancellation: cancellation)
             guard response.statusCode == 200 else { throw httpError(response, data) }
             return try JSONDecoder().decode(DictateResponse.self, from: data)
@@ -972,7 +984,7 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, skipCleanup: Bool, shortCleanup: ShortDictationCleanup?, onProgress: ((TaskProgress) -> Void)?, generation:Int) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, skipCleanup: Bool, shortCleanup: ShortDictationCleanup?, onProgress: ((TaskProgress) -> Void)?, onCleanupStart: (() -> Void)?, generation: Int) throws -> DictateResponse {
         try withTokenRetry { token in
             let requestID = UUID().uuidString
             var headers: [String: String] = [
@@ -998,22 +1010,43 @@ final class ServiceClient {
             headers["x-voice-meta-bytes"] = String(payload.metaBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)
-            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label:"TypeLeast.progress"))
-            timer.schedule(deadline:.now()+1,repeating:1)
-            timer.setEventHandler { [weak self] in
-                guard let self, let onProgress,
-                      let poll = try? self.makeRequest(path:"/api/voice-polish/tasks/progress?id="+requestID,method:"GET",token:token,timeout:3),
-                      let (data,response) = try? self.performSync(poll,timeout:3),response.statusCode == 200,
-                      let progress = try? JSONDecoder().decode(TaskProgress.self,from:data) else { return }
-                onProgress(progress)
-            }
-            if onProgress != nil { timer.resume() } else { timer.resume();timer.cancel() }
-            defer { timer.cancel() }
+            let timer = watchTaskProgress(requestID: requestID, token: token, generation: generation,
+                                          onProgress: onProgress, onCleanupStart: onCleanupStart)
+            defer { timer?.cancel() }
             let (data, resp) = try performSync(req, timeout: timeout,generation:generation)
             guard resp.statusCode == 200 else { throw httpError(resp, data) }
             do { return try JSONDecoder().decode(DictateResponse.self, from: data) }
             catch { throw ServiceError.decoding(String(describing: error)) }
         }
+    }
+
+    private func watchTaskProgress(requestID: String, token: String, generation: Int,
+                                   onProgress: ((TaskProgress) -> Void)? = nil,
+                                   onCleanupStart: (() -> Void)?) -> DispatchSourceTimer? {
+        guard onProgress != nil || onCleanupStart != nil else { return nil }
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "TypeLeast.progress"))
+        if onCleanupStart != nil {
+            timer.schedule(deadline: .now() + .milliseconds(60), repeating: .milliseconds(120), leeway: .milliseconds(15))
+        } else {
+            timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
+        }
+        var reportedCleanup = false
+        timer.setEventHandler { [weak self, weak timer] in
+            guard let self, let timer, !timer.isCancelled,
+                  let poll = try? self.makeRequest(path: "/api/voice-polish/tasks/progress?id=" + requestID,
+                                                   method: "GET", token: token, timeout: 3),
+                  let (data, response) = try? self.performSync(poll, timeout: 3, generation: generation),
+                  response.statusCode == 200, !timer.isCancelled,
+                  let progress = try? JSONDecoder().decode(TaskProgress.self, from: data) else { return }
+            onProgress?(progress)
+            if let onCleanupStart, !reportedCleanup, progress.cleanupModelStarted {
+                reportedCleanup = true
+                if onProgress == nil { timer.cancel() }
+                onCleanupStart()
+            }
+        }
+        timer.resume()
+        return timer
     }
 
     /// One request of the meeting job (see Meeting.swift).
@@ -1068,15 +1101,20 @@ final class ServiceClient {
         } }
     }
 
-    /// Ask the service to make one tiny call with this route (nothing is recorded).
-    func testLLMSync(route: LLMRoute) throws -> LLMTestResult {
+    /// Verify one route and optionally check the selected model's thinking control.
+    func testLLMSync(route: LLMRoute, probeThinking: Bool = false) throws -> LLMTestResult {
         try withPortRetry {
             try withTokenRetry { token in
-                let object: [String: Any] = ["llm": ["baseURL": route.baseURL, "model": route.model, "apiKey": route.apiKey]]
-                let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+                var fields = ["baseURL": route.baseURL, "model": route.model, "apiKey": route.apiKey]
+                fields["thinkingMode"] = route.thinkingMode?.rawValue
+                fields["thinkingControl"] = route.thinkingControl?.rawValue
+                fields["reasoningEffort"] = route.reasoningEffort
+                let object: [String: Any] = ["llm": fields, "probeThinking": probeThinking]
+                let body = try JSONSerialization.data(withJSONObject: object)
+                let timeout: TimeInterval = probeThinking ? 55 : 20
                 let req = try makeRequest(path: "/api/voice-polish/test-llm", method: "POST", token: token,
-                                          headers: ["content-type": "application/json"], body: body, timeout: 20)
-                let (data, resp) = try performSync(req, timeout: 20)
+                                          headers: ["content-type": "application/json"], body: body, timeout: timeout)
+                let (data, resp) = try performSync(req, timeout: timeout)
                 guard resp.statusCode == 200 || resp.statusCode == 400 else { throw httpError(resp, data) }
                 do { return try JSONDecoder().decode(LLMTestResult.self, from: data) }
                 catch { throw ServiceError.decoding(String(describing: error)) }
@@ -1119,18 +1157,24 @@ final class ServiceClient {
         }
     }
 
-    /// The provider's model ids, from its OpenAI-compatible `GET /models`. Called
-    /// directly (not through the local service), because it needs nothing but the key.
     func listModelsSync(route: LLMRoute) throws -> [String] {
-        guard let url = URL(string: route.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/models") else {
+        try modelCatalogSync(route: route).map(\.id)
+    }
+
+    /// The provider's catalog, from its OpenAI-compatible `GET /models`. Called
+    /// directly (not through the local service), because it needs nothing but the key.
+    func modelCatalogSync(route: LLMRoute) throws -> [LLMCatalogModel] {
+        let base = route.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard LLMPreset.isAllowedBaseURL(base),
+              let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/models") else {
             throw ServiceError.transport("bad url")
         }
         var req = URLRequest(url: url)
         req.timeoutInterval = 10
         if !route.apiKey.isEmpty { req.setValue("Bearer " + route.apiKey, forHTTPHeaderField: "Authorization") }
-        let (data, resp) = try performSync(req, timeout: 10)
+        let (data, resp) = try sendSync(req, timeout: 10)
         guard resp.statusCode == 200 else { throw ServiceError.http(status: resp.statusCode, code: nil, message: "") }
-        return LLMRoute.modelIDs(from: data)
+        return LLMCatalogModel.decode(data, baseURL: base)
     }
 }
 
@@ -1140,13 +1184,8 @@ struct LLMRoute: Codable, Equatable {
     var model: String
     var apiKey: String
     var reasoningEffort: String? = nil
-
-    /// Model ids from an OpenAI-compatible `/models` body: `{"data": [{"id": …}]}`.
-    static func modelIDs(from data: Data) -> [String] {
-        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let list = object["data"] as? [[String: Any]] else { return [] }
-        return list.compactMap { $0["id"] as? String }.sorted()
-    }
+    var thinkingMode: LLMThinkingMode? = nil
+    var thinkingControl: LLMThinkingControl? = nil
 }
 
 /// A short transcript uses only this route, or goes straight to insertion when it is nil.
@@ -1162,7 +1201,12 @@ struct ShortDictationCleanup: Equatable {
             policy["fullAbove"] = fullAbove
             policy["useSmallModel"] = useSmallModel
         }
-        if let route { policy["route"] = ["baseURL": route.baseURL, "model": route.model, "apiKey": route.apiKey] }
+        if let route {
+            var fields = ["baseURL": route.baseURL, "model": route.model, "apiKey": route.apiKey]
+            fields["thinkingMode"] = route.thinkingMode?.rawValue
+            fields["thinkingControl"] = route.thinkingControl?.rawValue
+            policy["route"] = fields
+        }
         return policy
     }
 }
@@ -1174,6 +1218,7 @@ struct LLMTestResult: Codable, Equatable {
     var code: String?
     var error: String?
     var sample: String?
+    var thinkingCapability: LLMThinkingCapability? = nil
 }
 
 enum BetaMessages {

@@ -13,7 +13,7 @@ import { createHmac } from "node:crypto";
 import { authorize } from "./token.js";
 import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
-import { completeOpenAI, normalizeRoute, parseRouteHeader } from "./openai-compat.js";
+import { completeOpenAI, normalizeRoute, parseRouteHeader, probeThinking } from "./openai-compat.js";
 import { MAX_MEETING_BYTES } from "./tasks/meeting.js";
 
 
@@ -169,8 +169,8 @@ export function createHandler(options) {
       }
 
       if (route === "/test-llm" && req.method === "POST") {
-        // One tiny call to check a user-supplied route. Nothing is recorded in
-        // history, and the key is never echoed back.
+        // Test the selected route with fixture text. Nothing is recorded in
+        // history, and neither the key nor probe responses are echoed back.
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         const llm = normalizeRoute(body.llm);
         if (!llm) {
@@ -178,6 +178,11 @@ export function createHandler(options) {
           return;
         }
         const started = Date.now();
+        const connected = async (details) => {
+          const ms = Date.now() - started;
+          const thinkingCapability = body.probeThinking === true ? await probeThinking({ route: llm }) : undefined;
+          reply(res, 200, { ok: true, ms, model: llm.model, ...details, thinkingCapability });
+        };
         try {
           const result = await completeOpenAI({
             route: llm,
@@ -185,13 +190,14 @@ export function createHandler(options) {
             user: "ping",
             maxTokens: 64,
             timeoutMs: 20000,
+            ...(body.probeThinking === true ? { maxTransportAttempts: 1 } : {}),
           });
-          reply(res, 200, { ok: true, ms: Date.now() - started, model: llm.model, sample: String(result.text).slice(0, 40) });
+          await connected({ sample: String(result.text).slice(0, 40) });
         } catch (error) {
           // A reply cut off at the token limit still proves the address, key and
           // model all work; the model just thinks before answering.
           if (error?.kind === "max-tokens") {
-            reply(res, 200, { ok: true, ms: Date.now() - started, model: llm.model, code: "thinking", note: "model thinks before answering" });
+            await connected({ code: "thinking", note: "model thinks before answering" });
             return;
           }
           reply(res, 200, { ok: false, ms: Date.now() - started, code: error?.code ?? error?.kind ?? "error", error: error instanceof Error ? error.message : String(error) });

@@ -43,13 +43,109 @@ export function normalizeRoute(value) {
   if (url.username || url.password) return null;
   // A remote service needs a key; a local server may not.
   if (!apiKey && !loopback) return null;
-  const effort = deepSeekEffort(url.host, model, value.reasoningEffort);
-  return { baseURL, model, apiKey, host: url.host, ...(effort ? { reasoningEffort: effort } : {}) };
+  const mode = ["enabled", "disabled", "default"].includes(value.thinkingMode) ? value.thinkingMode : undefined;
+  const control = ["thinking", "enableThinking", "reasoning", "effort"].includes(value.thinkingControl)
+    ? value.thinkingControl : undefined;
+  const effort = mode
+    ? safeEffort(value.reasoningEffort)
+    : deepSeekEffort(url.host, value.reasoningEffort);
+  return { baseURL, model, apiKey, host: url.host,
+    ...(mode ? { thinkingMode: mode } : {}),
+    ...(control ? { thinkingControl: control } : {}),
+    ...(effort ? { reasoningEffort: effort } : {}) };
 }
 
-function deepSeekEffort(host, model, effort) {
-  return host === "api.deepseek.com" && ["deepseek-flash", "deepseek-v4-pro"].includes(model.toLowerCase())
-    && ["low", "high", "max"].includes(effort) ? effort : undefined;
+function safeEffort(value) {
+  return typeof value === "string" && /^[a-z][a-z0-9_-]{0,23}$/.test(value) ? value : undefined;
+}
+
+function deepSeekEffort(host, effort) {
+  return host === "api.deepseek.com" && ["low", "high", "max"].includes(effort) ? effort : undefined;
+}
+
+function thinkingControl(host) {
+  if (isDeepSeekHost(host) || host === "open.bigmodel.cn" || host === "api.z.ai" || host === "api.moonshot.cn") return "thinking";
+  if (/^(?:[\w.-]+\.)?(?:dashscope(?:-intl|-us)?|maas)\.aliyuncs\.com$/u.test(host)) return "enableThinking";
+  if (host === "openrouter.ai") return "reasoning";
+  return "effort";
+}
+
+function thinkingFields(control, mode, effort) {
+  if (mode === "default") {
+    if (!effort) return {};
+    return control === "reasoning" ? { reasoning: { effort } } : { reasoning_effort: effort };
+  }
+  const enabled = mode === "enabled";
+  const strength = enabled && effort ? { reasoning_effort: effort } : {};
+  switch (control) {
+    case "thinking": return { thinking: { type: enabled ? "enabled" : "disabled" }, ...strength };
+    case "enableThinking": return { enable_thinking: enabled, ...strength };
+    case "reasoning": return { reasoning: { enabled, ...(enabled && effort ? { effort } : {}) } };
+    case "effort": return { reasoning_effort: enabled ? (effort ?? "low") : "none" };
+    default: return {};
+  }
+}
+
+function postCompletion(route, body, signal, fetchImpl) {
+  return fetchImpl(`${route.baseURL}/chat/completions`, {
+    method: "POST",
+    redirect: "error",
+    headers: {
+      "content-type": "application/json",
+      ...(route.apiKey ? { authorization: `Bearer ${route.apiKey}` } : {}),
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+/** A successful status alone cannot prove that a provider honored a switch. */
+export async function probeThinking({ route, signal, fetchImpl = globalThis.fetch, timeoutMs = 6500 }) {
+  const control = thinkingControl(route.host);
+  async function sample(mode) {
+    const deadline = createDeadline(signal, timeoutMs);
+    try {
+      const response = await postCompletion(route, {
+        model: route.model,
+        messages: [{ role: "user", content: "Calculate (17 × 23) + (31 × 7). Return only the integer." }],
+        ...(route.host === "api.openai.com" ? { max_completion_tokens: 192 } : { max_tokens: 192 }),
+        stream: false,
+        ...thinkingFields(control, mode),
+      }, deadline.signal, fetchImpl);
+      if (!response.ok) {
+        if (response.status !== 400 && response.status !== 422) {
+          await response.body?.cancel?.().catch(() => {});
+          return {};
+        }
+        // Check for an explicit refusal to disable thinking. Do not retain error text.
+        const error = (await response.json())?.error;
+        const reason = [error?.code, error?.param, error?.message].filter(v => typeof v === "string").join(" ").slice(0, 2000);
+        const fixedOn = mode === "disabled"
+          && /think|reasoning/i.test(reason)
+          && /must (?:be |stay )?(?:enabled|true)|only supports? (?:enabled|true)|only (?:enabled|true) is supported|cannot (?:be )?(?:disable|disabled|close|false)|does not support (?:disabl|turning off)|(?:必须|只能)开启|不支持关闭|不能关闭/i.test(reason);
+        return { fixedOn };
+      }
+      const body = await response.json();
+      const choice = body?.choices?.[0];
+      const reasoningText = choice?.message?.reasoning_content ?? choice?.message?.reasoning;
+      const reasoning = (typeof reasoningText === "string" && reasoningText.trim().length > 0)
+        || body?.usage?.completion_tokens_details?.reasoning_tokens > 0;
+      const replied = typeof choice?.message?.content === "string" && choice.message.content.trim().length > 0;
+      return { reasoning, replied };
+    } catch {
+      return {};
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  const off = await sample("disabled");
+  if (signal?.aborted) return undefined;
+  const on = await sample("enabled");
+  if (on.reasoning && off.replied && !off.reasoning) return { mode: "toggle", control };
+  if (on.reasoning && off.fixedOn) return { mode: "alwaysOn", control };
+  if (on.reasoning || off.reasoning) return { mode: "observed" };
+  return undefined;
 }
 
 /**
@@ -132,12 +228,14 @@ export async function completeOpenAI(options) {
   let lastError;
   const modelName = String(route.model ?? "").toLowerCase();
   const openAIQuick = route.host === "api.openai.com" && ["gpt-6-luna", "gpt-6.1-terra"].includes(modelName);
+  const usesCompletionBudget = openAIQuick || (route.host === "api.openai.com" && Boolean(route.thinkingMode));
   const kimiK3 = route.host === "api.moonshot.cn" && /^kimi-k3(?:[.-]|$)/u.test(modelName);
   const thinkingKey = `${route.host}\u0000${route.model}`;
   // DeepSeek explicitly supports this switch; dropping it enables thinking by default.
   let extra = !isDeepSeekHost(route.host) && thinkingSwitchRejected.has(thinkingKey) ? {} : noThinkingFields(route.host, route.model);
-  const effort = deepSeekEffort(route.host, modelName, route.reasoningEffort);
+  const effort = route.thinkingMode ? safeEffort(route.reasoningEffort) : deepSeekEffort(route.host, route.reasoningEffort);
   if (effort) extra = { thinking: { type: "enabled" }, reasoning_effort: effort };
+  if (route.thinkingMode) extra = thinkingFields(route.thinkingControl ?? thinkingControl(route.host), route.thinkingMode, effort);
   let triedWithoutThinkingSwitch = false;
   let budget = maxTokens;
   let widened = false;
@@ -145,34 +243,25 @@ export async function completeOpenAI(options) {
     retryBudget?.assertTime();
     const deadline = createDeadline(signal, Math.min(timeoutMs, retryBudget?.remainingMs() ?? timeoutMs));
     try {
-      const response = await fetchImpl(`${route.baseURL}/chat/completions`, {
-        method: "POST",
-        redirect: "error",
-        headers: {
-          "content-type": "application/json",
-          ...(route.apiKey ? { authorization: `Bearer ${route.apiKey}` } : {}),
-        },
-        body: JSON.stringify({
+      const response = await postCompletion(route, {
           model: route.model,
           messages: [
             { role: "system", content: system },
             { role: "user", content: user },
           ],
-          ...(budget === undefined ? {} : openAIQuick ? { max_completion_tokens: budget } : { max_tokens: budget }),
-          ...(temperature === undefined || kimiK3 || effort ? {} : { temperature }),
-          ...(openAIQuick ? { reasoning_effort: "none" } : kimiK3 ? { reasoning_effort: "low" } : {}),
+          ...(budget === undefined ? {} : usesCompletionBudget ? { max_completion_tokens: budget } : { max_tokens: budget }),
+          ...(temperature === undefined || kimiK3 || effort || route.thinkingMode === "enabled" ? {} : { temperature }),
+          ...(!route.thinkingMode && (openAIQuick ? { reasoning_effort: "none" } : kimiK3 ? { reasoning_effort: "low" } : {})),
           ...extra,
           stream: false,
-        }),
-        signal: deadline.signal,
-      });
+      }, deadline.signal, fetchImpl);
       if (!response.ok) {
         if (await contextLimit(response)) throw new ModelCallError('error','provider context limit exceeded',{code:'CONTEXT_LIMIT'});
         // The body may echo request details; only the status is kept.
         await response.body?.cancel?.().catch?.(() => {});
         // Some compatible providers reject the switch. DeepSeek documents it,
         // so an unrelated 400 must never silently enable its thinking mode.
-        if (response.status === 400 && Object.keys(extra).length > 0 && !isDeepSeekHost(route.host)) {
+        if (response.status === 400 && !route.thinkingMode && Object.keys(extra).length > 0 && !isDeepSeekHost(route.host)) {
           if (retryBudget && !retryBudget.retry()) throw new ModelCallError("error", "provider rejected parameters", {code:"HTTP_400"});
           triedWithoutThinkingSwitch = true;
           extra = {};
