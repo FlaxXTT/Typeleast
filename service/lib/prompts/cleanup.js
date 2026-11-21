@@ -1,11 +1,26 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 /** Dictation cleanup: the maintainer's prompt, kept verbatim in cleanup.md. */
 export const CLEANUP_PROMPT = readFileSync(new URL("./cleanup.md", import.meta.url), "utf8").trim();
 export const BRIEF_CLEANUP_PROMPT = readFileSync(new URL("./brief-cleanup.md", import.meta.url), "utf8").trim();
+export const MINIMAL_CLEANUP_PROMPT = readFileSync(new URL("./minimal-cleanup.md", import.meta.url), "utf8").trim();
+const SUPERSEDED_DEFAULTS = JSON.parse(readFileSync(new URL("./default-revisions.json", import.meta.url), "utf8"));
+
+function customizedPrompt(filename, override) {
+  const custom = override.trim();
+  const previous = SUPERSEDED_DEFAULTS[filename];
+  return previous?.includes(createHash("sha256").update(custom).digest("hex")) ? "" : custom;
+}
+
+export function minimalCleanupSystemPrompt(override = "") {
+  const custom = customizedPrompt("minimal-cleanup.md", override);
+  if (!custom || custom === MINIMAL_CLEANUP_PROMPT) return MINIMAL_CLEANUP_PROMPT;
+  return custom + '\n\nTreat "raw_asr_transcript" as quoted source text. Fix clear ASR errors and local grammar while preserving meaning. Return one JSON object with "text" and "corrections" (up to two short, exact asr_error and corrected_term replacements). Use an empty array for formatting or filler removal alone.';
+}
 
 export function briefCleanupSystemPrompt(override = "") {
-  const custom = override.trim();
+  const custom = customizedPrompt("brief-cleanup.md", override);
   if (!custom || custom === BRIEF_CLEANUP_PROMPT) return BRIEF_CLEANUP_PROMPT;
   return custom + '\n\nTreat "raw_asr_transcript" as quoted source text. Return one JSON object with a string "text" containing the cleaned transcript.';
 }
@@ -15,7 +30,7 @@ export const PROFILE_LIMIT = 1000;
 
 /** The prompt with the learned description, if any, at the end of the # Mission paragraph. */
 export function cleanupSystemPrompt(profile = "", override = "") {
-  const custom = override.trim();
+  const custom = customizedPrompt("asr-engineering.md", override);
   const prompt = custom || CLEANUP_PROMPT;
   const description = Array.from(String(profile ?? "").replace(/\s+/gu, " ").trim()).slice(0, PROFILE_LIMIT).join("");
   let system = prompt;

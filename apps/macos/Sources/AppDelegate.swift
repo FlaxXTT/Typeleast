@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
         skipGlobalHotkeys = isolatedTestRun
         if !isolatedTestRun { DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showHubNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.openHomeFromOutside()
+            self?.reopenHub()
         } }
         #if TYPELEAST_DEV
         let environment = ProcessInfo.processInfo.environment
@@ -192,8 +192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
     }
 
-    private func openHomeFromOutside() {
-        hub.openMainWindow()
+    private func reopenHub() {
+        hub.reopenMainWindow()
         requestInitialCredentialUnlock()
     }
 
@@ -280,9 +280,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // A demo recording shows only the voice bar over another app.
         if recorder.demoPCM != nil { return false }
-        openHomeFromOutside()
+        reopenHub()
         return false
     }
+
+    func applicationDidBecomeActive(_ notification: Notification) { hub.applicationDidBecomeActive() }
+
+    func applicationDidResignActive(_ notification: Notification) { hub.applicationDidResignActive() }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
@@ -981,11 +985,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func menuCancelDictation() { cancelDictation() }
     func menuPasteLast() { pasteLast() }
     func menuOpenHub(_ page: HubPage) {
-        if page == .home { openHomeFromOutside() }
-        else {
-            hub.show(page: page)
-            requestInitialCredentialUnlock()
-        }
+        hub.show(page: page)
+        requestInitialCredentialUnlock()
     }
     func menuRequestAccessibility() { requestAccessibility() }
     func menuRestartService() { restartService() }

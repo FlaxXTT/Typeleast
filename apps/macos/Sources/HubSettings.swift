@@ -56,6 +56,8 @@ struct SettingsPage: View {
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
     @State private var activeHotkeySlot: HotkeySlot?
+    // Keep category offsets only for the lifetime of this settings presentation.
+    @State private var scrollMemory = HubScrollMemory()
 
     init(loginItemStatus: LoginItemStatus = LoginItemStatus(), onClose: @escaping () -> Void = {}) {
         _loginItemStatus = StateObject(wrappedValue: loginItemStatus)
@@ -98,8 +100,8 @@ struct SettingsPage: View {
                 Text(model.settingsCategory.title).font(Theme.sectionTitleFont)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
-                HubScrollView(key: "settings-" + model.settingsCategory.rawValue, showsProgress: false) {
-                    LazyVStack(alignment: .leading, spacing: 20) {
+                HubScrollView(key: model.settingsCategory.rawValue, memory: scrollMemory, showsProgress: false) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         switch model.settingsCategory {
                         case .dictation: shortcuts; language; audio; cleanup
                         case .translation: translationShortcut; selectionTranslation
@@ -220,8 +222,7 @@ struct SettingsPage: View {
 
     @ViewBuilder private var shortDictationSettings: some View {
         let settings = model.settings
-        SettingRow(title: L10n.text("简要整理模型"),
-                   detail: L10n.text("25 以内直出，26–100 简要整理，101 起完整整理。中日韩按字，其他语言按词。")) {
+        SettingRow(title: L10n.text("简要整理模型"), detail: nil) {
             Picker("", selection: model.setting(\.shortDictationMode)) {
                 ForEach(ShortDictationMode.allCases, id: \.self) { mode in
                     Text(mode.label).tag(mode)
@@ -245,11 +246,13 @@ struct SettingsPage: View {
     }
 
     private var promptFiles: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             SettingsSection {
+                PromptFileRow(kind: .minimalCleanup, title: L10n.text("识别纠错提示词"), detail: L10n.text("25 字或词以内"))
+                Divider()
                 PromptFileRow(kind: .briefCleanup, title: L10n.text("简要整理提示词"), detail: L10n.text("26–100 字或词"))
                 Divider()
-                PromptFileRow(kind: .asrEngineering, title: L10n.text("ASR Engineering 提示词"))
+                PromptFileRow(kind: .asrEngineering, title: L10n.text("ASR Engineering 提示词"), detail: L10n.text("101 字或词起"))
             }
             SettingsSection {
                 PromptFileRow(kind: .translation, title: L10n.text("翻译提示词"),
@@ -390,10 +393,7 @@ struct SettingsPage: View {
     }
 
     private var speech: some View {
-        SpeechModelOptions()
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
+        SettingsSection { SpeechModelOptions() }
     }
 
     private var updates: some View {
@@ -493,20 +493,34 @@ struct CredentialUnlockRow: View {
     }
 }
 
+private struct CompactSettingsRowKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private extension EnvironmentValues {
+    var compactSettingsRows: Bool {
+        get { self[CompactSettingsRowKey.self] }
+        set { self[CompactSettingsRowKey.self] = newValue }
+    }
+}
+
 struct SettingsSection<Content: View>: View {
     var title: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let border = RoundedRectangle(cornerRadius: Theme.listGroupRadius, style: .circular)
+        VStack(alignment: .leading, spacing: 8) {
             if let title {
                 InterfaceTypography.text(title, size: 14, weight: .semibold).foregroundColor(Theme.secondary)
             }
-            VStack(alignment: .leading, spacing: 8) { content }
-                .padding(16)
+            VStack(alignment: .leading, spacing: 5) { content }
+                .environment(\.compactSettingsRows, true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
-                .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).strokeBorder(Theme.border, lineWidth: 1))
+                .background(border.fill(Theme.card))
+                .overlay(border.strokeBorder(Theme.border, lineWidth: 1))
         }
     }
 }
@@ -516,6 +530,12 @@ struct SettingRow<Trailing: View>: View {
     let detail: String?
     var loading = false
     @ViewBuilder var trailing: Trailing
+    @Environment(\.compactSettingsRows) private var compact
+
+    private var verticalInset: CGFloat {
+        guard compact else { return 8 }
+        return loading || detail?.isEmpty == false ? 6 : 4
+    }
 
     private var labels: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -537,12 +557,13 @@ struct SettingRow<Trailing: View>: View {
                 Spacer(minLength: 12)
                 trailing.fixedSize()
             }
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: compact ? 8 : 10) {
                 labels
                 trailing
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 8).frame(minHeight: 48)
+        .padding(.vertical, verticalInset)
+        .frame(minHeight: compact ? 40 : 48)
     }
 }
 
@@ -603,7 +624,8 @@ private struct NoteRow: View {
                 Button(action, action: perform).buttonStyle(SecondaryButtonStyle())
             }
         }
-        .padding(16)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window.opacity(0.7)))
     }
 }
@@ -806,7 +828,7 @@ struct HotkeyField: View {
 struct ModelSection: View {
     @EnvironmentObject var model: AppModel
     @State private var keyDraft = ""
-    @State private var models: [String] = []
+    @State private var models: [LLMCatalogModel] = []
     @State private var status = ""
     @State private var statusOK = true
     @State private var busy = false
@@ -821,6 +843,8 @@ struct ModelSection: View {
     private var requestContext: [String] { [settings.llmPresetID, settings.llmBaseURL, settings.llmModel, normalizedKeyDraft] }
 
     var body: some View {
+        let capabilities = LLMThinkingCache().capabilities(for: settings.llmBaseURL)
+        let thinking = capabilities[settings.llmModel.lowercased()]
         SettingsSection(title: L10n.text("整理模型")) {
                 SettingRow(title: L10n.text("服务商"), detail: nil) {
                     HStack(spacing: 8) {
@@ -866,8 +890,13 @@ struct ModelSection: View {
                             .frame(width: 200)
                         if !models.isEmpty {
                             Menu(L10n.text("选择")) {
-                                ForEach(models, id: \.self) { id in
-                                    Button(id) { model.setting(\.llmModel).wrappedValue = id }
+                                ForEach(models) { item in
+                                    let capability = capabilities[item.id.lowercased()] ?? item.thinking
+                                    let label = capability.map { capability in
+                                        let levels = capability.effortLevels?.map(Self.effortLabel).joined(separator: "/") ?? ""
+                                        return [item.id, capability.mode.label, levels].filter { !$0.isEmpty }.joined(separator: " · ")
+                                    } ?? item.id
+                                    Button(label) { model.setting(\.llmModel).wrappedValue = item.id }
                                 }
                             }
                             .frame(width: 70)
@@ -877,17 +906,23 @@ struct ModelSection: View {
                             .disabled(busy || keyLocked)
                     }
                 }
-                if settings.supportsCleanupThinking {
+                if thinking?.mode == .toggle {
                     ToggleRow(title: L10n.text("完整整理时开启思考"), detail: nil, isOn: model.setting(\.cleanupThinking))
-                    if settings.cleanupThinking {
-                        SettingRow(title: L10n.text("推理强度"), detail: nil) {
-                            Picker("", selection: model.setting(\.cleanupReasoningEffort)) {
-                                ForEach(CleanupReasoningEffort.allCases, id: \.self) { effort in
-                                    Text(effort.label).tag(effort)
-                                }
+                } else if !settings.llmModel.isEmpty {
+                    SettingRow(title: L10n.text("思考"), detail: nil) {
+                        Text(thinking?.mode.label ?? L10n.text("未验证")).foregroundColor(Theme.secondary)
+                    }
+                }
+                if let levels = thinking?.effortLevels, !levels.isEmpty,
+                   thinking?.mode == .alwaysOn || (thinking?.mode == .toggle && settings.cleanupThinking) {
+                    SettingRow(title: L10n.text("推理强度"), detail: nil) {
+                        Picker("", selection: model.setting(\.cleanupReasoningEffort)) {
+                            Text(L10n.text("模型默认")).tag("")
+                            ForEach(levels, id: \.self) { effort in
+                                Text(Self.effortLabel(effort)).tag(effort)
                             }
-                            .labelsHidden().frame(width: 180)
                         }
+                        .labelsHidden().frame(width: 180)
                     }
                 }
                 ToggleRow(title: L10n.text("服务故障时自动切换"), detail: L10n.text("文字会发给备用服务商。"), isOn: model.setting(\.automaticProviderFallback))
@@ -913,6 +948,16 @@ struct ModelSection: View {
         }
         .onChange(of: settings.llmBaseURL) { _ in models = [] }
         .onDisappear { invalidateRequest() }
+    }
+
+    private static func effortLabel(_ effort: String) -> String {
+        switch effort {
+        case "low": return L10n.text("低")
+        case "medium": return L10n.text("中")
+        case "high": return L10n.text("高")
+        case "max": return L10n.text("最高")
+        default: return effort
+        }
     }
 
     private func invalidateRequest() {
@@ -966,14 +1011,17 @@ struct ModelSection: View {
         status = L10n.text("正在获取…")
         statusOK = true
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try ServiceClient.shared.listModelsSync(route: route) }
+            let result = Result { try ServiceClient.shared.modelCatalogSync(route: route) }
             DispatchQueue.main.async {
                 guard requests.finish(request, context: requestContext) else { return }
                 busy = false
                 switch result {
-                case .success(let ids) where !ids.isEmpty:
-                    models = ids
-                    status = L10n.text("找到 {0} 个模型", ids.count)
+                case .success(let catalog) where !catalog.isEmpty:
+                    LLMThinkingCache().store(Dictionary(uniqueKeysWithValues: catalog.compactMap { item in
+                        item.thinking.map { (item.id, $0) }
+                    }), for: base)
+                    models = catalog
+                    status = L10n.text("找到 {0} 个模型", catalog.count)
                     statusOK = true
                 case .success:
                     status = L10n.text("此服务商没有模型列表，请手动填模型 ID")
@@ -1029,22 +1077,30 @@ struct ModelSection: View {
             }
             return
         }
+        let shouldProbe = settings.cleanupThinkingCapability?.needsProbe ?? true
+        let testRoute = shouldProbe ? route : settings.configuredCleanupRoute(route, full: true)
         let context = requestContext
         let request = requests.begin(context: context)
         busy = true
         status = L10n.text("正在测试…")
         statusOK = true
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try ServiceClient.shared.testLLMSync(route: route) }
+            let result = Result { try ServiceClient.shared.testLLMSync(route: testRoute, probeThinking: shouldProbe) }
             DispatchQueue.main.async {
                 guard requests.finish(request, context: requestContext) else { return }
                 busy = false
                 switch result {
                 case .success(let answer) where answer.ok:
                     let saved = normalizedKeyDraft.isEmpty || normalizedKeyDraft == KeychainStore.cached(account: settings.llmPresetID) || saveKey(quiet: true)
+                    if saved, let capability = answer.thinkingCapability {
+                        LLMThinkingCache().store([route.model: capability], for: route.baseURL)
+                    }
                     let thinks = answer.code == "thinking"
                     status = L10n.text("连接成功，用时 ") + String(Int(answer.ms ?? 0)) + L10n.text(" 毫秒") + (saved ? L10n.text("，Key 已保存") : L10n.text("，但 Key 无法存入钥匙串"))
                         + (thinks ? L10n.text("。此模型先思考，整理较慢") : "")
+                    if shouldProbe, answer.thinkingCapability == nil, settings.cleanupThinkingCapability == nil {
+                        status += L10n.text("。思考开关未验证")
+                    }
                     statusOK = saved
                     DiagnosticsLog.write("llm.test.ok", ["host": URL(string: route.baseURL)?.host ?? "?", "model": route.model])
                 case .success(let answer):

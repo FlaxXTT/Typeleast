@@ -13,6 +13,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     private var requestedRestorePage: HubPage?
     private var startupMask: NSView?
     private var maskTimeout: DispatchWorkItem?
+    private var homePresentationPending = true
     private(set) var shellCommitted = false
     let model: AppModel
 
@@ -49,6 +50,22 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     func openMainWindow() { show(page: .home) }
 
+    func reopenMainWindow() {
+        guard let window, !window.isMiniaturized,
+              window.isVisible || (NSApp.isHidden && !model.homePresentationSuspended) else {
+            openMainWindow()
+            return
+        }
+        guard !NSApp.isActive || NSApp.keyWindow == nil else { return }
+        if NSApp.isHidden { NSApp.unhide(nil) }
+        NSApp.activate(ignoringOtherApps: true)
+        (settingsWindow.visibleWindow ?? window).makeKeyAndOrderFront(nil)
+    }
+
+    func applicationDidBecomeActive() { playHomePresentationIfVisible() }
+
+    func applicationDidResignActive() { homePresentationPending = true }
+
     func show(page: HubPage = .home) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
         if window == nil { window = makeWindow() }
@@ -63,6 +80,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
+        if NSApp.isActive { playHomePresentationIfVisible() }
         // AppKit lays out the title bar again on first presentation. Reposition the
         // native buttons afterwards so they stay inside the window curve.
         DispatchQueue.main.async { [weak window] in
@@ -131,6 +149,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         if let window { AppWindowStyle.round(window) }
+        if NSApp.isActive { playHomePresentationIfVisible() }
         model.refreshPermissions()
         // The service may have restarted on a new port since the last check.
         model.actions?.recheckHealth()
@@ -141,10 +160,12 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        homePresentationPending = true
         model.homePresentationSuspended = true
     }
 
     func windowWillMiniaturize(_ notification: Notification) {
+        homePresentationPending = true
         model.homePresentationSuspended = true
     }
 
@@ -152,6 +173,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         let page = requestedRestorePage ?? .home
         requestedRestorePage = nil
         present(page)
+        if NSApp.isActive { playHomePresentationIfVisible() }
     }
 
     private func present(_ page: HubPage) {
@@ -160,9 +182,15 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         if page == .home {
             settingsWindow.closeImmediately()
             model.settingsPresented = false
-            model.homePresentationID &+= 1
         }
         model.navigate(to: page)
+    }
+
+    private func playHomePresentationIfVisible() {
+        guard homePresentationPending, let window, window.isVisible, !window.isMiniaturized,
+              !model.homePresentationSuspended, !model.settingsPresented else { return }
+        homePresentationPending = false
+        if model.page == .home { model.homePresentationID &+= 1 }
     }
 }
 

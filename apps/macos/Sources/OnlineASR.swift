@@ -24,6 +24,45 @@ struct OnlineASRTranscript: Sendable {
     var utterances: [OnlineASRUtterance] = []
 }
 
+/// Each take has its own stop boundary. The recorder already stores the PCM for history.
+final class DoubaoLiveAudio: @unchecked Sendable {
+    private let recorder: Recorder
+    private let lock = NSLock()
+    private var finalByteCount: Int?
+    private let completion = AsyncStream<Void>.makeStream()
+
+    init(recorder: Recorder) { self.recorder = recorder }
+
+    var endOfRecording: AsyncStream<Void> { completion.stream }
+
+    func finish(byteCount: Int) {
+        lock.withLock { finalByteCount = byteCount }
+        completion.continuation.finish()
+    }
+
+    func send(_ chunk: (Data, Bool) async throws -> Void) async throws {
+        let packetBytes = Recorder.bytesPerSecond / 10
+        var offset = 0
+        while true {
+            try Task.checkCancellation()
+            let end = lock.withLock { finalByteCount }
+            let limit = min(offset + packetBytes, end ?? Int.max)
+            let snapshot = recorder.pcmSnapshot(fromByteOffset: offset, endByteOffset: limit)
+            let last = snapshot.nextByteOffset == end
+            // Keep one sample in reserve while live so the final packet carries audio,
+            // even when the take ends exactly on a packet boundary.
+            if last || (snapshot.pcm.count == packetBytes && recorder.byteCount > limit) {
+                try Task.checkCancellation()
+                try await chunk(snapshot.pcm, last)
+                offset = snapshot.nextByteOffset
+                if last { return }
+            } else {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+    }
+}
+
 enum OnlineASR {
     private enum Failure: LocalizedError {
         case missingKey, invalidWorkspace, invalidAudio, invalidResponse, timedOut
@@ -43,6 +82,29 @@ enum OnlineASR {
 
     private typealias Socket = URLSessionWebSocketTask
 
+    /// Measure the provider's authenticated session startup without sending audio.
+    static func testConnection(configuration: OnlineASRConfiguration) async throws -> Int {
+        let start = ProcessInfo.processInfo.systemUptime
+        switch configuration.provider {
+        case .local:
+            throw Failure.invalidResponse
+        case .doubao:
+            let request = try doubaoConnection(configuration)
+            try await connect(request, duration: 0, responseTimeout: 8) { socket in
+                let first = try await beginDoubao(socket, language: "auto", meeting: false, configuration: configuration)
+                guard !first.last else { throw Failure.invalidResponse }
+                socket.cancel(with: .normalClosure, reason: nil)
+            }
+        case .funASR:
+            let request = try funASRConnection(configuration)
+            try await connect(request, duration: 0, responseTimeout: 8) { socket in
+                _ = try await beginFunASR(socket, language: "auto", meeting: false)
+                socket.cancel(with: .normalClosure, reason: nil)
+            }
+        }
+        return Int(((ProcessInfo.processInfo.systemUptime - start) * 1_000).rounded())
+    }
+
     static func transcribe(wav: Data, language: String, configuration: OnlineASRConfiguration) async throws -> String {
         try await recognize(wav: wav, language: language, configuration: configuration, meeting: false).text
     }
@@ -51,76 +113,93 @@ enum OnlineASR {
         try await recognize(wav: wav, language: "auto", configuration: configuration, meeting: true)
     }
 
+    static func transcribeLive(audio: DoubaoLiveAudio, maxSeconds: Int,
+                               language: String, configuration: OnlineASRConfiguration) async throws -> String {
+        let request = try doubaoConnection(configuration)
+        let result = try await connect(request, duration: Double(maxSeconds), endOfRecording: audio.endOfRecording) { socket in
+            try await recognizeDoubao(socket, language: language, meeting: false,
+                                      configuration: configuration) { send in
+                try await audio.send(send)
+            }
+        }
+        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func recognize(wav: Data, language: String, configuration: OnlineASRConfiguration,
                                   meeting: Bool) async throws -> OnlineASRTranscript {
-        let key = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard configuration.provider != .local, !key.isEmpty,
-              key.utf8.allSatisfy({ (0x21...0x7e).contains($0) })
-        else { throw Failure.missingKey }
+        guard configuration.provider != .local else { throw Failure.missingKey }
+        _ = try validatedKey(configuration.apiKey)
         guard Wav.isCanonical(wav), wav.count > 44 else { throw Failure.invalidAudio }
         let pcm = wav.dropFirst(44)
 
+        var result: OnlineASRTranscript
         switch configuration.provider {
         case .local:
             throw Failure.missingKey
         case .doubao:
-            var request = URLRequest(url: URL(string: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream")!)
-            let requestID = UUID().uuidString
-            request.setValue(key, forHTTPHeaderField: "X-Api-Key")
-            request.setValue("volc.seedasr.sauc.duration", forHTTPHeaderField: "X-Api-Resource-Id")
-            request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-            request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
-            request.setValue("-1", forHTTPHeaderField: "X-Api-Sequence")
-            return try await connect(request, duration: duration(pcm)) { socket in
-                try await recognizeDoubao(socket, pcm: pcm, language: language, meeting: meeting,
-                                          speechSmoothing: configuration.doubaoSpeechSmoothing, hotwords: configuration.doubaoHotwords)
+            let request = try doubaoConnection(configuration)
+            result = try await connect(request, duration: duration(pcm)) { socket in
+                try await recognizeDoubao(socket, language: language, meeting: meeting,
+                                          configuration: configuration) { send in
+                    try await sendPCM(pcm, send: send)
+                }
             }
         case .funASR:
-            let workspace = configuration.workspaceID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let host: String
-            if workspace.isEmpty {
-                host = "dashscope.aliyuncs.com"
-            } else {
-                guard workspace.range(of: #"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"#, options: .regularExpression) != nil
-                else { throw Failure.invalidWorkspace }
-                host = workspace + ".cn-beijing.maas.aliyuncs.com"
-            }
-            var request = URLRequest(url: URL(string: "wss://\(host)/api-ws/v1/inference")!)
-            request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
-            return try await connect(request, duration: duration(pcm)) { socket in
+            let request = try funASRConnection(configuration)
+            result = try await connect(request, duration: duration(pcm)) { socket in
                 try await recognizeFunASR(socket, pcm: pcm, language: language, meeting: meeting)
             }
         }
+        result.text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result
     }
 
     private static func duration(_ pcm: Data) -> Double { Double(pcm.count) / 32_000 }
 
-    private static func connect(_ request: URLRequest, duration: Double,
-                                run: @escaping @Sendable (Socket) async throws -> OnlineASRTranscript) async throws -> OnlineASRTranscript {
+    private static func validatedKey(_ input: String) throws -> String {
+        let key = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, key.utf8.allSatisfy({ (0x21...0x7e).contains($0) }) else { throw Failure.missingKey }
+        return key
+    }
+
+    private static func connect<Value: Sendable>(_ request: URLRequest, duration: Double,
+                                                 endOfRecording: AsyncStream<Void>? = nil,
+                                                 responseTimeout: TimeInterval = 30,
+                                                 run: @escaping @Sendable (Socket) async throws -> Value) async throws -> Value {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 20
-        configuration.timeoutIntervalForResource = duration + 30
+        configuration.timeoutIntervalForRequest = min(20, responseTimeout)
+        configuration.timeoutIntervalForResource = duration + responseTimeout
         let session = URLSession(configuration: configuration, delegate: NoRedirectDelegate(), delegateQueue: nil)
         let socket = session.webSocketTask(with: request)
         socket.maximumMessageSize = 4 * 1024 * 1024
         defer { session.invalidateAndCancel() }
         try Task.checkCancellation()
         socket.resume()
-        return try await withThrowingTaskGroup(of: OnlineASRTranscript.self) { group in
+        return try await withThrowingTaskGroup(of: Value.self) { group in
             group.addTask {
                 try await withTaskCancellationHandler {
-                    try await run(socket)
+                    do { return try await run(socket) }
+                    catch {
+                        if let status = (socket.response as? HTTPURLResponse)?.statusCode, status >= 400 {
+                            throw Failure.rejected(String(status))
+                        }
+                        if (error as? URLError)?.code == .timedOut { throw Failure.timedOut }
+                        throw error
+                    }
                 } onCancel: {
                     socket.cancel(with: .goingAway, reason: nil)
                 }
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(duration + 30))
+                if let endOfRecording {
+                    for await _ in endOfRecording {}
+                    try Task.checkCancellation()
+                }
+                try await Task.sleep(for: .seconds(endOfRecording == nil ? duration + responseTimeout : responseTimeout))
                 throw Failure.timedOut
             }
             defer { group.cancelAll() }
-            guard var result = try await group.next() else { throw Failure.invalidResponse }
-            result.text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let result = try await group.next() else { throw Failure.invalidResponse }
             return result
         }
     }
@@ -170,6 +249,21 @@ enum OnlineASR {
 
     // MARK: Doubao ASR 2.0
 
+    private static func doubaoConnection(_ configuration: OnlineASRConfiguration) throws -> URLRequest {
+        guard configuration.provider == .doubao else { throw Failure.missingKey }
+        let key = try validatedKey(configuration.apiKey)
+        // This endpoint accepts PCM throughout capture and preserves language selection,
+        // hotwords and smoothing when returning the finalized text.
+        var request = URLRequest(url: URL(string: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream")!)
+        let requestID = UUID().uuidString
+        request.setValue(key, forHTTPHeaderField: "X-Api-Key")
+        request.setValue("volc.seedasr.sauc.duration", forHTTPHeaderField: "X-Api-Resource-Id")
+        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
+        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        request.setValue("-1", forHTTPHeaderField: "X-Api-Sequence")
+        return request
+    }
+
     static func doubaoRequest(language: String, meeting: Bool, speechSmoothing: Bool, hotwords: String = "") -> [String: Any] {
         var audio: [String: Any] = ["format": "pcm", "codec": "raw", "rate": 16_000, "bits": 16, "channel": 1]
         let locales = ["zh": "zh-CN", "en": "en-US", "yue": "yue-CN", "ja": "ja-JP", "ko": "ko-KR"]
@@ -194,17 +288,24 @@ enum OnlineASR {
         return ["audio": audio, "request": options]
     }
 
-    private static func recognizeDoubao(_ socket: Socket, pcm: Data, language: String,
-                                        meeting: Bool, speechSmoothing: Bool, hotwords: String) async throws -> OnlineASRTranscript {
-        let request = doubaoRequest(language: language, meeting: meeting, speechSmoothing: speechSmoothing, hotwords: hotwords)
+    private static func beginDoubao(_ socket: Socket, language: String, meeting: Bool,
+                                    configuration: OnlineASRConfiguration) async throws -> (result: DoubaoEnvelope.Result?, last: Bool) {
+        let request = doubaoRequest(language: language, meeting: meeting,
+                                    speechSmoothing: configuration.doubaoSpeechSmoothing, hotwords: configuration.doubaoHotwords)
         try await socket.send(.data(doubaoFrame(type: 0x10, serialization: 0x10,
                                                payload: json(request))))
-        let first = try await doubaoResult(socket)
+        return try await doubaoResult(socket)
+    }
+
+    private static func recognizeDoubao(_ socket: Socket, language: String, meeting: Bool,
+                                        configuration: OnlineASRConfiguration,
+                                        sendAudio: @escaping @Sendable ((Data, Bool) async throws -> Void) async throws -> Void) async throws -> OnlineASRTranscript {
+        let first = try await beginDoubao(socket, language: language, meeting: meeting, configuration: configuration)
         let initial = first.result?.transcript ?? OnlineASRTranscript(text: "")
         if first.last { return initial }
 
         return try await exchange(socket, send: {
-            try await sendPCM(pcm) { chunk, last in
+            try await sendAudio { chunk, last in
                 try await socket.send(.data(doubaoFrame(type: last ? 0x22 : 0x20, serialization: 0, payload: chunk)))
             }
         }, receive: {
@@ -301,8 +402,23 @@ enum OnlineASR {
 
     // MARK: Alibaba Cloud Fun-ASR Realtime
 
-    private static func recognizeFunASR(_ socket: Socket, pcm: Data, language: String,
-                                       meeting: Bool) async throws -> OnlineASRTranscript {
+    private static func funASRConnection(_ configuration: OnlineASRConfiguration) throws -> URLRequest {
+        let key = try validatedKey(configuration.apiKey)
+        let workspace = configuration.workspaceID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let host: String
+        if workspace.isEmpty {
+            host = "dashscope.aliyuncs.com"
+        } else {
+            guard workspace.range(of: #"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"#, options: .regularExpression) != nil
+            else { throw Failure.invalidWorkspace }
+            host = workspace + ".cn-beijing.maas.aliyuncs.com"
+        }
+        var request = URLRequest(url: URL(string: "wss://\(host)/api-ws/v1/inference")!)
+        request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private static func beginFunASR(_ socket: Socket, language: String, meeting: Bool) async throws -> String {
         let id = UUID().uuidString.lowercased()
         var parameters: [String: Any] = ["format": "pcm", "sample_rate": 16_000, "disfluency_removal_enabled": true]
         if meeting { parameters["heartbeat"] = true }
@@ -315,11 +431,16 @@ enum OnlineASR {
             "task_group": "audio", "task": "asr", "function": "recognition", "model": "fun-asr-realtime",
             "parameters": parameters, "input": [String: Any]()
         ])
-        let finish = try funASRCommand("finish-task", id: id, payload: ["input": [String: Any]()])
         try await socket.send(start)
         let started = try await funASREvent(socket, id: id)
         guard started.header.event == "task-started" else { throw Failure.invalidResponse }
+        return id
+    }
 
+    private static func recognizeFunASR(_ socket: Socket, pcm: Data, language: String,
+                                       meeting: Bool) async throws -> OnlineASRTranscript {
+        let id = try await beginFunASR(socket, language: language, meeting: meeting)
+        let finish = try funASRCommand("finish-task", id: id, payload: ["input": [String: Any]()])
         return try await exchange(socket, send: {
             try await sendPCM(pcm) { chunk, _ in try await socket.send(.data(chunk)) }
             try await socket.send(finish)

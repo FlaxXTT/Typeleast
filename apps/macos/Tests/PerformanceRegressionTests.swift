@@ -28,11 +28,11 @@ func dashboardMotionTests() {
     check("a fresh count has no target before data arrives", count.target == nil)
     checkEq("a fresh count starts at zero", count.value(at: start), 0)
     count.retarget(800, at: start, reduceMotion: false)
-    let halfway = start.addingTimeInterval(0.125)
-    checkEq("count uses cubic ease-out halfway through 250 ms", count.value(at: halfway), 700)
+    let halfway = start.addingTimeInterval(0.160)
+    checkEq("count uses cubic ease-out halfway through 320 ms", count.value(at: halfway), 700)
     count.retarget(900, at: halfway, reduceMotion: false)
     checkEq("updates start from the current interpolation", count.value(at: halfway), 700)
-    checkEq("count finishes on its new target", count.value(at: halfway.addingTimeInterval(0.250)), 900)
+    checkEq("count finishes on its new target", count.value(at: halfway.addingTimeInterval(0.320)), 900)
     count.retarget(123, at: halfway, reduceMotion: true)
     checkEq("reduced motion skips count interpolation", count.value(at: halfway), 123)
     checkEq("a cached count can display immediately", CountUpTransition(initial: 91).value(at: start), 91)
@@ -42,14 +42,22 @@ func dashboardMotionTests() {
 
     let covered = HeatmapMotion.Sample(scale: 1, cover: 1)
     let final = HeatmapMotion.Sample(scale: 1, cover: 0)
-    checkEq("waiting columns keep the placeholder", HeatmapMotion.sample(elapsed: 0.019, column: 1), covered)
-    check("the first column has already begun", HeatmapMotion.sample(elapsed: 0.019, column: 0).cover < 1)
-    checkEq("a cell is uncovered and at peak scale at 150 ms", HeatmapMotion.sample(elapsed: 0.150, column: 0),
+    checkEq("waiting columns keep the placeholder", HeatmapMotion.sample(elapsed: 0.024, column: 1), covered)
+    check("the first column has already begun", HeatmapMotion.sample(elapsed: 0.024, column: 0).cover < 1)
+    checkEq("a cell is uncovered at half the reveal duration", HeatmapMotion.sample(elapsed: 0.1875, column: 0),
             .init(scale: 1.2, cover: 0))
-    checkEq("a cell settles after 300 ms", HeatmapMotion.sample(elapsed: 0.300, column: 0), final)
+    checkEq("a cell settles after 375 ms", HeatmapMotion.sample(elapsed: 0.375, column: 0), final)
     checkEq("column-local samples match at the same time", HeatmapMotion.sample(elapsed: 0.125, column: 0),
-            HeatmapMotion.sample(elapsed: 0.165, column: 2))
-    check("34 columns finish in 960 ms", abs(HeatmapMotion.finishTime(columns: 34) - 0.960) < 0.000001)
+            HeatmapMotion.sample(elapsed: 0.175, column: 2))
+    checkEq("the activity tile returns to the grid plane", HeatmapMotion.depth(elapsed: 0.375, column: 0, row: 6), 0)
+    check("the leading row rises before the following row or column",
+          HeatmapMotion.depth(elapsed: 0.024, column: 0, row: 0) > 0
+          && HeatmapMotion.depth(elapsed: 0.024, column: 0, row: 6) == 0
+          && HeatmapMotion.depth(elapsed: 0.024, column: 1, row: 0) == 0)
+    checkEq("the first tile lifts to full depth halfway through its pulse",
+            HeatmapMotion.depth(elapsed: 0.1875, column: 0, row: 0), 1)
+    check("the 20-column homepage heatmap finishes in 850 ms",
+          abs(HeatmapMotion.finishTime(columns: 20) - 0.850) < 0.000001)
 }
 
 func dashboardWindowTests() {
@@ -91,17 +99,35 @@ func dashboardWindowTests() {
     check("the shell is visible before its dashboard deliveries", model.stats == nil && !model.activityReady)
     check("statistics and activity both reach the visible shell", waitFor { model.stats != nil && model.activityReady })
 
+    hub.applicationDidBecomeActive()
+    let initialPresentation = model.homePresentationID
+    hub.reopenMainWindow()
+    checkEq("a repeated Dock entry keeps the visible Home presentation", model.homePresentationID, initialPresentation)
+    hub.applicationDidResignActive()
+    hub.applicationDidBecomeActive()
+    let nextPresentation = model.homePresentationID
+    checkEq("the next foreground activation starts one new Home presentation", nextPresentation, initialPresentation + 1)
+    hub.applicationDidBecomeActive()
+    hub.reopenMainWindow()
+    checkEq("repeated activation and Dock callbacks share the same presentation", model.homePresentationID, nextPresentation)
+
     let initialPalette = model.sidebarBrandPalette
     model.navigate(to: .history)
     check("sidebar navigation keeps the current brand palette", model.sidebarBrandPalette == initialPalette)
+    hub.reopenMainWindow()
+    checkEq("the Dock leaves the visible History page open", model.page, .history)
+    hub.applicationDidResignActive()
+    hub.applicationDidBecomeActive()
+    check("returning to a History window preserves the page and Home presentation",
+          model.page == .history && model.homePresentationID == nextPresentation)
     hub.show(page: .history)
     checkEq("explicit history navigation is preserved", model.page, .history)
     hub.openMainWindow()
-    checkEq("opening the visible window goes Home", model.page, .home)
+    checkEq("the explicit Home action opens Home", model.page, .home)
     hub.show(page: .history)
     window.close()
     let previousPalette = model.sidebarBrandPalette
-    hub.openMainWindow()
+    hub.reopenMainWindow()
     check("closed window reopens at Home", window.isVisible && model.page == .home)
     check("reopening the window draws a different brand palette", model.sidebarBrandPalette != previousPalette)
 
@@ -130,9 +156,8 @@ private func cancelledTranscriptionToastTests() {
     }
 
     var previousPanel: NSPanel?
-    var previousWidth: CGFloat = 0
     var expired = 0
-    for (locale, expected) in [("zh-Hans", "转录已取消"), ("en", "Transcription cancelled")] {
+    for (locale, expected) in [("zh-Hans", "转录已取消"), ("en", "Cancelled")] {
         L10n.language = locale
         toast.show(message: L10n.text("转录已取消"), undo: {}, expired: { expired += 1 })
         RunLoop.current.run(until: Date().addingTimeInterval(0.05))
@@ -147,17 +172,27 @@ private func cancelledTranscriptionToastTests() {
         check("the cancellation panel fits its content in \(locale)",
               host.bounds.width >= fitting.width && host.bounds.height >= fitting.height,
               "bounds=\(host.bounds.size) fitting=\(fitting)")
+        check("the cancellation toast is as compact as the recording capsule in \(locale)",
+              panel.frame.height == PillView.height &&
+              (RecordingBarMode.handsFree.width...PillView.thinkingWidth).contains(panel.frame.width))
         check("the cancellation card is free of a native corner mask in \(locale)",
               (host.layer?.cornerRadius ?? 0) == 0)
         if let previousPanel {
-            check("the same panel grows to fit the longer English toast", previousPanel === panel && panel.frame.width > previousWidth)
+            check("both languages reuse the same compact panel", previousPanel === panel)
         }
         previousPanel = panel
-        previousWidth = panel.frame.width
     }
     toast.finish()
     check("replacing and dismissing the toast each expire one pending undo",
           expired == 2 && previousPanel?.isVisible == false)
+
+    toast.show(message: L10n.text("转录已取消"), undo: {}, expired: { expired += 1 })
+    let deadline = Date().addingTimeInterval(3.5)
+    while previousPanel?.isVisible == true, Date() < deadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.025))
+    }
+    check("the cancellation toast expires and fades in under three and a half seconds",
+          expired == 3 && previousPanel?.isVisible == false)
 }
 
 private func dashboardCountRenderingTests() {

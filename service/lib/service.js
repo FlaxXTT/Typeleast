@@ -87,8 +87,9 @@ export class VoicePolishService {
   setProgress(id, value) {
     if (typeof id !== 'string' || !/^[A-Za-z0-9-]{1,80}$/.test(id)) return;
     for (const [key, item] of this.progress) if (Date.now() - item.updated > 600000) this.progress.delete(key);
-    if (!this.progress.has(id) && this.progress.size >= 20) return;
     const previous = this.progress.get(id);
+    if (previous) this.progress.delete(id);
+    else if (this.progress.size >= 20) this.progress.delete(this.progress.keys().next().value);
     this.progress.set(id, {stage:value.stage,completed:value.completed,total:value.total,
       sourceCharacters:value.sourceCharacters ?? previous?.sourceCharacters,
       sourceWords:value.sourceWords ?? previous?.sourceWords, updated:Date.now()});
@@ -182,13 +183,12 @@ export class VoicePolishService {
     const units = taskKind === "dictation" && Number.isInteger(limit) && limit >= 1 && limit <= 40
       ? shortDictationUnits(rawText) : Infinity;
     const short = Number.isFinite(units) && units <= limit;
-    if (short && tiered) return await this.recordAndReturn(request, base);
     const brief = tiered && units > limit && units <= fullAbove;
     const lighter = short || brief;
-    const useSmall = short || (brief && policy.useSmallModel === true);
+    const useSmall = (short && !tiered) || (brief && policy.useSmallModel === true);
     const mainRoute = normalizeRoute(request.llm);
     const custom = useSmall ? normalizeRoute(policy.route) : mainRoute;
-    const sameModel = useSmall && custom?.model.toLowerCase() === mainRoute?.model.toLowerCase();
+    const sameModel = short && !tiered && custom?.model.toLowerCase() === mainRoute?.model.toLowerCase();
     if (lighter && (!custom || sameModel || (short && rawText.length > 512))) {
       return await this.recordAndReturn(request, base);
     }
@@ -197,7 +197,10 @@ export class VoicePolishService {
       const tidyOnly = tidy(rawText);
       return await this.recordAndReturn(request, { ...base, text: tidyOnly.text, fallback: true, reason: "no-api-key", postprocess: tidyOnly.applied });
     }
-    if (lighter || taskKind !== "dictation") delete custom.reasoningEffort;
+    if (lighter || taskKind !== "dictation") {
+      delete custom.reasoningEffort;
+      if (custom.thinkingMode === "enabled") custom.thinkingMode = "disabled";
+    }
     base.provider = routeLabel(custom);
     base.model = custom.model;
     this.lastRoute = { provider: base.provider, model: base.model };
@@ -205,7 +208,10 @@ export class VoicePolishService {
     const routes = modelRoutes(custom, lighter ? [] : request.llmBackups);
     const deferred = !lighter && request.hasConfiguredBackups === true;
     const ctx = this.taskContext({ request, base, route: custom, routes, deferred, started, rawText });
-    if (short) return await runShortDictation(ctx);
+    if (short) {
+      const cleanupOverride = tiered && this.stateDir ? await readSavedPrompt(this.stateDir, "minimal-cleanup.md", this.logger) : "";
+      return await runShortDictation(ctx, { minimal: tiered, cleanupOverride });
+    }
     if (brief) {
       const cleanupOverride = this.stateDir ? await readSavedPrompt(this.stateDir, "brief-cleanup.md", this.logger) : "";
       return await runDictation(ctx, { cleanupOverride, brief: true });
@@ -240,7 +246,14 @@ export class VoicePolishService {
       logger: this.logger,
       stats: this.stats,
       complete: invoke,
-      reviewComplete: (options) => this.complete({ ...options, route: { ...successfulRoute, reasoningEffort: undefined } }),
+      reviewComplete: (options) => this.complete({
+        ...options,
+        route: {
+          ...successfulRoute,
+          reasoningEffort: undefined,
+          thinkingMode: successfulRoute.thinkingMode === "enabled" ? "disabled" : successfulRoute.thinkingMode,
+        },
+      }),
       redact: (text) => {
         let output = this.redactDetail(text);
         for (const item of routes) if (item.apiKey) output = output.split(item.apiKey).join("[redacted-key]");

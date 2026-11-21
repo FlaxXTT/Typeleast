@@ -101,7 +101,7 @@ final class AppModel: ObservableObject {
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
     @Published var retryingHistoryID: String?
-    /// External window entries start a new Home presentation.
+    /// Starts a Home entrance when it becomes visible in the foreground.
     @Published var homePresentationID = 0
     @Published var homePresentationSuspended = false
     @Published private(set) var history: [LocalHistoryEntry] = []
@@ -298,7 +298,8 @@ final class AppModel: ObservableObject {
             return (preset.name, L10n.text("钥匙串已锁定"))
         }
         guard llmConfigured else { return (L10n.text("没有整理模型（只去口头禅）"), nil) }
-        return (preset.name, settings.llmModel + (preset.id == "ollama" ? L10n.text("（本机）") : L10n.text("（你的 Key）")))
+        let modelName = settings.llmModel
+        return (preset.name, preset.id == "ollama" ? modelName + L10n.text("（本机）") : modelName)
     }
 
     /// Whether cleanup is configured: a model and (except for local servers) a key.

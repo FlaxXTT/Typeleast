@@ -319,7 +319,7 @@ private struct SetupCard: View {
                     }
                 }
                 if !model.credentialsLocked || !LLMPreset.find(model.settings.llmPresetID).needsKey {
-                    SetupRow(done: model.llmConfigured, title: L10n.text("整理模型（你的 API Key）"),
+                    SetupRow(done: model.llmConfigured, title: L10n.text("整理模型"),
                              detail: model.llmConfigured ? model.modelSummary : "",
                              action: L10n.text("打开设置")) {
                         model.settingsCategory = .models

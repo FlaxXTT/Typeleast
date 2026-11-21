@@ -1,6 +1,24 @@
 import AppKit
 import AVFoundation
 
+/// Evaluated once per successful capture using the recorder's existing device name.
+struct MicrophoneHintPolicy {
+    private var lastShownName: String?
+    private var lastShownAt: TimeInterval = 0
+    private static let reminderInterval: TimeInterval = 10 * 60
+
+    mutating func shouldShow(_ name: String, at now: TimeInterval,
+                             drawReminder: () -> Bool = { Int.random(in: 0..<20) == 0 }) -> Bool {
+        guard !name.isEmpty else { return false }
+        if name == lastShownName {
+            guard now - lastShownAt >= Self.reminderInterval, drawReminder() else { return false }
+        }
+        lastShownName = name
+        lastShownAt = now
+        return true
+    }
+}
+
 /// Recording, service requests, and insertion. Lifecycle and windows call the narrow entry points.
 final class DictationController {
     struct Host {
@@ -53,6 +71,7 @@ final class DictationController {
     private var captureRequest: UUID?
     private var heldShortcut = false
     private var onlineASRTask: Task<Void, Never>?
+    private var doubaoCapture: (audio: DoubaoLiveAudio, language: String, result: Task<String, Error>)?
     private var pendingAssistant = false
     /// 提示词模式's draft copied from a browser, whose fields Accessibility cannot read.
     private var copiedSelection: String?
@@ -105,9 +124,7 @@ final class DictationController {
 
     private var tickTimer: Timer?
     private var lastTickedSecond = -1
-    private var lastMicrophoneActivityAt: Date?
-    private var lastMicrophoneName = ""
-    private static let microphoneReminderInterval: TimeInterval = 5 * 60
+    private var microphoneHints = MicrophoneHintPolicy()
 
     func toggleDictation() { toggleDictation(translateTo: nil) }
 
@@ -235,22 +252,33 @@ final class DictationController {
 
     private func captureDidStart(_ take: RecordingBar.Take) {
         phase = .recording
+        if settings.onlineASRProvider == .doubao {
+            let audio = DoubaoLiveAudio(recorder: recorder)
+            let language = settings.recognitionLanguage(for: model.speech?.modelId)
+            let smoothing = settings.doubaoSpeechSmoothing
+            let hotwords = settings.doubaoHotwords
+            let maxSeconds = recorder.maxSeconds
+            let result = Task.detached(priority: .userInitiated) {
+                let key = KeychainStore.read(account: OnlineASRProvider.doubao.keychainAccount) ?? ""
+                let config = OnlineASRConfiguration(provider: .doubao, apiKey: key, workspaceID: "",
+                                                    doubaoSpeechSmoothing: smoothing, doubaoHotwords: hotwords)
+                return try await OnlineASR.transcribeLive(audio: audio, maxSeconds: maxSeconds,
+                                                          language: language, configuration: config)
+            }
+            doubaoCapture = (audio, language, result)
+        }
         // An answer to Prompt Beta: the questions stay visible so the user can answer them one by one.
         if pendingAssistant && betaPending != nil { beta.setBusy(L10n.text("正在听。说完按 {0}。", assistantKeyLabel)) }
         recordingStartedAt = recorder.startedAt ?? Date()
         idleBar.hide()
         recordingBar.limitSeconds = Double(recorder.maxSeconds)
-        let now = Date()
         let microphone = recorder.microphoneName
-        let remindMicrophone = lastMicrophoneActivityAt.map { now.timeIntervalSince($0) >= Self.microphoneReminderInterval } ?? true
         take.recording(destination: pendingAppBundleId,
                        badge: pendingTranslate.map { L10n.text("翻译") + " →" + $0.uppercased() }
                            ?? (pendingAssistant ? L10n.text("提示词模式") : ""))
-        if !microphone.isEmpty, remindMicrophone || microphone != lastMicrophoneName {
+        if microphoneHints.shouldShow(microphone, at: ProcessInfo.processInfo.systemUptime) {
             recordingBar.showMicrophoneHint(microphone)
         }
-        lastMicrophoneName = microphone
-        lastMicrophoneActivityAt = now
         let localServiceNeeded = settings.onlineASRProvider == .local && !serviceUp
         setHint(localServiceNeeded ? (model.serviceProblem.isEmpty ? L10n.text("本地服务未就绪") : model.serviceProblem) : nil,
                 warning: localServiceNeeded)
@@ -296,15 +324,17 @@ final class DictationController {
 
     func stopRecording(auto: Bool = false) {
         guard phase == .recording else { return }
+        let stoppedAt = ProcessInfo.processInfo.systemUptime
+        let doubao = doubaoCapture
+        doubaoCapture = nil
         let take = captureTake
         heldShortcut = false
-        lastMicrophoneActivityAt = Date()
         unregisterEscape()
         stopTick()
         OutputMuter.shared.restore()
         let app = pendingAppBundleId
         let field = pendingField
-        let language = settings.recognitionLanguage(for: model.speech?.modelId)
+        let language = doubao?.language ?? settings.recognitionLanguage(for: model.speech?.modelId)
         let strength = pendingAssistant ? "promptbeta" : "prompt"
         // A new 提示词模式 conversation starts from the selected text, revised by what was said.
         let baseline = !pendingAssistant || betaPending != nil ? nil : Self.hasText(field?.selection) ? field?.selection : copiedSelection
@@ -319,16 +349,17 @@ final class DictationController {
         if betaSession != nil { beta.setBusy(L10n.text("正在更新…")) }
         do {
             let r = try recorder.finish()
+            doubao?.audio.finish(byteCount: r.bytes)
             playSound(start: false)
             phase = .thinking
-            take?.processing()
             setHint(auto ? L10n.text("已到 {0} 秒上限 · thinking", recorder.maxSeconds) : nil)
             applyState()
             sendToServer(audioURL: r.url, appBundleId: app, language: language, strength: strength,
                          keepAudioPath: keep ? r.url.path : nil, seconds: r.seconds, field: field,
                          insert: true, deleteWhenDone: !keep, betaSession: betaSession, translateTo: translateTo,
-                         baseline: baseline, take: take)
+                         baseline: baseline, take: take, liveDoubao: doubao?.result, stoppedAt: stoppedAt)
         } catch {
+            doubao?.result.cancel()
             playSound(start: false)
             phase = .idle
             recordingStartedAt = nil
@@ -361,7 +392,8 @@ final class DictationController {
             applyState()
             updateIdleBar()
         case .recording:
-            lastMicrophoneActivityAt = Date()
+            doubaoCapture?.result.cancel()
+            doubaoCapture = nil
             unregisterEscape()
             stopTick()
             // A dictation can be taken back for a few seconds; an assistant answer cannot.
@@ -431,6 +463,21 @@ final class DictationController {
         target == nil && settings.keepAudio24h && settings.historyRetention.seconds != 0
     }
 
+    static func thinkingActivity(strength: String, translateTo: String?) -> RecordingBarModel.ThinkingActivity {
+        if translateTo != nil { return .translation }
+        if strength == VoiceStrength.promptbeta.rawValue { return .prompt }
+        return .transcription
+    }
+
+    private func certificationObserver(generation: UUID) -> () -> Void {
+        { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.phase == .thinking, self.progressID == generation else { return }
+                self.recordingBar.beginCertification()
+            }
+        }
+    }
+
     static func keepsHistory(translateTo target: String?, response: DictateResponse) -> Bool {
         target == nil && response.translated == nil && response.task != "translation"
     }
@@ -438,12 +485,10 @@ final class DictationController {
     func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
-                      translateTo: String? = nil, baseline: String? = nil, take: RecordingBar.Take? = nil) {
+                      translateTo: String? = nil, baseline: String? = nil, take: RecordingBar.Take? = nil,
+                      liveDoubao: Task<String, Error>? = nil, stoppedAt: TimeInterval? = nil) {
         phase = .thinking
         registerEscape()
-        if !recordingBar.isVisible { recordingBar.showThinking(detail: "") }
-        idleBar.hide()
-        applyState()
         let ordinaryDictation = translateTo == nil && strength != VoiceStrength.promptbeta.rawValue
         let skipCleanup = ordinaryDictation && !settings.dictationCleanupEnabled
         let shortCleanup = ordinaryDictation ? settings.shortDictationCleanup : nil
@@ -452,14 +497,27 @@ final class DictationController {
         // Read on the main thread, where Settings lives; the key comes from the Keychain.
         let previousBeta = betaSession == nil ? nil : betaPending
         let llm = skipCleanup ? nil : (ordinaryDictation ? settings.cleanupLLMRoute : previousBeta?.llm ?? settings.activeLLMRoute)
+        let activity = Self.thinkingActivity(strength: strength, translateTo: translateTo)
+        if let take { take.processing(activity: activity) }
+        else { recordingBar.showThinking(detail: "", activity: activity) }
+        idleBar.hide()
+        applyState()
         let canFailOver = llm != nil && settings.hasConfiguredBackupProviders
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
         let profile = skipCleanup ? "" : HistoryStore.shared.profile
         let ownPrompt = translateTo == nil ? nil : settings.customTranslatePrompt
-        let asrProvider = settings.onlineASRProvider
+        let asrProvider = liveDoubao == nil ? settings.onlineASRProvider : .doubao
         let usesOnlineASR = asrProvider != .local
         let progressID = UUID(); self.progressID = progressID
+        let observesCleanup = ordinaryDictation && !skipCleanup && (llm != nil || shortCleanup?.route != nil)
+        let onCleanupStart = observesCleanup ? certificationObserver(generation: progressID) : nil
+        let onProgress: ((TaskProgress) -> Void)? = ordinaryDictation ? nil : { [weak self] progress in
+            DispatchQueue.main.async {
+                guard let self, self.phase == .thinking, self.progressID == progressID else { return }
+                self.recordingBar.showThinking(detail: progress.label)
+            }
+        }
         let complete: (Result<DictateResponse, Error>) -> Void = { [weak self] outcome in
             if deleteWhenDone { try? FileManager.default.removeItem(at: audioURL) }
             DispatchQueue.main.async {
@@ -468,6 +526,11 @@ final class DictationController {
                         try? FileManager.default.removeItem(atPath: path)
                     }
                     return
+                }
+                if liveDoubao != nil, let stoppedAt, case .success(let response) = outcome,
+                   !response.insertableText.isEmpty {
+                    let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
+                    DiagnosticsLog.write("doubao.live-text-ready", ["ms": String(ms)])
                 }
                 self.onlineASRTask = nil
                 self.withBackupIfNeeded(outcome, generation: progressID, language: effectiveLanguage, strength: strength,
@@ -493,14 +556,27 @@ final class DictationController {
             let speechSmoothing = settings.doubaoSpeechSmoothing
             let hotwords = asrProvider == .doubao ? settings.doubaoHotwords : ""
             let ticket = client.generationTicket()
-            recordingBar.showThinking(detail: L10n.text("正在识别…"))
+            if !ordinaryDictation { recordingBar.showThinking(detail: L10n.text("正在识别…")) }
             onlineASRTask = Task.detached(priority: .userInitiated) {
                 do {
-                    let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
-                    try Task.checkCancellation()
-                    let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID,
-                                                               doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
-                    let spoken = try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
+                    let spoken: String
+                    if let liveDoubao {
+                        spoken = try await withTaskCancellationHandler {
+                            try await liveDoubao.value
+                        } onCancel: {
+                            liveDoubao.cancel()
+                        }
+                        if let stoppedAt {
+                            let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
+                            DiagnosticsLog.write("doubao.live-asr-final", ["ms": String(ms)])
+                        }
+                    } else {
+                        let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
+                        try Task.checkCancellation()
+                        let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID,
+                                                                   doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
+                        spoken = try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
+                    }
                     try Task.checkCancellation()
                     if skipCleanup && variants == nil {
                         var response = DictateResponse(text: spoken, raw: spoken, fallback: false)
@@ -516,7 +592,7 @@ final class DictationController {
                                     llm: llm, translateTo: translateTo, variants: variants, profile: profile,
                                     fieldContext: context, betaSession: betaSession, translatePrompt: ownPrompt, baseline: baseline,
                                     appHint: appBundleId, generationTicket: ticket, hasConfiguredBackups: canFailOver,
-                                    skipCleanup: skipCleanup, shortCleanup: shortCleanup)
+                                    skipCleanup: skipCleanup, shortCleanup: shortCleanup, onCleanupStart: onCleanupStart)
                                 if response.model == nil { response.model = asrProvider.label }
                                 return response
                             } catch let error as ServiceError
@@ -535,18 +611,13 @@ final class DictationController {
                 }
             }
         } else {
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).async {
                 complete(Result {
                     try client.dictateSync(wav: readAudio(), language: effectiveLanguage, appBundleId: appBundleId,
                         strength: strength, fieldContext: context, llm: llm, betaSession: betaSession,
                         translateTo: translateTo, variants: variants, profile: profile, baseline: baseline,
                         translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver, skipCleanup: skipCleanup,
-                        shortCleanup: shortCleanup, onProgress: { progress in
-                            DispatchQueue.main.async {
-                                guard let self, self.phase == .thinking, self.progressID == progressID else { return }
-                                self.recordingBar.showThinking(detail: progress.label)
-                            }
-                        })
+                        shortCleanup: shortCleanup, onProgress: onProgress, onCleanupStart: onCleanupStart)
                 })
             }
         }
@@ -569,6 +640,7 @@ final class DictationController {
         guard progressID == generation else { return }
         guard let first = routes.first else { completion(outcome, nil); return }
         if showsCapsule { recordingBar.showThinking(detail: L10n.text("正在切换备用模型…")) }
+        let onCleanupStart = showsCapsule && !isAssistant && translateTo == nil ? certificationObserver(generation: generation) : nil
         let ticket = client.generationTicket()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -576,7 +648,8 @@ final class DictationController {
                 var answer = try self.client.polishSync(text: text, language: language, strength: strength, llm: first,
                     translateTo: translateTo, variants: variants, profile: profile, fieldContext: context,
                     betaSession: retrySession, source: source, translatePrompt: translatePrompt, baseline: baseline, appHint: appBundleId,
-                    generationTicket: ticket, llmBackups: Array(routes.dropFirst()), retryInitial: isAssistant && betaSession == nil, betaSkip: betaSkip)
+                    generationTicket: ticket, llmBackups: Array(routes.dropFirst()), retryInitial: isAssistant && betaSession == nil, betaSkip: betaSkip,
+                    onCleanupStart: onCleanupStart)
                 if !answer.fallback && answer.beta?.notice == nil { answer.switchedProvider = true }
                 return answer
             }
@@ -684,7 +757,8 @@ final class DictationController {
     private func continueReviewedText(_ request: ReviewedRequest) {
         phase = .thinking
         registerEscape()
-        recordingBar.showThinking(detail: "")
+        let activity = Self.thinkingActivity(strength: request.strength, translateTo: request.translateTo)
+        recordingBar.showThinking(detail: "", activity: activity)
         idleBar.hide()
         if request.betaSession != nil { beta.setBusy(L10n.text("正在更新…")) }
         setHint(nil)
@@ -693,13 +767,15 @@ final class DictationController {
         let generation = UUID(); progressID = generation
         let requestTicket = client.generationTicket()
         let canFailOver = request.llm != nil && settings.hasConfiguredBackupProviders
+        let onCleanupStart = activity == .transcription && request.llm != nil ? certificationObserver(generation: generation) : nil
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let outcome = Result {
                 try self.client.polishSync(text: request.text, language: request.language, strength: request.strength, llm: request.llm,
                                            translateTo: request.translateTo, variants: request.variants, profile: request.profile,
                                            fieldContext: request.context, betaSession: request.betaSession, translatePrompt: request.translatePrompt,
-                                           baseline: request.baseline, appHint: request.appBundleId, generationTicket: requestTicket, hasConfiguredBackups: canFailOver)
+                                           baseline: request.baseline, appHint: request.appBundleId, generationTicket: requestTicket,
+                                           hasConfiguredBackups: canFailOver, onCleanupStart: onCleanupStart)
             }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
@@ -1103,7 +1179,7 @@ final class DictationController {
                               variants: String?, copyResult: Bool = false) {
         phase = .thinking
         registerEscape()
-        recordingBar.showThinking(detail: "")
+        recordingBar.showThinking(detail: "", activity: .prompt)
         applyState()
         let strength = VoiceStrength.promptbeta.rawValue
         let generation = UUID(); progressID = generation
@@ -1135,7 +1211,7 @@ final class DictationController {
         beta.hide()
         phase = .thinking
         registerEscape()
-        recordingBar.showThinking(detail: "")
+        recordingBar.showThinking(detail: "", activity: .prompt)
         applyState()
         let llm = pending.llm
         let language = pending.language

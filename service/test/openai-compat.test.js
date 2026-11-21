@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completeOpenAI, normalizeRoute, parseRouteHeader, routeLabel } from "../lib/openai-compat.js";
+import { completeOpenAI, normalizeRoute, parseRouteHeader, probeThinking, routeLabel } from "../lib/openai-compat.js";
 import { failureReason } from "../lib/llm.js";
 import { VoicePolishService } from "../lib/service.js";
 
@@ -127,4 +127,40 @@ test("a reply that spent its whole budget thinking is retried once with room to 
   await assert.rejects(completeOpenAI({ route, system: "S", user: "U", maxTokens: 64, timeoutMs: 2000, fetchImpl: always }),
     (error) => failureReason(error) === "model-max-tokens");
   assert.equal(always.calls.length, 2, "only one widening retry");
+});
+
+test("thinking probes compare on and off on only the selected model", async () => {
+  const route = normalizeRoute({ ...ROUTE, baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "fixture-model" });
+  const response = (thinking) => Response.json({ choices: [{ message: {
+    content: "608", ...(thinking ? { reasoning_content: "fixture reasoning" } : {}),
+  } }] });
+  const toggle = fakeFetch(n => response(n === 2));
+  assert.deepEqual(await probeThinking({ route, fetchImpl: toggle }), { mode: "toggle", control: "enableThinking" });
+  assert.deepEqual(toggle.calls.map(({body}) => [body.model, body.enable_thinking]), [
+    ["fixture-model", false], ["fixture-model", true],
+  ]);
+  const ignored = fakeFetch(() => response(false));
+  assert.equal(await probeThinking({ route, fetchImpl: ignored }), undefined);
+  const thinksInBoth = fakeFetch(() => response(true));
+  assert.deepEqual(await probeThinking({ route, fetchImpl: thinksInBoth }), { mode: "observed" });
+  const onlyOn = fakeFetch(n => n === 1
+    ? Response.json({ error: { message: "thinking only supports enabled" } }, { status: 400 })
+    : response(true));
+  assert.deepEqual(await probeThinking({ route, fetchImpl: onlyOn }), { mode: "alwaysOn", control: "enableThinking" });
+  const rateLimited = fakeFetch(n => n === 1 ? status(429) : response(true));
+  assert.deepEqual(await probeThinking({ route, fetchImpl: rateLimited }), { mode: "observed" });
+});
+
+test("explicit cleanup thinking settings reach the provider without silent fallback", async () => {
+  const route = normalizeRoute({ ...ROUTE, baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    thinkingMode: "enabled", thinkingControl: "enableThinking" });
+  const settings = { system: "S", user: "U", timeoutMs: 1000 };
+  const sent = fakeFetch(() => ok("OK"));
+  await completeOpenAI({ ...settings, route, fetchImpl: sent });
+  await completeOpenAI({ ...settings, route: { ...route, thinkingMode: "disabled" }, fetchImpl: sent });
+  await completeOpenAI({ ...settings, route: { ...route, thinkingMode: "default" }, fetchImpl: sent });
+  assert.deepEqual(sent.calls.map(({body}) => body.enable_thinking), [true, false, undefined]);
+  const rejects = fakeFetch(() => status(400));
+  await assert.rejects(completeOpenAI({ ...settings, route, fetchImpl: rejects }), { code: "HTTP_400" });
+  assert.equal(rejects.calls.length, 1);
 });

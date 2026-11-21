@@ -3,17 +3,17 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 普通听写按长度分流。25 字或词以内直接输出，26–100 简要整理，101 起完整整理。简要整理可指定小模型，DeepSeek 的完整整理可选择思考与推理强度。
-- 「个性化」可分别编辑、恢复简要整理、完整整理、翻译和提示词模式的提示词。默认完整整理更精简，有并列需求时按意思分点。
-- 听写与会议可各自选择本地或联网语音识别。豆包支持语义顺滑开关和自定义热词。使用联网听写时可删除闲置的本地模型权重。
-- 已保存的 API Key 在钥匙串锁定时显示为待解锁。调整首页统计、侧栏字标、设置分类和录音波形。
+- 听写胶囊先居中显示 Futura 的 Thinking。整理模型接手后，标题轻微上移，底部淡入一条衬线状态词。11 个词随机轮换，连续两次整理使用不同词。
+- 豆包听写在录音时流式传输，停录后只交付最终转写。联网语音识别可测试连接并查看延迟。
+- 听写整理可单独关闭。启用后，短句做基础纠错，中等长度轻度整理，长段落按意思组织。支持思考开关的模型会显示相应选项。
+- 设置重新打开时回到顶部。减少同一麦克风的重复提示，调慢首页统计和活动热力图的动效。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Dictation inserts transcripts of up to 25 characters or words directly, uses brief cleanup for 26–100, and runs full cleanup from 101. Brief cleanup can use a small model. DeepSeek full cleanup has optional thinking and reasoning effort.
-- Personalization now lets you edit or restore the prompts for brief cleanup, full cleanup, translation, and prompt mode independently. The default full cleanup prompt is shorter and groups distinct requests into numbered items.
-- Choose local or online recognition separately for dictation and meetings. Doubao supports optional speech smoothing and custom hotwords. You can remove unused local model weights while using online dictation.
-- Saved API keys show when they are waiting for Keychain unlock. Home statistics, the sidebar wordmark, Settings categories, and the recording waveform have been refined.
+- The dictation capsule starts with a centered Thinking label in Futura. When cleanup starts, the title lifts slightly and a serif status word fades in beneath it. The app rotates through eleven words and avoids consecutive repeats.
+- Doubao streams audio during dictation and delivers the final transcript after recording stops. Online recognition settings can test the connection and show its latency.
+- Dictation cleanup is optional. When enabled, short transcripts get basic corrections, medium transcripts get light editing, and long transcripts get structured cleanup. Settings show a thinking switch for models that support it.
+- Settings returns to the top when reopened. Microphone reminders appear less often, and Home statistics and activity animate more slowly.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

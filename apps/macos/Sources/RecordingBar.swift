@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import SwiftUI
 import QuartzCore
 
@@ -117,8 +118,22 @@ struct RecordingBarModel {
         case selectionCount
     }
 
+    enum ThinkingActivity: Equatable {
+        case cleanup
+        case prompt
+        case translation
+        case transcription
+    }
+
+    static let cleanupSubtitles = [
+        "Certify", "Polishing", "Refining", "Editing", "Tidying", "Organizing",
+        "Structuring", "Revising", "Proofreading", "Reviewing", "Finalizing",
+    ]
+
     private(set) var phase: Phase = .hidden
     private(set) var isProcessingCapture = false
+    private(set) var thinkingActivity: ThinkingActivity?
+    private var lastCleanupSubtitle: String?
     private(set) var destination = ""
     private(set) var detail = ""
     /// The mode used by this recording, or the translation target.
@@ -138,6 +153,15 @@ struct RecordingBarModel {
 
     var isVisible: Bool { phase != .hidden }
     var showsRecordingControls: Bool { phase == .recording && mode == .handsFree }
+    var isDictationThinking: Bool { thinkingActivity == .transcription || thinkingActivity == .cleanup }
+    var thinkingSubtitle: String? {
+        switch thinkingActivity {
+        case .cleanup: return lastCleanupSubtitle
+        case .prompt: return "Prompt"
+        case .translation: return "Translation"
+        case .transcription, nil: return nil
+        }
+    }
 
     mutating func showRecording(destination: String, badge: String = "", mode: RecordingBarMode = .handsFree) {
         self.mode = mode
@@ -152,6 +176,7 @@ struct RecordingBarModel {
         history.reset()
         phase = .recording
         isProcessingCapture = false
+        thinkingActivity = nil
         requiresReview = false
     }
 
@@ -170,20 +195,30 @@ struct RecordingBarModel {
         self.badge = badge
     }
 
-    mutating func showThinking(detail: String, startingMicrophone: Bool = false) {
+    mutating func showThinking(detail: String, startingMicrophone: Bool = false, activity: ThinkingActivity? = nil) {
         self.detail = detail
         isStartingMicrophone = startingMicrophone
+        if startingMicrophone || phase != .thinking || activity != nil { thinkingActivity = activity }
         phase = .thinking
         if startingMicrophone { isProcessingCapture = false }
     }
 
-    mutating func processing() {
-        showThinking(detail: "")
+    mutating func processing(activity: ThinkingActivity = .transcription) {
+        showThinking(detail: "", activity: activity)
         isProcessingCapture = true
+    }
+
+    mutating func beginCertification() -> Bool {
+        guard phase == .thinking, thinkingActivity == .transcription, !isStartingMicrophone else { return false }
+        lastCleanupSubtitle = Self.cleanupSubtitles.filter { $0 != lastCleanupSubtitle }.randomElement()
+        detail = ""
+        thinkingActivity = .cleanup
+        return true
     }
 
     mutating func showResult(_ text: String, warning: Bool, requiresReview: Bool = false) {
         isProcessingCapture = false
+        thinkingActivity = nil
         isStartingMicrophone = false
         resultText = RecordingBarFormat.summary(text)
         self.warning = warning
@@ -200,6 +235,7 @@ struct RecordingBarModel {
     mutating func hide() {
         phase = .hidden
         isProcessingCapture = false
+        thinkingActivity = nil
         destination = ""
         detail = ""
         badge = ""
@@ -271,6 +307,9 @@ final class PillView: NSView {
             if model.phase != oldValue.phase || model.mode != oldValue.mode || model.isStartingMicrophone != oldValue.isStartingMicrophone {
                 phaseChanged(from: oldValue)
             }
+            if model.thinkingActivity != oldValue.thinkingActivity {
+                certificationBeganAt = model.thinkingActivity == .cleanup ? phaseElapsed : nil
+            }
             // The animation timer paints recording frames. Audio samples must
             // not schedule another independent series of redraws between them.
             if model.phase != .recording || reduceMotion { needsDisplay = true }
@@ -289,6 +328,7 @@ final class PillView: NSView {
     private static let handoffFade = VoiceBarGeometry.shapeDuration
     private var spinnerPhase: CGFloat = 0
     private var phaseElapsed: Double = 0
+    private var certificationBeganAt: TimeInterval?
     private var lastAdvancedAt = ProcessInfo.processInfo.systemUptime
     private static let ink = VoiceBarPalette.ink
     private var cancelHover = false
@@ -320,8 +360,73 @@ final class PillView: NSView {
     }
     /// Font of the result line.
     static let resultFont = InterfaceTypography.localizedAppKit(14, weight: .medium)
-    private static let thinkingFont = NSFont.systemFont(ofSize: 15, weight: .semibold)
+    private static let dictationTitleSize: CGFloat = 21
+    private static let stackedDictationTitleScale = 16 / dictationTitleSize
+    private static let dictationThinkingFont = NSFont(name: "Futura-Medium", size: dictationTitleSize)
+        ?? NSFont.systemFont(ofSize: dictationTitleSize, weight: .semibold)
+    private static let thinkingFont = NSFontManager.shared.convert(dictationThinkingFont, toSize: 15)
+    private static let thinkingSubtitleFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+    private static let cleanupSubtitleFont: NSFont = {
+        let fontName = "AnthropicSerifVariable-TextRegular"
+        let size: CGFloat = 13
+        if let installed = NSFont(name: fontName, size: size) { return installed }
+
+        // A local font can live beside user data, outside the signed app bundle.
+        let url = URL(fileURLWithPath: ServiceClient.stateDirectory, isDirectory: true)
+            .appendingPathComponent("Fonts", isDirectory: true)
+            .appendingPathComponent("AnthropicSerif.woff2")
+        if let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+           let descriptors = CTFontManagerCreateFontDescriptorsFromData(data as CFData) as? [CTFontDescriptor],
+           let descriptor = descriptors.first(where: {
+               CTFontDescriptorCopyAttribute($0, kCTFontNameAttribute) as? String == fontName
+           }) {
+            return CTFontCreateWithFontDescriptor(descriptor, size, nil) as NSFont
+        }
+
+        return NSFont(name: "Georgia", size: 12)
+            ?? NSFont(name: "Times New Roman", size: 12)
+            ?? thinkingSubtitleFont
+    }()
+    private static let cleanupSubtitleInset: CGFloat = 6
     private static let processingFont = InterfaceTypography.localizedAppKit(13, weight: .medium)
+    private static let thinkingWaveCount = 8
+    private static let thinkingWaveSpacing: CGFloat = 6
+    private static let thinkingWaveRadius: CGFloat = 1.75
+    private static let thinkingWaveGap: CGFloat = 8
+    private static let thinkingWaveWidth = CGFloat(thinkingWaveCount - 1) * thinkingWaveSpacing + 2 * thinkingWaveRadius
+    private static let dictationThinkingTextWidth: CGFloat = {
+        let title = ("Thinking" as NSString).size(withAttributes: [.font: dictationThinkingFont]).width
+        let subtitleAttributes: [NSAttributedString.Key: Any] = [.font: cleanupSubtitleFont]
+        let subtitle = RecordingBarModel.cleanupSubtitles
+            .map { ($0 as NSString).size(withAttributes: subtitleAttributes).width }
+            .max() ?? 0
+        return ceil(max(title, subtitle + cleanupSubtitleInset)) + 1
+    }()
+
+    var certificationMotion: (lift: CGFloat, titleScale: CGFloat, reveal: CGFloat) {
+        guard model.thinkingActivity == .cleanup else { return (0, 1, 0) }
+        let settled: (CGFloat, CGFloat, CGFloat) = (8, Self.stackedDictationTitleScale, 1)
+        guard !reduceMotion, let certificationBeganAt else { return settled }
+        let elapsed = phaseElapsed - certificationBeganAt
+        guard elapsed < 0.395 else { return settled }
+
+        func ease(_ fraction: TimeInterval) -> CGFloat {
+            let t = min(1, max(0, fraction))
+            return CGFloat(t * t * (3 - 2 * t))
+        }
+        let rise = ease(elapsed / 0.27)
+        let settle = ease((elapsed - 0.27) / 0.125)
+        let titleScale = 1 - (1 - Self.stackedDictationTitleScale) * rise
+        return (9.3 * rise - 1.3 * settle, titleScale, ease((elapsed - 0.17) / 0.215))
+    }
+
+    private static func thinkingTextWidth(for model: RecordingBarModel) -> CGFloat {
+        if model.isDictationThinking { return dictationThinkingTextWidth }
+        let titleWidth = ceil(("Thinking" as NSString).size(withAttributes: [.font: thinkingFont]).width) + 1
+        guard let subtitle = model.thinkingSubtitle else { return titleWidth }
+        let subtitleWidth = ceil((subtitle as NSString).size(withAttributes: [.font: thinkingSubtitleFont]).width) + 1
+        return max(titleWidth, subtitleWidth)
+    }
 
     /// Capsule width for the current look; the host sizes the panel to it.
     static func width(for model: RecordingBarModel, limit: Double) -> CGFloat {
@@ -331,7 +436,10 @@ final class PillView: NSView {
             return model.mode.width + (limit - model.elapsed <= countdownSeconds ? 40 : 0)
         case .thinking:
             if model.isStartingMicrophone { return VoiceBarGeometry.starting.width }
-            if model.isProcessingCapture || model.detail.isEmpty { return thinkingWidth }
+            if model.isProcessingCapture || model.detail.isEmpty {
+                let textWidth = thinkingTextWidth(for: model)
+                return max(thinkingWidth, textWidth + thinkingWaveGap + thinkingWaveWidth + 26)
+            }
             return 94 + min(220, ceil((model.detail as NSString).size(withAttributes: [.font: processingFont]).width))
         case .selectionCount:
             return ceil((model.resultText as NSString).size(withAttributes: [.font: resultFont]).width) + 36
@@ -448,7 +556,12 @@ final class PillView: NSView {
         cancelHoverAmount = 0
         stopHoverAmount = 0
         if model.phase != previous.phase {
-            waveform.reset()
+            if model.phase == .recording && !reduceMotion {
+                let phaseRange = 0..<(2 * Double.pi)
+                waveform.reset(edgePhases: SIMD3(.random(in: phaseRange), .random(in: phaseRange), .random(in: phaseRange)))
+            } else {
+                waveform.reset()
+            }
         }
         cancelButton.isHidden = !model.showsRecordingControls
         stopButton.isHidden = !model.showsRecordingControls
@@ -592,16 +705,31 @@ final class PillView: NSView {
 
     private func drawThinking() {
         if model.isProcessingCapture || model.detail.isEmpty {
-            let label = "Thinking"
-            let textWidth = ceil((label as NSString).size(withAttributes: [.font: Self.thinkingFont]).width) + 1
-            let count = 8
-            let spacing: CGFloat = 6
-            let radius: CGFloat = 1.75
-            let gap: CGFloat = 8
-            let dotsWidth = CGFloat(count - 1) * spacing + 2 * radius
-            let x = bounds.midX - (textWidth + gap + dotsWidth) / 2
-            drawText(label, x: x, centerY: bounds.midY, width: textWidth, font: Self.thinkingFont, color: Self.ink)
-            drawThinkingDots(count: count, start: x + textWidth + gap + radius, spacing: spacing, radius: radius)
+            guard let context = NSGraphicsContext.current?.cgContext else { return }
+            let textWidth = Self.thinkingTextWidth(for: model)
+            let x = bounds.midX - (textWidth + Self.thinkingWaveGap + Self.thinkingWaveWidth) / 2
+            let subtitle = model.thinkingSubtitle
+            let motion = certificationMotion
+            let titleLift = model.isDictationThinking ? motion.lift : (subtitle == nil ? 0 : 7)
+            let titleFont = model.isDictationThinking ? Self.dictationThinkingFont : Self.thinkingFont
+            context.saveGState()
+            context.translateBy(x: x, y: bounds.midY + titleLift)
+            context.scaleBy(x: motion.titleScale, y: motion.titleScale)
+            drawText("Thinking", x: 0, centerY: 0, width: textWidth, font: titleFont, color: Self.ink)
+            context.restoreGState()
+
+            let cleanup = model.thinkingActivity == .cleanup
+            let reveal = cleanup ? motion.reveal : 1
+            if let subtitle, reveal > 0 {
+                let subtitleY = bounds.midY - 8.5 - (1 - reveal) * 3
+                let inset = cleanup ? Self.cleanupSubtitleInset : 0
+                drawText(subtitle, x: x + inset, centerY: subtitleY, width: textWidth - inset,
+                         font: cleanup ? Self.cleanupSubtitleFont : Self.thinkingSubtitleFont,
+                         color: Self.ink.withAlphaComponent(0.78 * reveal))
+            }
+            drawThinkingDots(count: Self.thinkingWaveCount,
+                             start: x + textWidth + Self.thinkingWaveGap + Self.thinkingWaveRadius,
+                             spacing: Self.thinkingWaveSpacing, radius: Self.thinkingWaveRadius)
             return
         }
         drawThinkingDots(count: 3, start: 29, spacing: 10, radius: 2.4)
@@ -951,10 +1079,10 @@ final class RecordingBar {
             apply { $0.update(level: value, elapsed: elapsed) }
         }
 
-        func processing() {
+        func processing(activity: RecordingBarModel.ThinkingActivity = .transcription) {
             apply {
                 guard $0.model.phase == .recording else { return }
-                $0.model.processing()
+                $0.model.processing(activity: activity)
                 $0.showThinking(detail: "")
             }
         }
@@ -1002,7 +1130,7 @@ final class RecordingBar {
         }
     }
 
-    /// A short reminder after cold/idle capture. It never takes keyboard or mouse focus.
+    /// Show the capture device without taking keyboard or mouse focus.
     func showMicrophoneHint(_ name: String) {
         onMain { [self] in
             self.hideMicrophoneHint()
@@ -1049,15 +1177,22 @@ final class RecordingBar {
     }
 
     /// Transcription / cleanup in flight.
-    func showThinking(detail: String, startingMicrophone: Bool = false) {
+    func showThinking(detail: String, startingMicrophone: Bool = false, activity: RecordingBarModel.ThinkingActivity? = nil) {
         onMain {
             self.cancelPendingFade()
             self.hideMicrophoneHint()
-            self.model.showThinking(detail: detail, startingMicrophone: startingMicrophone)
+            self.model.showThinking(detail: detail, startingMicrophone: startingMicrophone, activity: activity)
             self.pill.reduceMotion = RecordingBar.prefersReducedMotion
             self.pushModel()
             self.present()
             self.startTimer()
+        }
+    }
+
+    func beginCertification() {
+        onMain {
+            guard self.model.beginCertification() else { return }
+            self.pushModel()
         }
     }
 
@@ -1128,6 +1263,7 @@ final class RecordingBar {
         let isCountingDown = limitSeconds - model.elapsed <= PillView.countdownSeconds
         let widthChanged = previous.phase != model.phase || previous.badge != model.badge
             || previous.detail != model.detail || previous.resultText != model.resultText
+            || previous.thinkingActivity != model.thinkingActivity
             || previous.mode != model.mode || previous.isStartingMicrophone != model.isStartingMicrophone
             || wasCountingDown != isCountingDown
         pill.model = model
