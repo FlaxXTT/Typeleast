@@ -127,12 +127,19 @@ struct RecordingBarModel {
     static let cleanupSubtitles = [
         "Certify", "Polishing", "Refining", "Editing", "Tidying", "Organizing",
         "Structuring", "Revising", "Proofreading", "Reviewing", "Finalizing",
+        "Clarifying", "Correcting", "Formatting", "Rephrasing", "Rewriting", "Shaping", "Smoothing",
+        "Sculpting", "Distilling", "Aligning", "Arranging", "Tuning", "Composing",
+    ]
+    static let promptSubtitles = [
+        "Prompt", "Instruction", "Context", "Directive", "Request", "Brief", "Cue",
+        "Primer", "Invocation", "Spell", "Incantation",
     ]
 
     private(set) var phase: Phase = .hidden
     private(set) var isProcessingCapture = false
     private(set) var thinkingActivity: ThinkingActivity?
     private var lastCleanupSubtitle: String?
+    private var lastPromptSubtitle: String?
     private(set) var destination = ""
     private(set) var detail = ""
     /// The mode used by this recording, or the translation target.
@@ -156,7 +163,7 @@ struct RecordingBarModel {
     var thinkingSubtitle: String? {
         switch thinkingActivity {
         case .cleanup: return lastCleanupSubtitle
-        case .prompt: return "Prompt"
+        case .prompt: return lastPromptSubtitle ?? "Prompt"
         case .translation: return "Translation"
         case .transcription, nil: return nil
         }
@@ -197,6 +204,13 @@ struct RecordingBarModel {
     mutating func showThinking(detail: String, startingMicrophone: Bool = false, activity: ThinkingActivity? = nil) {
         self.detail = detail
         isStartingMicrophone = startingMicrophone
+        if activity == .prompt && (phase != .thinking || thinkingActivity != .prompt) {
+            if let previous = lastPromptSubtitle {
+                lastPromptSubtitle = Self.promptSubtitles.filter { $0 != previous }.randomElement()
+            } else {
+                lastPromptSubtitle = "Prompt"
+            }
+        }
         if startingMicrophone || phase != .thinking || activity != nil { thinkingActivity = activity }
         phase = .thinking
         if startingMicrophone { isProcessingCapture = false }
@@ -384,6 +398,12 @@ final class PillView: NSView {
             .max() ?? 0
         return ceil(max(title, subtitle + cleanupSubtitleInset)) + 1
     }()
+    private static let promptThinkingTextWidth: CGFloat = {
+        let title = ("Thinking" as NSString).size(withAttributes: [.font: thinkingFont]).width
+        let attributes: [NSAttributedString.Key: Any] = [.font: thinkingSubtitleFont]
+        let widest = RecordingBarModel.promptSubtitles.map { ($0 as NSString).size(withAttributes: attributes).width }.max() ?? 0
+        return ceil(max(title, widest)) + 1
+    }()
 
     var certificationMotion: (lift: CGFloat, titleScale: CGFloat, reveal: CGFloat) {
         guard model.thinkingActivity == .cleanup else { return (0, 1, 0) }
@@ -404,6 +424,7 @@ final class PillView: NSView {
 
     private static func thinkingTextWidth(for model: RecordingBarModel) -> CGFloat {
         if model.isDictationThinking { return dictationThinkingTextWidth }
+        if model.thinkingActivity == .prompt { return promptThinkingTextWidth }
         let titleWidth = ceil(("Thinking" as NSString).size(withAttributes: [.font: thinkingFont]).width) + 1
         guard let subtitle = model.thinkingSubtitle else { return titleWidth }
         let subtitleWidth = ceil((subtitle as NSString).size(withAttributes: [.font: thinkingSubtitleFont]).width) + 1

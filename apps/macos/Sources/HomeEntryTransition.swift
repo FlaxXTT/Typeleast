@@ -3,7 +3,7 @@ import SwiftUI
 struct HomeEntryMask: View {
     var body: some View {
         Color.white
-            .overlay { AppMarkView(size: 82) }
+            .overlay { AppMarkView(size: 82, surface: .waveformOnly) }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

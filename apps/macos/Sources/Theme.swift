@@ -71,17 +71,19 @@ enum Theme {
     static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
     /// The Home insights: white tiles on a lightly dotted panel, and the heatmap's blues.
-    static let homeRatio: CGFloat = 0.618
+    static let homeRatio: CGFloat = 0.65
     static let homeHeadingSize: CGFloat = 48
     static let homeFigureSize: CGFloat = 26
     static let homeSecondarySize: CGFloat = 13
-    static let tile = dynamic(hex(0xFFFFFF), hex(0x3C3B3B))
+    static let tileDarkRGB: UInt32 = 0x3C3B3B
+    static let tile = dynamic(hex(0xFFFFFF), hex(tileDarkRGB))
     static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
     static let homeBackdrop = dynamic(hex(0xEEEAE5), hex(0x242121))
     static let homeDot = dynamic(hex(0xDAD4CD), hex(0x444040))
     static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
-    static let heatEmpty = dynamic(hex(0xF8F8F8), hex(0x2C2B2B))
+    static let heatEmpty = dynamic(hex(0xE8E8E8), hex(0x2C2B2B))
+    static let heatHatch = dynamic(hex(0xC5C5C5), hex(0xF2F1F0, 0.06))
     static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
                        dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(royalCobalt, hex(0x6E8BF5))]
 }
@@ -312,9 +314,10 @@ enum AppMark {
 
 struct AppMarkView: View {
     var size: CGFloat = 28
+    var surface: AppIconArtwork.Surface = .interface
 
     var body: some View {
-        Image(nsImage: AppIconArtwork.image(size: size, surface: .interface))
+        Image(nsImage: AppIconArtwork.image(size: size, surface: surface))
             .resizable()
             .frame(width: size, height: size)
             .accessibilityHidden(true)

@@ -3,15 +3,15 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 首页入场新增居中的 Logo 遮罩。淡出后播放统计数字和最近 133 天的活动热力图。
-- 主窗口和设置使用原生 Push 切页，并为首页引擎显示模型品牌标志。
-- 豆包热词支持回车换行和自动保存。整理阶段的胶囊状态词使用系统 Big Caslon。
+- 首页新增 Cadence 热力图标题与 Rhythm 活跃天数。时段词随本机时间变化，并与 TypeLeast 字标首字母同色。
+- 侧栏字标和波形略微放大，新增粉色、电影灵感等随机配色。首页入场遮罩仅显示波形。
+- 整理与提示词模式各自使用扩展后的状态词，避免连续重复。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Home shows a brief centered logo before animating its numbers and 133-day activity grid.
-- The main window and Settings use native Push transitions. Home shows brand marks beside the active engines.
-- Press Return to separate Doubao hotwords. Changes save automatically. Cleanup status words use the system Big Caslon font.
+- Home adds the Cadence heatmap heading and Rhythm active-day readout. The time-of-day label follows local time and shares the TypeLeast initial’s color.
+- The sidebar wordmark and waveform are slightly larger, with new pink and cinema-inspired palettes. The Home entry mask shows a bare waveform.
+- Cleanup and Prompt Mode use expanded, separate sets of status words and avoid consecutive repeats.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

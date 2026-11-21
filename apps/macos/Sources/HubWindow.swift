@@ -246,6 +246,7 @@ struct HubRootView: View {
         .overlay(alignment: .top) {
             if !model.settingsPresented {
                 WindowDragRegion().frame(height: 44).padding(.leading, 84)
+                    .padding(.trailing, model.page == .home ? 128 : 0)
             }
         }
         .overlay(alignment: .bottomTrailing) { HubNoticeStack() }
@@ -267,7 +268,7 @@ private struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             SidebarBrand(palette: model.sidebarBrandPalette)
-                .padding(.bottom, 16)
+                .padding(.bottom, 12)
                 .overlay { if !model.settingsPresented { WindowDragRegion() } }
 
             ForEach([HubPage.home, .history, .meetings]) { page in

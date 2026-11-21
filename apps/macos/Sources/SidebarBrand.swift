@@ -12,34 +12,54 @@ struct SidebarBrandPalette: Equatable {
         let bars: [Bar]
         let t: UInt32
         let l: UInt32
+
+        var initialTint: Color { brandColor(t) }
     }
 
     let light: Appearance
     let dark: Appearance
 
+    func appearance(for colorScheme: ColorScheme) -> Appearance {
+        colorScheme == .dark ? dark : light
+    }
+
     static let all = [
         Self([0xE5B63E, 0x24405D]),                         // 教养黄、古蓝
         Self([0xC24438, 0xCDB7BF, 0x292123]),               // 朱砂红、羊皮紫米、书卷浓黑
-        Self([0xA4CE46, 0x175FF5]),                         // 抹茶荧光绿、生物电蓝
         Self([0xE5E8F5, 0xE26B30]),                         // 月光白、热力珠菊
         Self([0xEEF4F7, 0x212A32, 0xD82453]),               // 冷感纸白、科技炭黑、信号绯红
-        Self([0x42A567, 0xF2DA39, 0xEB79B7]),               // 草木鲜绿、柠檬亮黄、泡泡糖粉
         Self([0x171829, 0xD9E3F3, 0x834AF5]),               // 午夜深黑、银月冷白、电光紫罗兰
         Self([0xD6A67D, 0x82738E, 0x2B52BA, 0xF08A4B]),     // 暖杏沙色、灰紫、半调克莱因蓝、落日暖橙
-        Self([0x8759F4, 0xF1A7CF, 0xEFCF2B, 0x24232C, 0xF15B3B]), // 电光丁香紫、樱花粉、饱和黄、碳素墨黑、荧光朱橘
-        Self([0xE8B74D, 0xF1E9D7, 0x367B60]),               // 芝士奶黄、糯米白、灵魂绿
+        Self([0x285F9B, 0x32746D], darkInitialBackground: Theme.tileDarkRGB), // 青瓷蓝、海松绿
+        Self([0x2B604B, 0x5F7971], darkInitialBackground: Theme.tileDarkRGB), // 杉绿、青灰
+        Self([0x5A4A9A, 0x43739C], darkInitialBackground: Theme.tileDarkRGB), // 鸢尾紫、雾蓝
+        Self([0x823F62, 0xA75564], darkInitialBackground: Theme.tileDarkRGB), // 桑椹、干玫瑰
+        Self([0x2D4279, 0xA45442], darkInitialBackground: Theme.tileDarkRGB), // 靛青、赤陶
+        Self([0xB54C7A, 0x5973C9], darkInitialBackground: Theme.tileDarkRGB), // 蔷薇粉、矢车菊蓝
+        Self([0xB94167, 0x258273], darkInitialBackground: Theme.tileDarkRGB), // 草莓粉、薄荷青
+        Self([0xBD5773, 0xD1804F], darkInitialBackground: Theme.tileDarkRGB), // 蜜桃粉、杏子橙
+        Self([0xC8588D, 0x8661B5], darkInitialBackground: Theme.tileDarkRGB), // 樱花粉、绣球紫
+        Self([0xAE386E, 0xE9C647], darkInitialBackground: Theme.tileDarkRGB), // 覆盆子粉、柠檬黄
+        Self([0x930F2C, 0x265B53], darkInitialBackground: Theme.tileDarkRGB), // 雨巷绯灯
+        Self([0x244983, 0x579A96], darkInitialBackground: Theme.tileDarkRGB), // 海面微光
+        Self([0x5242A2, 0xB66C97], darkInitialBackground: Theme.tileDarkRGB), // 黄昏二重奏
+        Self([0xB94D24, 0x445D76], darkInitialBackground: Theme.tileDarkRGB), // 橙雾尽头
+        Self([0xA13732, 0x465B81], darkInitialBackground: Theme.tileDarkRGB), // 海岸篝火
+        Self([0x683E83, 0xBD7F94], darkInitialBackground: Theme.tileDarkRGB), // 雪夜糖盒
     ]
 
     static func random(excluding previous: Self? = nil) -> Self {
         all.filter { $0 != previous }.randomElement() ?? all[0]
     }
 
-    private init(_ colors: [UInt32]) {
+    private init(_ colors: [UInt32], darkInitialBackground: UInt32 = Theme.sidebarDarkRGB) {
         light = Self.appearance(colors, barInk: AppIconArtwork.waveformInk, background: Theme.sidebarLightRGB, towards: 0x000000)
-        dark = Self.appearance(colors, barInk: 0xFFFFFF, background: Theme.sidebarDarkRGB, towards: 0xFFFFFF)
+        dark = Self.appearance(colors, barInk: 0xFFFFFF, background: Theme.sidebarDarkRGB,
+                               towards: 0xFFFFFF, initialBackground: darkInitialBackground)
     }
 
-    private static func appearance(_ colors: [UInt32], barInk: UInt32, background: UInt32, towards ink: UInt32) -> Appearance {
+    private static func appearance(_ colors: [UInt32], barInk: UInt32, background: UInt32,
+                                   towards ink: UInt32, initialBackground: UInt32? = nil) -> Appearance {
         let accentFill = colors[colors.count > 3 ? 2 : colors.count - 1]
         let bars = AppIconArtwork.barRatios.indices.map { index in
             let fill = index == AppIconArtwork.barRatios.count - 1 ? accentFill : barInk
@@ -49,7 +69,7 @@ struct SidebarBrandPalette: Equatable {
             return Bar(fill: fill, edge: edge)
         }
         return Appearance(bars: bars,
-                          t: readable(colors[0], background: background, towards: ink, minimum: 4.5),
+                          t: readable(colors[0], background: initialBackground ?? background, towards: ink, minimum: 4.5),
                           l: readable(colors[colors.count - 1], background: background, towards: ink, minimum: 4.5))
     }
 
@@ -98,13 +118,13 @@ struct SidebarBrand: View {
     @Environment(\.colorScheme) private var colorScheme
     let palette: SidebarBrandPalette
 
-    private static let iconSize: CGFloat = 32
+    private static let iconSize: CGFloat = 36
 
     var body: some View {
-        let appearance = colorScheme == .dark ? palette.dark : palette.light
+        let appearance = palette.appearance(for: colorScheme)
         HStack(spacing: 9) {
             waveform(appearance)
-            SidebarWordmark(tintT: color(appearance.t), tintL: color(appearance.l))
+            SidebarWordmark(tintT: appearance.initialTint, tintL: brandColor(appearance.l))
             Spacer(minLength: 0)
         }
     }
@@ -115,9 +135,9 @@ struct SidebarBrand: View {
             ForEach(appearance.bars.indices, id: \.self) { index in
                 let bar = appearance.bars[index]
                 Capsule()
-                    .fill(color(bar.fill))
+                    .fill(brandColor(bar.fill))
                     .overlay {
-                        if let edge = bar.edge { Capsule().strokeBorder(color(edge), lineWidth: 0.6) }
+                        if let edge = bar.edge { Capsule().strokeBorder(brandColor(edge), lineWidth: 0.6) }
                     }
                     .frame(width: size * 0.10, height: size * AppIconArtwork.waveformOccupancy * AppIconArtwork.barRatios[index])
             }
@@ -125,11 +145,11 @@ struct SidebarBrand: View {
         .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
+}
 
-    private func color(_ rgb: UInt32) -> Color {
-        Color(.sRGB, red: Double(rgb >> 16 & 255) / 255,
-              green: Double(rgb >> 8 & 255) / 255, blue: Double(rgb & 255) / 255)
-    }
+private func brandColor(_ rgb: UInt32) -> Color {
+    Color(.sRGB, red: Double(rgb >> 16 & 255) / 255,
+          green: Double(rgb >> 8 & 255) / 255, blue: Double(rgb & 255) / 255)
 }
 
 private struct SidebarWordmark: View {
@@ -137,7 +157,7 @@ private struct SidebarWordmark: View {
     let tintL: Color
 
     private static let design = WordmarkOutline()
-    private static let nominalScale: CGFloat = 0.19
+    private static let nominalScale: CGFloat = 0.212
 
     var body: some View {
         let design = Self.design
