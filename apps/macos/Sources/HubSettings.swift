@@ -81,7 +81,7 @@ struct SettingsPage: View {
                             Text(category.title).font(Theme.rowFont)
                             Spacer()
                         }
-                        .foregroundColor(selected ? Theme.accent : Theme.secondary)
+                        .foregroundColor(selected ? Theme.ink : Theme.secondary)
                         .padding(.horizontal, 8).frame(height: 36)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: Theme.radius)
@@ -96,29 +96,32 @@ struct SettingsPage: View {
             .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 20)
             .frame(width: Self.sidebarWidth).background(Theme.sidebar)
             Divider().overlay(Theme.border)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(model.settingsCategory.title).font(Theme.sectionTitleFont)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
-                HubScrollView(key: model.settingsCategory.rawValue, memory: scrollMemory, showsProgress: false) {
-                    LazyVStack(alignment: .leading, spacing: 16) {
-                        switch model.settingsCategory {
-                        case .dictation: shortcuts; language; audio; cleanup
-                        case .translation: translationShortcut; selectionTranslation
-                        case .prompts: promptFiles
-                        case .models:
-                            if model.credentialsLocked {
-                                SettingsSection { CredentialUnlockRow() }
+            HubPageTransition(selection: model.settingsCategory) { category in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(category.title).font(Theme.sectionTitleFont)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
+                    HubScrollView(key: category.rawValue, memory: scrollMemory, showsProgress: false) {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            switch category {
+                            case .dictation: shortcuts; language; audio; cleanup
+                            case .translation: translationShortcut; selectionTranslation
+                            case .prompts: promptFiles
+                            case .models:
+                                if model.credentialsLocked {
+                                    SettingsSection { CredentialUnlockRow() }
+                                }
+                                OnlineASRSettings()
+                                speech
+                                ModelSection()
+                            case .general: general; privacy; permissions; updates; advanced
                             }
-                            OnlineASRSettings()
-                            speech
-                            ModelSection()
-                        case .general: general; privacy; permissions; updates; advanced
                         }
+                        .padding(.horizontal, 36).padding(.bottom, 24)
                     }
-                    .padding(.horizontal, 36).padding(.bottom, 24)
                 }
-                .id(model.settingsCategory)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.tile)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -136,6 +139,10 @@ struct SettingsPage: View {
         .onExitCommand { onClose() }
         .onChange(of: model.settingsCategory) { _ in
             if meter.running { meter.stop() }
+            if activeHotkeySlot != nil {
+                activeHotkeySlot = nil
+                FnKeyMonitor.shared.capturingShortcut = false
+            }
             refreshLoginStatus()
         }
         .onAppear {

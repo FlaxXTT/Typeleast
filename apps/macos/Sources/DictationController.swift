@@ -559,23 +559,32 @@ final class DictationController {
             if !ordinaryDictation { recordingBar.showThinking(detail: L10n.text("正在识别…")) }
             onlineASRTask = Task.detached(priority: .userInitiated) {
                 do {
-                    let spoken: String
-                    if let liveDoubao {
-                        spoken = try await withTaskCancellationHandler {
-                            try await liveDoubao.value
-                        } onCancel: {
-                            liveDoubao.cancel()
-                        }
-                        if let stoppedAt {
-                            let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
-                            DiagnosticsLog.write("doubao.live-asr-final", ["ms": String(ms)])
-                        }
-                    } else {
+                    let transcribeRecording = {
+                        try Task.checkCancellation()
                         let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
                         try Task.checkCancellation()
                         let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID,
                                                                    doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
-                        spoken = try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
+                        return try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
+                    }
+                    let spoken: String
+                    if let liveDoubao {
+                        spoken = try await OnlineASR.finishLiveDoubao(live: {
+                            let text = try await withTaskCancellationHandler {
+                                try await liveDoubao.value
+                            } onCancel: {
+                                liveDoubao.cancel()
+                            }
+                            if let stoppedAt {
+                                let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
+                                DiagnosticsLog.write("doubao.live-asr-final", ["ms": String(ms)])
+                            }
+                            return text
+                        }, replay: transcribeRecording, onFailure: { code, retrying in
+                            DiagnosticsLog.write(retrying ? "doubao.live-asr-retry" : "doubao.live-asr-failed", ["code": code])
+                        })
+                    } else {
+                        spoken = try await transcribeRecording()
                     }
                     try Task.checkCancellation()
                     if skipCleanup && variants == nil {
@@ -1029,10 +1038,10 @@ final class DictationController {
                 applyState()
             }
         case .failure(let error):
-            take?.cancel()
             if let preview { showTranslation(TranslationPreview.result(outcome), preview: preview) }
             let d = error as? ServiceError
             if case .http(410, _, _)? = d, betaPending != nil {
+                take?.failed(L10n.text("问题已过期，请重新说需求"))
                 dropBeta(notify: false)
                 showRequestResult(L10n.text("问题已过期，请重新说需求"), true)
                 setHint(L10n.text("问题已过期，请重新说需求"), warning: true)
@@ -1045,7 +1054,9 @@ final class DictationController {
                 serviceUp = false
                 scheduleHealthRetry()
             }
-            showRequestResult(usesOnlineASR || serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪"), true)
+            let notice = usesOnlineASR || serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪")
+            if let take { take.failed(notice) }
+            else { showRequestResult(notice, true) }
             if betaPending != nil { showBetaQuestions() }
             setHint(L10n.text("听写失败：") + (d?.description ?? error.localizedDescription), warning: true)
             applyState()

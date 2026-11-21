@@ -156,7 +156,8 @@ test("the model gets the cleanup prompt, the learned description and the transcr
   assert.equal(system.role, "system");
   assert.ok(system.content.startsWith("# Profile"));
   assert.match(system.content, /User background \(learned from earlier dictations\): 写周报的产品经理/);
-  assert.doesNotMatch(system.content, /HARNESS ADDENDUM/, "no cursor context, no addendum");
+  assert.match(system.content, /Application identifier: "com\.apple\.mail"/);
+  assert.doesNotMatch(system.content, /Window title:|Text before the cursor:/);
   assert.equal(user.role, "user");
   assert.deepEqual(JSON.parse(user.content), { raw_asr_transcript: RAW });
   assert.equal(model.calls[0].body.messages.length, 2);
@@ -477,8 +478,8 @@ test("three-tier dictation uses a separate prompt at 25, 26–100, and 101", asy
     else {
       assert.match(body.messages[0].content, units <= 100 ? /Number only distinct/ : /numbered points/);
     }
-    assert.match(body.messages[0].content, /fix clear ASR errors|repair ASR errors supported by context/i);
-    assert.match(body.messages[0].content, /read naturally|make their logic clear|logic easy to follow/i);
+    assert.match(body.messages[0].content, /fix (?:clear|likely) ASR errors|repair ASR errors supported by context/i);
+    assert.match(body.messages[0].content, /local grammar|make their logic clear|logic easy to follow/i);
     assert.equal(body.messages[0].content.includes("test profile"), units > 100);
   }
 });
@@ -492,7 +493,11 @@ test("minimal cleanup smooths local wording without rewriting the dictation", as
     ["呃，想把文见，早尽移过来。", "想把文件尽早移过来。", [fix("文见", "文件"), fix("早尽", "尽早")], true],
     ["呃，今天见", "今天见。", [], true],
     ["这个方案有点野。", "这个方案有点野。", [], true],
-    ["请查快递的乌流！", "请查询快递的物流。", [fix("乌流", "物流")], false],
+    ["请用 Cloud Code 查看项目代码。", "请用 Claude Code 查看项目代码。", [fix("Cloud", "Claude")], true],
+    ["天上那片 Claude 把太阳挡住了。", "天上那片 cloud 把太阳挡住了。", [fix("Claude", "cloud")], true],
+    ["把备份放到 cloud 存储里。", "把备份放到 cloud 存储里。", [], true],
+    ["继续检查这个 cloud code 的结果。", "继续检查这个 cloude code 和 K8s 的结果。", [fix("cloud code", "cloude code 和 K8s")], false],
+    ["请查快递的乌流！", "请查询快递的物流。", [fix("乌流", "物流")], "请查快递的物流！"],
     ["明天不开会。", "明天要开会。", [fix("不", "要")], false],
     ["明天有 3 场会。", "明天有 4 场会。", [fix("3", "4")], false],
     ["明天可能开会。", "明天一定开会。", [fix("可能", "一定")], false],
@@ -503,11 +508,87 @@ test("minimal cleanup smooths local wording without rewriting the dictation", as
     const model = fakeModel(JSON.stringify({ text, corrections }));
     const service = makeService({ model });
     const result = await service.polish({ rawText, llm, shortCleanup, fieldContext: { before: "Private cursor context" } });
-    assert.equal(result.text, accepted ? text : rawText);
+    assert.equal(result.text, typeof accepted === "string" ? accepted : accepted ? text : rawText);
     assert.equal(model.calls.length, 1);
     assert.equal(model.calls[0].body.model, llm.model);
     assert.deepEqual(JSON.parse(model.calls[0].body.messages[1].content), { raw_asr_transcript: rawText });
     assert.equal(result.corrections, undefined);
+  }
+});
+
+test("the short tier and full tier use supplied nearby text, and all tiers get the current app", async () => {
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  for (const units of [25, 26, 101]) {
+    const rawText = "字".repeat(units);
+    const model = fakeModel(JSON.stringify({ text: rawText }));
+    const result = await makeService({ model }).polish({
+      rawText, llm: ROUTE, shortCleanup, appHint: "com.example.editor",
+      profile: "Context from past sessions",
+      fieldContext: { before: "Text beside the cursor" },
+    });
+    assert.equal(result.text, rawText);
+    const system = model.calls[0].body.messages[0].content;
+    assert.match(system, /whole utterance/i);
+    assert.match(system, /Application identifier: "com\.example\.editor"/);
+    assert.match(system, /Honor explicit spelling and self-corrections/);
+    assert.equal(system.includes("Text beside the cursor"), units !== 26);
+    assert.equal(system.includes("Context from past sessions"), units > 100);
+  }
+});
+
+test("short mixed-language ASR repairs retain exact replacements if the model also paraphrases", async () => {
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  for (const fixture of [
+    {
+      raw: "我想使用 Cloud Code 去构建这个软件。",
+      scene: "使用 Anthropic 的编程代理 Claude Code",
+      text: "我想用 Claude Code 构建这个软件。",
+      from: "Cloud Code", to: "Claude Code",
+    },
+    {
+      raw: "我打算用 Claude Code 调试集群。",
+      scene: "用 Google Cloud 的 Cloud Code 插件调试 Kubernetes 应用",
+      text: "我想用 Cloud Code 调试集群。",
+      from: "Claude Code", to: "Cloud Code",
+    },
+  ]) {
+    const model = fakeModel(JSON.stringify({ text: fixture.text,
+      corrections: [{ asr_error: fixture.from, corrected_term: fixture.to }] }));
+    const result = await makeService({ model }).polish({ rawText: fixture.raw, llm: ROUTE, shortCleanup,
+      appHint: "com.example.editor",
+      fieldContext: { before: "Omitted distant text. " + "Earlier notes. ".repeat(40) + "API key: " + ROUTE.apiKey + " " + fixture.scene,
+        selected: "Selected text stays out of the short prompt", windowTitle: "Project notes" },
+    });
+    assert.equal(result.text, fixture.raw.replace(fixture.from, fixture.to));
+    const system = model.calls[0].body.messages[0].content;
+    assert.match(system, /Compare plausible sound-alikes/);
+    assert.ok(system.includes(fixture.scene));
+    assert.match(system, /Window title: "Project notes"/);
+    assert.doesNotMatch(system, /Omitted distant text|Selected text stays out|sk-test-123456789012/);
+    assert.equal(model.calls.length, 1);
+  }
+});
+
+test("explicit letters survive cleanup in either direction, regardless of the app", async () => {
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  const continuation = "这里是前面已经说过的解释。";
+  for (const repeat of [0, 3, 10]) {
+    const suffix = "。" + continuation.repeat(repeat);
+    for (const [spelled, correct, wrong] of [
+      ["C-L-O-U-D", "cloud", "Claude"],
+      ["C-L-A-U-D-E", "Claude", "cloud"],
+      ["C L O U D", "cloud", "cloudflare"],
+      ["Δ-Ε-Λ-Τ-Α", "ΔΕΛΤΑ", "ΔΕΛΤΑΣ"],
+    ]) {
+      const rawText = "这个词拼成" + spelled + suffix;
+      for (const [term, expected] of [[correct, "这个词拼成" + correct + suffix], [wrong, rawText]]) {
+        const model = fakeModel(JSON.stringify({ text: "这个词拼成" + term + suffix, corrections: [] }));
+        const result = await makeService({ model }).polish({ rawText, llm: ROUTE, shortCleanup, appHint: "com.example.terminal" });
+        assert.equal(result.text, expected);
+        assert.equal(result.qualityReview, undefined);
+        assert.equal(model.calls.length, 1);
+      }
+    }
   }
 });
 

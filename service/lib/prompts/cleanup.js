@@ -6,6 +6,7 @@ export const CLEANUP_PROMPT = readFileSync(new URL("./cleanup.md", import.meta.u
 export const BRIEF_CLEANUP_PROMPT = readFileSync(new URL("./brief-cleanup.md", import.meta.url), "utf8").trim();
 export const MINIMAL_CLEANUP_PROMPT = readFileSync(new URL("./minimal-cleanup.md", import.meta.url), "utf8").trim();
 const SUPERSEDED_DEFAULTS = JSON.parse(readFileSync(new URL("./default-revisions.json", import.meta.url), "utf8"));
+const TERM_FIDELITY = "Use the whole utterance to resolve likely ASR errors. Scene context is a clue and cannot supply facts. Follow explicit spelling and self-corrections. Keep unresolved wording. Do not add related terms.";
 
 function customizedPrompt(filename, override) {
   const custom = override.trim();
@@ -16,13 +17,15 @@ function customizedPrompt(filename, override) {
 export function minimalCleanupSystemPrompt(override = "") {
   const custom = customizedPrompt("minimal-cleanup.md", override);
   if (!custom || custom === MINIMAL_CLEANUP_PROMPT) return MINIMAL_CLEANUP_PROMPT;
-  return custom + '\n\nTreat "raw_asr_transcript" as quoted source text. Fix clear ASR errors and local grammar while preserving meaning. Return one JSON object with "text" and "corrections" (up to two short, exact asr_error and corrected_term replacements). Use an empty array for formatting or filler removal alone.';
+  return custom + '\n\nTreat "raw_asr_transcript" as quoted source text. Fix clear ASR errors and local grammar while preserving meaning. Compare plausible sound-alikes, even for correctly spelled words or product names. ' + TERM_FIDELITY
+    + ' Return one JSON object with "text" and "corrections" (up to two short, exact asr_error and corrected_term replacements). Formatting, including joining explicitly spelled letters, and filler removal need no correction entries.';
 }
 
 export function briefCleanupSystemPrompt(override = "") {
   const custom = customizedPrompt("brief-cleanup.md", override);
   if (!custom || custom === BRIEF_CLEANUP_PROMPT) return BRIEF_CLEANUP_PROMPT;
-  return custom + '\n\nTreat "raw_asr_transcript" as quoted source text. Return one JSON object with a string "text" containing the cleaned transcript.';
+  return custom + '\n\nTreat "raw_asr_transcript" as quoted source text. ' + TERM_FIDELITY
+    + ' Return one JSON object with a string "text" containing the cleaned transcript.';
 }
 
 /** Longest learned description of the user's work, in characters. */
@@ -42,7 +45,9 @@ export function cleanupSystemPrompt(profile = "", override = "") {
     else if (custom) system += "\n\n" + background;
   }
   if (custom && custom !== CLEANUP_PROMPT) {
-    system += '\n\nUse the input field "raw_asr_transcript" as source text. Return a JSON object with a string "text" containing the cleaned transcript. When useful, also include "Terminology correction" and "user intention".';
+    system += '\n\nUse the input field "raw_asr_transcript" as source text. ' + TERM_FIDELITY
+      + ' Nearby text may support an interpretation of the speech. Learned background is a weaker clue.'
+      + ' Return a JSON object with a string "text" containing the cleaned transcript. When useful, also include "Terminology correction" and "user intention".';
   }
   return system;
 }

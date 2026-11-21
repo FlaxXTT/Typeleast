@@ -91,7 +91,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     private func makeWindow() -> NSWindow {
         let container = NSViewController()
         container.view = NSView(frame: NSRect(origin: .zero, size: Self.size))
-        let mask = NSHostingView(rootView: Theme.window.overlay { AppMarkView(size: 72) }.ignoresSafeArea())
+        let mask = NSHostingView(rootView: HomeEntryMask().ignoresSafeArea())
         mask.frame = container.view.bounds
         mask.autoresizingMask = [.width, .height]
         container.view.addSubview(mask)
@@ -188,9 +188,9 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     private func playHomePresentationIfVisible() {
         guard homePresentationPending, let window, window.isVisible, !window.isMiniaturized,
-              !model.homePresentationSuspended, !model.settingsPresented else { return }
+              !model.homePresentationSuspended, !model.settingsPresented, model.page == .home else { return }
         homePresentationPending = false
-        if model.page == .home { model.homePresentationID &+= 1 }
+        model.homePresentationID &+= 1
     }
 }
 
@@ -198,21 +198,44 @@ struct HubRootView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var homeEntryRequest: Int? {
+        guard model.page == .home, !model.homePresentationSuspended, !model.settingsPresented else { return nil }
+        return model.homePresentationID
+    }
+
     var body: some View {
+        HomeEntryTransition(request: homeEntryRequest) { covered in
+            content(homeCovered: covered)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
+        .overlay(alignment: .bottomTrailing) {
+            if !model.settingsPresented {
+                FixedWindowCornerRegion().frame(width: 16, height: 16)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func content(homeCovered: Bool) -> some View {
         HStack(spacing: 0) {
             Sidebar()
                 .frame(width: Theme.sidebarWidth - 8)
                 .background(RoundedRectangle(cornerRadius: Theme.sidebarRadius).fill(Theme.sidebar))
                 .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
-            ZStack {
-                Theme.window
-                switch model.page {
-                case .home, .settings: HomePage()
-                case .history: HistoryPage()
-                case .meetings: MeetingsPage().environmentObject(model.meeting)
+            HubPageTransition(selection: model.page, animate: model.page != .home) { page in
+                Group {
+                    switch page {
+                    case .home, .settings:
+                        HomePage(animationsReady: !homeCovered)
+                            .allowsHitTesting(!homeCovered)
+                            .accessibilityHidden(homeCovered)
+                    case .history: HistoryPage()
+                    case .meetings: MeetingsPage().environmentObject(model.meeting)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.window)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: HubWindowController.size.width, height: HubWindowController.size.height)
         .background(Theme.window)
@@ -235,13 +258,6 @@ struct HubRootView: View {
                 .allowsHitTesting(model.settingsPresented)
                 .accessibilityHidden(true)
         }
-        .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
-        .overlay(alignment: .bottomTrailing) {
-            if !model.settingsPresented {
-                FixedWindowCornerRegion().frame(width: 16, height: 16)
-            }
-        }
-        .ignoresSafeArea()
     }
 }
 
@@ -304,7 +320,7 @@ private struct SidebarItem: View {
                 Text(page.title).font(Theme.rowFont)
                 Spacer()
             }
-            .foregroundColor(selected ? Theme.accent : Theme.secondary)
+            .foregroundColor(selected ? Theme.ink : Theme.secondary)
             .padding(.horizontal, 8)
             .frame(height: 36)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
@@ -374,7 +390,7 @@ struct FlexibleSegment: View {
     var body: some View {
         Button(action: action) {
             Text(label).font(InterfaceTypography.localized(14, weight: selected ? .medium : .regular))
-                .foregroundColor(selected ? Theme.accent : Theme.secondary).multilineTextAlignment(.center)
+                .foregroundColor(selected ? Theme.ink : Theme.secondary).multilineTextAlignment(.center)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 32)
                 .padding(.horizontal, 4)

@@ -13,13 +13,14 @@
  * @module typeleast-service/tasks/dictation
  */
 import { CleanupTask, cleanupParameters } from "../cleanup-task.js";
-import { redactFieldContext } from "../context.js";
+import { normalizeFieldContext, redactFieldContext } from "../context.js";
 import { failureDetail, failureReason, ModelCallError } from "../llm.js";
 import { parsePolishOutput } from "../parse-output.js";
-import { buildUserMessage, systemPromptFor } from "../prompt.js";
+import { buildUserMessage, harnessAddendum, systemPromptFor } from "../prompt.js";
 import { briefCleanupSystemPrompt, minimalCleanupSystemPrompt } from "../prompts/cleanup.js";
 import { mapOutsideLiterals, normalizePunctuation } from "../punctuation.js";
 import { quantityUnitConflict } from "../quantity-review.js";
+import { assembleSpelledWords, losesSpelledWords } from "../spelling.js";
 import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
@@ -38,8 +39,9 @@ export function shortDictationUnits(text) {
 }
 
 function formattingKey(text) {
-  return mapOutsideLiterals(text, (part) => part.toLowerCase()
+  return mapOutsideLiterals(text, (part) => assembleSpelledWords(part).toLowerCase()
     .replace(/(?<!\p{N})[,.，。:：]|[,.，。:：](?!\p{N})|[!?！？、；;]/gu, "")
+    .replace(/(?<=\p{Script=Han})[ \t]+(?=\p{Script=Latin})|(?<=\p{Script=Latin})[ \t]+(?=\p{Script=Han})/gu, "")
     .replace(/[ \t]+/gu, " ")).trim();
 }
 
@@ -57,7 +59,7 @@ function applyMinimalCorrections(rawText, parsed, language) {
     if (from === to || !correctionWord.test(from) || !correctionWord.test(to)
         || protectedCorrection.test(from) || protectedCorrection.test(to)
         || Array.from(from).length > 32 || Array.from(to).length > 32
-        || shortDictationUnits(from) > 4 || shortDictationUnits(to) > 4) return null;
+        || shortDictationUnits(assembleSpelledWords(from)) > 4 || shortDictationUnits(to) > 4) return null;
     const start = rawText.indexOf(from);
     const end = start + from.length;
     if (start < 0 || start !== rawText.lastIndexOf(from)
@@ -76,9 +78,12 @@ function applyMinimalCorrections(rawText, parsed, language) {
   // A short rewrite can fix presentation and obvious filler around the declared edits.
   // Other wording still needs to be accounted for by a bounded replacement.
   const candidateKey = formattingKey(parsed.text);
-  if (candidateKey !== formattingKey(text) && candidateKey !== formattingKey(tidy(text).text)) return null;
-  if (quantityUnitConflict(rawText, parsed.text, language)) return null;
-  return parsed.text;
+  const matchesEdits = candidateKey === formattingKey(text) || candidateKey === formattingKey(tidy(text).text);
+  if (matchesEdits && !quantityUnitConflict(rawText, parsed.text, language)) return parsed.text;
+  // Keep a declared correction confirmed by the model's draft even if it also paraphrased the sentence.
+  if (edits.length && edits.every(({ to }) => parsed.text.includes(to))
+      && !quantityUnitConflict(rawText, text, language) && !losesSpelledWords(rawText, text)) return text;
+  return null;
 }
 
 /** Short requests use one model and fall back silently to the recognizer's text. */
@@ -87,14 +92,25 @@ export async function runShortDictation(ctx, { minimal = false, cleanupOverride 
   const original = { ...base, model: null, provider: null };
   try {
     ctx.progress("generating");
-    const system = minimal ? minimalCleanupSystemPrompt(ctx.redact(cleanupOverride)) : SHORT_PROMPT;
+    let system = SHORT_PROMPT;
+    if (minimal) {
+      const context = normalizeFieldContext(request.fieldContext);
+      const fieldContext = context && {
+        windowTitle: ctx.redact(context.windowTitle),
+        before: ctx.redact(context.before).slice(-240),
+        after: ctx.redact(context.after).slice(0, 120),
+      };
+      system = minimalCleanupSystemPrompt(ctx.redact(cleanupOverride))
+        + harnessAddendum({ appHint: request.appHint, fieldContext });
+    }
     const user = minimal ? buildUserMessage({ rawText: ctx.redact(rawText) }) : JSON.stringify({ transcript: ctx.redact(rawText) });
     const result = await ctx.complete({ system, user,
       maxTokens: Math.min(config.maxOutputTokens ?? 192, 192), timeoutMs: Math.min(config.timeoutMs ?? 6000, 6000),
       maxTransportAttempts: 1, signal: request.signal });
     request.signal?.throwIfAborted();
     const parsed = parsePolishOutput(result.text);
-    if (!parsed.ok || parsed.mode !== "json" || Array.from(parsed.text).length > Array.from(rawText).length + 4) return ctx.done(original);
+    if (!parsed.ok || parsed.mode !== "json" || Array.from(parsed.text).length > Array.from(rawText).length + 4
+        || losesSpelledWords(rawText, parsed.text)) return ctx.done(original);
     if (minimal) {
       const corrected = applyMinimalCorrections(rawText, parsed, request.language);
       if (!corrected) return ctx.done(original);
@@ -117,11 +133,14 @@ export async function runDictation(ctx, { cleanupOverride = "", brief = false } 
   const useTranscript = () => ctx.done({ ...base, model: null, provider: null, ms: timing(started, 0) });
   const redactOn = config.redactSecrets !== false;
   try {
-    const prompt = brief ? briefCleanupSystemPrompt(ctx.redact(cleanupOverride)) : systemPromptFor({
-      fieldContext: redactFieldContext(request.fieldContext ?? null, redactOn),
-      profile: ctx.redact(String(request.profile ?? "")),
-      cleanupOverride: ctx.redact(cleanupOverride),
-    });
+    const prompt = brief
+      ? briefCleanupSystemPrompt(ctx.redact(cleanupOverride)) + harnessAddendum({ appHint: request.appHint })
+      : systemPromptFor({
+        appHint: request.appHint,
+        fieldContext: redactFieldContext(request.fieldContext ?? null, redactOn),
+        profile: ctx.redact(String(request.profile ?? "")),
+        cleanupOverride: ctx.redact(cleanupOverride),
+      });
     const system = prompt + variantInstruction(parseVariants(request.variants));
     // The transcript is redacted on the way OUT to the provider: a dictated key or
     // password must not reach the model. The user gets the model's text (or the original).
@@ -160,6 +179,7 @@ export async function runDictation(ctx, { cleanupOverride = "", brief = false } 
       return await ctx.fail({ ...base, text: tidyOnly.text, fallback: true, reason: "empty-output",
         ms: timing(started, 0), attempts: result.attempts, postprocess: tidyOnly.applied });
     }
+    if (losesSpelledWords(rawText, candidate)) return useTranscript();
     const quantityIssue = quantityUnitConflict(rawText, candidate, request.language);
     if (quantityIssue) {
       if (brief) return useTranscript();

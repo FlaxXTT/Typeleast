@@ -125,6 +125,60 @@ enum OnlineASR {
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The finished WAV is still available if a live connection breaks before it returns a transcript.
+    static func finishLiveDoubao(live: () async throws -> String,
+                                 replay: () async throws -> String,
+                                 onFailure: (_ code: String, _ retrying: Bool) -> Void) async throws -> String {
+        try Task.checkCancellation()
+        do {
+            return try await live()
+        } catch {
+            try Task.checkCancellation()
+            let failure = liveFailure(error)
+            onFailure(failure.code, failure.retry)
+            guard failure.retry else { throw error }
+            try Task.checkCancellation()
+            return try await replay()
+        }
+    }
+
+    private static func liveFailure(_ error: Error) -> (code: String, retry: Bool) {
+        if let failure = error as? Failure {
+            switch failure {
+            case .timedOut: return ("timeout", true)
+            case .missingKey: return ("missing-key", false)
+            case .invalidWorkspace: return ("invalid-workspace", false)
+            case .invalidAudio: return ("invalid-audio", false)
+            case .invalidResponse: return ("invalid-response", false)
+            case .rejected(let status):
+                switch status {
+                case "401", "403": return ("authorization", false)
+                case "429": return ("rate-limit", false)
+                case "500", "502", "503", "504": return ("http-" + status, true)
+                default: return (Int(status).map { "rejected-" + String($0) } ?? "rejected", false)
+                }
+            }
+        }
+        if error is CancellationError { return ("cancelled", false) }
+        if let code = (error as? URLError)?.code {
+            switch code {
+            case .timedOut: return ("timeout", true)
+            case .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .dnsLookupFailed, .notConnectedToInternet:
+                return ("connection", true)
+            case .cancelled: return ("cancelled", false)
+            default: return ("url" + String(code.rawValue), false)
+            }
+        }
+        if let code = (error as? POSIXError)?.code {
+            switch code {
+            case .ETIMEDOUT: return ("timeout", true)
+            case .ECONNRESET, .ECONNABORTED, .ENOTCONN, .EPIPE: return ("connection", true)
+            default: return ("posix-" + String(code.rawValue), false)
+            }
+        }
+        return ("other", false)
+    }
+
     private static func recognize(wav: Data, language: String, configuration: OnlineASRConfiguration,
                                   meeting: Bool) async throws -> OnlineASRTranscript {
         guard configuration.provider != .local else { throw Failure.missingKey }

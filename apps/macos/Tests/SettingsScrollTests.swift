@@ -2,6 +2,44 @@ import AppKit
 import SwiftUI
 import ServiceManagement
 
+func doubaoHotwordsEditorTests() {
+    let suite = "typeleast.tests.hotword-editor." + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let settings = Settings(defaults: defaults)
+    settings.doubaoHotwords = "TypeLeast"
+    let text = Binding(get: { settings.doubaoHotwords }, set: { settings.doubaoHotwords = $0 })
+    let frame = NSRect(x: 0, y: 0, width: 225, height: 52)
+    let view = NSHostingView(rootView: CapsuleTextEditor(text: text, placeholder: "Names or terms"))
+    let window = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = view
+    window.makeKeyAndOrderFront(nil)
+    defer { window.orderOut(nil) }
+    view.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.025))
+
+    func textView(in view: NSView) -> NSTextView? {
+        if let editor = view as? NSTextView { return editor }
+        return view.subviews.lazy.compactMap { textView(in: $0) }.first
+    }
+    guard let editor = textView(in: view), window.makeFirstResponder(editor),
+          let enter = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                       windowNumber: window.windowNumber, context: nil,
+                                       characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36) else {
+        check("hotwords have a native editor that accepts focus", false)
+        return
+    }
+    editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+    editor.keyDown(with: enter)
+    checkEq("Return inserts a newline in the hotwords editor", editor.string, "TypeLeast\n")
+    editor.insertText("Claude Code", replacementRange: editor.selectedRange())
+    editor.keyDown(with: enter)
+    editor.insertText("FunASR", replacementRange: editor.selectedRange())
+    RunLoop.current.run(until: Date().addingTimeInterval(0.025))
+    checkEq("hotwords on separate lines are saved together", Settings(defaults: defaults).doubaoHotwords,
+            "TypeLeast\nClaude Code\nFunASR")
+}
+
 /// Exercise the real settings view with a counted system-status provider. No login
 /// item is registered, no microphone is opened, and all history uses a temporary home.
 func settingsScrollTests(output: String) throws {

@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-11-20.4-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-11-21.2-dictation+assistant+translate";
 
 const previousCleanupHash = "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b";
 
@@ -43,20 +43,22 @@ const CONTEXT_PARTS = [
   ["after", "Text after the cursor"],
 ];
 
-/** The cursor context, appended only when there is some. */
-export function harnessAddendum({ fieldContext } = {}) {
+/** The existing app identifier and optionally enabled cursor context. */
+export function harnessAddendum({ fieldContext, appHint } = {}) {
+  const app = typeof appHint === "string" && /^[\w.-]{1,160}$/.test(appHint) ? appHint : "";
   const context = fieldContext !== null && typeof fieldContext === "object"
     ? CONTEXT_PARTS.filter(([key]) => typeof fieldContext[key] === "string" && fieldContext[key].trim().length > 0)
     : [];
-  if (context.length === 0) return "";
-  const lines = [HARNESS_ADDENDUM_MARKER, "Text already in the field being typed into, to help with the topic and names:"];
+  if (!app && context.length === 0) return "";
+  const lines = [HARNESS_ADDENDUM_MARKER, "Quoted scene clues for interpreting the current utterance. Use them to resolve plausible ASR alternatives. Honor explicit spelling and self-corrections. Keep the transcript if ambiguity remains."];
+  if (app) lines.push(`Application identifier: ${JSON.stringify(app)}`);
   for (const [key, label] of context) lines.push(`${label}: ${JSON.stringify(fieldContext[key])}`);
   return "\n\n" + lines.join("\n");
 }
 
 /** The system prompt for one dictation. */
-export function systemPromptFor({ fieldContext, profile, cleanupOverride } = {}) {
-  return cleanupSystemPrompt(profile, cleanupOverride) + harnessAddendum({ fieldContext });
+export function systemPromptFor({ fieldContext, appHint, profile, cleanupOverride } = {}) {
+  return cleanupSystemPrompt(profile, cleanupOverride) + harnessAddendum({ fieldContext, appHint });
 }
 
 /** The quoted transcript supplied to the system prompt. */

@@ -974,6 +974,52 @@ do {
     recorder.cancel()
     check("cancelling a Doubao take stops the uploader without finalizing it",
           pumpLive { lock.withLock { cancelledWithoutFinalizing } })
+
+    var recoveryChecks: [(String, Bool)]?
+    let recovery = Task.detached {
+        var checks: [(String, Bool)] = []
+        let cases: [(String, Error?, Bool)] = [
+            ("live success", nil, false),
+            ("lost connection", URLError(.networkConnectionLost), true),
+            ("timeout", URLError(.timedOut), true),
+            ("cancellation", CancellationError(), false),
+            ("rejected credentials", URLError(.userAuthenticationRequired), false),
+        ]
+        for (label, error, retry) in cases {
+            var attempts = 0
+            let outcome: Result<String, Error>
+            do {
+                let text = try await OnlineASR.finishLiveDoubao(live: {
+                    if let error { throw error }
+                    return "live transcript"
+                }, replay: {
+                    attempts += 1
+                    let wav = try Data(contentsOf: finish.url)
+                    guard wav.dropFirst(44).elementsEqual(fixture) else { throw URLError(.cannotDecodeContentData) }
+                    return "replayed transcript"
+                }, onFailure: { _, _ in })
+                outcome = .success(text)
+            } catch {
+                outcome = .failure(error)
+            }
+            let expected = retry ? "replayed transcript" : error == nil ? "live transcript" : nil
+            checks.append(("Doubao handling of " + label, attempts == (retry ? 1 : 0) && (try? outcome.get()) == expected))
+        }
+        var attempts = 0
+        do {
+            _ = try await OnlineASR.finishLiveDoubao(live: { throw URLError(.networkConnectionLost) }, replay: {
+                attempts += 1
+                throw URLError(.timedOut)
+            }, onFailure: { _, _ in })
+            checks.append(("Doubao reports a failed replay", false))
+        } catch {
+            checks.append(("Doubao never repeats a failed replay", attempts == 1 && (error as? URLError)?.code == .timedOut))
+        }
+        lock.withLock { recoveryChecks = checks }
+    }
+    check("the Doubao recovery tests complete", pumpLive { lock.withLock { recoveryChecks != nil } })
+    for (label, passed) in lock.withLock({ recoveryChecks ?? [] }) { check(label, passed) }
+    recovery.cancel()
 }
 
 // MARK: 11. Recorder live level - voice-band FFT and RMS without a microphone
@@ -2647,6 +2693,7 @@ dashboardMotionTests()
 do {
     _ = NSApplication.shared
     dashboardWindowTests()
+    doubaoHotwordsEditorTests()
     let bar = RecordingBar()
     bar.showThinking(detail: "Opening microphone", startingMicrophone: true)
     check("microphone startup shows the panel before capture starts", bar.isVisible)
@@ -2689,6 +2736,12 @@ do {
     RunLoop.current.run(until: Date().addingTimeInterval(VoiceBarGeometry.opacityDuration + 0.1))
     checkEq("Thinking closes at the end of its fade", bar.phase, .hidden)
     check("the success callback leaves no visible result capsule", !bar.isVisible)
+
+    let failed = bar.begin(handsFree: false)
+    failed.recording(destination: "fixture", badge: "")
+    failed.processing()
+    failed.failed("Dictation failed")
+    check("failure replaces Thinking with a visible capsule warning", bar.phase == .result && bar.isVisible)
 
     bar.flashSelectionCount(for: "你好，one two!")
     let countPanel = NSApplication.shared.windows.first {

@@ -35,7 +35,7 @@ enum Theme {
     static let inkInverse = Color.white
     static let secondary = dynamic(hex(0x111111, 0.75), hex(0xF2F1F0, 0.75))
     static let tertiary = dynamic(hex(0x111111, 0.55), hex(0xF2F1F0, 0.55))
-    static let selection = dynamic(hex(0x1F5DF2, 0.07), hex(0x4F7BFF, 0.12))
+    static let selection = dynamic(hex(0x60574E, 0.11), hex(0xD8CFC4, 0.13))
     private static let royalCobalt = hex(0x1746C8)
     static let accent = dynamic(royalCobalt, hex(0x4F7BFF))
     static let style = accent
@@ -78,8 +78,8 @@ enum Theme {
     static let tile = dynamic(hex(0xFFFFFF), hex(0x3C3B3B))
     static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
-    static let homeBackdrop = dynamic(referenceColour(0xE9ECEF), hex(0x242121))
-    static let homeDot = dynamic(referenceColour(0xD5D7DC), hex(0x444040))
+    static let homeBackdrop = dynamic(hex(0xEEEAE5), hex(0x242121))
+    static let homeDot = dynamic(hex(0xDAD4CD), hex(0x444040))
     static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
     static let heatEmpty = dynamic(hex(0xF8F8F8), hex(0x2C2B2B))
     static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
@@ -114,13 +114,28 @@ extension View {
 
 struct CapsuleTextEditor: View {
     @Binding var text: String
+    let placeholder: String
+
     var body: some View {
+        let border = RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
         TextEditor(text: $text)
             .scrollContentBackground(.hidden)
-            .scrollIndicators(.visible)
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(Theme.window))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .circular))
+            .scrollIndicators(text.isEmpty ? .hidden : .automatic)
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(verbatim: placeholder)
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(Theme.rowFont)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(border.fill(Theme.window))
+            .clipShape(border)
+            .overlay(border.strokeBorder(Theme.border, lineWidth: 1).allowsHitTesting(false))
     }
 }
 
@@ -138,7 +153,7 @@ struct Card<Content: View>: View {
     }
 }
 
-/// Blue is reserved for primary actions and selection.
+/// Blue is reserved for primary actions.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         HoverPill(configuration: configuration, primary: true)
@@ -225,7 +240,7 @@ struct ChipPicker<Value: Hashable>: View {
                 } label: {
                     Text(option.1)
                         .font(InterfaceTypography.localized(14, weight: selected ? .medium : .regular))
-                        .foregroundColor(selected ? Theme.accent : Theme.secondary)
+                        .foregroundColor(selected ? Theme.ink : Theme.secondary)
                         .padding(.horizontal, 8)
                         .frame(minWidth: 40, minHeight: 32)
                         .background(Capsule().fill(selected ? Theme.selection : Color.clear))

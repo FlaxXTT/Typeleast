@@ -8,6 +8,7 @@ import { CleanupTask, cleanupParameters } from "../cleanup-task.js";
 import { failureReason } from "../llm.js";
 import { directTranslatePrompt, translateBatches, translateUserMessage } from "../prompts/translate.js";
 import { tidy } from "../tidy.js";
+import { losesSpelledWords } from "../spelling.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
 import { timing } from "./timing.js";
@@ -36,7 +37,8 @@ export async function runTranslation(ctx, target) {
     ctx.progress("translating");
     const system = directTranslatePrompt(target, request.translatePrompt)
       + (target === "en" ? variantInstruction(parseVariants(request.variants)) : "")
-      + "\nTranslate all source lines in order. Preserve blank lines between paragraphs.";
+      + "\nTranslate all source lines in order. Preserve blank lines between paragraphs."
+      + " Respect explicit spelling. Use the whole utterance to interpret names and technical terms. Keep unresolved names as written. Add no associated terms or facts.";
     // At most TRANSLATE_BATCH paragraphs per request; the rest follow in later batches.
     for (const batch of batches) {
       const result = await ctx.complete({ system, user: translateUserMessage(target, ctx.redact(batch)),
@@ -50,6 +52,7 @@ export async function runTranslation(ctx, target) {
     const translated = parts.join("\n");
     task.assertTime();
     if (!translated) return incomplete("empty-output");
+    if (losesSpelledWords(rawText, translated)) return incomplete("spelling-conflict");
     const review = await reviewFacts(ctx, task, rawText, translated);
     if (review.state !== "clear") return ctx.fail({ ...base, raw: "", text: "", fallback: true,
       reason: "fact-review", qualityReview: { kind: "facts", original: rawText, candidate: translated, issues: review.issues ?? [] }, translated: target, ms: timing(started, 0), attempts });
