@@ -8,6 +8,7 @@ enum AppIconArtwork {
     enum Surface {
         case systemIcon
         case interface
+        case waveformOnly
     }
 
     static let canvasSize: CGFloat = 1024
@@ -88,8 +89,30 @@ enum AppIconArtwork {
         let tile = surface == .systemIcon
             ? CGRect(x: 100, y: 100, width: 824, height: 824)
             : CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize)
+        if surface != .waveformOnly { drawEnclosure(in: context, tile: tile) }
+
+        // The 61.8% scale sets the bar dimensions. The gap is adjusted separately,
+        // with the resulting waveform centred in the tile.
+        let waveformWidth = tile.width * waveformOccupancy
+        let barWidth = waveformWidth * 112 / 680
+        let gap = waveformWidth * 30 / 680 * barGapScale
+        let maximumHeight = tile.height * waveformOccupancy
+        let totalWidth = CGFloat(barRatios.count) * barWidth + CGFloat(barRatios.count - 1) * gap
+        for (index, ratio) in barRatios.enumerated() {
+            let height = maximumHeight * ratio
+            let bar = CGRect(x: tile.midX - totalWidth / 2 + CGFloat(index) * (barWidth + gap),
+                             y: tile.midY - height / 2, width: barWidth, height: height)
+            context.setFillColor(colour(index == barRatios.count - 1 ? 0x1F5DF2 : waveformInk))
+            context.addPath(CGPath(roundedRect: bar, cornerWidth: barWidth / 2,
+                                  cornerHeight: barWidth / 2, transform: nil))
+            context.fillPath()
+        }
+    }
+
+    private static func drawEnclosure(in context: CGContext, tile: CGRect) {
         let enclosure = outline(in: tile)
         context.saveGState()
+        defer { context.restoreGState() }
         context.addPath(enclosure)
         context.clip()
         context.setFillColor(colour(0xFAFAF9))
@@ -111,24 +134,6 @@ enum AppIconArtwork {
         context.setStrokeColor(colour(0x111111, alpha: 0.06))
         context.setLineWidth(2)
         context.strokePath()
-        context.restoreGState()
-
-        // The 61.8% scale sets the bar dimensions. The gap is adjusted separately,
-        // with the resulting waveform centred in the tile.
-        let waveformWidth = tile.width * waveformOccupancy
-        let barWidth = waveformWidth * 112 / 680
-        let gap = waveformWidth * 30 / 680 * barGapScale
-        let maximumHeight = tile.height * waveformOccupancy
-        let totalWidth = CGFloat(barRatios.count) * barWidth + CGFloat(barRatios.count - 1) * gap
-        for (index, ratio) in barRatios.enumerated() {
-            let height = maximumHeight * ratio
-            let bar = CGRect(x: tile.midX - totalWidth / 2 + CGFloat(index) * (barWidth + gap),
-                             y: tile.midY - height / 2, width: barWidth, height: height)
-            context.setFillColor(colour(index == barRatios.count - 1 ? 0x1F5DF2 : waveformInk))
-            context.addPath(CGPath(roundedRect: bar, cornerWidth: barWidth / 2,
-                                  cornerHeight: barWidth / 2, transform: nil))
-            context.fillPath()
-        }
     }
 
     static func image(size: CGFloat, surface: Surface = .systemIcon) -> NSImage {

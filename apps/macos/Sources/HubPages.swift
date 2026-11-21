@@ -104,12 +104,18 @@ struct HomePage: View {
                     }
                     HomeVersionFooter()
                 }
-                .frame(width: width - insightsWidth, height: max(0, geometry.size.height - 4), alignment: .top)
-                .padding(.top, 4)
+                .padding(.top, 20)
+                .frame(width: width - insightsWidth, height: geometry.size.height, alignment: .top)
             }
         }
-        .padding(EdgeInsets(top: 44, leading: Self.horizontalInset, bottom: 20, trailing: Self.horizontalInset))
+        .padding(EdgeInsets(top: 28, leading: Self.horizontalInset, bottom: 16, trailing: Self.horizontalInset))
         .background(Theme.window)
+        .overlay(alignment: .topTrailing) {
+            ShareButton(items: InsightsPanel.shareItems)
+                .frame(width: ShareButton.size.width, height: ShareButton.size.height)
+                .padding(.top, 4)
+                .padding(.trailing, 18)
+        }
     }
 }
 

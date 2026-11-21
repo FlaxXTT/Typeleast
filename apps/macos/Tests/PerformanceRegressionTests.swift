@@ -71,6 +71,13 @@ func dashboardMotionTests() {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
     calendar.firstWeekday = 1
+    let rhythmHours = [4, 5, 7, 8, 11, 12, 16, 17, 19, 20, 23]
+    let rhythmWords = rhythmHours.map { hour in
+        let date = calendar.date(from: DateComponents(year: 2026, month: 11, day: 21, hour: hour))!
+        return RhythmPeriod.current(at: date, calendar: calendar)
+    }
+    checkEq("the Rhythm word follows the local hour and includes overnight",
+            rhythmWords, [.nights, .dawns, .dawns, .morns, .morns, .noons, .noons, .dusks, .dusks, .nights, .nights])
     let saturday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 21, hour: 12))!
     let firstDay = calendar.date(from: DateComponents(year: 2026, month: 7, day: 12))!
     let saturdayRange = ActivityRange(endingOn: saturday, calendar: calendar)

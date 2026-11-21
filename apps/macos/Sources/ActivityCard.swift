@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreText
 import QuartzCore
 
 /// Finite frame schedules leave the dashboard idle once each animation finishes.
@@ -130,7 +131,6 @@ struct InsightsPanel: View {
                         .padding(.leading, 8)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
-                    ShareButton(items: Self.shareItems).frame(width: 94, height: 40)
                 }
                 .frame(height: headerHeight)
                 figures(height: tileHeight, gap: tileGap)
@@ -291,6 +291,7 @@ final class HomeDotGridView: NSView {
 
 /// The system share menu with the website and GitHub links.
 struct ShareButton: NSViewRepresentable {
+    static let size = NSSize(width: 94, height: 40)
     let items: [Any]
 
     func makeNSView(context: Context) -> HoverShareButton {
@@ -341,7 +342,7 @@ final class HoverShareButton: NSButton {
     private var hoverTracking: NSTrackingArea?
     private var hovering = false
     private var pickerOpen = false
-    override var intrinsicContentSize: NSSize { NSSize(width: 94, height: 40) }
+    override var intrinsicContentSize: NSSize { ShareButton.size }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -375,17 +376,13 @@ final class HoverShareButton: NSButton {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let capsule = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 20, yRadius: 20)
-        NSColor(Theme.tile).setFill()
-        capsule.fill()
+        let radius = bounds.height / 2
+        let capsule = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
         let pressed = isHighlighted && !pickerOpen
         if pressed || (hovering && window?.isKeyWindow == true) {
             NSColor(Theme.cardHover).setFill()
             capsule.fill()
         }
-        NSColor(Theme.border).setStroke()
-        capsule.lineWidth = 0.5
-        capsule.stroke()
 
         let ink = NSColor(Theme.ink)
         let label = NSAttributedString(string: title,
@@ -425,10 +422,11 @@ struct ActivityRange {
     }
 }
 
-/// Total active days above the heatmap, with weekdays down the side and months along the bottom.
+/// Cadence heatmap with weekdays down the side and months along the bottom.
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     var animationsReady = true
     @State private var weekOffset = 0
     @State private var animation: (target: Reveal, startedAt: Date)?
@@ -451,8 +449,13 @@ struct ActivityCard: View {
         let range = ActivityRange(endingOn: Date(), calendar: calendar)
         let reveal = Reveal(ready: revealReady, reduced: reduceMotion, presentation: model.homePresentationID)
         VStack(alignment: .leading, spacing: 0) {
-            ActiveDaysReadout(value: animationsReady ? log?.activeDays : log.map { _ in 0 })
+            Text(verbatim: "Cadence")
+                .font(.system(size: 24, weight: .medium, design: .serif))
+                .tracking(-0.45)
+                .foregroundColor(Theme.ink)
+                .frame(height: 28)
                 .padding(.horizontal, 7)
+                .accessibilityAddTraits(.isHeader)
             GeometryReader { geo in
                 let weeks = range.weekCount
                 let availableWidth = max(0, geo.size.width - dayColumn)
@@ -490,11 +493,14 @@ struct ActivityCard: View {
                 .frame(width: dayColumn + width, height: geo.size.height, alignment: .topLeading)
                 .frame(maxWidth: .infinity)
             }
-            .padding(.top, 12)
+            .padding(.top, 6)
             HStack(spacing: 6) {
                 Text(L10n.text("更少")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
                 ForEach(1..<5) { level in ActivityTrack.square(level, size: 13) }
                 Text(L10n.text("更多")).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
+                Spacer(minLength: 12)
+                ActiveDaysReadout(value: log.map { animationsReady ? $0.activeDays : 0 },
+                                  periodTint: model.sidebarBrandPalette.appearance(for: colorScheme).initialTint)
             }
             .padding(.horizontal, 7)
             .padding(.top, 8)
@@ -521,7 +527,7 @@ struct ActivityCard: View {
                     path.addLine(to: CGPoint(x: hatchWidth, y: y))
                 }
             }
-            .stroke(Theme.border.opacity(0.6), lineWidth: 1)
+            .stroke(Theme.heatHatch, lineWidth: 1)
             .frame(width: hatchWidth, height: cell).clipped()
             .offset(x: 16, y: CGFloat(row) * rowStep)
             .accessibilityHidden(true)
@@ -560,32 +566,87 @@ struct ActivityCard: View {
     }
 }
 
+enum RhythmPeriod: String, CaseIterable {
+    case dawns = "Dawns", morns = "Morns", noons = "Noons", dusks = "Dusks", nights = "Nights"
+
+    private var startHour: Int {
+        switch self {
+        case .dawns: return 5
+        case .morns: return 8
+        case .noons: return 12
+        case .dusks: return 17
+        case .nights: return 20
+        }
+    }
+
+    static func current(at date: Date, calendar: Calendar) -> Self {
+        let hour = calendar.component(.hour, from: date)
+        return allCases.last { $0.startHour <= hour } ?? .nights
+    }
+
+    struct Schedule: TimelineSchedule {
+        func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnySequence<Date> {
+            let calendar = Calendar.autoupdatingCurrent
+            return AnySequence(sequence(first: startDate) { date in
+                RhythmPeriod.allCases.compactMap { period in
+                    calendar.nextDate(after: date, matching: DateComponents(hour: period.startHour, minute: 0, second: 0),
+                                      matchingPolicy: .nextTime)
+                }.min()
+            })
+        }
+    }
+}
+
 struct ActiveDaysReadout: View {
     let value: Int?
+    var periodTint = Theme.homeLabel
+
+    private static let descriptor: CTFontDescriptor? = {
+        guard let url = Bundle.main.url(forResource: "GoeistSerif-Regular", withExtension: "otf", subdirectory: "Fonts"),
+              let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor]
+        else { return nil }
+        return descriptors.first
+    }()
+    private static let numberFont = font(24).monospacedDigit()
+    private static let rhythmFont = font(11, italic: true)
+    private static let periodFont = font(10)
+
+    private static func font(_ size: CGFloat, italic: Bool = false) -> Font {
+        guard let descriptor else {
+            let fallback = Font.system(size: size, design: .serif)
+            return italic ? fallback.italic() : fallback
+        }
+        // Upstream ships an upright face. Slant only the superscript.
+        var slant = CGAffineTransform(a: 1, b: 0, c: 0.18, d: 1, tx: 0, ty: 0)
+        let face = italic ? CTFontCreateWithFontDescriptor(descriptor, size, &slant)
+                          : CTFontCreateWithFontDescriptor(descriptor, size, nil)
+        return Font(face)
+    }
 
     var body: some View {
         let description = L10n.text("活跃天数")
         CountUpReadout(value.map(Double.init), animateOnAppear: value != nil) { number in
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .center, spacing: 4) {
                 let digits = number.map { L10n.formattedNumber(NSNumber(value: $0.rounded())) } ?? "--"
                 Text(verbatim: digits)
-                    .font(InsightTypography.number)
-                    .tracking(InsightTypography.numberTracking)
+                    .font(Self.numberFont)
+                    .tracking(-0.55)
                     .lineLimit(1).minimumScaleFactor(0.6)
                 if number != nil {
-                    Text(verbatim: "days")
-                        .font(InsightTypography.unit)
-                        .foregroundStyle(Theme.ink.opacity(0.8))
-                        .lineLimit(1).minimumScaleFactor(0.8)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(verbatim: "Rhythm")
+                            .font(Self.rhythmFont)
+                            .tracking(-0.24)
+                        TimelineView(RhythmPeriod.Schedule()) { context in
+                            Text(verbatim: RhythmPeriod.current(at: context.date, calendar: .autoupdatingCurrent).rawValue)
+                                .font(Self.periodFont)
+                                .foregroundStyle(periodTint)
+                        }
+                    }
+                    .fixedSize()
                 }
-                Text(verbatim: "Active")
-                    .font(InsightTypography.label)
-                    .foregroundColor(Theme.homeLabel)
-                    .lineLimit(1).minimumScaleFactor(0.85)
-                    .padding(.leading, 3)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(description)
         .accessibilityValue(value.map { L10n.formattedNumber(NSNumber(value: $0)) + " " + L10n.text("天") } ?? "--")

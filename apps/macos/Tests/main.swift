@@ -793,6 +793,7 @@ do {
 do {
     var capsule = RecordingBarModel()
     capsule.processing(activity: .prompt)
+    checkEq("the first prompt stage displays Prompt", capsule.thinkingSubtitle, "Prompt")
     checkEq("capsule uses the Thinking phase after recording", capsule.phase, .thinking)
     check("capture stays in processing until explicitly completed", capsule.isProcessingCapture)
     checkEq("Thinking reserves room for the label and dots", PillView.width(for: capsule, limit: 120), 150)
@@ -848,11 +849,15 @@ do {
         _ = capsule.beginCertification()
         words.append(capsule.thinkingSubtitle ?? "")
     }
-    checkEq("the cleanup word pool contains all eleven choices", Set(RecordingBarModel.cleanupSubtitles).count, 11)
+    checkEq("the cleanup word pool contains all twenty-four choices", Set(RecordingBarModel.cleanupSubtitles).count, 24)
     check("only cleanup words from the list are drawn", words.allSatisfy { RecordingBarModel.cleanupSubtitles.contains($0) })
     check("consecutive cleanup stages use different words", zip(words, words.dropFirst()).allSatisfy { $0.0 != $0.1 })
     capsule.processing(activity: .prompt)
-    check("prompt mode keeps its own label", !capsule.beginCertification() && capsule.thinkingSubtitle == "Prompt")
+    let promptLabel = capsule.thinkingSubtitle
+    check("prompt mode uses its own words and avoids repeating Prompt immediately",
+          !capsule.beginCertification() && promptLabel.map { $0 != "Prompt" && RecordingBarModel.promptSubtitles.contains($0) } == true)
+    capsule.showThinking(detail: "Another progress event", activity: .prompt)
+    checkEq("a prompt progress update preserves its chosen label", capsule.thinkingSubtitle, promptLabel)
 
     var typing = TypingHintWindow()
     check("60 key events do not trigger a tip", !typing.record(Array(repeating: 1, count: 60), in: "a", now: 1))
