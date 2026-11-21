@@ -9,7 +9,7 @@ private func animationFrames(from start: Date, duration: TimeInterval) -> [Date]
 }
 
 struct CountUpTransition {
-    static let duration = 0.320
+    static let duration = 1.2
     private var from: Double
     private(set) var target: Double?
     private(set) var startedAt: Date?
@@ -24,7 +24,8 @@ struct CountUpTransition {
         guard let target, let startedAt else { return target ?? from }
         let progress = max(0, date.timeIntervalSince(startedAt)) / Self.duration
         guard progress < 1 else { return target }
-        return from + (target - from) * (1 - pow(1 - progress, 3))
+        let eased = progress * progress * (3 - 2 * progress)
+        return from + (target - from) * eased
     }
 
     mutating func retarget(_ next: Double?, at date: Date, reduceMotion: Bool) {
@@ -96,9 +97,10 @@ private struct CountUpReadout<Content: View>: View {
 
 struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
+    var animationsReady = true
 
     private func figures(height: CGFloat, gap: CGFloat) -> some View {
-        let stats = model.stats
+        let stats = animationsReady ? model.stats : nil
         return LazyVGrid(columns: [GridItem(.flexible(), spacing: gap), GridItem(.flexible())], spacing: gap) {
             Figure(value: stats.map { Double($0.words) }, format: .count, label: "Words dictated", height: height)
             Figure(value: stats?.savedSeconds, format: .duration, label: "Time saved", height: height)
@@ -132,7 +134,7 @@ struct InsightsPanel: View {
                 }
                 .frame(height: headerHeight)
                 figures(height: tileHeight, gap: tileGap)
-                ActivityCard()
+                ActivityCard(animationsReady: animationsReady)
                     .id(model.homePresentationID)
                     .frame(height: activityHeight)
             }
@@ -169,9 +171,15 @@ enum InsightFormat {
     }
 }
 
+private enum InsightTypography {
+    static let number = Font.system(size: 32, weight: .medium, design: .serif).monospacedDigit()
+    static let numberTracking: CGFloat = -0.9
+    static let unit = Font.system(size: 12)
+    static let label = Font.system(size: Theme.homeSecondarySize)
+}
+
 /// One metric tile with a large figure, a smaller unit and a label.
 struct Figure: View {
-    private static let numberFont = Font.system(size: 32, weight: .medium, design: .serif).monospacedDigit()
     let value: Double?
     let format: InsightFormat
     let label: String
@@ -185,13 +193,13 @@ struct Figure: View {
                     ForEach(parts.indices, id: \.self) { index in
                         let part = parts[index]
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            (Text(verbatim: part.digits).font(Self.numberFont)
+                            (Text(verbatim: part.digits).font(InsightTypography.number)
                                 + Text(verbatim: part.suffix).font(.system(size: 21, weight: .medium, design: .serif)))
-                                .tracking(-0.9)
+                                .tracking(InsightTypography.numberTracking)
                                 .lineLimit(1).minimumScaleFactor(0.6)
                             if !part.unit.isEmpty {
                                 Text(verbatim: part.unit)
-                                    .font(.system(size: 12))
+                                    .font(InsightTypography.unit)
                                     .foregroundStyle(Theme.ink.opacity(0.8))
                                     .lineLimit(1).minimumScaleFactor(0.8)
                             }
@@ -202,7 +210,7 @@ struct Figure: View {
                 .accessibilityLabel(parts.map { $0.digits + $0.suffix + " " + $0.unit }.joined(separator: " "))
             }
             Text(verbatim: label)
-                .font(.system(size: Theme.homeSecondarySize))
+                .font(InsightTypography.label)
                 .lineLimit(1).minimumScaleFactor(0.85)
                 .foregroundColor(Theme.homeLabel)
         }
@@ -396,28 +404,62 @@ final class HoverShareButton: NSButton {
     }
 }
 
+/// Today and the preceding 132 calendar days, aligned to the calendar's week grid.
+struct ActivityRange {
+    static let dayCount = 133
+    let firstDay: Date
+    let today: Date
+    let lastWeek: Date
+    let weekCount: Int
+
+    init(endingOn date: Date, calendar: Calendar) {
+        let today = calendar.startOfDay(for: date)
+        let firstDay = calendar.date(byAdding: .day, value: 1 - Self.dayCount, to: today) ?? today
+        let firstWeek = calendar.dateInterval(of: .weekOfYear, for: firstDay)?.start ?? firstDay
+        let lastWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        let days = calendar.dateComponents([.day], from: firstWeek, to: lastWeek).day ?? 0
+        self.firstDay = firstDay
+        self.today = today
+        self.lastWeek = lastWeek
+        self.weekCount = days / 7 + 1
+    }
+}
+
 /// Total active days above the heatmap, with weekdays down the side and months along the bottom.
 struct ActivityCard: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var animationsReady = true
     @State private var weekOffset = 0
-    @State private var revealStart: Date?
+    @State private var animation: (target: Reveal, startedAt: Date)?
 
     private let dayColumn: CGFloat = 24
     private let navigationHeight: CGFloat = 18
     private let navigationGap: CGFloat = 6
 
+    private struct Reveal: Equatable {
+        let ready: Bool
+        let reduced: Bool
+        let presentation: Int
+    }
+
     var body: some View {
         let log = model.activityReady ? ActivityLog.shared : nil
         let _ = model.activityRevision
-        let revealReady = model.activityReady && !model.homePresentationSuspended
+        let revealReady = animationsReady && model.activityReady && !model.homePresentationSuspended
+        let calendar = ActivityTrack.calendar
+        let range = ActivityRange(endingOn: Date(), calendar: calendar)
+        let reveal = Reveal(ready: revealReady, reduced: reduceMotion, presentation: model.homePresentationID)
         VStack(alignment: .leading, spacing: 0) {
-            activeDays(log?.activeDays)
+            ActiveDaysReadout(value: animationsReady ? log?.activeDays : log.map { _ in 0 })
                 .padding(.horizontal, 7)
             GeometryReader { geo in
-                let weeks = max(1, min(20, Int((geo.size.width - dayColumn + ActivityTrack.columnGap) / ActivityTrack.columnStep)))
-                let cell = ActivityTrack.columnStep - ActivityTrack.columnGap
-                let width = CGFloat(weeks) * ActivityTrack.columnStep - ActivityTrack.columnGap
+                let weeks = range.weekCount
+                let availableWidth = max(0, geo.size.width - dayColumn)
+                let columnStep = min(ActivityTrack.preferredColumnStep,
+                                     (availableWidth + ActivityTrack.columnGap) / CGFloat(weeks))
+                let cell = max(0, columnStep - ActivityTrack.columnGap)
+                let width = CGFloat(weeks - 1) * columnStep + cell
                 let rowStep = max(cell + 2, (geo.size.height - cell - navigationHeight - navigationGap) / 6)
                 let navigationY = 6 * rowStep + cell + navigationGap
                 let duration = HeatmapMotion.finishTime(columns: weeks)
@@ -425,14 +467,15 @@ struct ActivityCard: View {
                     weekdays(cell: cell, rowStep: rowStep)
                     let elapsed = reduceMotion ? duration : 0
                     Group {
-                        if let revealStart, revealReady, !reduceMotion {
-                            TimelineView(.explicit(animationFrames(from: revealStart, duration: duration))) { frame in
-                                track(log: log, weeks: weeks, rowStep: rowStep, navigationY: navigationY,
-                                      elapsed: frame.date.timeIntervalSince(revealStart))
+                        if let animation, animation.target == reveal {
+                            TimelineView(.explicit(animationFrames(from: animation.startedAt, duration: duration))) { frame in
+                                track(log: log, range: range, columnStep: columnStep, cell: cell,
+                                      rowStep: rowStep, navigationY: navigationY,
+                                      elapsed: frame.date.timeIntervalSince(animation.startedAt))
                             }
                         } else {
-                            track(log: revealReady ? log : nil, weeks: weeks, rowStep: rowStep,
-                                  navigationY: navigationY, elapsed: elapsed)
+                            track(log: revealReady ? log : nil, range: range, columnStep: columnStep, cell: cell,
+                                  rowStep: rowStep, navigationY: navigationY, elapsed: elapsed)
                         }
                     }
                     .frame(width: width, height: navigationY + navigationHeight, alignment: .topLeading)
@@ -440,7 +483,7 @@ struct ActivityCard: View {
                     .clipped()
                     .padding(.top, -ActivityTrack.revealHeadroom)
                     .offset(x: dayColumn)
-                    navigation(log: log, weeks: weeks)
+                    navigation(log: log, range: range, calendar: calendar)
                         .frame(width: dayColumn + width)
                         .offset(y: navigationY)
                 }
@@ -460,36 +503,9 @@ struct ActivityCard: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
-        .onChange(of: revealReady, initial: true) { _, ready in
-            revealStart = ready ? (reduceMotion ? .distantPast : Date()) : nil
+        .onChange(of: reveal, initial: true) { _, target in
+            animation = target.ready && !target.reduced ? (target, Date()) : nil
         }
-        .onChange(of: reduceMotion) { _, reduced in
-            if reduced, revealStart != nil { revealStart = .distantPast }
-        }
-    }
-
-    private func activeDays(_ value: Int?) -> some View {
-        let description = L10n.text("活跃天数")
-        return CountUpReadout(value.map(Double.init)) { number in
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                let digits = number.map { L10n.formattedNumber(NSNumber(value: $0.rounded())) } ?? "--"
-                Text(verbatim: digits)
-                    .font(InterfaceTypography.figure(Theme.homeFigureSize))
-                    .tracking(-0.6)
-                if number != nil {
-                    InterfaceTypography.text("d", size: Theme.homeSecondarySize, weight: .semibold)
-                }
-                InterfaceTypography.text("Active", size: Theme.homeSecondarySize)
-                    .foregroundColor(Theme.homeLabel)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .padding(.leading, 3)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(description)
-        .accessibilityValue(value.map { L10n.formattedNumber(NSNumber(value: $0)) + " " + L10n.text("天") } ?? "--")
-        .help(description)
     }
 
     private func weekdays(cell: CGFloat, rowStep: CGFloat) -> some View {
@@ -512,16 +528,14 @@ struct ActivityCard: View {
         }
     }
 
-    private func track(log: ActivityLog?, weeks: Int, rowStep: CGFloat, navigationY: CGFloat, elapsed: Double) -> some View {
-        ActivityTrack(log: log, weeks: weeks, rowStep: rowStep,
+    private func track(log: ActivityLog?, range: ActivityRange, columnStep: CGFloat, cell: CGFloat,
+                       rowStep: CGFloat, navigationY: CGFloat, elapsed: Double) -> some View {
+        ActivityTrack(log: log, range: range, columnStep: columnStep, cell: cell, rowStep: rowStep,
                       navigationY: navigationY, elapsed: elapsed, position: Double(weekOffset))
     }
 
-    private func navigation(log: ActivityLog?, weeks: Int) -> some View {
-        let calendar = ActivityTrack.calendar
-        let today = calendar.startOfDay(for: Date())
-        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
-        let first = calendar.date(byAdding: .day, value: 7 * (weekOffset - weeks + 1), to: thisWeek) ?? thisWeek
+    private func navigation(log: ActivityLog?, range: ActivityRange, calendar: Calendar) -> some View {
+        let first = calendar.date(byAdding: .day, value: 7 * weekOffset, to: range.firstDay) ?? range.firstDay
         let earliest = log?.days.keys.min().flatMap { ActivityLog.parse($0, calendar: calendar) }
         return HStack {
             Button { move(-ActivityTrack.scrollWeeks) } label: {
@@ -540,20 +554,57 @@ struct ActivityCard: View {
     }
 
     private func move(_ weeks: Int) {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.320)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.64)) {
             weekOffset = min(0, weekOffset + weeks)
         }
     }
 }
 
+struct ActiveDaysReadout: View {
+    let value: Int?
+
+    var body: some View {
+        let description = L10n.text("活跃天数")
+        CountUpReadout(value.map(Double.init), animateOnAppear: value != nil) { number in
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                let digits = number.map { L10n.formattedNumber(NSNumber(value: $0.rounded())) } ?? "--"
+                Text(verbatim: digits)
+                    .font(InsightTypography.number)
+                    .tracking(InsightTypography.numberTracking)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                if number != nil {
+                    Text(verbatim: "days")
+                        .font(InsightTypography.unit)
+                        .foregroundStyle(Theme.ink.opacity(0.8))
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
+                Text(verbatim: "Active")
+                    .font(InsightTypography.label)
+                    .foregroundColor(Theme.homeLabel)
+                    .lineLimit(1).minimumScaleFactor(0.85)
+                    .padding(.leading, 3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(description)
+        .accessibilityValue(value.map { L10n.formattedNumber(NSNumber(value: $0)) + " " + L10n.text("天") } ?? "--")
+        .help(description)
+    }
+}
+
 private struct ActivityTrack: View, Animatable {
-    // Four weeks on the same 22-point pitch move both rows and labels exactly 88 points.
     static let scrollWeeks = 4
-    static let columnStep: CGFloat = 22
+    static let preferredColumnStep: CGFloat = 22
     static let columnGap: CGFloat = 3
     static let revealHeadroom: CGFloat = 6
+    private static let englishMonth = Date.FormatStyle(locale: Locale(identifier: "en_US"),
+                                                       calendar: Calendar(identifier: .gregorian),
+                                                       timeZone: .autoupdatingCurrent).month(.abbreviated)
     let log: ActivityLog?
-    let weeks: Int
+    let range: ActivityRange
+    let columnStep: CGFloat
+    let cell: CGFloat
     let rowStep: CGFloat
     let navigationY: CGFloat
     let elapsed: Double
@@ -573,29 +624,29 @@ private struct ActivityTrack: View, Animatable {
 
     var body: some View {
         let calendar = Self.calendar
-        let today = calendar.startOfDay(for: Date())
-        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
-        let cell = Self.columnStep - Self.columnGap
+        let weeks = range.weekCount
         let firstWeek = position - Double(weeks - 1)
         let first = Int(floor(firstWeek))
         ZStack(alignment: .topLeading) {
             ForEach(first...(first + weeks), id: \.self) { week in
-                let date = calendar.date(byAdding: .day, value: 7 * week, to: thisWeek) ?? thisWeek
-                let x = (Double(week) - firstWeek) * Self.columnStep
+                let date = calendar.date(byAdding: .day, value: 7 * week, to: range.lastWeek) ?? range.lastWeek
+                let x = (Double(week) - firstWeek) * columnStep
+                let offscreen = x <= -cell || x >= CGFloat(weeks) * columnStep
                 let column = max(0, week + weeks - 1)
                 let motion = HeatmapMotion.sample(elapsed: elapsed, column: column)
                 ForEach(0..<7, id: \.self) { row in
-                    let day = calendar.date(byAdding: .day, value: row, to: date) ?? date
-                    let depth = HeatmapMotion.depth(elapsed: elapsed, column: column, row: row)
-                    cellView(date: day, today: today, size: cell, motion: motion, depth: depth)
-                        .offset(x: x, y: CGFloat(row) * rowStep)
-                        .accessibilityHidden(x <= -cell || x >= CGFloat(weeks) * Self.columnStep)
+                    if let day = calendar.date(byAdding: .day, value: row, to: date) {
+                        let depth = HeatmapMotion.depth(elapsed: elapsed, column: column, row: row)
+                        cellView(date: day, motion: motion, depth: depth)
+                            .offset(x: x, y: CGFloat(row) * rowStep)
+                            .accessibilityHidden(offscreen)
+                    }
                 }
                 if week <= 0, let label = monthLabel(weekStart: date, calendar: calendar) {
                     InterfaceTypography.text(label, size: 11).foregroundColor(Theme.homeLabel)
                         .fixedSize()
                         .offset(x: x, y: navigationY + 2)
-                        .accessibilityHidden(x <= -cell || x >= CGFloat(weeks) * Self.columnStep)
+                        .accessibilityHidden(offscreen)
                 }
             }
         }
@@ -603,25 +654,24 @@ private struct ActivityTrack: View, Animatable {
     }
 
     @ViewBuilder
-    private func cellView(date: Date, today: Date, size: CGFloat, motion: HeatmapMotion.Sample,
-                          depth: Double) -> some View {
+    private func cellView(date: Date, motion: HeatmapMotion.Sample, depth: Double) -> some View {
         if let log {
             let face = Group {
-                if date <= today {
+                if date <= range.today && (position < 0 || date >= range.firstDay) {
                     let day = log.day(date)
                     let description = tooltip(date, day)
-                    Self.square(ActivityLog.level(day.dictations), size: size)
+                    Self.square(ActivityLog.level(day.dictations), size: cell)
                         .help(description).accessibilityLabel(description)
                 } else {
                     RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
                         .strokeBorder(Theme.border, lineWidth: 1)
-                        .frame(width: size, height: size)
+                        .frame(width: cell, height: cell)
                         .accessibilityHidden(true)
                 }
             }
             .overlay {
                 if motion.cover > 0 {
-                    Self.square(0, size: size).opacity(motion.cover)
+                    Self.square(0, size: cell).opacity(motion.cover)
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
@@ -633,7 +683,7 @@ private struct ActivityTrack: View, Animatable {
                     .background {
                         RoundedRectangle(cornerRadius: Theme.heatCellRadius)
                             .fill(.black.opacity(0.28 * depth))
-                            .frame(width: size, height: size)
+                            .frame(width: cell, height: cell)
                             .blur(radius: 2 * depth)
                             .offset(x: depth, y: 2 * depth)
                             .allowsHitTesting(false)
@@ -643,7 +693,7 @@ private struct ActivityTrack: View, Animatable {
                 face
             }
         } else {
-            Self.square(0, size: size).accessibilityHidden(true)
+            Self.square(0, size: cell).accessibilityHidden(true)
         }
     }
 
@@ -655,15 +705,14 @@ private struct ActivityTrack: View, Animatable {
 
     private func monthLabel(weekStart: Date, calendar: Calendar) -> String? {
         let days = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: weekStart) }
-        guard let startsMonth = days.first(where: { calendar.component(.day, from: $0) == 1 }) else { return nil }
-        if L10n.language != "en" {
-            return ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"][calendar.component(.month, from: startsMonth) - 1]
-        }
-        return startsMonth.formatted(.dateTime.locale(L10n.locale).month(.abbreviated))
+        guard let startsMonth = days.first(where: {
+            calendar.component(.day, from: $0) == 1 && $0 <= range.today && (position < 0 || $0 >= range.firstDay)
+        }) else { return nil }
+        return startsMonth.formatted(Self.englishMonth)
     }
 
     private func tooltip(_ date: Date, _ day: ActivityDay) -> String {
-        let when = date.formatted(.dateTime.locale(L10n.locale).month(.abbreviated).day())
+        let when = date.formatted(Self.englishMonth.day())
         return day.dictations == 0
             ? when + " · " + L10n.text("没有活动")
             : when + " · " + L10n.text("{0} 次 · {1} 字", day.dictations, day.words)
@@ -671,9 +720,9 @@ private struct ActivityTrack: View, Animatable {
 }
 
 enum HeatmapMotion {
-    static let columnDelay = 0.025
-    static let cellDuration = 0.375
-    private static let rowDelay = 0.00625
+    static let columnDelay = 0.055
+    static let cellDuration = 0.825
+    private static let rowDelay = columnDelay / 4
 
     struct Sample: Equatable {
         let scale: Double

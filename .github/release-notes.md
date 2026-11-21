@@ -3,17 +3,15 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 听写胶囊先居中显示 Futura 的 Thinking。整理模型接手后，标题轻微上移，底部淡入一条衬线状态词。11 个词随机轮换，连续两次整理使用不同词。
-- 豆包听写在录音时流式传输，停录后只交付最终转写。联网语音识别可测试连接并查看延迟。
-- 听写整理可单独关闭。启用后，短句做基础纠错，中等长度轻度整理，长段落按意思组织。支持思考开关的模型会显示相应选项。
-- 设置重新打开时回到顶部。减少同一麦克风的重复提示，调慢首页统计和活动热力图的动效。
+- 首页入场新增居中的 Logo 遮罩。淡出后播放统计数字和最近 133 天的活动热力图。
+- 主窗口和设置使用原生 Push 切页，并为首页引擎显示模型品牌标志。
+- 豆包热词支持回车换行和自动保存。整理阶段的胶囊状态词使用系统 Big Caslon。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- The dictation capsule starts with a centered Thinking label in Futura. When cleanup starts, the title lifts slightly and a serif status word fades in beneath it. The app rotates through eleven words and avoids consecutive repeats.
-- Doubao streams audio during dictation and delivers the final transcript after recording stops. Online recognition settings can test the connection and show its latency.
-- Dictation cleanup is optional. When enabled, short transcripts get basic corrections, medium transcripts get light editing, and long transcripts get structured cleanup. Settings show a thinking switch for models that support it.
-- Settings returns to the top when reopened. Microphone reminders appear less often, and Home statistics and activity animate more slowly.
+- Home shows a brief centered logo before animating its numbers and 133-day activity grid.
+- The main window and Settings use native Push transitions. Home shows brand marks beside the active engines.
+- Press Return to separate Doubao hotwords. Changes save automatically. Cleanup status words use the system Big Caslon font.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

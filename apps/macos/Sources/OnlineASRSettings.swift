@@ -41,11 +41,11 @@ struct OnlineASRSettings: View {
                     ToggleRow(title: L10n.text("豆包语义顺滑"),
                               detail: L10n.text("在识别时去除中文和英文的语气词与重复。"),
                               isOn: model.setting(\.doubaoSpeechSmoothing))
-                    SettingRow(title: L10n.text("豆包热词"), detail: L10n.text("每行一个词，随录音发给豆包。")) {
-                        TextField(L10n.text("人名、品牌或术语"), text: model.setting(\.doubaoHotwords), axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
-                            .lineLimit(1...4)
-                            .frame(width: 225)
+                    let title = L10n.text("豆包热词")
+                    SettingRow(title: title, detail: L10n.text("每行一个词，随录音发给豆包。")) {
+                        CapsuleTextEditor(text: model.setting(\.doubaoHotwords), placeholder: L10n.text("人名、品牌或术语"))
+                            .accessibilityLabel(title)
+                            .frame(width: 225, height: 52)
                     }
                 }
             }

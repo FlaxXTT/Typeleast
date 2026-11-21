@@ -1,5 +1,4 @@
 import AppKit
-import CoreText
 import SwiftUI
 import QuartzCore
 
@@ -366,27 +365,10 @@ final class PillView: NSView {
         ?? NSFont.systemFont(ofSize: dictationTitleSize, weight: .semibold)
     private static let thinkingFont = NSFontManager.shared.convert(dictationThinkingFont, toSize: 15)
     private static let thinkingSubtitleFont = NSFont.systemFont(ofSize: 11, weight: .medium)
-    private static let cleanupSubtitleFont: NSFont = {
-        let fontName = "AnthropicSerifVariable-TextRegular"
-        let size: CGFloat = 13
-        if let installed = NSFont(name: fontName, size: size) { return installed }
-
-        // A local font can live beside user data, outside the signed app bundle.
-        let url = URL(fileURLWithPath: ServiceClient.stateDirectory, isDirectory: true)
-            .appendingPathComponent("Fonts", isDirectory: true)
-            .appendingPathComponent("AnthropicSerif.woff2")
-        if let data = try? Data(contentsOf: url, options: .mappedIfSafe),
-           let descriptors = CTFontManagerCreateFontDescriptorsFromData(data as CFData) as? [CTFontDescriptor],
-           let descriptor = descriptors.first(where: {
-               CTFontDescriptorCopyAttribute($0, kCTFontNameAttribute) as? String == fontName
-           }) {
-            return CTFontCreateWithFontDescriptor(descriptor, size, nil) as NSFont
-        }
-
-        return NSFont(name: "Georgia", size: 12)
-            ?? NSFont(name: "Times New Roman", size: 12)
-            ?? thinkingSubtitleFont
-    }()
+    private static let cleanupSubtitleFont = NSFont(name: "BigCaslon-Medium", size: 13)
+        ?? NSFont(name: "Georgia", size: 12)
+        ?? NSFont(name: "Times New Roman", size: 12)
+        ?? thinkingSubtitleFont
     private static let cleanupSubtitleInset: CGFloat = 6
     private static let processingFont = InterfaceTypography.localizedAppKit(13, weight: .medium)
     private static let thinkingWaveCount = 8
@@ -1095,6 +1077,13 @@ final class RecordingBar {
         }
 
         func needsReview(_ text: String) { apply { $0.showResult(text, warning: true, requiresReview: true) } }
+
+        func failed(_ text: String) {
+            apply { bar in
+                guard bar.model.phase == .thinking, bar.model.isProcessingCapture else { return }
+                bar.showResult(text, warning: true)
+            }
+        }
 
         func cancel() { apply { $0.hide() } }
     }

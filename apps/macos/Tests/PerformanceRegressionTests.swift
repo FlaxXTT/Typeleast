@@ -28,11 +28,17 @@ func dashboardMotionTests() {
     check("a fresh count has no target before data arrives", count.target == nil)
     checkEq("a fresh count starts at zero", count.value(at: start), 0)
     count.retarget(800, at: start, reduceMotion: false)
-    let halfway = start.addingTimeInterval(0.160)
-    checkEq("count uses cubic ease-out halfway through 320 ms", count.value(at: halfway), 700)
+    let quarter = start.addingTimeInterval(CountUpTransition.duration / 4)
+    let halfway = start.addingTimeInterval(CountUpTransition.duration / 2)
+    let threeQuarters = start.addingTimeInterval(3 * CountUpTransition.duration / 4)
+    check("the slower count is still moving after 320 ms", count.value(at: start.addingTimeInterval(0.320)) < 800)
+    checkEq("count starts slower than a linear transition", count.value(at: quarter), 125)
+    checkEq("count reaches the midpoint halfway through 1.2 seconds", count.value(at: halfway), 400)
+    check("the count is easing toward the end after the third quarter",
+          abs(count.value(at: threeQuarters) - 675) < 0.000001)
     count.retarget(900, at: halfway, reduceMotion: false)
-    checkEq("updates start from the current interpolation", count.value(at: halfway), 700)
-    checkEq("count finishes on its new target", count.value(at: halfway.addingTimeInterval(0.320)), 900)
+    checkEq("updates start from the current interpolation", count.value(at: halfway), 400)
+    checkEq("count finishes on its new target", count.value(at: halfway.addingTimeInterval(CountUpTransition.duration)), 900)
     count.retarget(123, at: halfway, reduceMotion: true)
     checkEq("reduced motion skips count interpolation", count.value(at: halfway), 123)
     checkEq("a cached count can display immediately", CountUpTransition(initial: 91).value(at: start), 91)
@@ -42,22 +48,52 @@ func dashboardMotionTests() {
 
     let covered = HeatmapMotion.Sample(scale: 1, cover: 1)
     let final = HeatmapMotion.Sample(scale: 1, cover: 0)
-    checkEq("waiting columns keep the placeholder", HeatmapMotion.sample(elapsed: 0.024, column: 1), covered)
-    check("the first column has already begun", HeatmapMotion.sample(elapsed: 0.024, column: 0).cover < 1)
-    checkEq("a cell is uncovered at half the reveal duration", HeatmapMotion.sample(elapsed: 0.1875, column: 0),
+    let beforeSecondColumn = HeatmapMotion.columnDelay - 0.001
+    let halfPulse = HeatmapMotion.cellDuration / 2
+    checkEq("waiting columns keep the placeholder", HeatmapMotion.sample(elapsed: beforeSecondColumn, column: 1), covered)
+    check("the first column has already begun", HeatmapMotion.sample(elapsed: beforeSecondColumn, column: 0).cover < 1)
+    checkEq("a cell is uncovered at half the reveal duration", HeatmapMotion.sample(elapsed: halfPulse, column: 0),
             .init(scale: 1.2, cover: 0))
-    checkEq("a cell settles after 375 ms", HeatmapMotion.sample(elapsed: 0.375, column: 0), final)
-    checkEq("column-local samples match at the same time", HeatmapMotion.sample(elapsed: 0.125, column: 0),
-            HeatmapMotion.sample(elapsed: 0.175, column: 2))
-    checkEq("the activity tile returns to the grid plane", HeatmapMotion.depth(elapsed: 0.375, column: 0, row: 6), 0)
+    checkEq("a cell settles after 825 ms", HeatmapMotion.sample(elapsed: 0.825, column: 0), final)
+    checkEq("column-local samples match at the same time", HeatmapMotion.sample(elapsed: 0.25, column: 0),
+            HeatmapMotion.sample(elapsed: 0.25 + 2 * HeatmapMotion.columnDelay, column: 2))
+    checkEq("the activity tile returns to the grid plane",
+            HeatmapMotion.depth(elapsed: HeatmapMotion.cellDuration, column: 0, row: 6), 0)
     check("the leading row rises before the following row or column",
-          HeatmapMotion.depth(elapsed: 0.024, column: 0, row: 0) > 0
-          && HeatmapMotion.depth(elapsed: 0.024, column: 0, row: 6) == 0
-          && HeatmapMotion.depth(elapsed: 0.024, column: 1, row: 0) == 0)
+          HeatmapMotion.depth(elapsed: beforeSecondColumn, column: 0, row: 0) > 0
+          && HeatmapMotion.depth(elapsed: beforeSecondColumn, column: 0, row: 6) == 0
+          && HeatmapMotion.depth(elapsed: beforeSecondColumn, column: 1, row: 0) == 0)
     checkEq("the first tile lifts to full depth halfway through its pulse",
-            HeatmapMotion.depth(elapsed: 0.1875, column: 0, row: 0), 1)
-    check("the 20-column homepage heatmap finishes in 850 ms",
-          abs(HeatmapMotion.finishTime(columns: 20) - 0.850) < 0.000001)
+            HeatmapMotion.depth(elapsed: halfPulse, column: 0, row: 0), 1)
+    check("the 20-column homepage heatmap finishes in 1.87 seconds",
+          abs(HeatmapMotion.finishTime(columns: 20) - 1.87) < 0.000001)
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+    calendar.firstWeekday = 1
+    let saturday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 21, hour: 12))!
+    let firstDay = calendar.date(from: DateComponents(year: 2026, month: 7, day: 12))!
+    let saturdayRange = ActivityRange(endingOn: saturday, calendar: calendar)
+    checkEq("the 133-day range includes today and survives a daylight saving change", saturdayRange.firstDay, firstDay)
+    checkEq("a range ending Saturday occupies exactly 19 week columns", saturdayRange.weekCount, 19)
+    for offset in 1...6 {
+        let day = calendar.date(byAdding: .day, value: offset, to: saturday)!
+        let range = ActivityRange(endingOn: day, calendar: calendar)
+        checkEq("a 133-day range ending \(offset) days past Saturday occupies 20 aligned columns", range.weekCount, 20)
+        checkEq("column coverage keeps the inclusive range at 133 days for weekday offset \(offset)",
+                calendar.dateComponents([.day], from: range.firstDay, to: range.today).day, 132)
+    }
+
+    checkEq("Doubao dictation keeps the Doubao mark regardless of the installed local model",
+            EngineBrand.speech(provider: .doubao, modelID: "mlx-qwen3-asr-1.7b-8bit"), .doubao)
+    checkEq("the local Qwen speech model has the Qwen mark",
+            EngineBrand.speech(provider: .local, modelID: "mlx-qwen3-asr-1.7b-8bit"), .qwen)
+    checkEq("OpenRouter selects the DeepSeek whale for a routed DeepSeek model",
+            EngineBrand.cleanup(providerID: "openrouter", modelID: "deepseek/deepseek-flash"), .deepseek)
+    checkEq("Ollama selects the loaded model family when it is recognizable",
+            EngineBrand.cleanup(providerID: "ollama", modelID: "qwen3:8b"), .qwen)
+    checkEq("a custom OpenAI-compatible endpoint gets no inferred brand for an unknown model",
+            EngineBrand.cleanup(providerID: "custom", modelID: "custom/private"), nil)
 }
 
 func dashboardWindowTests() {
@@ -79,6 +115,8 @@ func dashboardWindowTests() {
 
     dashboardCountRenderingTests()
     cancelledTranscriptionToastTests()
+    pageTransitionRenderingTests()
+    homeEntryMaskTests()
 
     let model = AppModel(loadCacheImmediately: false)
     let hub = HubWindowController(model: model)
@@ -125,11 +163,14 @@ func dashboardWindowTests() {
     hub.openMainWindow()
     checkEq("the explicit Home action opens Home", model.page, .home)
     hub.show(page: .history)
+    let beforeReopening = model.homePresentationID
     window.close()
     let previousPalette = model.sidebarBrandPalette
     hub.reopenMainWindow()
+    hub.applicationDidBecomeActive()
     check("closed window reopens at Home", window.isVisible && model.page == .home)
     check("reopening the window draws a different brand palette", model.sidebarBrandPalette != previousPalette)
+    checkEq("reopening Home runs one new presentation", model.homePresentationID, beforeReopening + 1)
 
     let pending = AppModel(loadCacheImmediately: false)
     let slowHub = HubWindowController(model: pending)
@@ -145,6 +186,79 @@ func dashboardWindowTests() {
     pending.finishUserCacheLoad()
     slowHub.userCacheDidLoad()
     check("a late cache completion still loads both dashboard sections", waitFor { pending.stats != nil && pending.activityReady })
+}
+
+private func pageTransitionRenderingTests() {
+    var mounted: Set<HubPage> = []
+    func page(_ selection: HubPage) -> some View {
+        HubPageTransition(selection: selection) { page in
+            Text(page.rawValue)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear { mounted.insert(page) }
+                .onDisappear { mounted.remove(page) }
+        }
+    }
+    let view = NSHostingView(rootView: page(.home))
+    let frame = NSRect(x: 0, y: 0, width: 280, height: 150)
+    let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = view
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+
+    func waitFor(_ ready: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(1)
+        repeat {
+            view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.005))
+        } while !ready() && Date() < deadline
+        return ready()
+    }
+
+    check("the first page mounts without an outgoing page", waitFor { mounted == [.home] })
+    view.rootView = page(.history)
+    check("changing tabs mounts the destination", waitFor { mounted.contains(.history) })
+    view.rootView = page(.meetings)
+    check("the latest page is the only one left after the transition", waitFor { mounted == [.meetings] })
+}
+
+private func homeEntryMaskTests() {
+    var covered = false
+    func home(_ request: Int?) -> some View {
+        HomeEntryTransition(request: request) { isCovered in
+            Text("Home").onChange(of: isCovered, initial: true) { _, value in covered = value }
+        }
+    }
+    let view = NSHostingView(rootView: home(nil))
+    let frame = NSRect(x: 0, y: 0, width: 280, height: 150)
+    let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = view
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+
+    func waitFor(_ ready: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(1.5)
+        repeat {
+            view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        } while !ready() && Date() < deadline
+        return ready()
+    }
+
+    view.rootView = home(1)
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        check("reduced motion reveals the Home statistics without a mask", waitFor { !covered })
+        return
+    }
+    check("the Logo mask holds the Home statistics on entry", waitFor { covered })
+    RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+    check("the Home statistics stay held during the Logo pause", covered)
+    check("the Home statistics are released when the mask finishes fading", waitFor { !covered })
+    view.rootView = home(nil)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    view.rootView = home(1)
+    check("returning to Home plays the mask even with the same window presentation", waitFor { covered })
+    view.rootView = home(nil)
+    check("leaving Home dismisses an in-flight mask", waitFor { !covered })
 }
 
 private func cancelledTranscriptionToastTests() {
@@ -201,16 +315,21 @@ private func dashboardCountRenderingTests() {
         return
     }
 
-    let size = NSRect(x: 0, y: 0, width: 400, height: 90)
-    func figures(words: Double?, seconds: Double?, presentation: Int) -> some View {
+    let size = NSRect(x: 0, y: 0, width: 600, height: 90)
+    let columnWidth = size.width / 3
+    func figures(words: Double?, seconds: Double?, activeDays: Int?, presentation: Int) -> some View {
         HStack(spacing: 0) {
             Figure(value: words, format: .count, label: "Words dictated", height: size.height)
+                .frame(width: columnWidth)
             Figure(value: seconds, format: .duration, label: "Time saved", height: size.height)
+                .frame(width: columnWidth)
+            ActiveDaysReadout(value: activeDays)
+                .frame(width: columnWidth)
         }
         .frame(width: size.width, height: size.height)
         .id(presentation)
     }
-    let view = NSHostingView(rootView: figures(words: 0, seconds: 0, presentation: 0))
+    let view = NSHostingView(rootView: figures(words: 0, seconds: 0, activeDays: 0, presentation: 0))
     let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = view
     window.orderFront(nil)
@@ -223,38 +342,51 @@ private func dashboardCountRenderingTests() {
         return image.representation(using: .png, properties: [:])
     }
 
-    let words = NSRect(x: 0, y: 0, width: size.width / 2, height: size.height)
+    let words = NSRect(x: 0, y: 0, width: columnWidth, height: size.height)
     let time = words.offsetBy(dx: words.width, dy: 0)
+    let active = time.offsetBy(dx: time.width, dy: 0)
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     let zeroWords = snapshot(words)
     let zeroTime = snapshot(time)
+    let zeroActive = snapshot(active)
 
-    view.rootView = figures(words: nil, seconds: nil, presentation: 1)
+    view.rootView = figures(words: nil, seconds: nil, activeDays: nil, presentation: 1)
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     check("the first frame before data arrives renders numeric zeros", zeroWords != nil && zeroTime != nil &&
           zeroWords == snapshot(words) && zeroTime == snapshot(time))
+    let unavailableActive = snapshot(active)
+    check("active days have a placeholder until activity data arrives",
+          unavailableActive != nil && zeroActive != nil && unavailableActive != zeroActive)
 
-    view.rootView = figures(words: 64_300, seconds: 45_900, presentation: 2)
+    view.rootView = figures(words: 64_300, seconds: 45_900, activeDays: 20, presentation: 2)
     RunLoop.current.run(until: Date().addingTimeInterval(0.01))
     check("reopening with cached statistics renders zeros before the animation", zeroWords != nil && zeroTime != nil &&
           zeroWords == snapshot(words) && zeroTime == snapshot(time))
+    check("reopening with cached active days starts from zero", zeroActive != nil && zeroActive == snapshot(active))
     var wordsFrames = Set<Data>()
     var timeFrames = Set<Data>()
+    var activeFrames = Set<Data>()
     let deadline = Date().addingTimeInterval(CountUpTransition.duration + 0.10)
     while Date() < deadline {
         RunLoop.current.run(until: Date().addingTimeInterval(0.025))
         if let frame = snapshot(words) { wordsFrames.insert(frame) }
         if let frame = snapshot(time) { timeFrames.insert(frame) }
+        if let frame = snapshot(active) { activeFrames.insert(frame) }
     }
     check("cached word count renders intermediate frames on appearance", wordsFrames.count >= 3,
           "rendered \(wordsFrames.count) distinct frames")
     check("cached saved time renders intermediate frames on appearance", timeFrames.count >= 3,
           "rendered \(timeFrames.count) distinct frames")
+    check("cached active days render intermediate frames on appearance", activeFrames.count >= 3,
+          "rendered \(activeFrames.count) distinct frames")
     let finalWords = snapshot(words)
     let finalTime = snapshot(time)
+    let finalActive = snapshot(active)
     RunLoop.current.run(until: Date().addingTimeInterval(0.08))
     check("the rendered word and time counts settle", finalWords != nil && finalTime != nil &&
           finalWords == snapshot(words) && finalTime == snapshot(time))
+    check("the rendered active day count settles", finalActive != nil && finalActive != zeroActive &&
+          finalActive == snapshot(active))
 }
 
 func performanceRegressionTests() {

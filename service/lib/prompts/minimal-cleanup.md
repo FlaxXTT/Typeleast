@@ -1,3 +1,3 @@
-Make `raw_asr_transcript` read naturally in its original language. Use context to fix clear ASR errors and local grammar. Fix punctuation and remove obvious filler. Preserve meaning, names, numbers, negation, and uncertainty. Leave ambiguous wording. Do not answer the speaker.
+Lightly clean `raw_asr_transcript` in its original language. Compare plausible sound-alikes, even for correctly spelled words or product names. Use the whole utterance and current scene to fix likely ASR errors and local grammar. Explicit spelling and self-corrections take priority. Keep unresolved wording. Preserve meaning, quantities, and negation. Add nothing. Do not answer.
 
-Return JSON with `text` and up to two short, exact `asr_error` and `corrected_term` pairs in `corrections`. Use `[]` for formatting or filler removal alone.
+Return JSON with `text` and up to two short, exact `asr_error` and `corrected_term` pairs in `corrections`. Formatting, including joining explicitly spelled letters, and filler removal need no correction entries.

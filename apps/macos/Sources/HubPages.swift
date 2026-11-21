@@ -69,6 +69,7 @@ enum Formatters {
 struct HomePage: View {
     @EnvironmentObject var model: AppModel
     @State private var showsSetup = false
+    var animationsReady = true
     static let horizontalInset: CGFloat = 12
     static let columnGap: CGFloat = 14
     static let insightsFraction: CGFloat = 0.67
@@ -79,7 +80,7 @@ struct HomePage: View {
             let width = max(0, geometry.size.width - gap)
             let insightsWidth = width * Self.insightsFraction
             HStack(alignment: .top, spacing: gap) {
-                InsightsPanel()
+                InsightsPanel(animationsReady: animationsReady)
                     .frame(width: insightsWidth, height: geometry.size.height)
                     .background {
                         HomeDotGrid()
@@ -368,13 +369,19 @@ private struct EngineCard: View {
     var body: some View {
         let speech = model.speechEngineSummary
         let cleanup = model.cleanupEngineSummary
+        let speechBrand = EngineBrand.speech(provider: model.settings.onlineASRProvider, modelID: model.speech?.modelId)
+        let cleanupBrand = cleanup.detail.flatMap { _ in
+            EngineBrand.cleanup(providerID: model.settings.llmPresetID, modelID: model.settings.llmModel)
+        }
         VStack(alignment: .leading, spacing: 0) {
             InterfaceTypography.text(L10n.text("引擎"), size: Theme.homeFigureSize, weight: .medium)
             Spacer(minLength: 4)
             VStack(alignment: .leading, spacing: 9) {
-                EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: speech.name, detail: speech.detail)
+                EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: speech.name, detail: speech.detail,
+                          brand: speechBrand)
                 Divider().overlay(Theme.border)
-                EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: cleanup.name, detail: cleanup.detail)
+                EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: cleanup.name, detail: cleanup.detail,
+                          brand: cleanupBrand)
             }
             Spacer(minLength: 5)
             Button {
@@ -410,13 +417,17 @@ private struct EngineRow: View {
     let title: String
     let value: String
     let detail: String?
+    let brand: EngineBrand?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: symbol).font(Theme.captionFont).foregroundColor(Theme.homeLabel)
-            InterfaceTypography.text(value, size: 15, weight: .semibold)
-                .lineLimit(2).minimumScaleFactor(0.85).help(value)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 7) {
+                if let brand { EngineLogo(brand: brand) }
+                InterfaceTypography.text(value, size: 15, weight: .semibold)
+                    .lineLimit(2).minimumScaleFactor(0.85).help(value)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if let detail {
                 InterfaceTypography.text(detail, size: 11, weight: .medium)
                     .foregroundColor(Theme.secondary)
