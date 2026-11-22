@@ -592,6 +592,23 @@ test("explicit letters survive cleanup in either direction, regardless of the ap
   }
 });
 
+test("cleanup keeps a corrected word once and discards dictated spelling echoes", async () => {
+  const shortCleanup = { maxUnits: 25, fullAbove: 100 };
+  for (const repeat of [0, 3, 10]) {
+    const rest = "。" + "后面还要检查连接和同步是否正常。".repeat(repeat);
+    for (const [raw, draft, corrections] of [
+      ["我想打开 Tailscale，p a i r s c a l e", "我想打开 Tailscale，P-A-I-R-S-C-A-L-E", []],
+      ["我想打开 Paint，T-A-I-L-S-C-A-L-E", "我想打开 Tailscale，T-A-I-L-S-C-A-L-E",
+        [{ asr_error: "Paint", corrected_term: "Tailscale" }]],
+    ]) {
+      const model = fakeModel(JSON.stringify({ text: draft + rest, corrections }));
+      const result = await makeService({ model }).polish({ rawText: raw + rest, llm: ROUTE, shortCleanup });
+      assert.equal(result.text, "我想打开 Tailscale" + rest);
+      assert.equal(model.calls.length, 1);
+    }
+  }
+});
+
 test("the minimal prompt reloads from its own file", async (t) => {
   const stateDir = await mkdtemp(join(tmpdir(), "typeleast-minimal-prompt-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));

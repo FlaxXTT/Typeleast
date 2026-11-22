@@ -619,7 +619,7 @@ do {
     waveform.advance(at: 1.337)
     let accent = waveform.heights[middle]
     check("increasing input raises the centre during the same phrase",
-          ordinary > 14 && ordinary < accent && (18...20).contains(accent))
+          ordinary > 14 && ordinary < accent && (19...23).contains(accent))
     check("strong speech leaves the two end columns near rest",
           waveform.heights[left] > 14 && waveform.heights[right] > 15
           && waveform.heights[right] < accent
@@ -652,11 +652,11 @@ do {
     let quietOuterExcursion = waveform.heights[0] - resting
     waveform.receive(0.74, at: 3.08, reduceMotion: true)
     check("ordinary speech uses distinct, lower heights across the three middle columns",
-          (10...12).contains(waveform.heights[left]) && (15...16).contains(waveform.heights[middle])
-          && (13...14).contains(waveform.heights[right]))
+          (11...13).contains(waveform.heights[left]) && (16...18).contains(waveform.heights[middle])
+          && (14...16).contains(waveform.heights[right]))
     waveform.receive(1, at: 3.10, reduceMotion: true)
     check("reduced motion immediately distinguishes quiet and loud input",
-          quietHeight > resting && (19...20).contains(waveform.heights[middle]))
+          quietHeight > resting && (21...22).contains(waveform.heights[middle]))
     check("reduced motion keeps the center pair above both shoulders",
           waveform.heights[middle] > waveform.heights[right] && waveform.heights[right] > waveform.heights[left]
           && waveform.heights[right] > waveform.heights[6])
@@ -676,9 +676,9 @@ do {
     waveform.reset()
     check("starting a new take clears the envelope", waveform.heights.allSatisfy { $0 == resting })
 
-    func moderateSpeechFrames(edgePhases: SIMD3<Double>) -> [[Double]] {
+    func moderateSpeechFrames(texturePhases: SIMD3<Double>) -> [[Double]] {
         var sample = VoiceWaveform()
-        sample.reset(edgePhases: edgePhases)
+        sample.reset(texturePhases: texturePhases)
         return (0...50).compactMap { tick in
             let time = Double(tick) * 0.05
             sample.receive(0.74, at: time, reduceMotion: false, drawEndpointLift: { false })
@@ -686,13 +686,14 @@ do {
             return tick >= 20 ? Array(sample.heights[left...right]) : nil
         }
     }
-    let firstTake = moderateSpeechFrames(edgePhases: SIMD3(0.2, 2.3, 4.8))
-    let nextTake = moderateSpeechFrames(edgePhases: SIMD3(2.1, 4.0, 0.8))
-    checkEq("different edge phases cannot change the same voice in the middle", firstTake, nextTake)
-    check("a steady moderate voice preserves a clear, steady height hierarchy in the middle",
+    let firstTake = moderateSpeechFrames(texturePhases: SIMD3(0.2, 2.3, 4.8))
+    let nextTake = moderateSpeechFrames(texturePhases: SIMD3(2.1, 4.0, 0.8))
+    check("two recordings of the same level have subtly different middle columns",
+          zip(firstTake, nextTake).contains { abs($0[1] - $1[1]) > 0.2 })
+    check("a steady moderate voice keeps a clear height hierarchy with bounded movement",
           firstTake.allSatisfy { frame in
-              frame[1] - frame[2] > 1.5 && frame[2] - frame[0] > 1.5
-                && zip(frame, firstTake[0]).allSatisfy { abs($0 - $1) < 0.001 }
+              frame[1] - frame[2] > 1 && frame[2] - frame[0] > 1
+                && zip(frame, firstTake[0]).allSatisfy { abs($0 - $1) < 1.5 }
           })
 
     func endpointHeights(left: Bool, right: Bool) -> (heights: [Double], draws: Int) {
@@ -729,15 +730,16 @@ do {
     check("the first successful recording announces an input without drawing a reminder",
           microphoneHints.shouldShow("Built-in", at: 1, drawReminder: { false }))
     check("the same input stays quiet before the reminder interval",
-          !microphoneHints.shouldShow("Built-in", at: 599, drawReminder: { true }))
-    check("an eligible reminder only shows when the random draw succeeds",
-          !microphoneHints.shouldShow("Built-in", at: 601, drawReminder: { false })
-          && microphoneHints.shouldShow("Built-in", at: 602, drawReminder: { true }))
+          !microphoneHints.shouldShow("Built-in", at: 3600, drawReminder: { true }))
+    check("an unsuccessful draw defers another attempt by fifteen minutes",
+          !microphoneHints.shouldShow("Built-in", at: 3601, drawReminder: { false })
+          && !microphoneHints.shouldShow("Built-in", at: 4500, drawReminder: { true })
+          && microphoneHints.shouldShow("Built-in", at: 4501, drawReminder: { true }))
     check("a reminder restarts the quiet interval",
-          !microphoneHints.shouldShow("Built-in", at: 603, drawReminder: { true }))
+          !microphoneHints.shouldShow("Built-in", at: 4502, drawReminder: { true }))
     check("a real input change announces at the next recording even during the quiet interval",
-          microphoneHints.shouldShow("USB", at: 604, drawReminder: { false })
-          && microphoneHints.shouldShow("Built-in", at: 605, drawReminder: { false }))
+          microphoneHints.shouldShow("USB", at: 4503, drawReminder: { false })
+          && microphoneHints.shouldShow("Built-in", at: 4504, drawReminder: { false }))
 
 
     // pill show/hide state machine
@@ -819,7 +821,14 @@ do {
     checkEq("recognition centers the full-size title", liveView.certificationMotion.lift, 0)
     checkEq("recognition uses the full title size", liveView.certificationMotion.titleScale, 1)
     check("cleanup starts only once", capsule.beginCertification() && !capsule.beginCertification())
-    checkEq("cleanup keeps the same capsule width", PillView.width(for: capsule, limit: 120), recognitionWidth)
+    let cleanupWidth = PillView.width(for: capsule, limit: 120)
+    checkEq("cleanup keeps the recognition capsule width while adding dots", cleanupWidth, recognitionWidth)
+    let beforeHandoff = PillView.wovenDot(5, time: 1, cleanupElapsed: nil)
+    let atHandoff = PillView.wovenDot(5, time: 1, cleanupElapsed: 0)
+    checkEq("the two-strand motion starts from the moving recognition dot", atHandoff.y, beforeHandoff.y)
+    let wovenEven = PillView.wovenDot(6, time: 1.5, cleanupElapsed: 0.5)
+    let wovenOdd = PillView.wovenDot(7, time: 1.5, cleanupElapsed: 0.5)
+    check("the strands move in opposite horizontal directions", wovenEven.x * wovenOdd.x < 0)
     liveView.model = capsule
     checkEq("the cleanup word starts at zero opacity", liveView.certificationMotion.reveal, 0)
     liveView.reduceMotion = true

@@ -97,7 +97,7 @@ final class AppModel: ObservableObject {
 
     @Published var page: HubPage = .home
     @Published var sidebarBrandPalette = SidebarBrandPalette.random()
-    @Published var settingsCategory: SettingsCategory = .dictation
+    @Published var settingsCategory: SettingsCategory = .general
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
     @Published var retryingHistoryID: String?

@@ -68,6 +68,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window.contentViewController = nil
         }
         window = nil
+        model.settingsCategory = .general
         if model.settingsPresented { model.settingsPresented = false }
     }
 }

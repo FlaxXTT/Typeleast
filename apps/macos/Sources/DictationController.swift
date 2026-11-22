@@ -4,17 +4,22 @@ import AVFoundation
 /// Evaluated once per successful capture using the recorder's existing device name.
 struct MicrophoneHintPolicy {
     private var lastShownName: String?
-    private var lastShownAt: TimeInterval = 0
-    private static let reminderInterval: TimeInterval = 10 * 60
+    private var nextReminderAt: TimeInterval = 0
+    private static let reminderInterval: TimeInterval = 60 * 60
+    private static let retryInterval: TimeInterval = 15 * 60
 
     mutating func shouldShow(_ name: String, at now: TimeInterval,
-                             drawReminder: () -> Bool = { Int.random(in: 0..<20) == 0 }) -> Bool {
+                             drawReminder: () -> Bool = { Int.random(in: 0..<100) == 0 }) -> Bool {
         guard !name.isEmpty else { return false }
         if name == lastShownName {
-            guard now - lastShownAt >= Self.reminderInterval, drawReminder() else { return false }
+            guard now >= nextReminderAt else { return false }
+            guard drawReminder() else {
+                nextReminderAt = now + Self.retryInterval
+                return false
+            }
         }
         lastShownName = name
-        lastShownAt = now
+        nextReminderAt = now + Self.reminderInterval
         return true
     }
 }

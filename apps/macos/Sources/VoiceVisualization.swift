@@ -18,7 +18,7 @@ struct VoiceWaveform {
     private static let rightShoulder = rightMiddle + 1
     // The three main columns get more time between their onsets than the small edge columns.
     private static let delays: [TimeInterval] = [0, 0.006, 0.012, 0.020, 0.044, 0.068, 0.082, 0.090, 0.098, 0.106]
-    private static let columnGains: [Double] = [0.055, 0.125, 0.20, 0.54, 0.73, 0.63, 0.323, 0.20, 0.125, 0.055]
+    private static let columnGains: [Double] = [0.055, 0.125, 0.20, 0.59, 0.80, 0.69, 0.35, 0.20, 0.125, 0.055]
     private static let variationAmount = 0.10
     private static let longestDelay = delays[count - 1]
 
@@ -43,12 +43,12 @@ struct VoiceWaveform {
     private(set) var heights = [Double](repeating: restingHeight, count: count)
     private var drawnHeights = [Double](repeating: restingHeight, count: count)
     private var segments: [Segment] = []
-    private var edgePhases = SIMD3<Double>.zero
+    private var texturePhases = SIMD3<Double>.zero
     private var lastSpeechAt: TimeInterval?
 
-    mutating func reset(edgePhases: SIMD3<Double> = .zero) {
+    mutating func reset(texturePhases: SIMD3<Double> = .zero) {
         self = VoiceWaveform()
-        self.edgePhases = edgePhases
+        self.texturePhases = texturePhases
     }
 
     mutating func receive(_ level: Float, at now: TimeInterval, reduceMotion: Bool,
@@ -94,8 +94,12 @@ struct VoiceWaveform {
             let time = now - Self.delays[index]
             let segment = segments.last { $0.time <= time }
             let amplitude = segment?.value(at: time) ?? 0
-            let texture = amplitude > 0 && !(Self.leftShoulder...Self.rightMiddle).contains(index)
-                ? edgeVariation(at: time, column: index) : 0
+            var texture = amplitude > 0 ? variation(at: time, column: index) : 0
+            if let segment, (Self.leftShoulder...Self.rightMiddle).contains(index) {
+                // Strengthen the independent movement on syllable attacks and releases.
+                let articulation = min(1, 4 * abs(segment.target - amplitude))
+                texture *= (0.35 + 1.25 * articulation) * min(1, amplitude / 0.45)
+            }
             let lift = index == 0 && segment?.liftedEnds.left == true
                 || index == Self.count - 1 && segment?.liftedEnds.right == true
             heights[index] = Self.columnHeight(amplitude, at: index, texture: texture, liftEndpoint: lift)
@@ -107,9 +111,9 @@ struct VoiceWaveform {
         return dirty
     }
 
-    private func edgeVariation(at time: TimeInterval, column index: Int) -> Double {
+    private func variation(at time: TimeInterval, column index: Int) -> Double {
         let column = Double(index)
-        let phase = edgePhases[index % 3]
+        let phase = texturePhases[index % 3]
         return 0.7 * sin(time * (9 + column * 0.71) + column * 2.33 + phase)
             + 0.3 * sin(time * (5 + column * 0.47) - column * 1.31 - phase)
     }
@@ -131,8 +135,7 @@ struct VoiceWaveform {
             // Give the two center columns more lift during speech without clipping at the peak.
             let lift = index == leftMiddle || index == rightMiddle
                 ? 0.42 * weight * shaped * (1 - shaped) : 0
-            // The middle columns share the voice envelope, with separate gains and delays.
-            excursion = (shaped + lift) * gain
+            excursion = (shaped + lift) * gain * (1 + variationAmount * texture)
         } else {
             // A steeper logarithmic curve at the bottom makes quiet input visible at the edges.
             let soft = log1p(24 * amplitude) / outerLogRange

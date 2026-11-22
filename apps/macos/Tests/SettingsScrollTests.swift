@@ -194,7 +194,7 @@ func settingsScrollTests(output: String) throws {
     settle(settingsView, until: { settings.visibleWindow == nil })
     check("settings finish closing", settings.visibleWindow == nil)
     settingsView = try showSettings()
-    checkEq("reopening keeps the selected category", model.settingsCategory, .dictation)
+    checkEq("reopening returns to General", model.settingsCategory, .general)
     check("reopening resets the scroll to the top", abs(offset(in: settingsView)) < 0.5)
 
     if let reopenedScroll = scrollView(in: settingsView) {

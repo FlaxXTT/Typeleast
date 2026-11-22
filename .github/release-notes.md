@@ -3,15 +3,15 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 首页新增 Cadence 热力图标题与 Rhythm 活跃天数。时段词随本机时间变化，并与 TypeLeast 字标首字母同色。
-- 侧栏字标和波形略微放大，新增粉色、电影灵感等随机配色。首页入场遮罩仅显示波形。
-- 整理与提示词模式各自使用扩展后的状态词，避免连续重复。
+- 减少同一麦克风的提示频率。语音波形中段更高，起音和重音时的变化更自然。
+- 听写胶囊在整理开始时由 11 个波点过渡到 15 个。胶囊维持原尺寸，处理完直接淡出。
+- 整理提示词保留拼读指明的最终词语，移除用于自我纠正的拼读过程。重开设置回到顶部，关闭设置后恢复首页。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Home adds the Cadence heatmap heading and Rhythm active-day readout. The time-of-day label follows local time and shares the TypeLeast initial’s color.
-- The sidebar wordmark and waveform are slightly larger, with new pink and cinema-inspired palettes. The Home entry mask shows a bare waveform.
-- Cleanup and Prompt Mode use expanded, separate sets of status words and avoid consecutive repeats.
+- Microphone reminders appear less often for the same input. The recording waveform has taller, more expressive middle bars.
+- The dictation capsule transitions from 11 to 15 dots during cleanup, then fades out directly.
+- Cleanup keeps the final spelling without the spoken correction sequence. Settings reopens at the top and dismissing it restores Home.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

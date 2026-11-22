@@ -20,7 +20,7 @@ import { buildUserMessage, harnessAddendum, systemPromptFor } from "../prompt.js
 import { briefCleanupSystemPrompt, minimalCleanupSystemPrompt } from "../prompts/cleanup.js";
 import { mapOutsideLiterals, normalizePunctuation } from "../punctuation.js";
 import { quantityUnitConflict } from "../quantity-review.js";
-import { assembleSpelledWords, losesSpelledWords } from "../spelling.js";
+import { assembleSpelledWords, losesSpelledWords, removeSpellingEchoes } from "../spelling.js";
 import { tidy } from "../tidy.js";
 import { unwrap } from "../validate.js";
 import { parseVariants, variantInstruction } from "../variants.js";
@@ -77,6 +77,7 @@ function applyMinimalCorrections(rawText, parsed, language) {
   }
   // A short rewrite can fix presentation and obvious filler around the declared edits.
   // Other wording still needs to be accounted for by a bounded replacement.
+  text = removeSpellingEchoes(text, parsed.text);
   const candidateKey = formattingKey(parsed.text);
   const matchesEdits = candidateKey === formattingKey(text) || candidateKey === formattingKey(tidy(text).text);
   if (matchesEdits && !quantityUnitConflict(rawText, parsed.text, language)) return parsed.text;
@@ -109,6 +110,7 @@ export async function runShortDictation(ctx, { minimal = false, cleanupOverride 
       maxTransportAttempts: 1, signal: request.signal });
     request.signal?.throwIfAborted();
     const parsed = parsePolishOutput(result.text);
+    if (minimal && parsed.ok) parsed.text = removeSpellingEchoes(parsed.text);
     if (!parsed.ok || parsed.mode !== "json" || Array.from(parsed.text).length > Array.from(rawText).length + 4
         || losesSpelledWords(rawText, parsed.text)) return ctx.done(original);
     if (minimal) {
@@ -172,7 +174,7 @@ export async function runDictation(ctx, { cleanupOverride = "", brief = false } 
     if (parsed.mode !== "json") stats.jsonRecovered += 1;
     // The cleaned text is inserted as the model wrote it, minus a wrapper a chatty model may add
     // and redundant punctuation runs (「。，」) it sometimes keeps from the transcript.
-    const candidate = normalizePunctuation(unwrap(parsed.text).text).trim();
+    const candidate = removeSpellingEchoes(normalizePunctuation(unwrap(parsed.text).text)).trim();
     if (brief && (!candidate || Array.from(candidate).length > Math.ceil(Array.from(rawText).length * 1.15) + 12)) return useTranscript();
     if (!candidate) {
       const tidyOnly = tidy(rawText);
