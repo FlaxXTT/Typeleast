@@ -56,7 +56,6 @@ struct SettingsPage: View {
     @State private var devices: [AudioInputDevice] = []
     @State private var loginError = ""
     @State private var activeHotkeySlot: HotkeySlot?
-    // Keep category offsets only for the lifetime of this settings presentation.
     @State private var scrollMemory = HubScrollMemory()
 
     init(loginItemStatus: LoginItemStatus = LoginItemStatus(), onClose: @escaping () -> Void = {}) {

@@ -156,6 +156,13 @@ func dashboardWindowTests() {
     hub.reopenMainWindow()
     checkEq("repeated activation and Dock callbacks share the same presentation", model.homePresentationID, nextPresentation)
 
+    model.settingsPresented = true
+    hub.applicationDidResignActive()
+    hub.applicationDidBecomeActive()
+    model.settingsPresented = false
+    hub.applicationDidBecomeActive()
+    checkEq("returning from Settings preserves the visible Home presentation", model.homePresentationID, nextPresentation)
+
     let initialPalette = model.sidebarBrandPalette
     model.navigate(to: .history)
     check("sidebar navigation keeps the current brand palette", model.sidebarBrandPalette == initialPalette)

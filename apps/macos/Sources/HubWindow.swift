@@ -64,7 +64,9 @@ final class HubWindowController: NSObject, NSWindowDelegate {
 
     func applicationDidBecomeActive() { playHomePresentationIfVisible() }
 
-    func applicationDidResignActive() { homePresentationPending = true }
+    func applicationDidResignActive() {
+        if !model.settingsPresented { homePresentationPending = true }
+    }
 
     func show(page: HubPage = .home) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
@@ -199,7 +201,7 @@ struct HubRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var homeEntryRequest: Int? {
-        guard model.page == .home, !model.homePresentationSuspended, !model.settingsPresented else { return nil }
+        guard model.page == .home, !model.homePresentationSuspended else { return nil }
         return model.homePresentationID
     }
 

@@ -390,6 +390,8 @@ final class PillView: NSView {
     private static let thinkingWaveRadius: CGFloat = 1.75
     private static let thinkingWaveGap: CGFloat = 8
     private static let thinkingWaveWidth = CGFloat(thinkingWaveCount - 1) * thinkingWaveSpacing + 2 * thinkingWaveRadius
+    private static let recognitionDotCount = 11
+    private static let cleanupDotCount = 15
     private static let dictationThinkingTextWidth: CGFloat = {
         let title = ("Thinking" as NSString).size(withAttributes: [.font: dictationThinkingFont]).width
         let subtitleAttributes: [NSAttributedString.Key: Any] = [.font: cleanupSubtitleFont]
@@ -561,7 +563,7 @@ final class PillView: NSView {
         if model.phase != previous.phase {
             if model.phase == .recording && !reduceMotion {
                 let phaseRange = 0..<(2 * Double.pi)
-                waveform.reset(edgePhases: SIMD3(.random(in: phaseRange), .random(in: phaseRange), .random(in: phaseRange)))
+                waveform.reset(texturePhases: SIMD3(.random(in: phaseRange), .random(in: phaseRange), .random(in: phaseRange)))
             } else {
                 waveform.reset()
             }
@@ -709,10 +711,11 @@ final class PillView: NSView {
     private func drawThinking() {
         if model.isProcessingCapture || model.detail.isEmpty {
             guard let context = NSGraphicsContext.current?.cgContext else { return }
+            let cleanup = model.thinkingActivity == .cleanup
+            let motion = certificationMotion
             let textWidth = Self.thinkingTextWidth(for: model)
             let x = bounds.midX - (textWidth + Self.thinkingWaveGap + Self.thinkingWaveWidth) / 2
             let subtitle = model.thinkingSubtitle
-            let motion = certificationMotion
             let titleLift = model.isDictationThinking ? motion.lift : (subtitle == nil ? 0 : 7)
             let titleFont = model.isDictationThinking ? Self.dictationThinkingFont : Self.thinkingFont
             context.saveGState()
@@ -721,7 +724,6 @@ final class PillView: NSView {
             drawText("Thinking", x: 0, centerY: 0, width: textWidth, font: titleFont, color: Self.ink)
             context.restoreGState()
 
-            let cleanup = model.thinkingActivity == .cleanup
             let reveal = cleanup ? motion.reveal : 1
             if let subtitle, reveal > 0 {
                 let subtitleY = bounds.midY - 8.5 - (1 - reveal) * 3
@@ -730,14 +732,65 @@ final class PillView: NSView {
                          font: cleanup ? Self.cleanupSubtitleFont : Self.thinkingSubtitleFont,
                          color: Self.ink.withAlphaComponent(0.78 * reveal))
             }
-            drawThinkingDots(count: Self.thinkingWaveCount,
-                             start: x + textWidth + Self.thinkingWaveGap + Self.thinkingWaveRadius,
-                             spacing: Self.thinkingWaveSpacing, radius: Self.thinkingWaveRadius)
+            let waveStart = x + textWidth + Self.thinkingWaveGap + Self.thinkingWaveRadius
+            if model.isDictationThinking {
+                drawDictationDots(start: waveStart, cleanup: cleanup)
+            } else {
+                drawThinkingDots(count: Self.thinkingWaveCount, start: waveStart,
+                                 spacing: Self.thinkingWaveSpacing, radius: Self.thinkingWaveRadius)
+            }
             return
         }
         drawThinkingDots(count: 3, start: 29, spacing: 10, radius: 2.4)
         let x: CGFloat = 65
         drawProcessingText(model.detail, x: x, width: max(0, bounds.width - x - 29))
+    }
+
+    static func wovenDot(_ index: Int, time: Double, cleanupElapsed: Double?) -> (x: CGFloat, y: CGFloat, scale: CGFloat) {
+        let i = Double(index)
+        let travel = sin(time * 3.9 - i * 0.69) * 2.1
+        guard let age = cleanupElapsed else { return (0, CGFloat(-travel), 1) }
+        let progress = min(1, max(0, age / 0.36))
+        let blend = progress * progress * (3 - 2 * progress)
+        let direction = index.isMultiple(of: 2) ? 1.0 : -1.0
+        let strand = sin(3.2 * age + direction * (i - 7) * 0.74)
+        let breadth = 3.8 + 1.1 * sin(age * 2.1)
+        let crossing = strand * breadth + direction * 1.5
+        return (CGFloat(direction * 0.72 * cos(age * 2 - i * 0.46) * blend),
+                CGFloat(-(travel + (crossing - travel) * blend)),
+                CGFloat(1 + 0.25 * strand * blend))
+    }
+
+    private func drawDictationDots(start: CGFloat, cleanup: Bool) {
+        let age = certificationBeganAt.map { phaseElapsed - $0 }
+        let count = cleanup ? Self.cleanupDotCount : Self.recognitionDotCount
+        let progress: CGFloat = cleanup ? (reduceMotion ? 1 : CGFloat(min(1, max(0, (age ?? 0) / 0.24)))) : 0
+        let packing = progress * progress * (3 - 2 * progress)
+        // Use the space beside the label and inside the rounded end as the extra dots appear.
+        let rowStart = start - 4 * packing
+        let lastCentre = Self.thinkingWaveWidth - 2 * Self.thinkingWaveRadius + 12 * packing
+        let spacing = lastCentre / (CGFloat(Self.recognitionDotCount - 1) + CGFloat(Self.cleanupDotCount - Self.recognitionDotCount) * packing)
+        var previous: (x: CGFloat, y: CGFloat, radius: CGFloat)?
+        for index in 0..<count {
+            let slot = CGFloat(index) * spacing
+            let visibility = min(1, max(0, (lastCentre - slot + 2) / 2))
+            guard visibility > 0 else { continue }
+            let dot = reduceMotion ? (x: CGFloat.zero, y: CGFloat.zero, scale: CGFloat(1))
+                : Self.wovenDot(index, time: phaseElapsed, cleanupElapsed: age)
+            let radius = Self.thinkingWaveRadius * dot.scale * (0.65 + 0.35 * visibility)
+            let y = bounds.midY + dot.y
+            var x = rowStart + slot + dot.x * 0.28
+            if let previous {
+                let separation = previous.radius + radius + 0.55
+                let rise = y - previous.y
+                let run = sqrt(max(0, separation * separation - rise * rise))
+                x = max(x, previous.x + run)
+            }
+            previous = (x, y, radius)
+            Self.ink.withAlphaComponent(min(1, 0.74 + dot.y * 0.065) * visibility).setFill()
+            NSBezierPath(ovalIn: NSRect(x: x - radius, y: y - radius,
+                                        width: radius * 2, height: radius * 2)).fill()
+        }
     }
 
     private func drawThinkingDots(count: Int, start: CGFloat, spacing: CGFloat, radius: CGFloat) {
