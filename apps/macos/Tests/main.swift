@@ -1403,39 +1403,6 @@ do {
           !CaretAnchor.stillValid(before: "你好，", selected: "", value: "您好，世界", location: 3, length: 0))
     check("…as does an offset past the end",
           !CaretAnchor.stillValid(before: "", selected: "", value: "短", location: 5, length: 0))
-    let emoji = "👩🏽‍💻"
-    let unicodeText = String(repeating: "字", count: 19) + emoji + String(repeating: "e\u{0301}", count: 24)
-    let chunks = Inserter.unicodeChunks(unicodeText)
-    check("direct text events preserve Unicode without splitting emoji or surrogate pairs",
-          chunks.allSatisfy { $0.count <= 20 }
-          && chunks.map { String(decoding: $0, as: UTF16.self) }.joined() == unicodeText
-          && chunks.map { String(decoding: $0, as: UTF16.self) }.contains { $0.contains(emoji) })
-    let longGrapheme = "e" + String(repeating: "\u{0301}", count: 30)
-    check("direct text events preserve clusters larger than the event limit",
-          Inserter.unicodeChunks(longGrapheme).map { String(decoding: $0, as: UTF16.self) }.joined() == longGrapheme)
-    check("key event fallback avoids multiline or tab shortcuts",
-          Inserter.safeForTextEvents(unicodeText) && !Inserter.safeForTextEvents("one\ntwo")
-          && !Inserter.safeForTextEvents("one\ttwo"))
-    let editorLines = "第一行\r\n\r\n第二行 👩🏽‍💻\r"
-    let editorEvents = Inserter.textEvents(editorLines, allowsEditorNewlines: true)
-    checkEq("the identified editor preserves blank and trailing lines without clipboard",
-            editorEvents?.map { $0.map { String(decoding: $0, as: UTF16.self) } ?? "\n" }.joined(),
-            "第一行\n\n第二行 👩🏽‍💻\n")
-    check("generic fields never use Return events to enter multiline text",
-          Inserter.textEvents(editorLines, allowsEditorNewlines: false) == nil)
-    let codexNewline = Inserter.newlineMode(bundleID: "com.openai.codex", role: "AXGroup", classes: ["ProseMirror"])
-    check("the Codex composer uses Shift-Return to insert a line break without submitting",
-          codexNewline == .composerShiftReturn && codexNewline.flags == .maskShift)
-    check("an unrelated Codex field does not get a newline shortcut",
-          Inserter.newlineMode(bundleID: "com.openai.codex", role: "AXTextArea", classes: ["search"]) == .none)
-    let openCodeClasses = ["whitespace-pre-wrap", "pe-[var(--composer-scroll-end)]"]
-    check("the OpenCode composer uses the same non-submitting newline as Codex",
-          Inserter.newlineMode(bundleID: "ai.opencode.desktop", role: "AXTextArea", classes: openCodeClasses) == codexNewline
-          && Inserter.newlineMode(bundleID: "ai.opencode.desktop", role: "AXTextArea", classes: ["whitespace-pre-wrap"]) == .none)
-    check("the VS Code document editor still uses unmodified Return",
-          Inserter.newlineMode(bundleID: "com.microsoft.VSCode", role: "AXTextArea", classes: ["native-edit-context"]).flags.isEmpty
-          && Inserter.newlineMode(bundleID: "com.microsoft.VSCode", role: "AXTextArea", classes: ["native-edit-context"]) == .editorReturn)
-
     var m = RecordingBarModel()
     m.showRecording(destination: "x")
     let normal = PillView.width(for: m, limit: 120)

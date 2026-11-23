@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-18T17:19:15Z",
-  "updated_at": "2026-11-23T09:13:15Z",
+  "updated_at": "2026-11-23T14:10:10Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -17,9 +17,9 @@
     },
     ".github/release-notes.md": {
       "role": "index",
-      "sha256": "706395009c51a0c627f47d056cf9aa6edde63afb1bbc6fc8cb537ed544f59add",
-      "size": 1998,
-      "normalized_sha256": "706395009c51a0c627f47d056cf9aa6edde63afb1bbc6fc8cb537ed544f59add"
+      "sha256": "880c8d36f3fa25b403da689005a3a415dd4977b5ee18f52108eff16df733f554",
+      "size": 2178,
+      "normalized_sha256": "880c8d36f3fa25b403da689005a3a415dd4977b5ee18f52108eff16df733f554"
     },
     ".github/workflows/ci.yml": {
       "role": "index",
@@ -47,9 +47,9 @@
     },
     "CHANGELOG.md": {
       "role": "index",
-      "sha256": "fea959ca8053f48096ffd842844884e211fd08b66cad5a6951ce9434f9651b65",
-      "size": 84940,
-      "normalized_sha256": "fea959ca8053f48096ffd842844884e211fd08b66cad5a6951ce9434f9651b65"
+      "sha256": "143dc33d311a29ac0742a8e6aad62ba366b1a66dbfac0b63a9cb55c119ca92b9",
+      "size": 85100,
+      "normalized_sha256": "143dc33d311a29ac0742a8e6aad62ba366b1a66dbfac0b63a9cb55c119ca92b9"
     },
     "LICENSE": {
       "role": "index",
@@ -71,9 +71,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "76887d24805519725c0c70ff11c082572e331e2621c154552349e375c0103b82",
-      "size": 86561,
-      "normalized_sha256": "76887d24805519725c0c70ff11c082572e331e2621c154552349e375c0103b82"
+      "sha256": "73c83e2a0e71358c1ea618a1eedd0412819b79a37eec6a1d71054a9c3563f28f",
+      "size": 86453,
+      "normalized_sha256": "73c83e2a0e71358c1ea618a1eedd0412819b79a37eec6a1d71054a9c3563f28f"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -89,9 +89,9 @@
     },
     "apps/macos/Info.plist": {
       "role": "index",
-      "sha256": "0c6fce607ab3c2d12d2f2fa4a290b4eb014e8d4d8837bc660efa2794327ceeb7",
+      "sha256": "bf7c69846747d210fbecd3e2d5685905847ea2c3183d96a40890e200a7dcc410",
       "size": 1335,
-      "normalized_sha256": "0c6fce607ab3c2d12d2f2fa4a290b4eb014e8d4d8837bc660efa2794327ceeb7"
+      "normalized_sha256": "bf7c69846747d210fbecd3e2d5685905847ea2c3183d96a40890e200a7dcc410"
     },
     "apps/macos/MLXWorker/Package.resolved": {
       "role": "index",
@@ -248,9 +248,9 @@
     },
     "apps/macos/Sources/AppDelegate.swift": {
       "role": "index",
-      "sha256": "5734b8c4548e7fd1b1d37caf7104ca7a8ed955176bf7158d35db2df07a77edbe",
-      "size": 49437,
-      "normalized_sha256": "5734b8c4548e7fd1b1d37caf7104ca7a8ed955176bf7158d35db2df07a77edbe"
+      "sha256": "61345de877c57cfedb0946a2902ef5e7edcd536250f65faff49bfa6b32ecefec",
+      "size": 49334,
+      "normalized_sha256": "61345de877c57cfedb0946a2902ef5e7edcd536250f65faff49bfa6b32ecefec"
     },
     "apps/macos/Sources/AppIconArtwork.swift": {
       "role": "index",
@@ -326,9 +326,9 @@
     },
     "apps/macos/Sources/FieldContext.swift": {
       "role": "index",
-      "sha256": "4da2796b53ebfdc77c436d63912979ecf1a7458c04f650ebbd31f7b2e2759a6e",
-      "size": 20105,
-      "normalized_sha256": "4da2796b53ebfdc77c436d63912979ecf1a7458c04f650ebbd31f7b2e2759a6e"
+      "sha256": "a0e7cf7d7097a42d8e65e379e40256e2cc96686389834ccfe0a1951347209027",
+      "size": 19795,
+      "normalized_sha256": "a0e7cf7d7097a42d8e65e379e40256e2cc96686389834ccfe0a1951347209027"
     },
     "apps/macos/Sources/FnKey.swift": {
       "role": "index",
@@ -404,9 +404,9 @@
     },
     "apps/macos/Sources/HubWindow.swift": {
       "role": "index",
-      "sha256": "80879072da117d8e84885dd73e3887b3c3843efb99bdfeccd74390cccfb1901d",
-      "size": 16018,
-      "normalized_sha256": "80879072da117d8e84885dd73e3887b3c3843efb99bdfeccd74390cccfb1901d"
+      "sha256": "27156d8bb56e71cbd297fd5831cd14bc78ba30bb154c1509f758d624cada513e",
+      "size": 16025,
+      "normalized_sha256": "27156d8bb56e71cbd297fd5831cd14bc78ba30bb154c1509f758d624cada513e"
     },
     "apps/macos/Sources/IdleBar.swift": {
       "role": "index",
@@ -416,9 +416,9 @@
     },
     "apps/macos/Sources/Inserter.swift": {
       "role": "index",
-      "sha256": "a1099a53c2b4edede41f79fdd71c3aadb477e635b966a9ea0ef1498d07f6817b",
-      "size": 17635,
-      "normalized_sha256": "a1099a53c2b4edede41f79fdd71c3aadb477e635b966a9ea0ef1498d07f6817b"
+      "sha256": "444d34396bad7f497690c4a0b27d485e66e61a7d9590b46aff91e1d32899b9ba",
+      "size": 9816,
+      "normalized_sha256": "444d34396bad7f497690c4a0b27d485e66e61a7d9590b46aff91e1d32899b9ba"
     },
     "apps/macos/Sources/InstanceLock.swift": {
       "role": "index",
@@ -740,9 +740,9 @@
     },
     "apps/macos/Tests/PerformanceRegressionTests.swift": {
       "role": "index",
-      "sha256": "2756402efaaa115255a5422679e85e11bc3688299c03b784cf529c55763c8bb1",
-      "size": 38118,
-      "normalized_sha256": "2756402efaaa115255a5422679e85e11bc3688299c03b784cf529c55763c8bb1"
+      "sha256": "6a9279debc0687065c3bedbe64f896ff5335edaacfc905feba55aeb3c3a56425",
+      "size": 38488,
+      "normalized_sha256": "6a9279debc0687065c3bedbe64f896ff5335edaacfc905feba55aeb3c3a56425"
     },
     "apps/macos/Tests/SettingsScrollTests.swift": {
       "role": "index",
@@ -764,9 +764,9 @@
     },
     "apps/macos/Tests/main.swift": {
       "role": "index",
-      "sha256": "59e0a8226b7cdf66ea0f2fee696c5662fc3a09b5d5456d8db0b32a17f96941b4",
-      "size": 192403,
-      "normalized_sha256": "59e0a8226b7cdf66ea0f2fee696c5662fc3a09b5d5456d8db0b32a17f96941b4"
+      "sha256": "f4eff726a19694fbb97da693baa9303564b6a73e56061654b743a5aaa1208261",
+      "size": 189604,
+      "normalized_sha256": "f4eff726a19694fbb97da693baa9303564b6a73e56061654b743a5aaa1208261"
     },
     "apps/macos/Tests/package-names.sh": {
       "role": "index",

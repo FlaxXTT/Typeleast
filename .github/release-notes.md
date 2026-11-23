@@ -3,11 +3,13 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- Cadence 热力图的纯白格新增浅灰圆角描边。
+- 听写使用纯文本粘贴，短暂使用剪贴板后恢复原内容。
+- 已打开的窗口重新获得焦点或从 Dock 恢复时跳过首页遮罩。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Cadence now outlines the lightest heatmap cells with a subtle rounded border.
+- Dictation uses standard plain-text paste and restores the previous clipboard shortly afterward.
+- Refocusing or restoring an open window skips the Home overlay.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

@@ -51,7 +51,13 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     func openMainWindow() { show(page: .home) }
 
     func reopenMainWindow() {
-        guard let window, !window.isMiniaturized,
+        if let window, window.isMiniaturized {
+            homePresentationPending = false
+            window.deminiaturize(nil)
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let window,
               window.isVisible || (NSApp.isHidden && !model.homePresentationSuspended) else {
             openMainWindow()
             return
@@ -63,10 +69,6 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     func applicationDidBecomeActive() { playHomePresentationIfVisible() }
-
-    func applicationDidResignActive() {
-        if !model.settingsPresented { homePresentationPending = true }
-    }
 
     func show(page: HubPage = .home) {
         if model.settings.needsPractice && page != .settings { model.actions?.showOnboarding(); return }
@@ -167,15 +169,15 @@ final class HubWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillMiniaturize(_ notification: Notification) {
-        homePresentationPending = true
-        model.homePresentationSuspended = true
+        homePresentationPending = false
     }
 
     func windowDidDeminiaturize(_ notification: Notification) {
-        let page = requestedRestorePage ?? .home
-        requestedRestorePage = nil
-        present(page)
-        if NSApp.isActive { playHomePresentationIfVisible() }
+        homePresentationPending = false
+        if let page = requestedRestorePage {
+            requestedRestorePage = nil
+            present(page)
+        }
     }
 
     private func present(_ page: HubPage) {

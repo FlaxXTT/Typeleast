@@ -286,7 +286,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     func applicationDidBecomeActive(_ notification: Notification) { hub.applicationDidBecomeActive() }
 
-    func applicationDidResignActive(_ notification: Notification) { hub.applicationDidResignActive() }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 

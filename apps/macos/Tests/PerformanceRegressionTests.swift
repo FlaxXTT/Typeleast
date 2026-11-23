@@ -163,27 +163,32 @@ func dashboardWindowTests() {
     let initialPresentation = model.homePresentationID
     hub.reopenMainWindow()
     checkEq("a repeated Dock entry keeps the visible Home presentation", model.homePresentationID, initialPresentation)
-    hub.applicationDidResignActive()
     hub.applicationDidBecomeActive()
     let nextPresentation = model.homePresentationID
-    checkEq("the next foreground activation starts one new Home presentation", nextPresentation, initialPresentation + 1)
+    checkEq("foreground activation keeps the existing Home presentation", nextPresentation, initialPresentation)
     hub.applicationDidBecomeActive()
     hub.reopenMainWindow()
     checkEq("repeated activation and Dock callbacks share the same presentation", model.homePresentationID, nextPresentation)
 
     model.settingsPresented = true
-    hub.applicationDidResignActive()
     hub.applicationDidBecomeActive()
     model.settingsPresented = false
     hub.applicationDidBecomeActive()
     checkEq("returning from Settings preserves the visible Home presentation", model.homePresentationID, nextPresentation)
+
+    window.miniaturize(nil)
+    check("Home window minimizes", waitFor { window.isMiniaturized })
+    hub.reopenMainWindow()
+    check("Dock restores the minimized Home window", waitFor { window.isVisible && !window.isMiniaturized })
+    hub.applicationDidBecomeActive()
+    checkEq("restoring the minimized window does not restart the Home mask", model.homePresentationID, nextPresentation)
+    check("restoring does not suspend the existing Home view", !model.homePresentationSuspended)
 
     let initialPalette = model.sidebarBrandPalette
     model.navigate(to: .history)
     check("sidebar navigation keeps the current brand palette", model.sidebarBrandPalette == initialPalette)
     hub.reopenMainWindow()
     checkEq("the Dock leaves the visible History page open", model.page, .history)
-    hub.applicationDidResignActive()
     hub.applicationDidBecomeActive()
     check("returning to a History window preserves the page and Home presentation",
           model.page == .history && model.homePresentationID == nextPresentation)
