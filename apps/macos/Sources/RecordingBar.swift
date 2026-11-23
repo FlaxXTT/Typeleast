@@ -124,6 +124,7 @@ struct RecordingBarModel {
         case transcription
     }
 
+    static let dictationTitles = ["Musing", "Mulling", "Reflect", "Ponder", "Meditate"]
     static let cleanupSubtitles = [
         "Certify", "Polishing", "Refining", "Editing", "Tidying", "Organizing",
         "Structuring", "Revising", "Proofreading", "Reviewing", "Finalizing",
@@ -138,6 +139,7 @@ struct RecordingBarModel {
     private(set) var phase: Phase = .hidden
     private(set) var isProcessingCapture = false
     private(set) var thinkingActivity: ThinkingActivity?
+    private var lastDictationTitle: String?
     private var lastCleanupSubtitle: String?
     private var lastPromptSubtitle: String?
     private(set) var destination = ""
@@ -160,6 +162,7 @@ struct RecordingBarModel {
     var isVisible: Bool { phase != .hidden }
     var showsRecordingControls: Bool { phase == .recording && mode == .handsFree }
     var isDictationThinking: Bool { thinkingActivity == .transcription || thinkingActivity == .cleanup }
+    var thinkingTitle: String { isDictationThinking ? lastDictationTitle ?? "Thinking" : "Thinking" }
     var thinkingSubtitle: String? {
         switch thinkingActivity {
         case .cleanup: return lastCleanupSubtitle
@@ -204,6 +207,9 @@ struct RecordingBarModel {
     mutating func showThinking(detail: String, startingMicrophone: Bool = false, activity: ThinkingActivity? = nil) {
         self.detail = detail
         isStartingMicrophone = startingMicrophone
+        if activity == .transcription && (phase != .thinking || thinkingActivity != .transcription) {
+            lastDictationTitle = Self.dictationTitles.filter { $0 != lastDictationTitle }.randomElement()
+        }
         if activity == .prompt && (phase != .thinking || thinkingActivity != .prompt) {
             if let previous = lastPromptSubtitle {
                 lastPromptSubtitle = Self.promptSubtitles.filter { $0 != previous }.randomElement()
@@ -322,6 +328,8 @@ final class PillView: NSView {
             }
             if model.thinkingActivity != oldValue.thinkingActivity {
                 certificationBeganAt = model.thinkingActivity == .cleanup ? phaseElapsed : nil
+                pasteFinaleBeganAt = nil
+                onPasteFinaleFinished = nil
             }
             // The animation timer paints recording frames. Audio samples must
             // not schedule another independent series of redraws between them.
@@ -342,6 +350,9 @@ final class PillView: NSView {
     private var spinnerPhase: CGFloat = 0
     private var phaseElapsed: Double = 0
     private var certificationBeganAt: TimeInterval?
+    private var pasteFinaleBeganAt: TimeInterval?
+    private var onPasteFinaleFinished: (() -> Void)?
+    private static let pasteFinaleDuration: TimeInterval = 0.62
     private var lastAdvancedAt = ProcessInfo.processInfo.systemUptime
     private static let ink = VoiceBarPalette.ink
     private var cancelHover = false
@@ -374,10 +385,12 @@ final class PillView: NSView {
     /// Font of the result line.
     static let resultFont = InterfaceTypography.localizedAppKit(14, weight: .medium)
     private static let dictationTitleSize: CGFloat = 21
-    private static let stackedDictationTitleScale = 16 / dictationTitleSize
-    private static let dictationThinkingFont = NSFont(name: "Futura-Medium", size: dictationTitleSize)
+    private static let recognitionTitleScale = 18 / dictationTitleSize
+    private static let stackedDictationTitleScale = 15 / dictationTitleSize
+    private static let dictationThinkingFont = NSFont(name: "AvenirNext-Medium", size: dictationTitleSize)
         ?? NSFont.systemFont(ofSize: dictationTitleSize, weight: .semibold)
-    private static let thinkingFont = NSFontManager.shared.convert(dictationThinkingFont, toSize: 15)
+    private static let thinkingFont = NSFont(name: "Futura-Medium", size: 15)
+        ?? NSFont.systemFont(ofSize: 15, weight: .semibold)
     private static let thinkingSubtitleFont = NSFont.systemFont(ofSize: 11, weight: .medium)
     private static let cleanupSubtitleFont = NSFont(name: "BigCaslon-Medium", size: 13)
         ?? NSFont(name: "Georgia", size: 12)
@@ -388,17 +401,18 @@ final class PillView: NSView {
     private static let thinkingWaveCount = 8
     private static let thinkingWaveSpacing: CGFloat = 6
     private static let thinkingWaveRadius: CGFloat = 1.75
+    private static let dictationDotRadius: CGFloat = 1.9
     private static let thinkingWaveGap: CGFloat = 8
     private static let thinkingWaveWidth = CGFloat(thinkingWaveCount - 1) * thinkingWaveSpacing + 2 * thinkingWaveRadius
     private static let recognitionDotCount = 11
-    private static let cleanupDotCount = 15
+    private static let cleanupWaveDotCount = 20
     private static let dictationThinkingTextWidth: CGFloat = {
-        let title = ("Thinking" as NSString).size(withAttributes: [.font: dictationThinkingFont]).width
         let subtitleAttributes: [NSAttributedString.Key: Any] = [.font: cleanupSubtitleFont]
         let subtitle = RecordingBarModel.cleanupSubtitles
             .map { ($0 as NSString).size(withAttributes: subtitleAttributes).width }
             .max() ?? 0
-        return ceil(max(title, subtitle + cleanupSubtitleInset)) + 1
+        // Keep the established title column and wave position across both stages.
+        return max(80, ceil(subtitle + cleanupSubtitleInset) + 1)
     }()
     private static let promptThinkingTextWidth: CGFloat = {
         let title = ("Thinking" as NSString).size(withAttributes: [.font: thinkingFont]).width
@@ -408,7 +422,9 @@ final class PillView: NSView {
     }()
 
     var certificationMotion: (lift: CGFloat, titleScale: CGFloat, reveal: CGFloat) {
-        guard model.thinkingActivity == .cleanup else { return (0, 1, 0) }
+        guard model.thinkingActivity == .cleanup else {
+            return (0, model.thinkingActivity == .transcription ? Self.recognitionTitleScale : 1, 0)
+        }
         let settled: (CGFloat, CGFloat, CGFloat) = (8, Self.stackedDictationTitleScale, 1)
         guard !reduceMotion, let certificationBeganAt else { return settled }
         let elapsed = phaseElapsed - certificationBeganAt
@@ -420,7 +436,7 @@ final class PillView: NSView {
         }
         let rise = ease(elapsed / 0.27)
         let settle = ease((elapsed - 0.27) / 0.125)
-        let titleScale = 1 - (1 - Self.stackedDictationTitleScale) * rise
+        let titleScale = Self.recognitionTitleScale + (Self.stackedDictationTitleScale - Self.recognitionTitleScale) * rise
         return (9.3 * rise - 1.3 * settle, titleScale, ease((elapsed - 0.17) / 0.215))
     }
 
@@ -576,7 +592,15 @@ final class PillView: NSView {
     /// Audio samples start pulses. The animation clock renders them independently.
     func receiveLevel(_ level: Float, at now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         guard model.phase == .recording else { return }
-        waveform.receive(level, at: now, reduceMotion: reduceMotion)
+        waveform.receive(level, at: now, reduceMotion: reduceMotion,
+                         drawDoublePeak: { Int.random(in: 0..<5) == 0 },
+                         drawEdgeAccent: {
+                             switch Int.random(in: 0..<40) {
+                             case 0..<13: return .left
+                             case 13..<26: return .right
+                             default: return nil
+                             }
+                         })
         if reduceMotion { needsDisplay = true }
     }
 
@@ -603,6 +627,17 @@ final class PillView: NSView {
         let waveChanged = model.phase == .recording && !reduceMotion && waveform.advance(at: now)
         let hoverChanged = abs(cancelTarget - cancelHoverAmount) > 0.001 || abs(stopTarget - stopHoverAmount) > 0.001
         if waveChanged || hoverChanged || model.phase == .thinking { needsDisplay = true }
+        if let start = pasteFinaleBeganAt, phaseElapsed - start >= Self.pasteFinaleDuration,
+           let finish = onPasteFinaleFinished {
+            onPasteFinaleFinished = nil
+            finish()
+        }
+    }
+
+    func beginPasteFinale(completion: @escaping () -> Void) {
+        // Let the 11-to-20 handoff finish even when cleanup returns immediately.
+        pasteFinaleBeganAt = max(phaseElapsed, (certificationBeganAt ?? phaseElapsed) + 0.395)
+        onPasteFinaleFinished = completion
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -721,7 +756,8 @@ final class PillView: NSView {
             context.saveGState()
             context.translateBy(x: x, y: bounds.midY + titleLift)
             context.scaleBy(x: motion.titleScale, y: motion.titleScale)
-            drawText("Thinking", x: 0, centerY: 0, width: textWidth, font: titleFont, color: Self.ink)
+            let titleWidth = model.isDictationThinking ? textWidth / motion.titleScale : textWidth
+            drawText(model.thinkingTitle, x: 0, centerY: 0, width: titleWidth, font: titleFont, color: Self.ink)
             context.restoreGState()
 
             let reveal = cleanup ? motion.reveal : 1
@@ -763,34 +799,88 @@ final class PillView: NSView {
 
     private func drawDictationDots(start: CGFloat, cleanup: Bool) {
         let age = certificationBeganAt.map { phaseElapsed - $0 }
-        let count = cleanup ? Self.cleanupDotCount : Self.recognitionDotCount
-        let progress: CGFloat = cleanup ? (reduceMotion ? 1 : CGFloat(min(1, max(0, (age ?? 0) / 0.24)))) : 0
+        let count = cleanup ? Self.cleanupWaveDotCount : Self.recognitionDotCount
+        let progress: CGFloat = cleanup ? (reduceMotion ? 1 : CGFloat(min(1, max(0, (age ?? 0) / 0.20)))) : 0
         let packing = progress * progress * (3 - 2 * progress)
         // Use the space beside the label and inside the rounded end as the extra dots appear.
         let rowStart = start - 4 * packing
         let lastCentre = Self.thinkingWaveWidth - 2 * Self.thinkingWaveRadius + 12 * packing
-        let spacing = lastCentre / (CGFloat(Self.recognitionDotCount - 1) + CGFloat(Self.cleanupDotCount - Self.recognitionDotCount) * packing)
-        var previous: (x: CGFloat, y: CGFloat, radius: CGFloat)?
+        let spacing = lastCentre / (CGFloat(Self.recognitionDotCount - 1) + CGFloat(Self.cleanupWaveDotCount - Self.recognitionDotCount) * packing)
+        var dots: [(x: CGFloat, y: CGFloat, radius: CGFloat, alpha: CGFloat)] = []
+        dots.reserveCapacity(count)
         for index in 0..<count {
             let slot = CGFloat(index) * spacing
             let visibility = min(1, max(0, (lastCentre - slot + 2) / 2))
             guard visibility > 0 else { continue }
             let dot = reduceMotion ? (x: CGFloat.zero, y: CGFloat.zero, scale: CGFloat(1))
                 : Self.wovenDot(index, time: phaseElapsed, cleanupElapsed: age)
-            let radius = Self.thinkingWaveRadius * dot.scale * (0.65 + 0.35 * visibility)
-            let y = bounds.midY + dot.y
-            var x = rowStart + slot + dot.x * 0.28
-            if let previous {
+            let radius = Self.dictationDotRadius * dot.scale * (0.65 + 0.35 * visibility)
+            var x = rowStart + min(slot + dot.x * 0.18, lastCentre)
+            if packing < 1, let previous = dots.last {
                 let separation = previous.radius + radius + 0.55
-                let rise = y - previous.y
+                let rise = dot.y - previous.y
                 let run = sqrt(max(0, separation * separation - rise * rise))
-                x = max(x, previous.x + run)
+                x += (1 - packing) * max(0, previous.x + run - x)
             }
-            previous = (x, y, radius)
-            Self.ink.withAlphaComponent(min(1, 0.74 + dot.y * 0.065) * visibility).setFill()
-            NSBezierPath(ovalIn: NSRect(x: x - radius, y: y - radius,
+            let alpha = min(1, 0.74 + dot.y * 0.065) * visibility
+            dots.append((x, dot.y, radius, alpha))
+        }
+
+        // Where the woven strands meet, give the two dots just enough vertical
+        // room to stay legible without forcing either strand into a fixed row.
+        var clearance = [CGFloat](repeating: 0, count: dots.count)
+        for index in dots.indices.dropFirst() where packing > 0 {
+            let left = dots[index - 1]
+            let right = dots[index]
+            let run = right.x - left.x
+            let separation = left.radius + right.radius + 0.55
+            guard run < separation else { continue }
+            let rise = sqrt(separation * separation - run * run)
+            let direction: CGFloat = index.isMultiple(of: 2) ? -1 : 1
+            let blend = min(1, packing * 4) * min(1, (separation - run) / 0.35)
+            let lift = max(0, rise - direction * (right.y - left.y)) * blend / 2
+            clearance[index - 1] = max(clearance[index - 1], lift)
+            clearance[index] = max(clearance[index], lift)
+        }
+
+        let finaleElapsed = pasteFinaleBeganAt.map { phaseElapsed - $0 }
+        var finaleLeft = rowStart - 23.5
+        if finaleElapsed != nil {
+            // The two layers lift at the leading edge to clear the subtitle.
+            let titleWidth = (model.thinkingTitle as NSString).size(withAttributes: [.font: Self.dictationThinkingFont]).width
+            let titleStart = start - Self.dictationThinkingTextWidth - Self.thinkingWaveGap - Self.thinkingWaveRadius
+            let titleEnd = titleStart + titleWidth * Self.stackedDictationTitleScale
+            finaleLeft = max(finaleLeft, titleEnd + 3)
+        }
+        for (index, dot) in dots.enumerated() {
+            let y = dot.y + (index.isMultiple(of: 2) ? -clearance[index] : clearance[index])
+            let pose = Self.pasteFinaleDot(index: index, elapsed: finaleElapsed,
+                                          from: NSPoint(x: dot.x, y: y), left: finaleLeft, right: rowStart + 53.5)
+            let radius = dot.radius + (Self.dictationDotRadius - dot.radius) * pose.progress
+            Self.ink.withAlphaComponent(dot.alpha + (0.80 - dot.alpha) * pose.progress).setFill()
+            NSBezierPath(ovalIn: NSRect(x: pose.center.x - radius, y: bounds.midY + pose.center.y - radius,
                                         width: radius * 2, height: radius * 2)).fill()
         }
+    }
+
+    /// Settle in groups into two staggered layers of the same gentle wave.
+    static func pasteFinaleDot(index: Int, elapsed: TimeInterval?, from: NSPoint, left: CGFloat, right: CGFloat)
+        -> (center: NSPoint, progress: CGFloat) {
+        guard let elapsed else { return (from, 0) }
+        let group = index / 5
+        let isUpper = index.isMultiple(of: 2)
+        let delay = Double(group) * 0.053 + Double(index % 5) * 0.013 + (isUpper ? 0 : 0.050)
+        let t = CGFloat(min(1, max(0, (elapsed - delay) / 0.32)))
+        let progress = t * t * t * (t * (6 * t - 15) + 10)
+        let u = Double(index) / Double(cleanupWaveDotCount - 1)
+        let envelope = pow(sin(.pi * u), 0.7)
+        let phase = 2 * Double.pi * (u - 0.13) + 0.25 * sin(2 * .pi * u)
+        let wave = envelope * (5.5 * sin(phase) - 0.75 * sin(2.1 * elapsed - u * 6.2))
+        let layer = isUpper ? 3.2 : -3.2
+        let x = left + (right - left) * CGFloat(u)
+        let y = CGFloat(wave + 4 * pow(1 - u, 4) + layer)
+        return (NSPoint(x: from.x + (x - from.x) * progress,
+                        y: from.y + (y - from.y) * progress), progress)
     }
 
     private func drawThinkingDots(count: Int, start: CGFloat, spacing: CGFloat, radius: CGFloat) {
@@ -1257,6 +1347,16 @@ final class RecordingBar {
             guard self.model.beginCertification() else { return }
             self.pushModel()
         }
+    }
+
+    var canAnimatePaste: Bool {
+        model.phase == .thinking && model.thinkingActivity == .cleanup
+            && panelBox?.isVisible == true && !Self.prefersReducedMotion
+    }
+
+    func beginPasteFinale(completion: @escaping () -> Void) {
+        pill.beginPasteFinale(completion: completion)
+        startTimer()
     }
 
     /// Brief confirmation, then a short fade out. A warning shows an amber mark instead.

@@ -83,6 +83,21 @@ func dashboardMotionTests() {
     let saturdayRange = ActivityRange(endingOn: saturday, calendar: calendar)
     checkEq("the 133-day range includes today and survives a daylight saving change", saturdayRange.firstDay, firstDay)
     checkEq("a range ending Saturday occupies exactly 19 week columns", saturdayRange.weekCount, 19)
+    calendar.locale = Locale(identifier: "en_US")
+    let shadeSamples = [0, 45, 80, 132].map { age in
+        let date = calendar.date(byAdding: .day, value: -age, to: saturdayRange.today)!
+        return saturdayRange.emptyShade(for: date, calendar: calendar, region: "US")
+    }
+    checkEq("unused heatmap days have four progressively lighter age bands", shadeSamples, [0, 1, 2, 3])
+    let sundayBoundary = calendar.date(byAdding: .day, value: -27, to: saturdayRange.today)!
+    checkEq("weekends can lighten an unused day near a band boundary",
+            saturdayRange.emptyShade(for: sundayBoundary, calendar: calendar, region: "US"), 1)
+    let thanksgiving = calendar.date(from: DateComponents(year: 2026, month: 11, day: 26))!
+    let december = calendar.date(byAdding: .day, value: 24, to: thanksgiving)!
+    let decemberRange = ActivityRange(endingOn: december, calendar: calendar)
+    check("recognized regional holidays gently lighten an unused day",
+          decemberRange.emptyShade(for: thanksgiving, calendar: calendar, region: "US") >
+            decemberRange.emptyShade(for: thanksgiving, calendar: calendar, region: "CA"))
     for offset in 1...6 {
         let day = calendar.date(byAdding: .day, value: offset, to: saturday)!
         let range = ActivityRange(endingOn: day, calendar: calendar)

@@ -1,37 +1,43 @@
 import AppKit
 import Carbon.HIToolbox
 
-// Inserter.swift - clipboard + synthesized Cmd+V, with clipboard restore.
+// Direct insertion and explicit clipboard actions.
 
 struct ClipboardSnapshot {
     var items: [[NSPasteboard.PasteboardType: Data]]
-    var changeCount: Int
 }
 
 enum PasteResult {
     case pasted
-    /// The Cmd+V was posted, but delivery could not be confirmed and the
-    /// Accessibility grant is missing. This is NOT a known failure: on many
-    /// machines the paste lands anyway, and telling the user it failed when the
-    /// text actually appeared is worse than staying quiet about the uncertainty.
+    /// Text was sent, but the target did not acknowledge that it inserted it.
     case unverified
     case secureInput
+    case accessibilityRequired
     case eventFailed
 
     var ok: Bool { self == .pasted || self == .unverified }
 
     var message: String {
         switch self {
-        case .pasted: return L10n.text("已粘贴")
-        case .unverified: return L10n.text("已粘贴。没看到请按 ⌘V，或允许辅助功能")
-        case .secureInput: return L10n.text("安全输入已开启，已复制到剪贴板")
-        case .eventFailed: return L10n.text("无法粘贴，已复制到剪贴板")
+        case .pasted: return L10n.text("已写入")
+        case .unverified: return L10n.text("已发送文字，请确认是否写入。")
+        case .secureInput: return L10n.text("安全输入已开启，未写入。")
+        case .accessibilityRequired: return L10n.text("请允许辅助功能后再写入。")
+        case .eventFailed: return L10n.text("无法写入当前输入框。")
         }
     }
 }
 
 final class Inserter {
     static let shared = Inserter()
+
+    enum NewlineMode {
+        case none
+        case editorReturn
+        case composerShiftReturn
+
+        var flags: CGEventFlags { self == .composerShiftReturn ? .maskShift : [] }
+    }
 
     // MARK: clipboard
 
@@ -47,7 +53,7 @@ final class Inserter {
                 items.append(dict)
             }
         }
-        return ClipboardSnapshot(items: items, changeCount: pb.changeCount)
+        return ClipboardSnapshot(items: items)
     }
 
     @discardableResult
@@ -58,14 +64,6 @@ final class Inserter {
         return pb.changeCount
     }
 
-    /// Apps that turn pasted HTML/RTF lists into real lists. Everything else (chat,
-    /// code editors, terminals) gets the plain "1. …" text, which is what they want.
-    static let richListApps: Set<String> = [
-        "com.apple.Notes", "com.apple.mail", "com.apple.Pages", "com.apple.iWork.Pages",
-        "com.microsoft.Word", "com.microsoft.Outlook", "com.apple.TextEdit", "notion.id",
-    ]
-
-    /// HTML for text containing "1. " numbered lines, or nil when there is no list.
     /// A numbered or bulleted list starts on its own line: when the cursor follows other text on
     /// the same line (or what precedes it could not be read), a line break goes first.
     static func separatingList(_ text: String, before: String?) -> String {
@@ -75,46 +73,6 @@ final class Inserter {
             if line.trimmingCharacters(in: .whitespaces).isEmpty { return text }
         }
         return "\n" + text
-    }
-
-    static func listHTML(for text: String) -> String? {
-        let lines = text.components(separatedBy: "\n")
-        let numbered = lines.filter { $0.range(of: #"^\s*\d{1,2}[.)]\s+"#, options: .regularExpression) != nil }
-        guard numbered.count >= 2 else { return nil }
-        func escape(_ s: String) -> String {
-            s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-        }
-        var html = ""
-        var inList = false
-        for line in lines {
-            if let r = line.range(of: #"^\s*\d{1,2}[.)]\s+"#, options: .regularExpression) {
-                if !inList { html += "<ol>"; inList = true }
-                html += "<li>" + escape(String(line[r.upperBound...])) + "</li>"
-            } else {
-                if inList { html += "</ol>"; inList = false }
-                if !line.trimmingCharacters(in: .whitespaces).isEmpty { html += "<p>" + escape(line) + "</p>" }
-            }
-        }
-        if inList { html += "</ol>" }
-        return "<meta charset=\"utf-8\"><div style=\"font-family:-apple-system\">" + html + "</div>"
-    }
-
-    /// Plain text plus, for a list, HTML and RTF flavours of the same content.
-    @discardableResult
-    func setRich(_ text: String, html: String) -> Int {
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        let item = NSPasteboardItem()
-        item.setString(text, forType: .string)
-        item.setString(html, forType: .html)
-        if let data = html.data(using: .utf8),
-           let attributed = NSAttributedString(html: data, documentAttributes: nil),
-           let rtf = attributed.rtf(from: NSRange(location: 0, length: attributed.length), documentAttributes: [:]) {
-            item.setData(rtf, forType: .rtf)
-        }
-        pb.writeObjects([item])
-        return pb.changeCount
     }
 
     func restore(_ snap: ClipboardSnapshot) {
@@ -134,9 +92,10 @@ final class Inserter {
 
     static func isSecureInputEnabled() -> Bool { IsSecureEventInputEnabled() }
     static func isAccessibilityTrusted() -> Bool { AXIsProcessTrusted() }
-
-    /// Synthesise Cmd+V. Construction needs no permission; delivery may.
-    func postCommandV() -> Bool { postCommand(0x09) } // kVK_ANSI_V
+    static var pasteModifiersReleased: Bool {
+        let held: CGEventFlags = [.maskAlternate, .maskShift, .maskControl, .maskCommand, .maskSecondaryFn]
+        return CGEventSource.flagsState(.combinedSessionState).intersection(held).isEmpty
+    }
 
     /// Browsers whose web text fields Accessibility cannot read. They copy nothing when nothing
     /// is selected (unlike editors such as VS Code, which copy the whole line), so a ⌘C there
@@ -193,35 +152,186 @@ final class Inserter {
         return true
     }
 
-    /// Full insert: put text on the pasteboard, paste it, then restore the clipboard.
-    /// Returns the result plus whether the clipboard was restored (left intact on failure).
-    func insert(_ text: String, richHTML: String? = nil,
-                completion: @escaping (PasteResult, Bool) -> Void) {
-        let snap = snapshot()
-        let before = richHTML.map { setRich(text, html: $0) } ?? setString(text)
+    /// Replace the selection (or insert at the caret) without using the pasteboard.
+    func insert(_ text: String, into app: NSRunningApplication, canPost: () -> Bool) -> PasteResult {
+        guard !Self.isSecureInputEnabled() else { return .secureInput }
+        guard Self.isAccessibilityTrusted() else { return .accessibilityRequired }
+        guard canPost(), !text.isEmpty else { return .eventFailed }
 
-        if Inserter.isSecureInputEnabled() {
-            completion(.secureInput, false)
-            return
+        let target = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(target, 0.25)
+        let bundleID = app.bundleIdentifier ?? ""
+        let isTerminal = TerminalGuard.isTerminal(bundleID)
+        let isAgentComposerApp = bundleID == "com.openai.codex" || bundleID == "ai.opencode.desktop"
+        func focusedElement() -> AXUIElement? {
+            if isAgentComposerApp,
+               let systemFocus = FieldContextReader.focusedElement(ofApp: bundleID) {
+                return systemFocus
+            }
+            return FieldContextReader.copy(target, kAXFocusedUIElementAttribute)
         }
-        guard postCommandV() else {
-            completion(.eventFailed, false)
-            return
-        }
-        let result: PasteResult = Inserter.isAccessibilityTrusted() ? .pasted : .unverified
-        let shouldRestore = (result == .pasted) && snap.changeCount >= 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            var restored = false
-            if shouldRestore {
-                let pb = NSPasteboard.general
-                // Only restore when nothing else wrote to the pasteboard meanwhile.
-                if pb.changeCount == before || pb.string(forType: .string) == text {
-                    self.restore(snap)
-                    restored = true
+        let focus = focusedElement()
+        var newlineMode = NewlineMode.none
+        if let focus {
+            AXUIElementSetMessagingTimeout(focus, 0.25)
+            let subrole: String? = FieldContextReader.copy(focus, kAXSubroleAttribute)
+            if subrole == kAXSecureTextFieldSubrole as String { return .secureInput }
+            if bundleID == "com.microsoft.VSCode" || isAgentComposerApp {
+                let role: String? = FieldContextReader.copy(focus, kAXRoleAttribute)
+                var element = focus
+                for _ in 0..<(isAgentComposerApp ? 4 : 1) {
+                    let classes: [String] = FieldContextReader.copy(element, "AXDOMClassList") ?? []
+                    newlineMode = Self.newlineMode(bundleID: bundleID, role: role, classes: classes)
+                    guard newlineMode == .none, isAgentComposerApp,
+                          let parent: AXUIElement = FieldContextReader.copy(element, kAXParentAttribute) else { break }
+                    element = parent
                 }
             }
-            completion(result, restored)
+            // The verified keyboard adapters cover editors whose AX writes do not update
+            // the document. All other fields use the same capability-based AX path.
+            if !isTerminal, newlineMode == .none,
+               let result = Self.writeThroughAccessibility(text, to: focus, canWrite: {
+                   canPost() && !Self.isSecureInputEnabled()
+                       && (focusedElement().map { CFEqual(focus, $0) } ?? false)
+               }) {
+                return result
+            }
         }
+        if bundleID == "com.openai.codex", newlineMode == .none {
+            DiagnosticsLog.write("delivery.codex-field", ["code": "composer-not-identified"])
+        }
+        guard newlineMode != .none || isTerminal || focus.map(FieldContextReader.canReceiveTextEvents) == true,
+              let commands = Self.textEvents(text, allowsEditorNewlines: newlineMode != .none) else { return .eventFailed }
+        guard CGPreflightPostEventAccess(),
+              let source = CGEventSource(stateID: .privateState) else { return .accessibilityRequired }
+        var sent = false
+        for command in commands {
+            if command == nil {
+                let current = focusedElement()
+                guard let focus, let current, CFEqual(focus, current) else { return sent ? .unverified : .eventFailed }
+            }
+            let key: CGKeyCode = command == nil ? CGKeyCode(kVK_Return) : 0
+            guard canPost(), !Self.isSecureInputEnabled(),
+                  let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else {
+                return sent ? .unverified : .eventFailed
+            }
+            down.flags = command == nil ? newlineMode.flags : []
+            up.flags = down.flags
+            command?.withUnsafeBufferPointer {
+                down.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
+                up.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
+            }
+            down.postToPid(app.processIdentifier)
+            up.postToPid(app.processIdentifier)
+            sent = true
+        }
+        return sent ? .unverified : .eventFailed
+    }
+
+    private static func writeThroughAccessibility(_ text: String, to field: AXUIElement,
+                                                   canWrite: () -> Bool) -> PasteResult? {
+        func isSettable(_ attribute: CFString) -> Bool {
+            var settable = DarwinBoolean(false)
+            return AXUIElementIsAttributeSettable(field, attribute, &settable) == .success && settable.boolValue
+        }
+
+        // For an empty text area, AXValue can insert the entire multiline value.
+        // Some editors accept an AXSelectedText write without changing an empty field.
+        let value = kAXValueAttribute as CFString
+        if text.utf8.contains(10) || text.utf8.contains(13),
+           FieldContextReader.copy(field, kAXRoleAttribute) as String? == kAXTextAreaRole,
+           isSettable(value),
+           let original: String = FieldContextReader.copy(field, kAXValueAttribute),
+           original.isEmpty {
+            guard canWrite() else { return .eventFailed }
+            let latestValue: String? = FieldContextReader.copy(field, kAXValueAttribute)
+            guard latestValue == "" else { return .eventFailed }
+            switch AXUIElementSetAttributeValue(field, value, text as CFString) {
+            case .success:
+                let actual: String? = FieldContextReader.copy(field, kAXValueAttribute)
+                guard actual == text else { return .unverified }
+                let selectedRange = kAXSelectedTextRangeAttribute as CFString
+                if isSettable(selectedRange), canWrite() {
+                    var caret = CFRange(location: text.utf16.count, length: 0)
+                    if let range = AXValueCreate(.cfRange, &caret) {
+                        AXUIElementSetAttributeValue(field, selectedRange, range)
+                    }
+                }
+                return .pasted
+            case .attributeUnsupported, .notImplemented: break
+            case .cannotComplete: return .unverified
+            default: return .eventFailed
+            }
+        }
+
+        let selection = kAXSelectedTextAttribute as CFString
+        guard isSettable(selection) else { return nil }
+        guard canWrite() else { return .eventFailed }
+        switch AXUIElementSetAttributeValue(field, selection, text as CFString) {
+        case .success: return .pasted
+        case .attributeUnsupported, .notImplemented: return nil
+        // The app may already have applied a timed-out write. Never replay it.
+        case .cannotComplete: return .unverified
+        default: return .eventFailed
+        }
+    }
+
+    static func newlineMode(bundleID: String, role: String?, classes: [String]) -> NewlineMode {
+        if bundleID == "com.microsoft.VSCode", role == kAXTextAreaRole,
+           classes.contains(where: { $0 == "native-edit-context" || $0 == "inputarea" }) { return .editorReturn }
+        if bundleID == "com.openai.codex", classes.contains("ProseMirror") { return .composerShiftReturn }
+        if bundleID == "ai.opencode.desktop", role == kAXTextAreaRole,
+           classes.contains("pe-[var(--composer-scroll-end)]"), classes.contains("whitespace-pre-wrap") {
+            return .composerShiftReturn
+        }
+        return .none
+    }
+
+    /// A nil element denotes the identified editor's line-break shortcut.
+    static func textEvents(_ text: String, allowsEditorNewlines: Bool) -> [[UInt16]?]? {
+        guard allowsEditorNewlines else {
+            return safeForTextEvents(text) ? unicodeChunks(text).map(Optional.some) : nil
+        }
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
+        guard lines.allSatisfy({ $0.isEmpty || safeForTextEvents($0) }) else { return nil }
+        var events: [[UInt16]?] = []
+        for (index, line) in lines.enumerated() {
+            if index > 0 { events.append(nil) }
+            events.append(contentsOf: unicodeChunks(line).map(Optional.some))
+        }
+        return events
+    }
+
+    static func safeForTextEvents(_ text: String) -> Bool {
+        !text.isEmpty && text.unicodeScalars.allSatisfy {
+            !CharacterSet.controlCharacters.contains($0) || $0.value == 0x200C || $0.value == 0x200D
+        } && text.rangeOfCharacter(from: .newlines) == nil
+    }
+
+    /// Keep sequences such as emoji together whenever they fit within one event.
+    static func unicodeChunks(_ text: String) -> [[UInt16]] {
+        let limit = 20
+        var chunks: [[UInt16]] = []
+        var pending: [UInt16] = []
+        func append(_ units: [UInt16]) {
+            if pending.count + units.count > limit {
+                chunks.append(pending)
+                pending = []
+            }
+            pending.append(contentsOf: units)
+        }
+        for character in text {
+            let units = Array(character.utf16)
+            if units.count <= limit {
+                append(units)
+            } else {
+                for scalar in character.unicodeScalars { append(Array(scalar.utf16)) }
+            }
+        }
+        if !pending.isEmpty { chunks.append(pending) }
+        return chunks
     }
 
     /// Ask macOS to prompt for the Accessibility grant.
