@@ -3,15 +3,11 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 减少同一麦克风的提示频率。语音波形中段更高，起音和重音时的变化更自然。
-- 听写胶囊在整理开始时由 11 个波点过渡到 15 个。胶囊维持原尺寸，处理完直接淡出。
-- 整理提示词保留拼读指明的最终词语，移除用于自我纠正的拼读过程。重开设置回到顶部，关闭设置后恢复首页。
+- Cadence 热力图的纯白格新增浅灰圆角描边。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Microphone reminders appear less often for the same input. The recording waveform has taller, more expressive middle bars.
-- The dictation capsule transitions from 11 to 15 dots during cleanup, then fades out directly.
-- Cleanup keeps the final spelling without the spoken correction sequence. Settings reopens at the top and dismissing it restores Home.
+- Cadence now outlines the lightest heatmap cells with a subtle rounded border.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation
