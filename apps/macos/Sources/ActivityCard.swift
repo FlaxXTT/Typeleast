@@ -420,6 +420,36 @@ struct ActivityRange {
         self.lastWeek = lastWeek
         self.weekCount = days / 7 + 1
     }
+
+    func emptyShade(for date: Date, calendar: Calendar, region: String?) -> Int {
+        let age = max(0, calendar.dateComponents([.day], from: date, to: today).day ?? 0)
+        let relief = Self.isHoliday(date, calendar: calendar, region: region) ? 12
+            : calendar.isDateInWeekend(date) ? 7 : 0
+        // Slightly stagger the band boundaries across rows to soften vertical seams.
+        let weekdayOffset = (calendar.component(.weekday, from: date) * 3) % 7 - 3
+        return min(3, max(0, (age + relief + weekdayOffset) / 33))
+    }
+
+    private static func isHoliday(_ date: Date, calendar: Calendar, region: String?) -> Bool {
+        let parts = calendar.dateComponents([.month, .day, .weekday], from: date)
+        guard let month = parts.month, let day = parts.day else { return false }
+        if month == 1 && day == 1 { return true }
+        switch region {
+        case "US":
+            return (month == 7 && day == 4) || (month == 12 && day == 25)
+                || (month == 9 && day <= 7 && parts.weekday == 2)
+                || (month == 11 && (22...28).contains(day) && parts.weekday == 5)
+        case "CN":
+            if (month == 5 && day == 1) || (month == 10 && day <= 3) { return true }
+            var lunar = Calendar(identifier: .chinese)
+            lunar.timeZone = calendar.timeZone
+            let parts = lunar.dateComponents([.month, .day], from: date)
+            return parts.isLeapMonth != true && ((parts.month == 1 && parts.day == 1)
+                || (parts.month == 5 && parts.day == 5) || (parts.month == 8 && parts.day == 15))
+        default:
+            return false
+        }
+    }
 }
 
 /// Cadence heatmap with weekdays down the side and months along the bottom.
@@ -685,6 +715,7 @@ private struct ActivityTrack: View, Animatable {
 
     var body: some View {
         let calendar = Self.calendar
+        let region = Locale.autoupdatingCurrent.region?.identifier
         let weeks = range.weekCount
         let firstWeek = position - Double(weeks - 1)
         let first = Int(floor(firstWeek))
@@ -698,7 +729,7 @@ private struct ActivityTrack: View, Animatable {
                 ForEach(0..<7, id: \.self) { row in
                     if let day = calendar.date(byAdding: .day, value: row, to: date) {
                         let depth = HeatmapMotion.depth(elapsed: elapsed, column: column, row: row)
-                        cellView(date: day, motion: motion, depth: depth)
+                        cellView(date: day, calendar: calendar, region: region, motion: motion, depth: depth)
                             .offset(x: x, y: CGFloat(row) * rowStep)
                             .accessibilityHidden(offscreen)
                     }
@@ -715,13 +746,15 @@ private struct ActivityTrack: View, Animatable {
     }
 
     @ViewBuilder
-    private func cellView(date: Date, motion: HeatmapMotion.Sample, depth: Double) -> some View {
+    private func cellView(date: Date, calendar: Calendar, region: String?, motion: HeatmapMotion.Sample, depth: Double) -> some View {
         if let log {
             let face = Group {
                 if date <= range.today && (position < 0 || date >= range.firstDay) {
                     let day = log.day(date)
                     let description = tooltip(date, day)
-                    Self.square(ActivityLog.level(day.dictations), size: cell)
+                    let level = ActivityLog.level(day.dictations)
+                    let shade = level == 0 ? range.emptyShade(for: date, calendar: calendar, region: region) : 0
+                    Self.square(level, size: cell, emptyShade: shade)
                         .help(description).accessibilityLabel(description)
                 } else {
                     RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
@@ -758,9 +791,9 @@ private struct ActivityTrack: View, Animatable {
         }
     }
 
-    static func square(_ level: Int, size: CGFloat) -> some View {
+    static func square(_ level: Int, size: CGFloat, emptyShade: Int = 0) -> some View {
         RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
-            .fill(level == 0 ? Theme.heatEmpty : Theme.heat[min(3, level - 1)])
+            .fill(level == 0 ? Theme.heatEmptyShades[emptyShade] : Theme.heat[min(3, level - 1)])
             .frame(width: size, height: size)
     }
 

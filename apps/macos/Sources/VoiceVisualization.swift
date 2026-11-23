@@ -2,7 +2,9 @@ import Foundation
 
 /// Tracks capture levels on the animation clock and delays the envelope from left to right.
 struct VoiceWaveform {
-    static let count = 10
+    enum Edge { case left, right }
+
+    static let count = 11
     static let restingHeight: Double = 2
     static let peakHeight: Double = 26
 
@@ -17,8 +19,9 @@ struct VoiceWaveform {
     private static let leftShoulder = leftMiddle - 1
     private static let rightShoulder = rightMiddle + 1
     // The three main columns get more time between their onsets than the small edge columns.
-    private static let delays: [TimeInterval] = [0, 0.006, 0.012, 0.020, 0.044, 0.068, 0.082, 0.090, 0.098, 0.106]
-    private static let columnGains: [Double] = [0.055, 0.125, 0.20, 0.59, 0.80, 0.69, 0.35, 0.20, 0.125, 0.055]
+    private static let delays: [TimeInterval] = [0, 0.006, 0.012, 0.020, 0.044, 0.068, 0.082, 0.090, 0.098, 0.104, 0.110]
+    private static let columnGains: [Double] = [0.055, 0.125, 0.20, 0.59, 0.80, 0.69, 0.35, 0.26, 0.20, 0.125, 0.055]
+    private static let accentThreshold = 0.69
     private static let variationAmount = 0.10
     private static let longestDelay = delays[count - 1]
 
@@ -45,6 +48,8 @@ struct VoiceWaveform {
     private var segments: [Segment] = []
     private var texturePhases = SIMD3<Double>.zero
     private var lastSpeechAt: TimeInterval?
+    private var lastDoublePeakAt: TimeInterval?
+    private var edgeAccent: (time: TimeInterval, edge: Edge)?
 
     mutating func reset(texturePhases: SIMD3<Double> = .zero) {
         self = VoiceWaveform()
@@ -52,7 +57,9 @@ struct VoiceWaveform {
     }
 
     mutating func receive(_ level: Float, at now: TimeInterval, reduceMotion: Bool,
-                          drawEndpointLift: () -> Bool = { Int.random(in: 0..<5) == 0 }) {
+                          drawEndpointLift: () -> Bool = { Int.random(in: 0..<5) == 0 },
+                          drawDoublePeak: () -> Bool = { false },
+                          drawEdgeAccent: () -> Edge? = { nil }) {
         let volume = level.isFinite ? Double(min(1, max(0, level))) : 0
         // The capture meter boosts quiet signals with a fourth root. Restore some
         // of the dynamic range so quiet speech moves the middle columns only a little.
@@ -61,6 +68,8 @@ struct VoiceWaveform {
         if reduceMotion {
             segments.removeAll(keepingCapacity: true)
             lastSpeechAt = nil
+            lastDoublePeakAt = nil
+            edgeAccent = nil
             for index in heights.indices {
                 heights[index] = Self.columnHeight(amplitude, at: index, texture: 0)
             }
@@ -69,6 +78,14 @@ struct VoiceWaveform {
         let previous = segments.last
         if let previous, now < previous.time { return }
         let from = previous?.value(at: now) ?? 0
+        if amplitude >= Self.accentThreshold, (previous?.target ?? 0) < Self.accentThreshold {
+            if lastDoublePeakAt.map({ now - $0 >= 0.70 }) ?? true, drawDoublePeak() {
+                lastDoublePeakAt = now
+            }
+            if edgeAccent.map({ now - $0.time >= 0.70 }) ?? true, let edge = drawEdgeAccent() {
+                edgeAccent = (now, edge)
+            }
+        }
         var liftedEnds = previous?.liftedEnds ?? (left: false, right: false)
         if amplitude >= Self.speechThreshold {
             // Choose once at the onset of a phrase so the shape does not flicker between frames.
@@ -104,11 +121,36 @@ struct VoiceWaveform {
                 || index == Self.count - 1 && segment?.liftedEnds.right == true
             heights[index] = Self.columnHeight(amplitude, at: index, texture: texture, liftEndpoint: lift)
         }
+        applyDoublePeak(at: now)
+        applyEdgeAccent(at: now)
         let dirty = zip(heights, drawnHeights).contains {
             abs($0 - $1) >= 0.05 || ($0 == Self.restingHeight && $1 != $0)
         }
         if dirty { drawnHeights = heights }
         return dirty
+    }
+
+    private mutating func applyEdgeAccent(at now: TimeInterval) {
+        guard let edgeAccent else { return }
+        let column = edgeAccent.edge == .left ? 0 : Self.count - 1
+        let peakTime = Self.delays[column] + 0.045
+        let offset = now - edgeAccent.time - peakTime
+        let prominence = max(0, 1 - abs(offset) / (offset < 0 ? 0.045 : 0.085))
+        let mix = prominence * prominence * (3 - 2 * prominence)
+        let excursion = heights[column] - Self.restingHeight
+        heights[column] += min(6.5 - heights[column], 2.5 * excursion) * mix
+    }
+
+    private mutating func applyDoublePeak(at now: TimeInterval) {
+        guard let lastDoublePeakAt else { return }
+        let prominence = max(0, 1 - abs(now - lastDoublePeakAt - 0.115) / 0.040)
+        let primary = heights[Self.leftMiddle] - Self.restingHeight
+        guard prominence > 0, primary > 8 else { return }
+        let mix = prominence * prominence * (3 - 2 * prominence)
+        let valley = Self.restingHeight + 0.58 * primary
+        let secondary = Self.restingHeight + 0.86 * primary
+        heights[Self.rightMiddle] -= mix * max(0, heights[Self.rightMiddle] - valley)
+        heights[Self.rightShoulder] += mix * max(0, secondary - heights[Self.rightShoulder])
     }
 
     private func variation(at time: TimeInterval, column index: Int) -> Double {

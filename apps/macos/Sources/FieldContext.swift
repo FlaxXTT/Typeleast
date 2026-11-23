@@ -313,6 +313,12 @@ enum FieldContextReader {
         return selectedRange(element) != nil
     }
 
+    static func canReceiveTextEvents(_ element: AXUIElement) -> Bool {
+        let role: String = copy(element, kAXRoleAttribute) ?? ""
+        return textFieldRoles.contains(role) || (!role.isEmpty && !notEditableRoles.contains(role)
+            && selectedRange(element) != nil)
+    }
+
     // MARK: helpers
 
     static func copy<T>(_ element: AXUIElement, _ attribute: String) -> T? {

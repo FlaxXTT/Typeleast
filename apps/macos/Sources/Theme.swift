@@ -83,6 +83,12 @@ enum Theme {
     static let homeDot = dynamic(hex(0xDAD4CD), hex(0x444040))
     static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
     static let heatEmpty = dynamic(hex(0xE8E8E8), hex(0x2C2B2B))
+    static let heatEmptyShades = [
+        heatEmpty,
+        dynamic(hex(0xF0F0F0), hex(0x323131)),
+        dynamic(hex(0xF8F8F8), hex(0x373636)),
+        tile,
+    ]
     static let heatHatch = dynamic(hex(0xC5C5C5), hex(0xF2F1F0, 0.06))
     static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
                        dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(royalCobalt, hex(0x6E8BF5))]

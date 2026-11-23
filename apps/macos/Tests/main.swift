@@ -586,8 +586,8 @@ do {
     var waveform = VoiceWaveform()
     let middle = waveform.heights.count / 2 - 1
     let resting = VoiceWaveform.restingHeight
-    checkEq("recording draws ten bars", waveform.heights.count, 10)
-    checkEq("ten two-point bars and nine two-point gaps fill 38 points", VoiceBarGeometry.waveform.width, 38)
+    checkEq("recording draws eleven bars", waveform.heights.count, 11)
+    checkEq("eleven two-point bars and ten two-point gaps fill 42 points", VoiceBarGeometry.waveform.width, 42)
     check("full-height columns fit inside the recording capsule", VoiceBarGeometry.waveform.height < PillView.height)
     waveform.receive(0, at: 0, reduceMotion: false)
     check("an audio-free waveform stays at rest", !waveform.advance(at: 0.1))
@@ -605,12 +605,12 @@ do {
           waveform.heights[middle] > resting && waveform.heights[right] == resting)
     waveform.advance(at: 1.078)
     check("the right main column responds last",
-          waveform.heights[right] > resting && waveform.heights[9] == resting)
+          waveform.heights[right] > resting && waveform.heights[10] == resting)
     waveform.receive(0.54, at: 1.05, reduceMotion: false)
     waveform.advance(at: 1.13)
     let quiet = waveform.heights[middle]
     check("quiet samples keep the centre low and the edges visible",
-          (5...8).contains(quiet) && waveform.heights[9] > resting)
+          (5...8).contains(quiet) && waveform.heights[10] > resting)
 
     waveform.receive(0.74, at: 1.15, reduceMotion: false)
     waveform.advance(at: 1.238)
@@ -623,7 +623,7 @@ do {
     check("strong speech leaves the two end columns near rest",
           waveform.heights[left] > 14 && waveform.heights[right] > 15
           && waveform.heights[right] < accent
-          && waveform.heights[0] < 3.5 && waveform.heights[9] < 3.5)
+          && waveform.heights[0] < 3.5 && waveform.heights[10] < 3.5)
     let outer = waveform.heights[0]
     waveform.receive(0.98, at: 1.30, reduceMotion: false)
     waveform.advance(at: 1.372)
@@ -725,6 +725,39 @@ do {
           && liftedRightEnd.heights[last] > idleEnds.heights[last]
           && liftedRightEnd.heights[last] < liftedRightEnd.heights[last - 1])
 
+    var doublePeak = VoiceWaveform()
+    var quietAccentDraws = 0
+    doublePeak.receive(0.54, at: 0, reduceMotion: false, drawDoublePeak: {
+        quietAccentDraws += 1
+        return true
+    })
+    checkEq("a quiet voice cannot trigger the second peak", quietAccentDraws, 0)
+    doublePeak.receive(0.98, at: 1, reduceMotion: false, drawDoublePeak: { true })
+    doublePeak.advance(at: 1.074)
+    check("the first peak rises while the second is still at rest",
+          doublePeak.heights[middle] > resting && doublePeak.heights[right + 1] == resting)
+    doublePeak.receive(0.98, at: 1.05, reduceMotion: false)
+    doublePeak.advance(at: 1.115)
+    check("an accent produces a shorter, delayed peak on the right",
+          doublePeak.heights[middle] > doublePeak.heights[right + 1]
+          && doublePeak.heights[right + 1] > doublePeak.heights[right])
+
+    for edge in [VoiceWaveform.Edge.left, .right] {
+        var withAccent = VoiceWaveform()
+        var baseline = VoiceWaveform()
+        withAccent.receive(1, at: 0, reduceMotion: false, drawEndpointLift: { false }, drawEdgeAccent: { edge })
+        baseline.receive(1, at: 0, reduceMotion: false, drawEndpointLift: { false })
+        let peakTime = edge == .left ? 0.045 : 0.155
+        let column = edge == .left ? 0 : VoiceWaveform.count - 1
+        let opposite = VoiceWaveform.count - 1 - column
+        withAccent.advance(at: peakTime)
+        baseline.advance(at: peakTime)
+        check("a chosen endpoint lifts on a loud accent without changing the opposite endpoint",
+              withAccent.heights[column] > baseline.heights[column] + 1
+              && withAccent.heights[column] <= 6.5
+              && withAccent.heights[opposite] == baseline.heights[opposite])
+    }
+
     var microphoneHints = MicrophoneHintPolicy()
     check("an unnamed input does not announce a device", !microphoneHints.shouldShow("", at: 0))
     check("the first successful recording announces an input without drawing a reminder",
@@ -811,6 +844,9 @@ do {
             DictationController.thinkingActivity(strength: "promptbeta", translateTo: nil), .prompt)
 
     capsule.processing(activity: .transcription)
+    let recognitionTitle = capsule.thinkingTitle
+    check("recognition picks a title from the five selected words",
+          ["Musing", "Mulling", "Reflect", "Ponder", "Meditate"].contains(recognitionTitle))
     check("recognition leaves the second line empty", capsule.thinkingSubtitle == nil)
     let recognitionWidth = PillView.width(for: capsule, limit: 120)
     let liveView = PillView(frame: NSRect(x: 0, y: 0, width: recognitionWidth, height: PillView.height))
@@ -818,9 +854,10 @@ do {
     liveView.model = capsule
     let now = ProcessInfo.processInfo.systemUptime
     liveView.advance(at: now)
-    checkEq("recognition centers the full-size title", liveView.certificationMotion.lift, 0)
-    checkEq("recognition uses the full title size", liveView.certificationMotion.titleScale, 1)
+    checkEq("recognition centers the title", liveView.certificationMotion.lift, 0)
+    checkEq("recognition renders the 21-point title at 18 points", liveView.certificationMotion.titleScale, 18.0 / 21.0)
     check("cleanup starts only once", capsule.beginCertification() && !capsule.beginCertification())
+    checkEq("cleanup retains the recognition title", capsule.thinkingTitle, recognitionTitle)
     let cleanupWidth = PillView.width(for: capsule, limit: 120)
     checkEq("cleanup keeps the recognition capsule width while adding dots", cleanupWidth, recognitionWidth)
     let beforeHandoff = PillView.wovenDot(5, time: 1, cleanupElapsed: nil)
@@ -849,7 +886,42 @@ do {
           peak > liveView.certificationMotion.lift && liveView.certificationMotion.lift > 8)
     liveView.advance(at: now + 0.43)
     checkEq("the title finishes at the stacked position", liveView.certificationMotion.lift, 8)
+    checkEq("the stacked title renders at 15 points", liveView.certificationMotion.titleScale, 15.0 / 21.0)
     checkEq("the cleanup word finishes fading in", liveView.certificationMotion.reveal, 1)
+    let scattered = NSPoint(x: 104, y: 3)
+    checkEq("cleanup dots keep weaving until the paste finale starts",
+            PillView.pasteFinaleDot(index: 0, elapsed: nil, from: scattered, left: 78, right: 152).center, scattered)
+    let curve = (0..<20).map {
+        PillView.pasteFinaleDot(index: $0, elapsed: 0.60, from: scattered, left: 78, right: 152).center
+    }
+    let upperWave = stride(from: 0, to: curve.count, by: 2).map { curve[$0] }
+    let lowerWave = stride(from: 1, to: curve.count, by: 2).map { curve[$0] }
+    check("the paste finale fills its expanded width with two staggered layers of a wave",
+          curve[0].x == 78 && curve[19].x == 152
+          && zip(curve, curve.dropFirst()).allSatisfy { $1.x - $0.x > 3.8 }
+          && zip(upperWave, lowerWave).allSatisfy { $0.y - $1.y > 4.5 }
+          && upperWave[4].y > upperWave[7].y + 4 && lowerWave[4].y > lowerWave[7].y + 4)
+    let upperStart = PillView.pasteFinaleDot(index: 0, elapsed: 0.05, from: scattered, left: 78, right: 152)
+    let lowerStart = PillView.pasteFinaleDot(index: 1, elapsed: 0.05, from: scattered, left: 78, right: 152)
+    check("the lower layer follows the upper layer after a short pause",
+          upperStart.progress > 0 && lowerStart.progress == 0)
+    let justBeforeSettle = PillView.pasteFinaleDot(index: 19, elapsed: 0.57, from: scattered, left: 78, right: 152).center
+    let atSettle = PillView.pasteFinaleDot(index: 19, elapsed: 0.59, from: scattered, left: 78, right: 152).center
+    check("the last dot eases into its final position without a late shape change",
+          hypot(justBeforeSettle.x - atSettle.x, justBeforeSettle.y - atSettle.y) < 0.05
+          && abs(atSettle.x - curve[19].x) < 0.0001
+          && abs(atSettle.y - curve[19].y) < 0.0001)
+    var pasteFinaleCompletions = 0
+    liveView.beginPasteFinale { pasteFinaleCompletions += 1 }
+    for index in 1...12 { liveView.advance(at: now + 0.43 + Double(index) * 0.05) }
+    checkEq("paste waits through the final pose hold", pasteFinaleCompletions, 0)
+    liveView.advance(at: now + 1.08)
+    liveView.advance(at: now + 1.13)
+    checkEq("paste starts exactly once after the full finale", pasteFinaleCompletions, 1)
+    var nextCapsule = capsule
+    nextCapsule.hide()
+    nextCapsule.processing()
+    check("the next recording uses a different title", nextCapsule.thinkingTitle != recognitionTitle)
 
     var words = [capsule.thinkingSubtitle ?? ""]
     for _ in 0..<24 {
@@ -1331,11 +1403,38 @@ do {
           !CaretAnchor.stillValid(before: "你好，", selected: "", value: "您好，世界", location: 3, length: 0))
     check("…as does an offset past the end",
           !CaretAnchor.stillValid(before: "", selected: "", value: "短", location: 5, length: 0))
-    let html = Inserter.listHTML(for: "我说三点：\n1. 要快\n2. 要准\n3. 要便宜")
-    check("numbered lines become an ordered list", html?.contains("<ol><li>要快</li><li>要准</li><li>要便宜</li></ol>") == true, html ?? "nil")
-    check("the lead-in stays a paragraph", html?.contains("<p>我说三点：</p>") == true)
-    checkEq("prose produces no list HTML", Inserter.listHTML(for: "今天天气不错。"), nil)
-    check("list HTML escapes markup", Inserter.listHTML(for: "1. a<b>\n2. c&d")?.contains("a&lt;b&gt;") == true)
+    let emoji = "👩🏽‍💻"
+    let unicodeText = String(repeating: "字", count: 19) + emoji + String(repeating: "e\u{0301}", count: 24)
+    let chunks = Inserter.unicodeChunks(unicodeText)
+    check("direct text events preserve Unicode without splitting emoji or surrogate pairs",
+          chunks.allSatisfy { $0.count <= 20 }
+          && chunks.map { String(decoding: $0, as: UTF16.self) }.joined() == unicodeText
+          && chunks.map { String(decoding: $0, as: UTF16.self) }.contains { $0.contains(emoji) })
+    let longGrapheme = "e" + String(repeating: "\u{0301}", count: 30)
+    check("direct text events preserve clusters larger than the event limit",
+          Inserter.unicodeChunks(longGrapheme).map { String(decoding: $0, as: UTF16.self) }.joined() == longGrapheme)
+    check("key event fallback avoids multiline or tab shortcuts",
+          Inserter.safeForTextEvents(unicodeText) && !Inserter.safeForTextEvents("one\ntwo")
+          && !Inserter.safeForTextEvents("one\ttwo"))
+    let editorLines = "第一行\r\n\r\n第二行 👩🏽‍💻\r"
+    let editorEvents = Inserter.textEvents(editorLines, allowsEditorNewlines: true)
+    checkEq("the identified editor preserves blank and trailing lines without clipboard",
+            editorEvents?.map { $0.map { String(decoding: $0, as: UTF16.self) } ?? "\n" }.joined(),
+            "第一行\n\n第二行 👩🏽‍💻\n")
+    check("generic fields never use Return events to enter multiline text",
+          Inserter.textEvents(editorLines, allowsEditorNewlines: false) == nil)
+    let codexNewline = Inserter.newlineMode(bundleID: "com.openai.codex", role: "AXGroup", classes: ["ProseMirror"])
+    check("the Codex composer uses Shift-Return to insert a line break without submitting",
+          codexNewline == .composerShiftReturn && codexNewline.flags == .maskShift)
+    check("an unrelated Codex field does not get a newline shortcut",
+          Inserter.newlineMode(bundleID: "com.openai.codex", role: "AXTextArea", classes: ["search"]) == .none)
+    let openCodeClasses = ["whitespace-pre-wrap", "pe-[var(--composer-scroll-end)]"]
+    check("the OpenCode composer uses the same non-submitting newline as Codex",
+          Inserter.newlineMode(bundleID: "ai.opencode.desktop", role: "AXTextArea", classes: openCodeClasses) == codexNewline
+          && Inserter.newlineMode(bundleID: "ai.opencode.desktop", role: "AXTextArea", classes: ["whitespace-pre-wrap"]) == .none)
+    check("the VS Code document editor still uses unmodified Return",
+          Inserter.newlineMode(bundleID: "com.microsoft.VSCode", role: "AXTextArea", classes: ["native-edit-context"]).flags.isEmpty
+          && Inserter.newlineMode(bundleID: "com.microsoft.VSCode", role: "AXTextArea", classes: ["native-edit-context"]) == .editorReturn)
 
     var m = RecordingBarModel()
     m.showRecording(destination: "x")

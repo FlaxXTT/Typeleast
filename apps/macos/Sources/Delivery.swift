@@ -51,6 +51,7 @@ enum Delivery {
         }
     }
     private static var waiting: Waiting?
+    private static var generation = UUID()
 
     /// The text as the target should receive it. A terminal gets one line without control
     /// characters, which reduces accidental command execution; elsewhere a list never starts
@@ -74,13 +75,39 @@ enum Delivery {
         }
     }
 
-    private static func paste(_ text: String, appBundleId: String, completion: @escaping (DeliveryOutcome) -> Void) {
-        let rich = Inserter.richListApps.contains(appBundleId) ? Inserter.listHTML(for: text) : nil
-        Inserter.shared.insert(text, richHTML: rich) { result, _ in completion(.pasted(result)) }
+    private static func paste(_ text: String, appBundleId: String, field: FocusedField?,
+                              onWaiting: @escaping (DeliveryWait) -> Void, completion: @escaping (DeliveryOutcome) -> Void) {
+        let token = generation
+        let deadline = ProcessInfo.processInfo.systemUptime + 0.45
+        func attempt(afterWait: Bool) {
+            guard token == generation else { completion(.superseded); return }
+            let released = Inserter.pasteModifiersReleased
+            if !released, ProcessInfo.processInfo.systemUptime < deadline {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { attempt(afterWait: true) }
+                return
+            }
+            if afterWait, let reason = bringBack(appBundleId: appBundleId, field: field) {
+                waitToDeliver(text, appBundleId: appBundleId, field: field, reason: reason,
+                              onWaiting: onWaiting, completion: completion)
+                return
+            }
+            guard let app = NSWorkspace.shared.frontmostApplication,
+                  PasteTarget.matches(expected: appBundleId, frontmost: app.bundleIdentifier ?? "") else {
+                completion(.appChanged)
+                return
+            }
+            let result = Inserter.shared.insert(text, into: app) {
+                token == generation && NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier
+                    && Inserter.pasteModifiersReleased
+            }
+            completion(.pasted(result))
+        }
+        attempt(afterWait: false)
     }
 
     /// Whatever was waiting gives way to something newer.
     static func cancelWaiting() {
+        generation = UUID()
         guard let old = waiting else { return }
         waiting = nil
         old.timer?.invalidate()
@@ -93,8 +120,14 @@ enum Delivery {
                         completion: @escaping (DeliveryOutcome) -> Void) {
         cancelWaiting()
         guard let reason = bringBack(appBundleId: appBundleId, field: field) else {
-            return paste(text, appBundleId: appBundleId, completion: completion)
+            return paste(text, appBundleId: appBundleId, field: field, onWaiting: onWaiting, completion: completion)
         }
+        waitToDeliver(text, appBundleId: appBundleId, field: field, reason: reason,
+                      onWaiting: onWaiting, completion: completion)
+    }
+
+    private static func waitToDeliver(_ text: String, appBundleId: String, field: FocusedField?, reason: DeliveryWait,
+                                      onWaiting: @escaping (DeliveryWait) -> Void, completion: @escaping (DeliveryOutcome) -> Void) {
         DiagnosticsLog.write("delivery.wait", ["code": reason == .app ? "app" : "field"])
         onWaiting(reason)
         let wait = Waiting(reason: reason, wasFrontmost: isFrontmost(appBundleId), finish: completion)
@@ -118,7 +151,7 @@ enum Delivery {
                     }
                     waiting = nil
                     wait.timer?.invalidate()
-                    paste(text, appBundleId: appBundleId, completion: wait.finish)
+                    paste(text, appBundleId: appBundleId, field: field, onWaiting: onWaiting, completion: wait.finish)
                 }
                 return
             }

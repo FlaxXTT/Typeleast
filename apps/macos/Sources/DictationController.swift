@@ -907,6 +907,8 @@ final class DictationController {
         }
         switch outcome {
         case .success(let resp):
+            let animatePaste = insert && resp.beta == nil && resp.qualityReview == nil && !resp.noiseSuspected
+                && !resp.insertableText.isEmpty && recordingBar.canAnimatePaste
             let keepsHistory = Self.keepsHistory(translateTo: translateTo ?? preview?.target, response: resp)
             func saveToHistory(_ entry: LocalHistoryEntry) -> String? {
                 guard keepsHistory else { return nil }
@@ -918,7 +920,7 @@ final class DictationController {
             }
             if resp.insertableText.isEmpty && resp.beta == nil && resp.qualityReview == nil && !resp.noiseSuspected {
                 take?.cancel()
-            } else if resp.qualityReview == nil {
+            } else if resp.qualityReview == nil && !animatePaste {
                 take?.done()
             }
             if !usesOnlineASR {
@@ -1034,8 +1036,24 @@ final class DictationController {
                 let counts = DictationStats.countWords(text)
                 ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
                                           typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
-                insertText(text, fallback: resp.fallback, entryId: historyID, appBundleId: appBundleId, field: field,
-                           showsCapsule: take == nil, offersHistoryRecovery: keepsHistory)
+                let deliver = { [weak self] in
+                    self?.insertText(text, fallback: resp.fallback, entryId: historyID, appBundleId: appBundleId, field: field,
+                                     showsCapsule: take == nil && !animatePaste, offersHistoryRecovery: keepsHistory)
+                }
+                if animatePaste {
+                    phase = .thinking
+                    registerEscape()
+                    recordingBar.beginPasteFinale { [weak self] in
+                        guard let self, self.progressID == generation, self.phase == .thinking else { return }
+                        self.phase = .idle
+                        self.unregisterEscape()
+                        self.recordingBar.hide()
+                        deliver()
+                    }
+                    applyState()
+                } else {
+                    deliver()
+                }
             } else {
                 Inserter.shared.setString(text)
                 showRequestResult(text, resp.fallback)
@@ -1087,8 +1105,13 @@ final class DictationController {
             guard self.progressID == generation, self.phase == .idle else { return }
             switch outcome {
             case .pasted(let result):
-                self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message, warning: !result.ok)
-                if showsCapsule { self.recordingBar.showResult(text, warning: !result.ok || fallback) }
+                if !result.ok {
+                    self.notPasted(entryId, L10n.text("未能写入"), result.message,
+                                   showsCapsule: showsCapsule, offersHistoryRecovery: offersHistoryRecovery)
+                    return
+                }
+                self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message)
+                if showsCapsule { self.recordingBar.showResult(text, warning: fallback) }
                 self.applyState()
             case .appChanged:
                 self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"),
