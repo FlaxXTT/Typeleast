@@ -755,6 +755,13 @@ private struct ActivityTrack: View, Animatable {
                     let level = ActivityLog.level(day.dictations)
                     let shade = level == 0 ? range.emptyShade(for: date, calendar: calendar, region: region) : 0
                     Self.square(level, size: cell, emptyShade: shade)
+                        .overlay {
+                            if level == 0 && shade == Theme.heatEmptyShades.indices.last {
+                                RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
+                                    .strokeBorder(Theme.border, lineWidth: 1)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                         .help(description).accessibilityLabel(description)
                 } else {
                     RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
