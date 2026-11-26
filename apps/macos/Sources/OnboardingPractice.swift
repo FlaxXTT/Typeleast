@@ -1,156 +1,186 @@
-import Foundation
-import AVFoundation
 import Combine
-import CoreAudio
+import Foundation
 
-/// The practice passes when one real recording was recognised and cleaned up; what was said is up to the user.
-struct PracticeProgress {
-    enum Outcome: Equatable { case passed, tooShort, nothingHeard, notCleaned, needsReview }
-    private(set) var complete = false
-    mutating func accept(_ response: DictateResponse, seconds: Double) -> Outcome {
-        complete = false
-        guard response.qualityReview == nil else { return .needsReview }
-        guard seconds >= 0.6 else { return .tooShort }
-        guard !response.raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .nothingHeard }
-        guard !response.fallback, !response.insertableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .notCleaned }
-        complete = true
-        return .passed
+enum OnboardingDemo: CaseIterable {
+    case dictation, voiceTranslation, selectionTranslation, skill
+
+    enum Shortcut { case dictation, translation, skill }
+
+    var shortcut: Shortcut {
+        switch self {
+        case .dictation: return .dictation
+        case .voiceTranslation, .selectionTranslation: return .translation
+        case .skill: return .skill
+        }
+    }
+
+    var usesSpeech: Bool { self == .dictation || self == .voiceTranslation }
+
+    var title: String {
+        switch self {
+        case .dictation: return L10n.text("口述成文字")
+        case .voiceTranslation: return L10n.text("说话后翻译")
+        case .selectionTranslation: return L10n.text("选中文字翻译")
+        case .skill: return L10n.text("调用 Skill")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .dictation: return "waveform"
+        case .voiceTranslation: return "mic"
+        case .selectionTranslation: return "character.bubble"
+        case .skill: return "circle.hexagongrid"
+        }
+    }
+
+    var instruction: String {
+        switch self {
+        case .dictation: return L10n.text("按一下开始，说完再按一下。整理好的文字会写到光标处。")
+        case .voiceTranslation: return L10n.text("没有选中文字时，按一下开始，说完再按一下。译文会写到光标处。")
+        case .selectionTranslation: return L10n.text("先选中文字，再按快捷键。译文会显示在单独的面板里。")
+        case .skill: return L10n.text("打开 Harness EQ，移到想用的 Skill，再调用到当前输入框。")
+        }
+    }
+
+    func binding(in settings: Settings) -> HotKeyBinding {
+        switch shortcut {
+        case .dictation: return settings.hotkeyMain.enabled ? settings.hotkeyMain : settings.hotkeyAlt
+        case .translation: return settings.hotkeyTranslate
+        case .skill: return settings.hotkeyAssistant
+        }
+    }
+
+    func shortcutLabel(in settings: Settings) -> String {
+        let binding = binding(in: settings)
+        guard binding.enabled else { return L10n.text("未设置快捷键") }
+        return binding.isFn ? "Fn" : HotKeyCentre.describe(keyCode: binding.keyCode, modifiers: binding.modifiers)
+    }
+
+    var sample: String {
+        switch self {
+        case .dictation: return L10n.text("嗯，报告周三发，不对，改成周四。")
+        case .voiceTranslation, .selectionTranslation: return "明天下午三点开会。"
+        case .skill: return L10n.text("提炼待办")
+        }
+    }
+
+    var result: String {
+        switch self {
+        case .dictation: return L10n.text("报告改为周四发送。")
+        case .voiceTranslation, .selectionTranslation: return "The meeting is at 3 p.m. tomorrow."
+        case .skill: return L10n.text("请从这段文字中提炼待办，保留原文提到的负责人和截止时间。")
+        }
     }
 }
 
-/// Only the current practice result is displayed; these rows are never saved.
-struct PracticeResultRow: Equatable {
-    let title: String
-    let text: String
-
-    static func rows(raw: String, output: String, needsReview: Bool = false) -> [PracticeResultRow] {
-        var rows: [PracticeResultRow] = []
-        if !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            rows.append(PracticeResultRow(title: "原始识别", text: raw))
-        }
-        if !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            rows.append(PracticeResultRow(title: needsReview ? "待核对整理结果" : "整理结果", text: output))
-        }
-        return rows
-    }
-}
-
-/// No paste, clipboard, field context, history or vocabulary learning.
+/// Runs solely inside the onboarding window. The capsule and its output are simulated.
 final class OnboardingPracticeController: ObservableObject {
     @Published private(set) var phase: AppPhase = .idle
-    @Published private(set) var progress = PracticeProgress()
-    @Published private(set) var raw = ""
+    @Published private(set) var mode: OnboardingDemo?
     @Published private(set) var output = ""
-    @Published private(set) var needsReview = false
-    @Published private(set) var status = ""
-    private let recorder = Recorder(metersVoice: true)
-    private let settings: Settings
-    private let client: ServiceClient
+    @Published private(set) var selectionHighlighted = false
+    @Published private(set) var showingSkill = false
+
+    private var startTime: TimeInterval = 0
+    private var pending: DispatchWorkItem?
     private var generation = 0
-    private var pendingAudio: URL?
-    var acceptsShortcut = false
-    var recognitionModelID: () -> String? = { nil }
-    /// The language to translate into, while the translation step is shown; nil for plain dictation.
-    var translateTo: String?
-    init(settings: Settings = .shared, client: ServiceClient = .shared) {
-        self.settings = settings; self.client = client
-        recorder.maxSeconds = 40
-        recorder.onAutoStop = { [weak self] in self?.stop() }
-    }
-    var voiceLevel: Float { recorder.voiceLevel() }
-    var elapsed: Double { recorder.elapsed }
-    var complete: Bool { progress.complete }
-    var busy: Bool { phase != .idle }
-    var translateSample: String { L10n.language == "en" ? "Let's meet tomorrow at three and bring the report." : "明天下午三点开会，记得带上报告。" }
-    var sample: String {
-        L10n.language == "en" ? "Send the report on Tuesday, no wait, on Thursday. Keep it under 3 pages." : "嗯，把报告周三发，不对，改成周四，不超过三页。"
+    private let recordingHold: TimeInterval
+    private let processingHold: TimeInterval
+
+    init(recordingHold: TimeInterval = 1.55, processingHold: TimeInterval = 0.55) {
+        self.recordingHold = recordingHold
+        self.processingHold = processingHold
     }
 
-    /// Resolve the selected input each time, just as daily dictation does.
-    /// The injectable functions allow this routing to be tested without opening a microphone.
-    static func configureInput(_ recorder: Recorder, uid: String,
-                               resolve: (String) -> AudioDeviceID? = AudioDevices.deviceID(forUID:),
-                               apply: @escaping (AudioDeviceID?, AVAudioEngine) -> Void = { id, engine in
-                                   _ = AudioInputSelector.apply(deviceID: id, to: engine)
-                               }) {
-        let deviceID = resolve(uid)
-        recorder.prepareEngine = { engine in apply(deviceID, engine) }
+    var busy: Bool { phase != .idle || showingSkill }
+    var complete: Bool { !output.isEmpty }
+    var elapsed: TimeInterval { phase == .recording ? ProcessInfo.processInfo.systemUptime - startTime : 0 }
+    func enter(_ mode: OnboardingDemo?) {
+        cancel()
+        self.mode = mode
     }
 
-    func toggle() {
-        if phase == .recording { stop(); return }
-        guard phase == .idle else { return }
-        guard settings.activeLLMRoute != nil else { status = L10n.text("请先配置可用的整理模型。"); return }
-        switch Recorder.authorizationStatus() {
-        case .notDetermined:
-            phase = .starting
-            generation += 1
-            let token = generation
-            Recorder.requestMicrophoneAccess { [weak self] allowed in
-                guard let self, self.generation == token, self.phase == .starting else { return }
-                self.phase = .idle
-                if allowed { self.toggle() } else { self.status = L10n.text("需要麦克风权限才能完成真实语音练习。") }
-            }
-            return
-        case .authorized: break
-        default: status = L10n.text("需要麦克风权限才能完成真实语音练习。"); return
+    func selectExample() {
+        guard mode == .selectionTranslation, !busy else { return }
+        selectionHighlighted = true
+    }
+
+    func handle(_ shortcut: OnboardingDemo.Shortcut, held: Bool = false) {
+        guard let mode, mode.shortcut == shortcut else { return }
+        if mode.usesSpeech {
+            if phase == .recording { stop() }
+            else if phase == .idle { beginSpeech(duration: max(5, recordingHold)) }
+        } else if mode == .skill, held {
+            guard !busy else { return }
+            showingSkill = true
+            output = ""
+        } else if !busy {
+            playExample()
         }
-        raw = ""; output = ""; needsReview = false; status = ""
-        recorder.demoPCM = nil
-        Self.configureInput(recorder, uid: settings.inputDeviceUID)
-        generation += 1
-        let token = generation
-        phase = .starting
-        recorder.startAsync { [weak self] result in
-            guard let self, self.generation == token, self.phase == .starting else { return }
-            switch result {
-            case .success: self.phase = .recording
-            case .failure:
-                self.status = L10n.text("打不开麦克风，请检查设备和权限。")
-                self.phase = .idle
-            }
+    }
+
+    func releaseSkill() {
+        guard mode == .skill, showingSkill else { return }
+        showingSkill = false
+        showResult()
+    }
+
+    func playExample() {
+        guard let mode, !busy else { return }
+        output = ""
+        if mode.usesSpeech {
+            beginSpeech(duration: recordingHold)
+        } else if mode == .skill {
+            showingSkill = true
+            schedule(after: processingHold) { $0.releaseSkill() }
+        } else {
+            selectExample()
+            showResult()
         }
     }
 
     func stop() {
         guard phase == .recording else { return }
-        do {
-            let recording = try recorder.finish()
-            guard let route = settings.activeLLMRoute else { try? FileManager.default.removeItem(at: recording.url); status = L10n.text("请先配置可用的整理模型。"); phase = .idle; return }
-            pendingAudio = recording.url
-            let language = settings.recognitionLanguage(for: recognitionModelID()), target = translateTo
-            let token = generation
-            phase = .thinking; status = ""
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                let result: Result<DictateResponse, Error> = Result {
-                    defer { try? FileManager.default.removeItem(at: recording.url) }
-                    let wav = try Data(contentsOf: recording.url)
-                    try? FileManager.default.removeItem(at: recording.url)
-                    return try self?.client.dictateSync(wav: wav, language: language, appBundleId: "tutorial", strength: "concise",
-                        llm: route, translateTo: target) ?? DictateResponse()
-                }
-                DispatchQueue.main.async {
-                    guard let self, self.generation == token else { return }
-                    self.pendingAudio = nil
-                    self.phase = .idle
-                    switch result {
-                    case .failure(let error): self.status = L10n.text("没有完成：") + ((error as? ServiceError).map { "\($0)" } ?? error.localizedDescription)
-                    case .success(let response):
-                        self.needsReview = response.qualityReview != nil
-                        self.raw = response.qualityReview?.original ?? response.raw
-                        self.output = response.qualityReview?.candidate ?? response.insertableText
-                        switch self.progress.accept(response, seconds: recording.seconds) {
-                        case .passed: self.status = L10n.text("已完成，请检查识别和整理结果。")
-                        case .tooShort: self.status = L10n.text("录音太短，请再说一次。")
-                        case .nothingHeard: self.status = L10n.text("没听清，请再说一次。")
-                        case .notCleaned: self.status = L10n.text("识别到了，但整理没完成。请检查整理模型和 API Key。")
-                        case .needsReview: self.status = L10n.text("数量或单位可能发生变化，请核对。")
-                        }
-                    }
-                }
-            }
-        } catch { phase = .idle; status = L10n.text("录音太短或设备异常，请重试。") }
+        showResult()
     }
-    func cancel() { generation += 1; recorder.cancel(); if let pendingAudio { try? FileManager.default.removeItem(at: pendingAudio) }; pendingAudio = nil; phase = .idle; raw = ""; output = ""; needsReview = false }
-    func reset() { cancel(); progress = PracticeProgress(); status = "" }
+
+    func cancel() {
+        generation += 1
+        pending?.cancel()
+        pending = nil
+        phase = .idle
+        output = ""
+        selectionHighlighted = false
+        showingSkill = false
+    }
+
+    private func beginSpeech(duration: TimeInterval) {
+        output = ""
+        startTime = ProcessInfo.processInfo.systemUptime
+        phase = .recording
+        schedule(after: duration) { $0.stop() }
+    }
+
+    private func showResult() {
+        guard let mode else { return }
+        phase = .thinking
+        schedule(after: processingHold) { practice in
+            practice.output = mode.result
+            practice.phase = .idle
+        }
+    }
+
+    private func schedule(after delay: TimeInterval, _ action: @escaping (OnboardingPracticeController) -> Void) {
+        pending?.cancel()
+        generation += 1
+        let token = generation
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.generation == token else { return }
+            self.pending = nil
+            action(self)
+        }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
 }

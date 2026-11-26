@@ -19,20 +19,25 @@
 
 <br>
 
-## 提示词模式：说出想法，补充完整需求
+## 用 Harness EQ 调用和归档 Skill
 
-<p align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/prompt-dark.svg">
-  <img src="docs/media/readme/prompt-light.svg" alt="提示词 Beta：你说项目，它问缺少的信息，你回答并核对它的理解，它写出完整提示词，再删除你没说过的内容。" width="880">
-</picture>
-</p>
+在「设置 → Harness EQ」导入 Skill。在目标输入框中按住 **Fn + 空格**，把鼠标移到想用的 Skill，松开两键即可写入。
 
-- **提问**：每轮最多 4 个问题，只问缺少的信息。
-- **核对**：每次回答后显示它的理解。不对就直接说。
-- **生成**：你点「生成」，它才写提示词。
+<details>
+<summary>复制给 Agent 的 Skill 归档提示词</summary>
 
-<sub>上图为示例画面，对话是虚构的。</sub>
+```text
+请将我指定的 Skill 归档到 TypeLeast 的「设置 → Harness EQ → Skill」。如果我还没有指定名称或路径，先问我。只处理我指定的项目。
+
+1. 纯提示词 Skill 选择「存入 TypeLeast」。带依赖的 Skill 请用包含 SKILL.md 和必需文件的 .skill 或 .zip 包导入，保留原有的相对路径、正文和必要字段。
+2. 验证 Harness EQ 能从归档副本调用它。纯提示词应返回完整正文。带依赖的 Skill 应指向归档副本里的 SKILL.md，并能以它所在的目录为基准读取所需文件。验证只需读取文件，无需执行其中的指令或脚本。
+3. 验证成功后，如果我已明确要求「归档并删除原件」，就将指定原件移到废纸篓。否则请先问我「已确认通过 Harness EQ 调用归档副本不受影响。原 Agent 可能停止自动加载旧入口。要把原件移到废纸篓吗？」
+4. 如果调用仍依赖原路径、其他项目还在引用原件，或无法确认依赖已完整迁移，请保留原件并说明原因。如果你不能操作 TypeLeast，请告诉我需要手动完成哪一步。
+
+最后告诉我归档了哪条 Skill、验证了什么，以及原件是否已移到废纸篓。
+```
+
+</details>
 
 <br>
 

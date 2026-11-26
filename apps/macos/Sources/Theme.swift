@@ -30,6 +30,7 @@ enum Theme {
     static let detail = dynamic(hex(0xFBFAF9), hex(0x1F1C1C))
     static let card = dynamic(hex(0xF2F1F0), hex(0x3C3B3B))
     static let cardHover = dynamic(hex(0x777777, 0.08), hex(0xF2F1F0, 0.06))
+    static let controlHover = dynamic(hex(0x242121, 0.07), hex(0x131111, 0.23))
     static let border = dynamic(hex(0x777777, 0.15), hex(0xF2F1F0, 0.10))
     static let ink = dynamic(hex(0x111111), hex(0xF2F1F0))
     static let inkInverse = Color.white
@@ -56,7 +57,7 @@ enum Theme {
     static let sidebarRadius: CGFloat = 20
     static let settingsRadius: CGFloat = 24
     static let capsuleRadius: CGFloat = 999
-    static let heatCellRadius: CGFloat = 4
+    static let heatCellRadius: CGFloat = 5
     static let pageInset: CGFloat = 24
     static let sidebarWidth: CGFloat = 210
     static let spacing: CGFloat = 8
@@ -70,7 +71,7 @@ enum Theme {
     static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12)
     static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
-    /// The Home insights: white tiles on a lightly dotted panel, and the heatmap's blues.
+    /// Home's Cloud White surfaces and the heatmap's activity levels.
     static let homeRatio: CGFloat = 0.65
     static let homeHeadingSize: CGFloat = 48
     static let homeFigureSize: CGFloat = 26
@@ -79,16 +80,27 @@ enum Theme {
     static let tile = dynamic(hex(0xFFFFFF), hex(tileDarkRGB))
     static let panel = dynamic(hex(0xF7F6F5), hex(0x1D1A1A))
     static let dot = dynamic(hex(0xDCDCD9), hex(0x343333))
-    static let homeBackdrop = dynamic(hex(0xEEEAE5), hex(0x242121))
-    static let homeDot = dynamic(hex(0xDAD4CD), hex(0x444040))
-    static let homeLabel = dynamic(hex(0x7C7C7C), hex(0xB6B2B2))
+    static let homeWindow = dynamic(hex(0xF6F6F7), hex(0x242121))
+    static let homeSidebar = dynamic(hex(0xF0F0F2), hex(sidebarDarkRGB))
+    static let homeTile = dynamic(hex(0xF9F9F8), hex(tileDarkRGB))
+    static let homeTileEdge = dynamic(hex(0xF6F6F7), hex(tileDarkRGB))
+    static let homeTileSurface = EllipticalGradient(colors: [homeTile, homeTileEdge],
+                                                    center: UnitPoint(x: 0.52, y: 0.33), startRadiusFraction: 0.35)
+    static let homeBorder = dynamic(hex(0xE0E0E4), hex(0xF2F1F0, 0.10))
+    static let homeMetricBorder = dynamic(hex(0xE9E9EE), hex(0xF2F1F0, 0.085))
+    static let homeSelection = dynamic(hex(0xE6E6EB), hex(0xD8CFC4, 0.13))
+    static let homeBackdrop = dynamic(hex(0xEEEEF1), hex(0x242121))
+    static let homeDot = dynamic(hex(0xD7D7DF), hex(0x444040))
+    static let homeInk = dynamic(hex(0x26262D), hex(0xF2F1F0))
+    static let homeLabel = dynamic(hex(0x656570), hex(0xB6B2B2))
     static let heatEmpty = dynamic(hex(0xE8E8E8), hex(0x2C2B2B))
     static let heatEmptyShades = [
         heatEmpty,
         dynamic(hex(0xF0F0F0), hex(0x323131)),
         dynamic(hex(0xF8F8F8), hex(0x373636)),
-        tile,
+        homeTile,
     ]
+    static let heatWhiteBorder = dynamic(hex(0xD6D6E0), hex(0xF2F1F0, 0.10))
     static let heatHatch = dynamic(hex(0xC5C5C5), hex(0xF2F1F0, 0.06))
     static let heat = [dynamic(referenceColour(0xECF0FE), hex(0x26304F)), dynamic(referenceColour(0xC6D2FC), hex(0x34458A)),
                        dynamic(referenceColour(0xA0B4FB), hex(0x4A63C9)), dynamic(royalCobalt, hex(0x6E8BF5))]
@@ -163,15 +175,19 @@ struct Card<Content: View>: View {
 
 /// Blue is reserved for primary actions.
 struct PrimaryButtonStyle: ButtonStyle {
+    var feedback = ControlHoverFeedback.standard
+
     func makeBody(configuration: Configuration) -> some View {
-        HoverPill(configuration: configuration, primary: true)
+        HoverPill(configuration: configuration, primary: true, feedback: feedback)
     }
 }
 
 /// Quiet rounded outline for secondary actions.
 struct SecondaryButtonStyle: ButtonStyle {
+    var feedback = ControlHoverFeedback.standard
+
     func makeBody(configuration: Configuration) -> some View {
-        HoverPill(configuration: configuration, primary: false)
+        HoverPill(configuration: configuration, primary: false, feedback: feedback)
     }
 }
 
@@ -179,6 +195,7 @@ struct SecondaryButtonStyle: ButtonStyle {
 private struct HoverPill: View {
     let configuration: ButtonStyleConfiguration
     let primary: Bool
+    let feedback: ControlHoverFeedback
 
     var body: some View {
         configuration.label
@@ -189,8 +206,8 @@ private struct HoverPill: View {
             .frame(minHeight: 32)
             .background(RoundedRectangle(cornerRadius: Theme.controlRadius).fill(primary ? Theme.accent : Theme.card))
             .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(primary ? Color.clear : Theme.border, lineWidth: 1))
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.controlRadius, primary: primary))
-            .contentShape(RoundedRectangle(cornerRadius: Theme.controlRadius))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.controlRadius, primary: primary,
+                                    feedback: configuration.role == .destructive ? .fixed : feedback))
     }
 }
 
@@ -201,6 +218,7 @@ struct IconButton: View {
     var role: ButtonRole? = nil
     var size: CGFloat = 32
     var symbolSize: CGFloat = 16
+    var feedback = ControlHoverFeedback.compact
     let action: () -> Void
     @State private var hovering = false
 
@@ -212,7 +230,7 @@ struct IconButton: View {
                 .frame(width: size, height: size)
                 .contentShape(RoundedRectangle(cornerRadius: Theme.smallControlRadius, style: .circular))
         }
-        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
+        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius, feedback: feedback))
         .help(help)
         .transientHover($hovering)
     }
@@ -272,8 +290,7 @@ private struct HoverChipLabel: View {
 
     var body: some View {
         configuration.label
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.capsuleRadius))
-            .contentShape(Capsule())
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.capsuleRadius, feedback: .fixed))
     }
 }
 

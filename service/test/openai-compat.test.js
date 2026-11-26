@@ -50,6 +50,14 @@ test("a completion sends the key as a bearer token and returns the message conte
   assert.equal(call.body.stream, false);
 });
 
+test("preserves per-response usage after a length retry", async () => {
+  const fetchImpl = fakeFetch(n => n === 1 ? ok("", "length") : ok("Ready"));
+  const result = await completeOpenAI({ route: normalizeRoute(ROUTE), system: "S", user: "U",
+    maxTokens: 30, timeoutMs: 2000, fetchImpl });
+  assert.equal(result.text, "Ready");
+  assert.equal(result.usage.total_tokens, 9);
+});
+
 test("failures are classified, retried only when it can help, and never mention the key", async () => {
   const auth = fakeFetch(() => status(401));
   await assert.rejects(completeOpenAI({ route: normalizeRoute(ROUTE), system: "S", user: "U", timeoutMs: 2000, fetchImpl: auth }), (error) => {

@@ -30,6 +30,7 @@ import { hasRepetitionLoop } from "./asr-review.js";
 import { TRANSLATE_LANGUAGES } from "./prompts/translate.js";
 import { applyVariants, parseVariants } from "./variants.js";
 import { runDictation, runShortDictation, shortDictationUnits } from "./tasks/dictation.js";
+import { resolveSelfCorrections } from "./self-correction.js";
 import { runTranslation } from "./tasks/translation.js";
 import { AssistantSessions } from "./tasks/assistant.js";
 import { buildProfile } from "./tasks/profile.js";
@@ -156,7 +157,8 @@ export class VoicePolishService {
       task:taskKind,raw:originalText,text:tidy(originalText).text,fallback:true,reason:'text-too-long',ms:timing(started,0),
     });
     const strength = canonicalStrength(request.strength ?? this.strength);
-    const rawText = originalText;
+    const correction = taskKind === "dictation" && !skipCleanup ? resolveSelfCorrections(originalText) : null;
+    const rawText = correction?.text ?? originalText;
     const base = {
       task: taskKind,
       raw: originalText,
@@ -180,7 +182,7 @@ export class VoicePolishService {
     const limit = policy?.maxUnits;
     const fullAbove = policy?.fullAbove;
     const tiered = Number.isInteger(fullAbove) && fullAbove > limit && fullAbove <= 400;
-    const units = taskKind === "dictation" && Number.isInteger(limit) && limit >= 1 && limit <= 40
+    const units = taskKind === "dictation" && !correction?.pending && Number.isInteger(limit) && limit >= 1 && limit <= 40
       ? shortDictationUnits(rawText) : Infinity;
     const short = Number.isFinite(units) && units <= limit;
     const brief = tiered && units > limit && units <= fullAbove;
@@ -221,7 +223,7 @@ export class VoicePolishService {
     if (translateTo) return await runTranslation(ctx, translateTo);
     if (strength === "promptbeta") return await this.assistant.run(ctx, betaSkip);
     const cleanupOverride = this.stateDir ? await readSavedPrompt(this.stateDir, "asr-engineering.md", this.logger) : "";
-    return await runDictation(ctx, { cleanupOverride });
+    return await runDictation(ctx, { cleanupOverride, pendingCorrection: correction?.pending });
   }
 
   /**
@@ -268,7 +270,8 @@ export class VoicePolishService {
   /** One model call; every call is counted for /health. */
   complete(options) {
     this.stats.modelCalls += 1;
-    return completeOpenAI({ ...options, ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
+    return completeOpenAI({ ...options,
+      ...(this.fetchImpl ? { fetchImpl: this.fetchImpl } : {}) });
   }
 
   /** Prompt mode's sessions, for the tests and diagnostics. */

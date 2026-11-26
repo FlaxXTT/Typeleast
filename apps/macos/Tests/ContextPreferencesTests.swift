@@ -1,14 +1,14 @@
 import Foundation
 import AppKit
-import AVFoundation
 import CoreAudio
+import SwiftUI
 
 func contextPreferencesTests() {
     let suite = "typeleast.tests.context." + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite); KeychainStore.stub = [:]; HistorySeal.reset() }
     let settings = Settings(defaults: defaults)
-    check("fresh install requires real tutorial", settings.needsPractice)
+    check("fresh install starts onboarding", settings.needsPractice)
     settings.onboardingDone = true
     check("finished tutorial remains finished after restart", !Settings(defaults: defaults).needsPractice)
     defaults.removePersistentDomain(forName: suite)
@@ -27,29 +27,6 @@ func contextPreferencesTests() {
     checkEq("resetting selection language follows the shortcut again", reopened.preferredSelectionTranslateTarget, "ja")
     defaults.set("invalid", forKey: "voice.selectionTranslateTarget")
     checkEq("an unknown selection translation language follows the shortcut", reopened.preferredSelectionTranslateTarget, "ja")
-
-    // The onboarding recorder must use the selected input on every attempt,
-    // including after the user changes it. No device is opened in this test.
-    let practiceRecorder = Recorder()
-    let testEngine = AVAudioEngine()
-    var resolvedUIDs = [String]()
-    var appliedIDs = [AudioDeviceID?]()
-    var usedExpectedEngine = true
-    let resolveInput: (String) -> AudioDeviceID? = { uid in
-        resolvedUIDs.append(uid)
-        return uid == "fictional-microphone" ? 42 : nil
-    }
-    let applyInput: (AudioDeviceID?, AVAudioEngine) -> Void = { id, engine in
-        appliedIDs.append(id)
-        usedExpectedEngine = usedExpectedEngine && engine === testEngine
-    }
-    OnboardingPracticeController.configureInput(practiceRecorder, uid: "fictional-microphone", resolve: resolveInput, apply: applyInput)
-    practiceRecorder.prepareEngine?(testEngine)
-    OnboardingPracticeController.configureInput(practiceRecorder, uid: "", resolve: resolveInput, apply: applyInput)
-    practiceRecorder.prepareEngine?(testEngine)
-    checkEq("practice resolves the current microphone before each recording", resolvedUIDs, ["fictional-microphone", ""])
-    check("practice applies the chosen input and then system default", appliedIDs.count == 2 && appliedIDs[0] == 42 && appliedIDs[1] == nil)
-    check("practice applies input to its recording engine", usedExpectedEngine)
 
     let inputNames: [AudioDeviceID: String] = [
         10: "MacBook Pro麦克风", 20: "USB Mic", 30: "Studio Aggregate", 40: "CADefaultDeviceAggregate-100-0",
@@ -70,32 +47,53 @@ func contextPreferencesTests() {
     checkEq("a named aggregate keeps its own name", recordingInputName(30), "Studio Aggregate")
     checkEq("an unreadable route does not claim to use a different microphone", recordingInputName(nil), nil)
 
-    let practiceRaw = "报告周三发，不对，周四，不超过三页。"
-    let practiceOutput = "报告周四发，不超过三月。"
-    let practiceRows = PracticeResultRow.rows(raw: practiceRaw, output: practiceOutput)
-    checkEq("practice identifies both stages in order", practiceRows.map(\.title), ["原始识别", "整理结果"])
-    checkEq("practice preserves both original texts without truncation", practiceRows.map(\.text), [practiceRaw, practiceOutput])
-    checkEq("failed cleanup can still show the transcript", PracticeResultRow.rows(raw: practiceRaw, output: "").map(\.text), [practiceRaw])
-    check("an empty practice does not show result rows", PracticeResultRow.rows(raw: "  ", output: "\n").isEmpty)
-    let reviewRows = PracticeResultRow.rows(raw: practiceRaw, output: practiceOutput, needsReview: true)
-    checkEq("suspect cleanup is labeled for review", reviewRows.map(\.title), ["原始识别", "待核对整理结果"])
-    checkEq("suspect cleanup preserves source and candidate", reviewRows.map(\.text), [practiceRaw, practiceOutput])
+    let demo = OnboardingPracticeController(recordingHold: 0, processingHold: 0)
+    checkEq("onboarding teaches all four workflows", OnboardingDemo.allCases.count, 4)
+    checkEq("onboarding shows the default dictation shortcut", OnboardingDemo.dictation.shortcutLabel(in: settings), "Fn")
+    checkEq("onboarding shows the default translation chord", OnboardingDemo.voiceTranslation.shortcutLabel(in: settings), "Fn + Left Shift")
+    checkEq("onboarding shows the default Skill chord", OnboardingDemo.skill.shortcutLabel(in: settings), "Fn + Space")
+    func waitForDemo() { RunLoop.current.run(until: Date().addingTimeInterval(0.025)) }
+    demo.enter(.dictation)
+    demo.handle(.translation)
+    check("an unrelated shortcut cannot start the wrong demo", !demo.busy)
+    demo.handle(.dictation)
+    check("dictation simulates listening without a configured model", demo.phase == .recording)
+    let practiceFrame = NSRect(x: 0, y: 0, width: 610, height: 400)
+    let practiceWindow = NSWindow(contentRect: practiceFrame, styleMask: [.titled], backing: .buffered, defer: false)
+    practiceWindow.isReleasedWhenClosed = false
+    defer { practiceWindow.close() }
+    let practiceView = NSHostingView(rootView: OnboardingPracticeView(practice: demo, demo: .dictation)
+        .environmentObject(AppModel()).frame(width: practiceFrame.width, height: practiceFrame.height))
+    practiceWindow.contentView = practiceView
+    practiceView.layoutSubtreeIfNeeded()
+    demo.handle(.dictation)
+    practiceView.layoutSubtreeIfNeeded()
+    waitForDemo()
+    practiceView.layoutSubtreeIfNeeded()
+    checkEq("the recorded example always writes the known dictation result", demo.output, OnboardingDemo.dictation.result)
+    demo.enter(.voiceTranslation)
+    demo.playExample()
+    waitForDemo()
+    checkEq("play example completes voice translation without recording", demo.output, OnboardingDemo.voiceTranslation.result)
+    demo.enter(.selectionTranslation)
+    demo.handle(.translation)
+    check("translation highlights the practice text when it was not selected", demo.selectionHighlighted)
+    waitForDemo()
+    checkEq("selection translation produces the known panel result", demo.output, OnboardingDemo.selectionTranslation.result)
+    demo.enter(.skill)
+    demo.handle(.skill, held: true)
+    check("a held Skill chord opens the example and waits for release", demo.showingSkill && demo.output.isEmpty)
+    demo.releaseSkill()
+    waitForDemo()
+    checkEq("releasing the Skill shortcut writes the known example", demo.output, OnboardingDemo.skill.result)
+    demo.enter(.voiceTranslation)
+    demo.playExample()
+    demo.enter(nil)
+    waitForDemo()
+    check("leaving the demo discards an in-flight result and clears shortcut interception", demo.mode == nil && !demo.busy && demo.output.isEmpty)
 
-    var progress = PracticeProgress()
     var response = DictateResponse()
-    response.raw = "周三，不对，周四，不超过三页"; response.text = "周四，不超过 3 页。"
-    checkEq("a short recording is asked again", progress.accept(response, seconds: 0.3), .tooShort)
-    response.fallback = true
-    checkEq("a failed cleanup does not pass", progress.accept(response, seconds: 2), .notCleaned)
-    check("…and the practice stays open", !progress.complete)
-    response.fallback = false
     response.text = "周四交，不超过三页。"
-    checkEq("any recognised and cleaned sentence passes, Chinese numerals included", progress.accept(response, seconds: 2), .passed)
-    check("…and the practice is complete", progress.complete)
-    var suspect = DictateResponse()
-    suspect.qualityReview = QualityReview(kind: "quantity", original: practiceRaw, candidate: practiceOutput)
-    checkEq("suspect quantity requires review even if raw and text are empty", progress.accept(suspect, seconds: 2), .needsReview)
-    check("suspect result revokes an earlier success", !progress.complete)
     response.corrections = [TermCorrection(from: "哭达", to: "CUDA", reason: nil)]
     response.intention = "交周报"
     checkEq("corrections and intention never reach the inserted text", response.insertableText, "周四交，不超过三页。")

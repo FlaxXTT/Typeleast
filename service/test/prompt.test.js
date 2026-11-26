@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CLEANUP_PROMPT, cleanupSystemPrompt, PROFILE_LIMIT } from "../lib/prompts/cleanup.js";
+import { CLEANUP_PROMPT, briefCleanupSystemPrompt, cleanupSystemPrompt, minimalCleanupSystemPrompt, PROFILE_LIMIT } from "../lib/prompts/cleanup.js";
 import { directTranslatePrompt, TRANSLATE_PROMPT, translateBatches, translateUserMessage } from "../lib/prompts/translate.js";
 import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSION, systemPromptFor } from "../lib/prompt.js";
 import { PROFILE_PROMPT, profileMessage, readProfile } from "../lib/prompts/profile.js";
@@ -24,6 +24,16 @@ test("the learned description closes the # Mission paragraph and is capped", () 
   assert.equal(prompt.replace("\nUser background (learned from earlier dictations): 做 CFD 仿真的工程师", ""), CLEANUP_PROMPT);
   const long = cleanupSystemPrompt("字".repeat(PROFILE_LIMIT + 50));
   assert.equal(long.length - CLEANUP_PROMPT.length, "\nUser background (learned from earlier dictations): ".length + PROFILE_LIMIT);
+});
+
+test("custom dictation prompts also retain the question and rhetorical tone rules", () => {
+  const custom = "Tidy this transcript.";
+  const prompts = [minimalCleanupSystemPrompt(custom), briefCleanupSystemPrompt(custom), cleanupSystemPrompt("", custom)];
+  for (const prompt of prompts) {
+    assert.ok(prompt.startsWith(custom));
+    assert.match(prompt, /keep direct and rhetorical questions as questions/iu);
+    assert.match(prompt, /keep statements of uncertainty as statements/iu);
+  }
 });
 
 test("only the cursor context rides in the addendum", () => {

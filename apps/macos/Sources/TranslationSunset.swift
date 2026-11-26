@@ -49,6 +49,7 @@ struct TranslationSunset: View {
         }
         .frame(width: Self.artworkSize.width, height: Self.artworkSize.height)
         .scaleEffect(pressed && !reduceMotion ? 0.90 : 1)
+        .offset(y: hovering && !pressed && !reduceMotion ? -0.5 : 0)
         .opacity(hovering || pressed ? 1 : 0.94)
         .frame(width: Self.displaySize.width, height: Self.displaySize.height)
         .contentShape(Rectangle())

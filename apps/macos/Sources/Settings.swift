@@ -293,7 +293,7 @@ final class Settings {
         set { encodeBinding("hk.alt.v2", newValue); changed() }
     }
 
-    /// 提示词模式: Fn + Space by default.
+    /// Harness eq invocation (formerly Prompt Beta): Fn + Space by default.
     var hotkeyAssistant: HotKeyBinding {
         get { decodeBinding("hk.assistant") ?? HotKeyBinding.assistantDefault }
         set { encodeBinding("hk.assistant", newValue); changed() }
@@ -337,9 +337,35 @@ final class Settings {
         set { d.set(newValue, forKey: "voice.doubaoSpeechSmoothing"); changed() }
     }
 
+    var doubaoHotwordTableID: String {
+        get { d.string(forKey: "voice.doubaoHotwordTableID") ?? "" }
+        set { d.set(newValue, forKey: "voice.doubaoHotwordTableID"); changed() }
+    }
+
+    var doubaoReplacementTableID: String {
+        get { d.string(forKey: "voice.doubaoReplacementTableID") ?? "" }
+        set { d.set(newValue, forKey: "voice.doubaoReplacementTableID"); changed() }
+    }
+
+    var doubaoVocabularyTables: DoubaoVocabularyTables {
+        DoubaoVocabularyTables(hotwords: doubaoHotwordTableID, replacements: doubaoReplacementTableID)
+    }
+
     var doubaoHotwords: String {
         get { d.string(forKey: "voice.doubaoHotwords") ?? "" }
         set { d.set(newValue, forKey: "voice.doubaoHotwords"); changed() }
+    }
+
+    var vocabularyReplacements: [VocabularyRule] {
+        get {
+            guard let data = d.data(forKey: "voice.vocabularyReplacements") else { return [] }
+            return (try? JSONDecoder().decode([VocabularyRule].self, from: data)) ?? []
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "voice.vocabularyReplacements")
+            changed()
+        }
     }
 
     var dictationCleanupEnabled: Bool {

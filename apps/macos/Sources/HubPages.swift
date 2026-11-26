@@ -109,7 +109,8 @@ struct HomePage: View {
             }
         }
         .padding(EdgeInsets(top: 28, leading: Self.horizontalInset, bottom: 16, trailing: Self.horizontalInset))
-        .background(Theme.window)
+        .foregroundStyle(Theme.homeInk)
+        .background(Theme.homeWindow)
         .overlay(alignment: .topTrailing) {
             ShareButton(items: InsightsPanel.shareItems)
                 .frame(width: ShareButton.size.width, height: ShareButton.size.height)
@@ -135,7 +136,7 @@ private struct ShortcutReferenceCard: View {
                 }
             }
             shortcut(L10n.text("翻译"), binding: model.settings.hotkeyTranslate)
-            shortcut(L10n.text("问任何问题"), binding: model.settings.hotkeyAssistant)
+            shortcut(L10n.text("调用"), binding: model.settings.hotkeyAssistant)
             Menu(L10n.text("试试听写")) {
                 Button(L10n.text("备忘录")) { model.actions?.openRecommendedApp("com.apple.Notes") }
                 Button(L10n.text("文本编辑")) { model.actions?.openRecommendedApp("com.apple.TextEdit") }
@@ -143,21 +144,22 @@ private struct ShortcutReferenceCard: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .font(Theme.captionFont)
+            .hoverFeedback()
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.sidebar))
+        .hoverCard(Theme.homeSidebar, radius: Theme.homeCardRadius)
     }
 
     private func shortcut(_ title: String, binding: HotKeyBinding) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            InterfaceTypography.text(title, size: Theme.homeSecondarySize).foregroundColor(Theme.secondary)
+            InterfaceTypography.text(title, size: Theme.homeSecondarySize).foregroundColor(Theme.homeLabel)
             if binding.enabled {
                 ShortcutKeyLayout(spacing: 4) {
                     ForEach(Array(keys(binding).enumerated()), id: \.offset) { _, key in
                         InterfaceTypography.text(key, size: 13, weight: .semibold)
                             .padding(.horizontal, 7).frame(minWidth: 27, minHeight: 27)
-                            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.window))
-                            .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.border, lineWidth: 1))
+                            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.homeTile))
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.homeBorder, lineWidth: 1))
                     }
                 }
             } else {
@@ -203,7 +205,7 @@ private struct ServiceBadge: View {
                 .frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             InterfaceTypography.text(badgeText, size: 12, weight: .medium)
-                .foregroundColor(Theme.secondary)
+                .foregroundColor(Theme.homeLabel)
                 .lineLimit(1)
                 .help(badgeText)
             if model.modelsMissing {
@@ -221,7 +223,7 @@ private struct ServiceBadge: View {
         .font(Theme.captionFont)
         .padding(.horizontal, 8)
         .frame(minHeight: 22)
-        .background(Capsule().fill(Theme.window))
+        .background(Capsule().fill(Theme.homeTile))
     }
 }
 
@@ -259,7 +261,7 @@ private struct HomeVersionFooter: View {
     var body: some View {
         HStack(spacing: 8) {
             InterfaceTypography.text(L10n.text("版本 {0}", "v" + Updater.currentVersion), size: 12)
-                .foregroundColor(Theme.tertiary)
+                .foregroundColor(Theme.homeLabel)
                 .lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
             Button {
@@ -275,8 +277,8 @@ private struct HomeVersionFooter: View {
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 54)
-        .background(Theme.tile, in: RoundedRectangle(cornerRadius: Theme.homeActivityRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.homeActivityRadius).strokeBorder(Theme.border, lineWidth: 1))
+        .background(Theme.homeTileSurface, in: RoundedRectangle(cornerRadius: Theme.homeActivityRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.homeActivityRadius).strokeBorder(Theme.homeBorder, lineWidth: 1))
     }
 }
 
@@ -385,7 +387,7 @@ private struct EngineCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 EngineRow(symbol: "waveform", title: L10n.text("语音识别"), value: speech.name, detail: speech.detail,
                           brand: speechBrand)
-                Divider().overlay(Theme.border)
+                Divider().overlay(Theme.homeBorder)
                 EngineRow(symbol: "sparkles", title: L10n.text("整理"), value: cleanup.name, detail: cleanup.detail,
                           brand: cleanupBrand)
             }
@@ -404,17 +406,16 @@ private struct EngineCard: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 36)
-                .background(Theme.selection, in: RoundedRectangle(cornerRadius: Theme.listGroupRadius))
+                .background(Theme.homeSelection, in: RoundedRectangle(cornerRadius: Theme.listGroupRadius))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.listGroupRadius))
+            .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.listGroupRadius, feedback: .magnetic))
             .foregroundColor(Theme.accent)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.homeCardRadius, style: .circular).fill(Theme.tile))
-        .overlay(RoundedRectangle(cornerRadius: Theme.homeCardRadius).strokeBorder(Theme.border, lineWidth: 1))
+        .hoverCard(Theme.homeTileSurface, radius: Theme.homeCardRadius, border: Theme.homeBorder)
     }
 }
 
@@ -556,6 +557,7 @@ struct HistoryPage: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                     .frame(width: 130)
+                    .hoverFeedback(.fixed)
                     Menu {
                         Button(L10n.text("删除全部历史"), role: .destructive) { confirmClear = true }
                     } label: {
@@ -564,27 +566,30 @@ struct HistoryPage: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .frame(width: 32)
+                    .hoverFeedback(.compact)
                 }
             }
             historyChips
                 .padding(.horizontal, Theme.pageInset)
                 .padding(.bottom, 12)
 
+            if model.credentialsLocked {
+                CredentialUnlockRow()
+                    .frame(maxWidth: 400)
+                    .frame(maxWidth: .infinity, maxHeight: dayGroups.isEmpty ? .infinity : nil)
+                    .padding(.horizontal, Theme.pageInset)
+                    .padding(.vertical, 12)
+            }
+
             if dayGroups.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
-                    if model.credentialsLocked {
-                        Button(L10n.text(model.credentialsUnlocking ? "正在解锁…" : "用 Touch ID 解锁")) {
-                            model.actions?.unlockCredentials()
-                        }
-                            .buttonStyle(SecondaryButtonStyle())
-                            .disabled(model.credentialsUnlocking || model.phase != .idle)
-                    } else {
+                if !model.credentialsLocked {
+                    VStack(spacing: 8) {
+                        Image(systemName: "clock").font(.system(size: 28)).foregroundColor(Theme.tertiary)
                         Text(L10n.text(model.historyUnavailable ? "无法读取历史" : "没有听写记录"))
                             .foregroundColor(Theme.secondary)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HubScrollView(key: "history") {
                     LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -720,7 +725,7 @@ struct HistoryRow: View {
                         .font(InterfaceTypography.localized(12)).foregroundColor(Theme.secondary).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("查看并确认")) { model.actions?.reviewEntry(id: entry.id) }
-                        .buttonStyle(.link)
+                        .buttonStyle(FlatActionButtonStyle()).foregroundColor(Theme.accent)
                 }
                 if !compact && (expanded || entry.fallback) {
                 HStack(spacing: 6) {
@@ -766,7 +771,7 @@ struct HistoryRow: View {
         .padding(.vertical, compact ? 4 : 8)
         .frame(minHeight: compact ? 32 : 42)
         .contentShape(Rectangle())
-        .background(selected ? Theme.selection : hovering ? Theme.cardHover : Color.clear)
+        .background(selected ? Theme.selection : hovering ? Theme.controlHover : Color.clear)
         .help(AppNames.name(for: entry.app))
         .focusable(!compact).focused($keyboardFocused)
         .transientHover($hovering)
@@ -817,7 +822,7 @@ private struct HistoryDetail: View {
             HStack {
                 Text(L10n.text("记录详情")).font(InterfaceTypography.localized(14, weight: .semibold))
                 Spacer()
-                IconButton(symbol: "xmark", help: L10n.text("关闭"), action: close)
+                IconButton(symbol: "xmark", help: L10n.text("关闭"), feedback: .fixed, action: close)
                     .keyboardShortcut(.cancelAction)
             }.padding(24)
             Divider().overlay(Theme.border)

@@ -210,6 +210,7 @@ struct HubRootView: View {
     var body: some View {
         HomeEntryTransition(request: homeEntryRequest) { covered in
             content(homeCovered: covered)
+                .windowHoverEffects(enabled: !covered && !model.settingsPresented)
         }
         .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .circular))
         .overlay(alignment: .bottomTrailing) {
@@ -221,10 +222,13 @@ struct HubRootView: View {
     }
 
     private func content(homeCovered: Bool) -> some View {
-        HStack(spacing: 0) {
-            Sidebar()
+        let showingHome = model.page == .home || model.page == .settings
+        let windowColor = showingHome ? Theme.homeWindow : Theme.window
+        let sidebarColor = showingHome ? Theme.homeSidebar : Theme.sidebar
+        return HStack(spacing: 0) {
+            Sidebar(homePalette: showingHome)
                 .frame(width: Theme.sidebarWidth - 8)
-                .background(RoundedRectangle(cornerRadius: Theme.sidebarRadius).fill(Theme.sidebar))
+                .background(RoundedRectangle(cornerRadius: Theme.sidebarRadius).fill(sidebarColor))
                 .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
             HubPageTransition(selection: model.page, animate: model.page != .home) { page in
                 Group {
@@ -234,6 +238,7 @@ struct HubRootView: View {
                             .allowsHitTesting(!homeCovered)
                             .accessibilityHidden(homeCovered)
                     case .history: HistoryPage()
+                    case .vocabulary: VocabularyPage()
                     case .meetings: MeetingsPage().environmentObject(model.meeting)
                     }
                 }
@@ -242,7 +247,7 @@ struct HubRootView: View {
             }
         }
         .frame(width: HubWindowController.size.width, height: HubWindowController.size.height)
-        .background(Theme.window)
+        .background(windowColor)
         .font(Theme.bodyFont)
         .foregroundColor(Theme.ink)
         .tint(Theme.accent)
@@ -268,6 +273,7 @@ struct HubRootView: View {
 
 private struct Sidebar: View {
     @EnvironmentObject var model: AppModel
+    let homePalette: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -275,25 +281,23 @@ private struct Sidebar: View {
                 .padding(.bottom, 12)
                 .overlay { if !model.settingsPresented { WindowDragRegion() } }
 
-            ForEach([HubPage.home, .history, .meetings]) { page in
-                SidebarItem(page: page).disabled(model.settings.needsPractice)
+            ForEach([HubPage.home, .history, .vocabulary, .meetings]) { page in
+                SidebarItem(page: page, homePalette: homePalette).disabled(model.settings.needsPractice)
             }
 
             Spacer()
 
-            SidebarModes()
-                .padding(.bottom, 8)
-            Divider().overlay(Theme.border).padding(.vertical, 8)
-            HStack(spacing: 4) {
-                IconButton(symbol: "envelope", help: L10n.text("联系我们")) {
+            Divider().overlay(homePalette ? Theme.homeBorder : Theme.border).padding(.vertical, 8)
+            HStack(spacing: 5) {
+                IconButton(symbol: "envelope", help: L10n.text("联系我们"), size: 36, symbolSize: 18) {
                     NSWorkspace.shared.open(URL(string: "https://github.com/FlaxXTT/Typeleast")!)
                 }
                 .accessibilityLabel(L10n.text("联系我们"))
                 Spacer(minLength: 0)
-                IconButton(symbol: "gearshape", help: L10n.settingTitle, size: 32) { model.navigate(to: .settings) }
+                IconButton(symbol: "gearshape", help: L10n.settingTitle, size: 36, symbolSize: 18) { model.navigate(to: .settings) }
                     .background(RoundedRectangle(cornerRadius: Theme.radius)
                         .fill(model.settingsPresented ? Theme.selection : Color.clear))
-                IconButton(symbol: "questionmark.circle", help: L10n.text("帮助"), size: 32) {
+                IconButton(symbol: "questionmark.circle", help: L10n.text("帮助"), size: 36, symbolSize: 18) {
                     NSWorkspace.shared.open(URL(string: "https://github.com/FlaxXTT/Typeleast#readme")!)
                 }
             }
@@ -305,36 +309,35 @@ private struct Sidebar: View {
 
 private struct SidebarItem: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let page: HubPage
-    @State private var hovering = false
-
-    private var icon: some View {
-        SidebarMotionIcon(page: page, selected: page == .settings ? model.settingsPresented : model.page == page,
-                          hovering: hovering)
-    }
+    let homePalette: Bool
 
     var body: some View {
         let selected = page == .settings ? model.settingsPresented : model.page == page
+        let ink = homePalette ? Theme.homeInk : Theme.ink
+        let label = homePalette ? Theme.homeLabel : Theme.secondary
+        let selection = homePalette ? Theme.homeSelection : Theme.selection
+        let initial = Text(verbatim: String(page.title.prefix(1))).font(.custom("AvenirNext-DemiBold", size: 17))
+        let remainder = Text(verbatim: String(page.title.dropFirst())).font(.custom("AvenirNext-Medium", size: 13))
         Button {
             model.navigate(to: page)
         } label: {
             HStack(spacing: 10) {
-                icon
+                Image(systemName: page.symbol)
+                    .font(.system(size: 16))
                     .frame(width: 16, height: 16)
-                Text(page.title).font(Theme.rowFont)
+                Text("\(initial)\(remainder)")
                 Spacer()
             }
-            .foregroundColor(selected ? Theme.ink : Theme.secondary)
+            .foregroundColor(selected ? ink : label)
             .padding(.horizontal, 8)
             .frame(height: 36)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular)
-                .fill(selected ? Theme.selection : (hovering ? Theme.cardHover : Color.clear)))
+                .fill(selected ? selection : Color.clear))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .animation(reduceMotion ? nil : Theme.fast, value: hovering)
-        .transientHover($hovering)
+        .buttonStyle(FlatActionButtonStyle(feedback: .compact))
+        .accessibilityLabel(Text(verbatim: page.title))
     }
 }
 
@@ -365,27 +368,6 @@ extension PageHeader where Trailing == EmptyView {
     }
 }
 
-/// The cleanup modes, in the sidebar so they are one click away on every page and apart
-/// from Settings. The chosen one shows what it does in a few words.
-struct SidebarModes: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Button { model.actions?.startAssistant() } label: {
-                Label {
-                    InterfaceTypography.text(L10n.text("提示词模式"), size: 14, weight: .medium)
-                } icon: {
-                    Image(systemName: "text.bubble").font(.system(size: 14, weight: .medium))
-                }
-                .padding(10)
-            }.buttonStyle(FlatActionButtonStyle())
-        }
-        .disabled(model.phase != .idle)
-        .help(model.phase == .idle ? "" : L10n.text("说完再切换"))
-    }
-}
-
 /// Equal-width segments can wrap translated labels without widening the window.
 struct FlexibleSegment: View {
     let label: String
@@ -401,7 +383,7 @@ struct FlexibleSegment: View {
                 .padding(.horizontal, 4)
                 .background(RoundedRectangle(cornerRadius: Theme.radius, style: .circular).fill(selected ? Theme.selection : Color.clear))
                 .contentShape(Rectangle())
-        }.buttonStyle(FlatActionButtonStyle())
+        }.buttonStyle(FlatActionButtonStyle(feedback: .fixed))
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

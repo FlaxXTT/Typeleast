@@ -42,6 +42,108 @@ if let index = CommandLine.arguments.firstIndex(of: "--settings-scroll-check"), 
     exit(failed == 0 ? 0 : 1)
 }
 
+// Run with an isolated state directory. Deliver pointer events to a real hosted
+// heatmap and check that it paints and clears the tooltip.
+if let index = CommandLine.arguments.firstIndex(of: "--cadence-hover-check"), CommandLine.arguments.count > index + 1 {
+    let output = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
+    guard output.path.hasPrefix("/private/tmp/"), let home = ProcessInfo.processInfo.environment["TYPELEAST_HOME"],
+          home.hasPrefix("/private/tmp/"), Bundle.main.bundleIdentifier != "com.dsh.voice" else { exit(2) }
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    let today = Date()
+    let calendar = Calendar(identifier: .gregorian)
+    let key = ActivityLog(defaults: .standard, calendar: calendar).dayKey(today)
+    let activity = ActivityDay(dictations: 30, words: 1_800, latinWords: 120)
+    UserDefaults.standard.register(defaults: ["voice.activity.v1": try JSONEncoder().encode([key: activity])])
+
+    let dark = CommandLine.arguments.contains("--dark")
+    let app = NSApplication.shared
+    app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    let model = AppModel()
+    let pointer = WindowHoverPointer()
+    let view = NSHostingView(rootView: HomePage().environmentObject(model)
+        .modifier(WindowHoverEffects(enabled: true, pointer: pointer))
+        .environment(\.appearsActive, true)
+        .environment(\.colorScheme, dark ? .dark : .light))
+    let frame = NSRect(x: 0, y: 0, width: 734, height: 656)
+    let window = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = view
+    view.frame = frame
+    func trackingView(in view: NSView) -> ActivityHoverView? {
+        (view as? ActivityHoverView) ?? view.subviews.lazy.compactMap { trackingView(in: $0) }.first
+    }
+    func render() throws -> Data {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.19))
+        view.layoutSubtreeIfNeeded()
+        guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        guard let image = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+        return image
+    }
+    let range = ActivityRange(endingOn: today, calendar: calendar)
+    view.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(HeatmapMotion.finishTime(columns: range.weekCount) + 0.2))
+    let before = try render()
+    try before.write(to: output.appendingPathComponent("home.png"))
+    guard let tracking = trackingView(in: view), tracking.bounds.width > 0 else { exit(3) }
+    let cellSize = (tracking.bounds.width + 3) / CGFloat(range.weekCount) - 3
+    let rowStep = (tracking.bounds.height - cellSize) / 6
+    let row = calendar.component(.weekday, from: today) - 1
+    let point = tracking.convert(CGPoint(x: tracking.bounds.maxX - cellSize / 2, y: CGFloat(row) * rowStep + cellSize / 2), to: nil)
+    let localPoint = view.convert(point, from: nil)
+    guard let bitmap = NSBitmapImageRep(data: before) else { exit(4) }
+    let x = Int(localPoint.x / view.bounds.width * CGFloat(bitmap.pixelsWide))
+    let y = Int((view.isFlipped ? localPoint.y : view.bounds.height - localPoint.y)
+                / view.bounds.height * CGFloat(bitmap.pixelsHigh))
+    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)
+    check("the day under the pointer is painted at its own position",
+          color.map { $0.blueComponent - $0.redComponent > 0.2 } == true, "pixel=\(x),\(y) color=\(String(describing: color))")
+    let movement = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                                      windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 0, pressure: 0)!
+    tracking.mouseMoved(with: movement)
+    let hovered = try render()
+    try hovered.write(to: output.appendingPathComponent("cadence-hover.png"))
+    check("moving over a Cadence date paints the tooltip", hovered != before)
+    tracking.mouseExited(with: movement)
+    checkEq("leaving the grid restores the normal image", try render(), before)
+
+    let emptyPoint = tracking.convert(CGPoint(x: tracking.bounds.maxX - cellSize / 2 - (cellSize + 3),
+                                              y: CGFloat(row) * rowStep + cellSize / 2), to: nil)
+    let emptyMove = NSEvent.mouseEvent(with: .mouseMoved, location: emptyPoint, modifierFlags: [], timestamp: 0,
+                                       windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 0, pressure: 0)!
+    tracking.mouseMoved(with: emptyMove)
+    let firstIdleHover = try render()
+    try firstIdleHover.write(to: output.appendingPathComponent("cadence-idle-first.png"))
+    check("moving over an idle day paints a tooltip", firstIdleHover != before)
+    tracking.mouseMoved(with: emptyMove)
+    checkEq("moving within the same idle cell keeps its word", try render(), firstIdleHover)
+    tracking.mouseExited(with: emptyMove)
+    tracking.mouseEntered(with: emptyMove)
+    let nextIdleHover = try render()
+    try nextIdleHover.write(to: output.appendingPathComponent("cadence-idle-next.png"))
+    check("re-entering an idle cell draws a different word", nextIdleHover != firstIdleHover)
+    tracking.mouseExited(with: emptyMove)
+    checkEq("leaving an idle cell restores its appearance", try render(), before)
+
+    let control = UUID()
+    pointer.control(control, hovering: true)
+    pointer.move(to: CGPoint(x: 702, y: 28))
+    let spotlight = try render()
+    check("a soft spotlight appears only in dark mode", (spotlight != before) == dark)
+    pointer.clear()
+    checkEq("clearing the pointer removes the window effect", try render(), before)
+
+    pointer.move(to: CGPoint(x: 29, y: 113))
+    let tilted = try render()
+    check("the metric card responds to the pointer", tilted != before)
+    pointer.control(control, hovering: true)
+    let level = try render()
+    check("a control takes priority over card tilt", tilted != level)
+    if !dark { checkEq("light mode card returns to its original shape over a control", level, before) }
+    pointer.clear()
+    window.orderOut(nil)
+    exit(failed == 0 ? 0 : 1)
+}
+
 // Isolated visual regression fixture. It never loads the daily history or opens a service.
 if let index = CommandLine.arguments.firstIndex(of:"--unified-ui-render"), CommandLine.arguments.count > index+1 {
     let output = CommandLine.arguments[index+1]
@@ -1252,7 +1354,6 @@ do {
 // MARK: 14. Fn single-press recogniser
 
 do {
-    let t0 = Date(timeIntervalSince1970: 1000)
     // 🌐 gate: a tap that switched the keyboard input source must not start a dictation
     check("fn gate starts when the input source is unchanged",
           FnTapGate.shouldStart(sourceAtPress: "com.apple.keylayout.US", sourceAfter: "com.apple.keylayout.US"))
@@ -1265,19 +1366,57 @@ do {
     checkEq("Fn input switching keeps its observation window", FnTapGate.delay(systemUsageType: 1), FnTapGate.settleSeconds)
     checkEq("unknown Fn settings retain input-switch protection", FnTapGate.delay(systemUsageType: nil), FnTapGate.settleSeconds)
     var fn = FnTapDetector()
-    fn.fnDown(at: t0, otherModifiersHeld: false)
-    check("fn tap fires on a quick clean press", fn.fnUp(at: t0.addingTimeInterval(0.2)))
-    fn.fnDown(at: t0, otherModifiersHeld: false)
-    check("fn hold is not a tap", !fn.fnUp(at: t0.addingTimeInterval(1.5)))
-    fn.fnDown(at: t0, otherModifiersHeld: false)
+    let fnStart: TimeInterval = 120
+    fn.fnDown(at: fnStart, otherModifiersHeld: false)
+    check("fn fires on releasing a clean press", fn.fnUp(at: fnStart + 0.2))
+    fn.fnDown(at: fnStart, otherModifiersHeld: false)
+    check("a clean fn release can start dictation after one second", fn.fnUp(at: fnStart + 1.0))
+    fn.fnDown(at: fnStart, otherModifiersHeld: false)
+    check("a chord stays eligible before the two-second deadline", fn.allowsChord(at: fnStart + 1.8))
+    check("an expired fn press cannot trigger a chord", !fn.allowsChord(at: fnStart + 2.1))
+    check("releasing a timed-out fn press does nothing", !fn.fnUp(at: fnStart + 2.2))
+    fn.fnDown(at: fnStart, otherModifiersHeld: false)
     fn.otherInput()
-    check("fn + another key is a chord, not a tap", !fn.fnUp(at: t0.addingTimeInterval(0.2)))
-    fn.fnDown(at: t0, otherModifiersHeld: true)
-    check("⌘Fn is not a tap", !fn.fnUp(at: t0.addingTimeInterval(0.1)))
-    check("an Fn release without a press does nothing", !fn.fnUp(at: t0))
+    check("fn + another key is a chord, not a tap", !fn.fnUp(at: fnStart + 0.2))
+    fn.fnDown(at: fnStart, otherModifiersHeld: true)
+    check("⌘Fn is not a tap", !fn.fnUp(at: fnStart + 0.1))
+    check("an Fn release without a press does nothing", !fn.fnUp(at: fnStart))
     fn.otherInput()
-    fn.fnDown(at: t0, otherModifiersHeld: false)
-    check("keys typed before Fn do not spoil the next tap", fn.fnUp(at: t0.addingTimeInterval(0.3)))
+    fn.fnDown(at: fnStart, otherModifiersHeld: false)
+    check("keys typed before Fn do not spoil the next tap", fn.fnUp(at: fnStart + 0.3))
+
+    var harness = FnSpaceGesture()
+    func fnChanged(_ down: Bool, _ time: TimeInterval) -> FnSpaceGesture.Result {
+        harness.fnChanged(down: down, at: time)
+    }
+    func spaceChanged(_ down: Bool, _ time: TimeInterval, repeated: Bool = false) -> FnSpaceGesture.Result {
+        harness.spaceChanged(down: down, repeated: repeated, canStart: true, otherModifiersHeld: false, at: time)
+    }
+
+    _ = fnChanged(true, 10)
+    checkEq("Fn+Space opens on key down", spaceChanged(true, 10.3), .pressed)
+    checkEq("Space autorepeat keeps the existing panel", spaceChanged(true, 10.8, repeated: true), .consumed)
+    checkEq("releasing Space first keeps the panel open past the decision window", spaceChanged(false, 13), .consumed)
+    checkEq("releasing Fn last closes the panel", fnChanged(false, 13.1), .released(consumingSpace: false))
+    check("Fn+Space completion suppresses bare Fn dictation", harness.endFnGesture())
+
+    _ = fnChanged(true, 20)
+    checkEq("a fresh Fn+Space reopens the panel", spaceChanged(true, 20.1), .pressed)
+    checkEq("releasing Fn first keeps the panel open", fnChanged(false, 20.2), .pass)
+    check("releasing Fn first suppresses bare Fn dictation", harness.endFnGesture())
+    checkEq("releasing Space last closes the panel and consumes the key-up", spaceChanged(false, 20.3),
+            .released(consumingSpace: true))
+    checkEq("a duplicate Space release cannot dismiss the panel twice", spaceChanged(false, 20.4), .pass)
+
+    _ = fnChanged(true, 30)
+    _ = spaceChanged(true, 30.1)
+    _ = spaceChanged(false, 30.2)
+    checkEq("Space can be pressed again while Fn keeps the panel open", spaceChanged(true, 30.3), .consumed)
+    checkEq("releasing Fn now leaves the panel open while Space is down", fnChanged(false, 30.4), .pass)
+    checkEq("releasing the re-pressed Space closes the panel", spaceChanged(false, 30.5), .released(consumingSpace: true))
+    _ = harness.endFnGesture()
+    _ = fnChanged(true, 40)
+    checkEq("Fn+Space still requires the two-second decision window", spaceChanged(true, 42.1), .pass)
 }
 
 // MARK: 15. update offers and progress
@@ -1767,6 +1906,91 @@ do {
     reloaded.clear()
     checkEq("clearing empties it", reloaded.activeDays, 0)
     defaults.removePersistentDomain(forName: suite); removeTestHistoryDB(suite)
+}
+
+do {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: -8 * 3600)!
+    let utc = ISO8601DateFormatter().date(from: "2026-11-25T02:00:00Z")!
+    let suite = "typeleast-test-cadence-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let legacy = Data(#"{"2026-11-24":{"dictations":1,"words":100}}"#.utf8)
+    defaults.set(legacy, forKey: "voice.activity.v1")
+    let log = ActivityLog(defaults: defaults, calendar: calendar)
+    checkEq("heatmap token counts use the displayed local day", log.dayKey(utc), "2026-11-24")
+    checkEq("old activity without the language breakdown can show tokens", log.day(utc).estimatedTokens, 72)
+    log.record(words: 110, latinWords: 10, at: utc)
+    let reloaded = ActivityLog(defaults: defaults, calendar: calendar)
+    checkEq("historic counts and new Latin words are combined without recounting", reloaded.day(utc).estimatedTokens, 156)
+    checkEq("an empty day has zero tokens", ActivityDay().estimatedTokens, 0)
+    log.clear()
+    checkEq("clearing activity also clears derived tokens", log.day(utc).estimatedTokens, 0)
+
+    var words = CadenceIdleWords()
+    let firstCycle = (0..<20).map { _ in words.next() }
+    let secondCycle = (0..<20).map { _ in words.next() }
+    checkEq("idle Cadence words are unique within a cycle", Set(firstCycle).count, 20)
+    checkEq("reshuffling uses the same vocabulary", Set(secondCycle), Set(firstCycle))
+    check("idle Cadence words do not repeat across cycles", firstCycle.last != secondCycle.first)
+
+    calendar.firstWeekday = 1
+    let range = ActivityRange(endingOn: utc, calendar: calendar)
+    let grid = ActivityHoverGrid(range: range, columnStep: 22, rowStep: 26, cellSize: 18, position: 0)
+    let right = CGFloat(range.weekCount - 1) * 22
+    let tuesday = CGPoint(x: right + 8, y: 2 * 26 + 8)
+    checkEq("Cadence hover targets the actual date under the pointer", grid.cell(at: tuesday, calendar: calendar)?.date, range.today)
+    checkEq("Cadence hover ignores the gaps", grid.cell(at: CGPoint(x: right - 2, y: tuesday.y), calendar: calendar), nil)
+    checkEq("Cadence hover ignores cells after today", grid.cell(at: CGPoint(x: tuesday.x, y: tuesday.y + 26), calendar: calendar), nil)
+    let earlier = ActivityHoverGrid(range: range, columnStep: 22, rowStep: 26, cellSize: 18, position: -4)
+    let lastMonth = calendar.date(byAdding: .day, value: -28, to: range.today)
+    checkEq("Cadence hover follows week navigation", earlier.cell(at: tuesday, calendar: calendar)?.date, lastMonth)
+    let tip = ActivityHoverGrid.tipFrame(for: CGRect(x: right, y: 0, width: 18, height: 18),
+        size: CGSize(width: 148, height: 55), in: CGSize(width: right + 18, height: 200))
+    check("the tooltip fits and stays clear of the hovered corner", tip.minY > 18 && tip.maxX <= right + 18, "\(tip)")
+
+    let tracker = ActivityHoverView(frame: CGRect(x: 0, y: 0, width: 400, height: 180))
+    var pointer: CGPoint?
+    tracker.onPoint = { pointer = $0 }
+    tracker.updateTrackingAreas()
+    let motion = NSEvent.mouseEvent(with: .mouseMoved, location: CGPoint(x: 50, y: 75), modifierFlags: [],
+                                    timestamp: 0, windowNumber: 0, context: nil, eventNumber: 1, clickCount: 0, pressure: 0)!
+    tracker.mouseMoved(with: motion)
+    check("the native Cadence tracking view forwards mouse movement", pointer != nil)
+    tracker.mouseExited(with: motion)
+    checkEq("the native Cadence tracking view clears the hover on exit", pointer, nil)
+}
+
+do {
+    let size = CGSize(width: 100, height: 32)
+    let feedback = ControlHoverFeedback.magnetic
+    let corner = feedback.follow(CGPoint(x: 0, y: 0), in: size)
+    check("magnetic feedback follows the pointer without exceeding two points",
+          corner.width < 0 && corner.height < 0 && hypot(corner.width, corner.height) <= 2.001)
+    checkEq("the center of a magnetic button adds no directional movement",
+            feedback.follow(CGPoint(x: 50, y: 16), in: size), .zero)
+    checkEq("ordinary feedback disregards pointer position",
+            ControlHoverFeedback.standard.follow(CGPoint(x: 0, y: 0), in: size), .zero)
+
+    let parent = NSView(frame: CGRect(x: 0, y: 0, width: 140, height: 60))
+    let frame = CGRect(x: 12, y: 12, width: 100, height: 32)
+    let button = NSButton(frame: frame)
+    button.wantsLayer = true
+    parent.addSubview(button)
+    let edge = CGPoint(x: frame.midX, y: frame.minY + 0.25)
+    check("a native button accepts its lower edge at rest", parent.hitTest(edge) === button)
+    button.setControlLift(1)
+    checkEq("native feedback preserves the button frame", button.frame, frame)
+    check("a lifted native button still accepts its original lower edge", parent.hitTest(edge) === button)
+
+    let card = CGRect(x: 0, y: 0, width: 100, height: 70)
+    let tilt = HoverCardAngle(at: CGPoint(x: 1, y: 1), in: card, overControl: false)
+    check("card tilt follows the pointer with a one-degree limit",
+          tilt.pitch > 0 && tilt.yaw < 0 && hypot(tilt.pitch, tilt.yaw) <= 1.001)
+    checkEq("card tilt pauses over a control",
+            HoverCardAngle(at: CGPoint(x: 1, y: 1), in: card, overControl: true), HoverCardAngle())
+    checkEq("card tilt is neutral outside the card",
+            HoverCardAngle(at: CGPoint(x: 101, y: 35), in: card, overControl: false), HoverCardAngle())
 }
 
 func testHistoryDB(_ suite: String) -> URL {
@@ -2628,16 +2852,19 @@ do {
 // MARK: new-user guide: every entry names a place; a failed model download offers a mirror
 do {
     let entries = SettingsGuide.entries
-    checkEq("the guide lists five places", entries.count, 5)
+    checkEq("the guide lists four places", entries.count, 4)
     check("every guide entry says where it is", entries.allSatisfy { !$0.place.isEmpty })
-    checkEq("the API key lives under Settings › Models", entries.first { $0.title == L10n.text("API Key") }?.category, .models)
+    let apiKeyEntry = entries.first { $0.title == L10n.text("API Key") }
+    checkEq("the API key lives under Settings › Models", apiKeyEntry?.category, .models)
     checkEq("the speech model lives under Settings › Models", entries.first { $0.title == L10n.text("语音模型") }?.category, .models)
     let model = AppModel()
     model.navigate(to: .history)
-    SettingsGuide.open(entries[1], in: model)
+    if let apiKeyEntry { SettingsGuide.open(apiKeyEntry, in: model) }
     check("opening an entry presents the Settings window on its tab",
           model.settingsPresented && model.settingsCategory == .models)
     checkEq("the guide keeps the background page in place", model.page, .history)
+    check("Harness eq is a Settings category without a guide entry",
+          SettingsCategory.tools.title == "Harness eq" && !entries.contains { $0.title == L10n.harnessTitle })
     func speech(_ json: String) -> SpeechStatus { try! JSONDecoder().decode(SpeechStatus.self, from: Data(json.utf8)) }
     check("an unreachable host is a network failure", speech(#"{"phase":"error","error":"could not reach huggingface.co: fetch failed"}"#).networkFailure)
     check("a failed catalog download is a network failure", speech(#"{"phase":"ready","operation":{"modelId":"x","phase":"error","received":0,"total":0,"error":"download-failed"}}"#).networkFailure)
@@ -2766,6 +2993,7 @@ do {
 
 contextPreferencesTests()
 meetingTests()
+doubaoFileMeetingTests()
 performanceRegressionTests()
 dashboardMotionTests()
 
@@ -2866,6 +3094,178 @@ do {
     tips.stop()
     tips.permissionsChanged()
     check("welcome does not reappear after the panel is recreated", !tips.isVisible)
+
+    // Harness EQ floating SkillInvocationPanel & SkillInvocationState regression tests.
+    var nav = SkillInvocationState()
+    checkEq("empty skill list has zero pages", nav.pageCount(for: 0), 0)
+    checkEq("empty skill list has empty page range", nav.pageIndices(for: 0), 0..<0)
+    nav.step(1, total: 0)
+    checkEq("stepping empty skill list keeps index at 0", nav.selectedIndex, 0)
+
+    nav = SkillInvocationState()
+    checkEq("single skill has one page", nav.pageCount(for: 1), 1)
+    checkEq("single skill page range is 0..<1", nav.pageIndices(for: 1), 0..<1)
+    nav.step(1, total: 1)
+    checkEq("stepping forward on single skill stays at 0", nav.selectedIndex, 0)
+    nav.step(-1, total: 1)
+    checkEq("stepping backward on single skill stays at 0", nav.selectedIndex, 0)
+
+    nav = SkillInvocationState()
+    checkEq("six skills fit on one exact page", nav.pageCount(for: 6), 1)
+    checkEq("six skills page range is 0..<6", nav.pageIndices(for: 6), 0..<6)
+    nav.step(-1, total: 6)
+    checkEq("stepping backward from first of six wraps to last", nav.selectedIndex, 5)
+    nav.step(1, total: 6)
+    checkEq("stepping forward from last of six wraps to first", nav.selectedIndex, 0)
+
+    nav = SkillInvocationState()
+    checkEq("seven skills span two pages", nav.pageCount(for: 7), 2)
+    checkEq("seven skills page 1 has six unique items", nav.pageIndices(for: 7), 0..<6)
+    nav.selectedIndex = 5
+    nav.step(1, total: 7)
+    checkEq("stepping past slot 6 advances to item 7", nav.selectedIndex, 6)
+    checkEq("seven skills page 2 has only the 7th item without duplicates", nav.pageIndices(for: 7), 6..<7)
+    check("slot 1 on page 2 is invalid when only 1 item exists on page 2", !nav.selectSlot(1, total: 7))
+    check("slot 0 on page 2 selects item 7", nav.selectSlot(0, total: 7) && nav.selectedIndex == 6)
+    nav.step(1, total: 7)
+    checkEq("stepping forward from 7th item wraps to 1st", nav.selectedIndex, 0)
+    nav.step(-1, total: 7)
+    checkEq("stepping backward from 1st item wraps to 7th", nav.selectedIndex, 6)
+    nav.selectedIndex = 2
+    nav.stepPage(1, total: 7)
+    checkEq("page forward from page 1 clamps to last item on partial page 2", nav.selectedIndex, 6)
+    nav.stepPage(1, total: 7)
+    checkEq("page forward from page 2 wraps to page 1", nav.selectedIndex, 0)
+    nav.stepPage(-1, total: 7)
+    checkEq("page backward from page 1 wraps to page 2", nav.selectedIndex, 6)
+
+    let skillPanel = SkillInvocationPanel()
+    skillPanel.show(targetName: "TextEdit", targetIcon: nil, onSettings: {}, onInvoke: { _ in })
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    let floating = skillPanel.panelWindow
+    check("SkillInvocationPanel opens visibly", skillPanel.isOpen && floating != nil)
+    check("SkillInvocationPanel stays nonactivating while accepting key events",
+          floating?.styleMask.contains(.nonactivatingPanel) == true && floating?.canBecomeKey == true && floating?.canBecomeMain == false)
+    checkEq("SkillInvocationPanel enforces its layout size", floating?.frame.size, SkillInvocationPanel.panelSize)
+    func wheelBackdrop(in view: NSView) -> NSVisualEffectView? {
+        if let glass = view as? NSVisualEffectView, glass.blendingMode == .behindWindow,
+           glass.identifier?.rawValue == "harness.center-glass" { return glass }
+        return view.subviews.lazy.compactMap(wheelBackdrop).first
+    }
+    let ringMaskData = floating?.contentView.flatMap(wheelBackdrop(in:))?.maskImage?.tiffRepresentation
+    let ringMask = ringMaskData.flatMap(NSBitmapImageRep.init(data:))
+    let centerAlphas = ringMask.map { bitmap in
+        [1, 2, 3].compactMap {
+            bitmap.colorAt(x: bitmap.pixelsWide * $0 / 4, y: bitmap.pixelsHigh / 2)?.alphaComponent
+        }
+    }
+    check("the application hub uses one continuous behind-window material across both halves",
+          centerAlphas.map { $0.count == 3 && $0.allSatisfy { $0 >= 0.99 } } == true)
+    let veil = floating?.contentView.flatMap(wheelBackdrop(in:))?.subviews
+        .first { $0.identifier?.rawValue == "harness.frosted-veil" }
+    let veilBitmap = veil.flatMap { $0.bitmapImageRepForCachingDisplay(in: $0.bounds) }
+    if let veil, let veilBitmap { veil.cacheDisplay(in: veil.bounds, to: veilBitmap) }
+    check("the hub veil is nearly opaque inside the circle and leaves its corners clear",
+          veilBitmap.map { bitmap in
+              let center = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.alphaComponent ?? 0
+              let corner = bitmap.colorAt(x: 1, y: 1)?.alphaComponent ?? 1
+              return center >= 0.97 && corner <= 0.05
+          } == true)
+    skillPanel.close()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    check("SkillInvocationPanel closes cleanly", !skillPanel.isOpen && skillPanel.panelWindow == nil)
+
+    checkEq("a single Skill occupies a full ring", SkillRadialGeometry.sectorSweep(count: 1), 360.0)
+    check("sector hit-testing wraps around the angle seam",
+          SkillRadialGeometry.containsAngle(-178, center: 179, sweep: 12))
+    check("the blank angular gap cannot select a neighboring sector",
+          !SkillRadialGeometry.containsAngle(-60, center: -90, sweep: SkillRadialGeometry.sectorSweep(count: 6)))
+    let wheelSide = SkillRadialGeometry.wheelSize
+    let wheelBounds = CGRect(x: 0, y: 0, width: wheelSide, height: wheelSide)
+    let ringRadii = [(SkillRadialGeometry.innerMinRadius, SkillRadialGeometry.innerMaxRadius),
+                     (SkillRadialGeometry.outerMinRadius, SkillRadialGeometry.outerMaxRadius)]
+    let labelsFit = ringRadii.allSatisfy { innerRadius, outerRadius in
+        (1...SkillInvocationState.pageSize).allSatisfy { count in
+            (0..<count).allSatisfy { slot in
+                [0.0, 15, 30, 45].allSatisfy { offset in
+                    let sector = RoundedAnnularSector(centerAngle: SkillRadialGeometry.sectorAngle(slot: slot, count: count) + offset,
+                                                      sweep: SkillRadialGeometry.sectorSweep(count: count),
+                                                      innerRadius: innerRadius, outerRadius: outerRadius)
+                    let label = sector.labelLayout(in: wheelBounds)
+                    let padded = label.rect.insetBy(dx: -2, dy: -2)
+                    let outline = sector.path(in: wheelBounds)
+                    return label.rect.width >= 20 && (1...2).contains(label.lines) && (0...4).allSatisfy { row in
+                        (0...4).allSatisfy { column in
+                            let point = CGPoint(x: padded.minX + padded.width * CGFloat(column) / 4,
+                                                y: padded.minY + padded.height * CGFloat(row) / 4)
+                            return outline.contains(label.pointInSector(point))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    check("Skill labels stay inside the rounded sectors with room on all sides", labelsFit)
+    let sector = RoundedAnnularSector(centerAngle: -90, sweep: SkillRadialGeometry.sectorSweep(count: 6),
+                                      innerRadius: 60, outerRadius: 122)
+    let nearVisibleEdge = CGPoint(x: wheelSide / 2, y: wheelSide / 2 - 121)
+    check("the visible sector rim is included in the hit zone",
+          sector.path(in: wheelBounds).contains(nearVisibleEdge)
+          && sector.interactionShape.path(in: wheelBounds).contains(nearVisibleEdge))
+    let child = RoundedAnnularSector(centerAngle: -90, sweep: sector.sweep, innerRadius: 128, outerRadius: 168)
+    let sibling = RoundedAnnularSector(centerAngle: -30, sweep: sector.sweep, innerRadius: 128, outerRadius: 168)
+    let roots = [sector.interactionShape]
+    let children = [child.interactionShape, sibling.interactionShape]
+    func wheelPoint(radius: CGFloat, angle: Double) -> CGPoint {
+        let radians = angle * .pi / 180
+        return CGPoint(x: wheelSide / 2 + radius * cos(radians), y: wheelSide / 2 + radius * sin(radians))
+    }
+    let outsideRim = wheelPoint(radius: 171, angle: -90)
+    check("hover and click reach beyond the outer painted rim",
+          !child.path(in: wheelBounds).contains(outsideRim)
+          && children[0].path(in: wheelBounds).contains(outsideRim)
+          && SkillRadialGeometry.hit(at: outsideRim, roots: roots, children: children) == .child(0))
+    let overlap = wheelPoint(radius: 118, angle: -90)
+    checkEq("an open Skill branch wins the shared band", SkillRadialGeometry.hit(at: overlap, roots: roots, children: children), .child(0))
+    checkEq("that band belongs to the folder before opening the branch",
+            SkillRadialGeometry.hit(at: overlap, roots: roots, children: []), .root(0))
+    checkEq("the folder remains reachable closer to the hub",
+            SkillRadialGeometry.hit(at: wheelPoint(radius: 100, angle: -90), roots: roots, children: children), .root(0))
+    checkEq("the expanded Skill sectors keep a narrow boundary between neighbors",
+            SkillRadialGeometry.hit(at: wheelPoint(radius: 151, angle: -60), roots: roots, children: children), nil)
+    checkEq("the center remains outside the sector hit zones",
+            SkillRadialGeometry.hit(at: wheelPoint(radius: 40, angle: -90), roots: roots, children: children), nil)
+    let branchAnchor = CGPoint(x: 174, y: 57)
+    check("the outward branch corridor protects diagonal travel but excludes inward travel",
+          SkillRadialGeometry.branchCorridorContains(CGPoint(x: 185, y: 43), from: branchAnchor, angle: -90)
+          && !SkillRadialGeometry.branchCorridorContains(CGPoint(x: 174, y: 70), from: branchAnchor, angle: -90))
+    check("the preview corridor connects the hovered point to either side of the preview",
+          SkillPointerCorridor.contains(CGPoint(x: 20, y: 3), apex: .zero,
+                                        edgeStart: CGPoint(x: 30, y: -10), edgeEnd: CGPoint(x: 30, y: 10))
+          && SkillPointerCorridor.contains(CGPoint(x: -20, y: 3), apex: .zero,
+                                           edgeStart: CGPoint(x: -30, y: -10), edgeEnd: CGPoint(x: -30, y: 10))
+          && !SkillPointerCorridor.contains(CGPoint(x: 20, y: 20), apex: .zero,
+                                            edgeStart: CGPoint(x: 30, y: -10), edgeEnd: CGPoint(x: 30, y: 10)))
+
+    var wheel = SkillWheelHoverState()
+    check("the wheel starts with no highlighted folder", wheel.active == nil)
+    wheel.move(to: .root("folder-a"))
+    checkEq("first hover opens its folder immediately", wheel.active, "folder-a")
+    wheel.move(to: .root("folder-b"))
+    checkEq("crossing another folder defers its selection", wheel.pending, .switchRoot("folder-b"))
+    wheel.move(to: .transit)
+    wheel.settle(.switchRoot("folder-b"))
+    check("crossing the safe corridor preserves the visible branch without arming a Skill",
+          wheel.active == "folder-a" && wheel.pending == nil && wheel.hit == .transit)
+    wheel.move(to: .child("skill-a"))
+    wheel.settle(.switchRoot("folder-b"))
+    checkEq("reaching a child cancels the pending branch switch", wheel.active, "folder-a")
+    checkEq("the outer Skill is the active hover target", wheel.hit, .child("skill-a"))
+    wheel.move(to: .outside)
+    checkEq("crossing the gap immediately disarms invocation", wheel.hit, .outside)
+    wheel.settle(.collapse)
+    check("leaving the wheel collapses the outer ring", wheel.active == nil)
+
 }
 
 server.stop()

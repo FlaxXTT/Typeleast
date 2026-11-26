@@ -57,8 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     var skipGlobalHotkeys = false
     private let instanceLock = InstanceLock()
     private let betaPanel = BetaPanel()
+    private let skillInvocation = SkillInvocationPanel()
+    private var skillInvocationWhileHeld = false
     lazy var beta: BetaController = {
-        betaPanel.onContinue = { [weak self] in self?.startAssistant() }
+        betaPanel.onContinue = { [weak self] in self?.dictation.toggleAssistant() }
         betaPanel.onSkip = { [weak self] in self?.finishBetaWithoutAnswers(answer: $0) }
         betaPanel.onAnswer = { [weak self] in self?.dictation.answerBeta($0) }
         betaPanel.onCancel = { [weak self] in self?.dropBeta(notify: true) }
@@ -126,7 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         model.credentialsLocked = KeychainStore.requiresUnlock
         if opensHome, settings.onboardingDone, !launchedAsLoginItem { hub.openMainWindow() }
         if model.credentialsLocked, opensHome, !launchedAsLoginItem {
-            authenticateCredentials { [weak self] _ in self?.beginUserCacheLoad(opensHome: opensHome) }
+            authenticateCredentials(allowBiometryRecovery: false) { [weak self] _ in
+                self?.beginUserCacheLoad(opensHome: opensHome)
+            }
         } else {
             beginUserCacheLoad(opensHome: opensHome)
         }
@@ -153,20 +157,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         }
     }
 
-    private func authenticateCredentials(completion: @escaping (Bool) -> Void) {
+    private func authenticateCredentials(allowBiometryRecovery: Bool, completion: @escaping (Bool) -> Void) {
         guard !model.credentialsUnlocking else { return }
         attemptedCredentialUnlock = true
         model.credentialsUnlocking = true
         model.credentialUnlockError = nil
         Task { @MainActor [weak self] in
             guard let self else { return }
-            do { try await TouchIDVault.shared.unlock() }
-            catch {
+            do {
+                try await TouchIDVault.shared.unlock(allowBiometryRecovery: allowBiometryRecovery)
+            } catch {
                 let failure = error as NSError
                 DiagnosticsLog.write("keychain.touch-id.fail", ["status": String(TouchIDVault.status(error)), "code": String(failure.code)])
                 switch (error as? LAError)?.code {
                 case .userCancel, .systemCancel, .appCancel: break
-                case .biometryLockout: self.model.credentialUnlockError = L10n.text("请先用登录密码解锁 Mac，再试 Touch ID。")
+                case .biometryLockout:
+                    self.model.credentialUnlockError = L10n.text("macOS 已锁定 Touch ID。点击解锁，按系统提示恢复。")
                 default: self.model.credentialUnlockError = L10n.text("Touch ID 解锁失败，请重试。")
                 }
             }
@@ -174,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             let unlocked = TouchIDVault.shared.isUnlocked
             self.model.credentialsLocked = !unlocked
             if unlocked {
+                DiagnosticsLog.write("keychain.touch-id.unlocked")
                 self.model.refreshLLMKeyPresence()
                 self.model.refreshOnlineASRKeyPresence()
             }
@@ -182,9 +189,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     func unlockCredentials() {
+        unlockCredentials(allowBiometryRecovery: true)
+    }
+
+    private func unlockCredentials(allowBiometryRecovery: Bool) {
         guard model.credentialsLocked, phase == .idle else { return }
         guard model.userCacheReady else { unlockWhenCacheReady = true; return }
-        authenticateCredentials { [weak self] unlocked in
+        authenticateCredentials(allowBiometryRecovery: allowBiometryRecovery) { [weak self] unlocked in
             guard let self, unlocked else { return }
             HistoryStore.shared.retryAfterUnlock()
             self.model.reloadHistory()
@@ -198,7 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     private func requestInitialCredentialUnlock() {
-        if !attemptedCredentialUnlock { unlockCredentials() }
+        if !attemptedCredentialUnlock { unlockCredentials(allowBiometryRecovery: false) }
     }
 
     private func finishLaunch(opensHome: Bool) {
@@ -216,8 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         updates.scheduleChecks()
 
         FnKeyMonitor.shared.onTap = { [weak self] source in self?.fnTapped(sourceAtPress: source) }
-        FnKeyMonitor.shared.onHold = { [weak self] in self?.beginHeldDictation() == true }
-        FnKeyMonitor.shared.onHoldEnd = { [weak self] in self?.dictation.endHeldShortcut() }
         recordingBar.onCancel = { [weak self] in self?.cancelDictation() }
         recordingBar.onDismiss = { [weak self] in self?.updateIdleBar() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
@@ -471,10 +480,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
             register(slot, binding) { [weak self] in self?.hotkeyPressed() }
         }
         register("pasteLast", settings.hotkeyPasteLast) { [weak self] in self?.pasteLast() }
-        register("assistant", settings.hotkeyAssistant) { [weak self] in self?.startAssistant() }
         register("translate", settings.hotkeyTranslate) { [weak self] in self?.translateHotkeyPressed() }
-        FnKeyMonitor.shared.configure(bareFn: fnWanted, chords: chords)
+        let skillShortcut = settings.hotkeyAssistant
+        register("invoke", skillShortcut) { [weak self] in
+            self?.invokeSkillShortcut(whileHeld: skillShortcut.fnChord == .space)
+        }
+        let fnMonitor = FnKeyMonitor.shared
+        fnMonitor.onSpaceRelease = { [weak self] in
+            guard let self else { return }
+            self.onboarding.practice.releaseSkill()
+            guard self.skillInvocationWhileHeld else { return }
+            self.skillInvocationWhileHeld = false
+            self.skillInvocation.finishShortcut()
+        }
+        fnMonitor.onSpaceCancel = { [weak self] in
+            guard let self else { return }
+            if self.onboarding.practice.showingSkill { self.onboarding.practice.cancel() }
+            guard self.skillInvocationWhileHeld else { return }
+            self.skillInvocationWhileHeld = false
+            self.skillInvocation.close()
+        }
+        fnMonitor.configure(bareFn: fnWanted, chords: chords)
         model.hotkeyProblems = problems
+    }
+
+    private func invokeSkillShortcut(whileHeld: Bool) {
+        if onboarding.handleShortcut(.skill, held: whileHeld) { return }
+        if skillInvocation.isOpen {
+            if !whileHeld { skillInvocation.close() }
+            return
+        }
+        guard phase == .idle, !Inserter.isSecureInputEnabled() else { return }
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        guard let app = frontmost, let bundle = app.bundleIdentifier, bundle != Bundle.main.bundleIdentifier,
+              !FieldContextReader.isBlocked(bundleId: bundle) else {
+            recordingBar.showResult(L10n.text("请先点一下要写入的对话框。"), warning: true)
+            return
+        }
+        skillInvocationWhileHeld = whileHeld
+        skillInvocation.show(targetName: frontmost?.localizedName ?? frontmost?.bundleIdentifier,
+            targetIcon: frontmost?.icon, waitsForShortcutRelease: whileHeld, onSettings: { [weak self] in
+                self?.hub.show(page: .settings)
+                self?.model.settingsCategory = .tools
+            }, onInvoke: { [weak self] invocation in
+                guard let self, self.phase == .idle else { return }
+                guard !app.isTerminated else {
+                    self.recordingBar.showResult(L10n.text("原应用已关闭。"), warning: true)
+                    return
+                }
+                let process = app.processIdentifier
+                let generation = self.skillInvocation.generation
+                if NSWorkspace.shared.frontmostApplication?.processIdentifier != process {
+                    app.activate(options: [])
+                }
+                Task { @MainActor [weak self] in
+                    // Activation may complete on the next event turn when coming from another app.
+                    for _ in 0..<16 {
+                        guard let self, self.phase == .idle, !self.skillInvocation.isOpen,
+                              self.skillInvocation.generation == generation else { return }
+                        if app.isTerminated { break }
+                        if NSWorkspace.shared.frontmostApplication?.processIdentifier == process {
+                            guard !Inserter.isSecureInputEnabled() else { return }
+                            let field: FocusedField?
+                            if invocation.isMCP {
+                                let secure = await Task.detached(priority: .userInitiated) {
+                                    FieldContextReader.hasSecureFocus(processID: process)
+                                }.value
+                                guard !secure, !Inserter.isSecureInputEnabled(), self.phase == .idle,
+                                      !self.skillInvocation.isOpen, self.skillInvocation.generation == generation else { return }
+                                field = nil
+                            } else {
+                                field = FieldContextReader.capture(bundleId: bundle)
+                            }
+                            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == process else { return }
+                            self.dictation.insertText(invocation.text, fallback: false, entryId: nil, appBundleId: bundle, field: field,
+                                                      showsCapsule: false, offersHistoryRecovery: false, showsDeliveryErrors: true)
+                            return
+                        }
+                        try? await Task.sleep(for: .milliseconds(25))
+                    }
+                    guard let self, self.phase == .idle, !self.skillInvocation.isOpen,
+                          self.skillInvocation.generation == generation else { return }
+                    self.recordingBar.showResult(L10n.text("未能回到原来的对话框。"), warning: true)
+                }
+            })
     }
 
     /// Fn or a shortcut: toggle (press to start, press to stop).
@@ -483,13 +572,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     }
 
     private func beginHeldDictation() -> Bool {
-        guard !settings.needsPractice, !onboarding.practice.busy, !onboarding.practice.acceptsShortcut else { return false }
+        guard !settings.needsPractice, !onboarding.isKeyWindow else { return false }
         return dictation.startHeldShortcut()
     }
 
     private func dictationShortcutPressed(_ slot: String) {
         guard pendingShortcut == nil, heldShortcutSlot == nil else { return }
-        guard phase == .idle, !settings.needsPractice, !onboarding.practice.acceptsShortcut, !onboarding.practice.busy else {
+        guard phase == .idle, !settings.needsPractice, !onboarding.isKeyWindow else {
             hotkeyPressed()
             return
         }
@@ -515,8 +604,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
 
     /// The translation shortcut takes the selection first, or toggles spoken translation.
     func translateHotkeyPressed() {
-        if onboarding.practice.acceptsShortcut && onboarding.practice.translateTo != nil { onboarding.practice.toggle(); return }
-        guard phase == .idle, !onboarding.practice.acceptsShortcut, !onboarding.practice.busy, !settings.needsPractice else {
+        if onboarding.handleShortcut(.translation) { return }
+        guard phase == .idle, !settings.needsPractice else {
             toggleDictation(translateTo: settings.translateTarget)
             return
         }
@@ -542,7 +631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         Inserter.shared.copySelection(whileFrontmost: pid) { [weak self] text in
             guard let self else { return }
             self.readingShortcutSelection = false
-            guard self.phase == .idle, !self.onboarding.practice.acceptsShortcut, !self.onboarding.practice.busy,
+            guard self.phase == .idle, !self.onboarding.isKeyWindow,
                   !self.settings.needsPractice, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
             let field = text.flatMap { FieldContextReader.frontmostApp(bundleId: bundle, selection: $0) }
             self.performTranslationShortcut(selection: field)
@@ -599,6 +688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     /// keyboard input source changed across the tap, the 🌐 key was switching 中/英
     /// for the system and the microphone stays closed.
     func fnTapped(sourceAtPress: String?) {
+        if onboarding.handleShortcut(.dictation) { return }
         guard phase == .idle else { hotkeyPressed(); return }
         DispatchQueue.main.asyncAfter(deadline: .now() + FnTapGate.currentDelay) { [weak self] in
             guard let self = self, self.phase == .idle else { return }
@@ -969,16 +1059,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func openRecommendedApp(_ bundle: String) { recordingHints.openRecommendation(bundle) }
 
     // MARK: MenuActionTarget
-
-    func startAssistant() {
-        guard !onboarding.practice.acceptsShortcut && !onboarding.practice.busy else { return }
-        guard !settings.needsPractice else { showOnboarding(); return }
-        dictation.toggleAssistant()
-    }
-    func setCleanupMode(_ code: String) {
-        if code == "promptbeta" { startAssistant() }
-    }
-    func menuSetStrength(_ code: String) { setCleanupMode(code) }
 
     func menuToggleDictation() { toggleDictation() }
     func menuCancelDictation() { cancelDictation() }

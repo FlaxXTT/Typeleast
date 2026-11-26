@@ -7,15 +7,28 @@ import Foundation
 struct ActivityDay: Codable, Equatable {
     var dictations = 0
     var words = 0
+    // Legacy days have only a combined count. Use the CJK rate for their unknown portion.
+    var latinWords: Int? = nil
     // Optional fields keep existing count-only activity records readable.
     var speakingSeconds: Double?
     var savedSeconds: Double?
     var timedWords: Int?
     var timedDictations: Int?
 
+    var estimatedTokens: Int {
+        let total = max(0, words)
+        let latin = min(total, max(0, latinWords ?? 0))
+        // Fit to sample dictation text compared with o200k_base and Qwen3 BPE.
+        let weighted = Double(total - latin) * 0.72 + Double(latin) * 1.20
+        return Int(clamping: Int64(exactly: weighted.rounded()) ?? Int64.max)
+    }
+
     mutating func include(_ activity: ActivityDay) {
         dictations += activity.dictations
         words += activity.words
+        if let latin = activity.latinWords {
+            latinWords = (latinWords ?? 0) + latin
+        }
         if let duration = activity.speakingSeconds {
             speakingSeconds = (speakingSeconds ?? 0) + duration
             savedSeconds = (savedSeconds ?? 0) + (activity.savedSeconds ?? 0)
@@ -63,9 +76,10 @@ final class ActivityLog {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
-    func record(words: Int, seconds: Double? = nil, typingSeconds: Double? = nil, at date: Date = Date()) {
+    func record(words: Int, latinWords: Int = 0, seconds: Double? = nil, typingSeconds: Double? = nil, at date: Date = Date()) {
         let day = dayKey(date)
-        var activity = ActivityDay(dictations: 1, words: max(0, words))
+        let total = max(0, words)
+        var activity = ActivityDay(dictations: 1, words: total, latinWords: latinWords > 0 ? min(latinWords, total) : nil)
         if let seconds, let typingSeconds {
             activity.speakingSeconds = seconds
             activity.savedSeconds = max(0, typingSeconds - seconds)

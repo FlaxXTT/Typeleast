@@ -303,7 +303,6 @@ enum VoiceBarPalette {
     static let surfaceBottom = NSColor.black
     static let edge = NSColor.white.withAlphaComponent(0.32)
     static let card = NSColor(srgbRed: 29.0 / 255, green: 26.0 / 255, blue: 26.0 / 255, alpha: 1)
-    static let finishSurface = NSColor.white
     static let finishInk = NSColor.black
     static let warning = NSColor(srgbRed: 240.0 / 255, green: 160.0 / 255, blue: 75.0 / 255, alpha: 1)
     static let appearance = NSAppearance(named: .darkAqua)!
@@ -716,9 +715,8 @@ final class PillView: NSView {
                           width: Self.buttonSize, height: Self.buttonSize)
         if handsFree {
             if showsCancel { drawCancel() }
-            VoiceBarPalette.finishSurface.setFill()
-            let expansion = reduceMotion ? 0 : stopHoverAmount * 1.8
-            NSBezierPath(ovalIn: stop.insetBy(dx: -expansion, dy: -expansion)).fill()
+            NSColor(calibratedWhite: 1 - stopHoverAmount * 0.10, alpha: 1).setFill()
+            NSBezierPath(ovalIn: stop).fill()
             let c = NSPoint(x: stop.midX, y: stop.midY)
             let check = NSBezierPath()
             check.move(to: NSPoint(x: c.x - 5.5, y: c.y + 0.2))
@@ -949,9 +947,8 @@ final class PillView: NSView {
 
     /// A quiet grey disc with a dark ×.
     private func drawCancel() {
-        NSColor(calibratedWhite: 0.28 + cancelHoverAmount * 0.06, alpha: 1).setFill()
-        let expansion = reduceMotion ? 0 : cancelHoverAmount * 1.8
-        NSBezierPath(ovalIn: cancelRect.insetBy(dx: -expansion, dy: -expansion)).fill()
+        NSColor(calibratedWhite: 0.28 + cancelHoverAmount * 0.12, alpha: 1).setFill()
+        NSBezierPath(ovalIn: cancelRect).fill()
         let c = NSPoint(x: cancelRect.midX, y: cancelRect.midY), r: CGFloat = 4.6
         let angle: CGFloat = 0
         func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {

@@ -1,9 +1,8 @@
 /**
  * Find a narrow, independently checkable class of meaning changes.
  *
- * This is deliberately not a fact checker: a single mismatch asks the user
- * to review the two texts; it does not decide which text is correct. Multiple
- * instances of the same value are left alone because a later expression may
+ * A single mismatch flags a candidate for the caller to handle. The
+ * comparison does not decide which text is correct. Multiple instances of the same value are left alone because a later expression may
  * be a correction, comparison, date, or a different measurement altogether.
  */
 const unitGroups = [

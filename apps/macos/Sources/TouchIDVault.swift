@@ -64,11 +64,32 @@ final class TouchIDVault {
         }
     }
 
-    func unlock() async throws {
+    func unlock(allowBiometryRecovery: Bool) async throws {
         if isUnlocked { return }
         let envelope = try JSONDecoder().decode(Envelope.self, from: Data(contentsOf: manifest))
-        let unlocked = try await open(envelope)
+        let unlocked: Session
+        do {
+            unlocked = try await open(envelope)
+        } catch let error as LAError where allowBiometryRecovery && error.code == .biometryLockout {
+            try await restoreBiometryIfLockedOut()
+            unlocked = try await open(envelope)
+        }
         lock.withLock { if session == nil { session = unlocked } }
+    }
+
+    private func restoreBiometryIfLockedOut() async throws {
+        let context = LAContext()
+        defer { context.invalidate() }
+        var problem: NSError?
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &problem) { return }
+        guard (problem as? LAError)?.code == .biometryLockout else {
+            throw problem ?? Self.failure(errSecNotAvailable)
+        }
+        // This context restores Touch ID only. Unlocking the vault always uses a fresh context.
+        guard try await context.evaluatePolicy(.deviceOwnerAuthentication,
+                                               localizedReason: L10n.text("恢复 TypeLeast 的 Touch ID")) else {
+            throw Self.failure(errSecAuthFailed)
+        }
     }
 
     /// Writes to a new Keychain and verifies that Touch ID can read it back before selecting it.

@@ -20,6 +20,15 @@ struct MeetingResult: Codable, Equatable {
     var speakers: [String]
     var truncated: Bool?
 
+    func applyingVocabulary(_ rules: [VocabularyRule]) -> Self {
+        guard !rules.isEmpty else { return self }
+        var result = self
+        for index in result.segments.indices {
+            result.segments[index].text = Vocabulary.applying(rules, to: result.segments[index].text)
+        }
+        return result
+    }
+
     static func online(_ transcript: OnlineASRTranscript, duration: Double) -> Self {
         var speakerLabels: [String: String] = [:]
         var speakers: [String] = []
@@ -145,6 +154,7 @@ private final class MeetingPreviewToken {
 /// What the Meetings page shows. The one meeting flow: audio in, job, transcript out.
 final class MeetingController: ObservableObject {
     enum Stage: Equatable { case idle, recording, converting, transcribing, done, failed }
+    enum DoubaoConnection: Equatable { case untested, testing, connected, failed }
     typealias CloudRecognizer = @Sendable (Data, OnlineASRConfiguration) async throws -> OnlineASRTranscript
 
     struct Transcript: Identifiable {
@@ -165,6 +175,7 @@ final class MeetingController: ObservableObject {
     @Published private(set) var liveWarning = false
     @Published private(set) var modelInstalled: Bool?
     @Published private(set) var download: SpeechModelOperation?
+    @Published private(set) var doubaoConnection: DoubaoConnection = .untested
 
     private let client: ServiceClient
     private let settings: Settings
@@ -186,11 +197,21 @@ final class MeetingController: ObservableObject {
     private var finalAfterPreview: Data?
     private var provider: OnlineASRProvider = .local
     private var cloudTask: Task<Void, Never>?
+    private var doubaoTest: Task<Void, Never>?
     var pollInterval: TimeInterval = 2
 
     init(client: ServiceClient = .shared, liveChunkBytes: Int = 320_000, settings: Settings = .shared,
-         recognizeCloud: @escaping CloudRecognizer = { try await OnlineASR.transcribeMeeting(wav: $0, configuration: $1) },
-         cloudKey: @escaping @Sendable (OnlineASRProvider) -> String = { KeychainStore.read(account: $0.keychainAccount) ?? "" }) {
+         recognizeCloud: @escaping CloudRecognizer = { wav, configuration in
+             if configuration.provider == .doubao {
+                 guard !configuration.apiKey.isEmpty else { throw DoubaoMeetingASR.Failure.missingKey }
+                 guard let storage = DoubaoMeetingStorage.saved() else { throw DoubaoMeetingASR.Failure.missingStorage }
+                 return try await DoubaoMeetingASR().transcribe(wav: wav, configuration: configuration, storage: storage)
+             }
+             return try await OnlineASR.transcribeMeeting(wav: wav, configuration: configuration)
+         },
+         cloudKey: @escaping @Sendable (OnlineASRProvider) -> String = {
+             $0 == .doubao ? DoubaoMeetingASR.savedKey() : KeychainStore.read(account: $0.keychainAccount) ?? ""
+         }) {
         self.client = client
         self.settings = settings
         self.recognizeCloud = recognizeCloud
@@ -203,6 +224,22 @@ final class MeetingController: ObservableObject {
     var canRetry: Bool { stage == .failed && audio != nil }
     var result: MeetingResult? { transcript?.result }
     var usesLivePreview: Bool { provider == .local }
+
+    @MainActor func checkDoubaoConnection(force: Bool = false) {
+        guard force || doubaoConnection == .untested else { return }
+        let key = cloudKey(.doubao)
+        doubaoTest?.cancel()
+        guard !key.isEmpty else { doubaoConnection = .untested; return }
+        doubaoConnection = .testing
+        doubaoTest = Task {
+            do {
+                try await DoubaoMeetingASR().testConnection(apiKey: key)
+                if !Task.isCancelled { doubaoConnection = .connected }
+            } catch {
+                if !Task.isCancelled { doubaoConnection = .failed }
+            }
+        }
+    }
 
     // MARK: model
 
@@ -430,6 +467,7 @@ final class MeetingController: ObservableObject {
             return
         }
         let token = MeetingPreviewToken()
+        let rules = settings.vocabularyReplacements
         finalToken = token
         let requestID = UUID().uuidString.lowercased()
         jobID = requestID
@@ -440,7 +478,7 @@ final class MeetingController: ObservableObject {
                 let id = try self.client.meetingStartSync(wav: wav, requestID: requestID)
                 guard id == requestID else { try? self.client.meetingCancelSync(id: id); throw ServiceError.decoding("meeting request id") }
                 if token.isCancelled { try? self.client.meetingCancelSync(id: id); return }
-                self.poll(id: id, run: run, token: token)
+                self.poll(id: id, run: run, token: token, rules: rules)
                 if token.isCancelled { try? self.client.meetingCancelSync(id: id) }
             } catch {
                 try? self.client.meetingCancelSync(id: requestID)
@@ -455,6 +493,8 @@ final class MeetingController: ObservableObject {
         let workspaceID = settings.funASRWorkspaceID
         let speechSmoothing = settings.doubaoSpeechSmoothing
         let hotwords = provider == .doubao ? settings.doubaoHotwords : ""
+        let tables = settings.doubaoVocabularyTables
+        let rules = settings.vocabularyReplacements
         let recognize = recognizeCloud
         let key = cloudKey
         meter?.invalidate()
@@ -464,16 +504,20 @@ final class MeetingController: ObservableObject {
         cloudTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let configuration = OnlineASRConfiguration(provider: provider, apiKey: key(provider), workspaceID: workspaceID,
-                                                           doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
+                                                           doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords,
+                                                           doubaoTables: tables)
                 try Task.checkCancellation()
                 let response = try await recognize(wav, configuration)
                 try Task.checkCancellation()
-                let result = MeetingResult.online(response, duration: duration)
+                let result = MeetingResult.online(response, duration: duration).applyingVocabulary(rules)
                 await MainActor.run { [weak self] in
                     guard let self, self.generation == run else { return }
                     self.finishCloud(started: start)
                     self.transcript = Transcript(id: UUID().uuidString, result: result, seconds: duration, elapsed: self.elapsed)
                     self.audio = nil
+                    if response.temporaryAudioCleanupFailed {
+                        self.message = DoubaoMeetingASR.Failure.cleanup.localizedDescription
+                    }
                     self.stage = .done
                 }
             } catch {
@@ -495,7 +539,7 @@ final class MeetingController: ObservableObject {
         elapsed = ProcessInfo.processInfo.systemUptime - started
     }
 
-    private func poll(id: String, run: Int, token: MeetingPreviewToken) {
+    private func poll(id: String, run: Int, token: MeetingPreviewToken, rules: [VocabularyRule]) {
         var misses = 0
         let deadline = ProcessInfo.processInfo.systemUptime + 21 * 60
         while !token.isCancelled {
@@ -508,13 +552,14 @@ final class MeetingController: ObservableObject {
             if token.isCancelled { break }
             do {
                 let status = try client.meetingStatusSync(id: id)
+                let result = status.result?.applyingVocabulary(rules)
                 misses = 0
                 DispatchQueue.main.async {
                     guard self.generation == run else { return }
                     self.elapsed = status.elapsedMs / 1000
                     switch status.phase {
                     case "done":
-                        guard let result = status.result else {
+                        guard let result else {
                             self.fail(Self.explain(code: status.code))
                             return
                         }

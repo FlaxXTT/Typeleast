@@ -218,9 +218,18 @@ final class RecordingHints {
             return
         }
         let isReady = hint == .ready
-        let view = HintHost(rootView: Card(shortcut: shortcut, ready: isReady) { [weak self] in self?.dismiss() })
-        view.frame = NSRect(x: 0, y: 0, width: 324, height: isReady ? 128 : 54)
+        let view: NSView
+        if isReady {
+            let host = HintHost(rootView: ReadyCard(shortcut: shortcut) { [weak self] in self?.dismiss() })
+            host.frame = NSRect(x: 0, y: 0, width: 324, height: 128)
+            view = host
+        } else {
+            let host = NSHostingView(rootView: TypingReminderPill(shortcut: shortcut))
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            view = host
+        }
         let card = PillPanel(contentRect: view.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        if !isReady { card.appearance = VoiceBarPalette.appearance }
         card.contentView = view
         card.isFloatingPanel = true
         card.becomesKeyOnlyIfNeeded = true
@@ -242,7 +251,7 @@ final class RecordingHints {
         panel = card
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             card.alphaValue = 0
-            card.setFrameOrigin(NSPoint(x: origin.x, y: origin.y - 10))
+            if isReady { card.setFrameOrigin(NSPoint(x: origin.x, y: origin.y - 10)) }
         }
         card.orderFrontRegardless()
         if card.alphaValue == 0 {
@@ -269,33 +278,73 @@ final class RecordingHints {
         presentNext()
     }
 
-    private final class HintHost: NSHostingView<Card> {
+    private final class HintHost: NSHostingView<ReadyCard> {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     }
 
-    private struct Card: View {
+    private struct ReadyCard: View {
         let shortcut: String
-        let ready: Bool
         let dismiss: () -> Void
 
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
-                if ready {
-                    Text(L10n.text("可以开始听写了"))
-                        .font(.system(size: 15, weight: .semibold))
-                }
+                Text(L10n.text("可以开始听写了"))
+                    .font(.system(size: 15, weight: .semibold))
                 Label(L10n.text("按下 {0} 即可听写", shortcut), systemImage: "waveform")
                     .font(.system(size: 13))
-                if ready {
-                    Button(L10n.text("明白了"), action: dismiss)
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+                Button(L10n.text("明白了"), action: dismiss)
+                    .buttonStyle(.borderedProminent)
+                    .hoverFeedback(.compact)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.12)))
         }
+    }
+}
+
+private struct TypingReminderPill: View {
+    let shortcut: String
+    private static let message = "按下 {0} 即可听写"
+    private static let waveform: [CGFloat] = [5, 9, 14, 11, 6]
+    private let ink = Color(nsColor: VoiceBarPalette.ink)
+    private let edge = Color(nsColor: VoiceBarPalette.edge)
+
+    var body: some View {
+        HStack(spacing: 9) {
+            HStack(spacing: VoiceBarGeometry.waveformBarGap) {
+                ForEach(Self.waveform.indices, id: \.self) { index in
+                    Capsule().fill(ink.opacity(0.86))
+                        .frame(width: VoiceBarGeometry.waveformBarWidth, height: Self.waveform[index])
+                }
+            }
+            HStack(spacing: 5) {
+                let template = L10n.text(Self.message)
+                if let slot = template.range(of: "{0}") {
+                    Text(template[..<slot.lowerBound].trimmingCharacters(in: .whitespaces))
+                    Text(shortcut)
+                        .font(.custom("AvenirNext-DemiBold", size: 12))
+                        .padding(.horizontal, 7)
+                        .frame(height: 21)
+                        .background(ink.opacity(0.11), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(edge.opacity(0.75)))
+                    Text(template[slot.upperBound...].trimmingCharacters(in: .whitespaces))
+                } else {
+                    Text(L10n.text(Self.message, shortcut))
+                }
+            }
+            .font(L10n.language == "en" ? .custom("AvenirNext-Medium", size: 13)
+                                       : InterfaceTypography.localized(13, weight: .medium))
+        }
+        .foregroundStyle(ink)
+        .padding(.horizontal, 13)
+        .frame(height: PillView.height)
+        .background(Color(nsColor: VoiceBarPalette.surfaceTop), in: Capsule())
+        .overlay(Capsule().strokeBorder(edge))
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(L10n.text(Self.message, shortcut)))
     }
 }

@@ -44,7 +44,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func installSettingsPage(in window: NSWindow) {
         let host = NSHostingController(rootView:
-            SettingsPage(onClose: { [weak self] in self?.close() }).environmentObject(model))
+            SettingsPage(onClose: { [weak self] in self?.close() })
+                .windowHoverEffects()
+                .environmentObject(model))
         host.sizingOptions = []
         window.contentViewController = host
     }
