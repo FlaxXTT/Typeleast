@@ -297,7 +297,7 @@ private final class HubScrollChrome: NSView {
     weak var scroll: NSScrollView?
     private var progressWidth: CGFloat = 0
     private var showsFade = false
-    private let topButton = NSButton()
+    private let topButton = BackToTopButton()
     private let progressLayer = CALayer()
     private let fadeLayer = CAGradientLayer()
     override var isFlipped: Bool { true }
@@ -359,7 +359,10 @@ private final class HubScrollChrome: NSView {
         let width = ((extent > 0 ? min(1, offset / extent) : 0) * bounds.width * scale).rounded() / scale
         let fade = showsBottomFade && extent - offset > 2
         let hideButton = offset < 360
-        if topButton.isHidden != hideButton { topButton.isHidden = hideButton }
+        if topButton.isHidden != hideButton {
+            topButton.resetHover()
+            topButton.isHidden = hideButton
+        }
         if progressWidth != width || showsFade != fade {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -385,4 +388,39 @@ private final class HubScrollChrome: NSView {
         }
     }
 
+}
+
+private final class BackToTopButton: NSButton {
+    private var hoverTracking: NSTrackingArea?
+    private var hovering = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(tracking)
+        hoverTracking = tracking
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovering = isEnabled && !isHidden
+        setControlLift(hovering ? 0.5 : 0)
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) { resetHover() }
+
+    func resetHover() {
+        hovering = false
+        setControlLift(0)
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if hovering && window?.isKeyWindow == true {
+            NSColor(Theme.controlHover).setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: Theme.smallControlRadius, yRadius: Theme.smallControlRadius).fill()
+        }
+        super.draw(dirtyRect)
+    }
 }

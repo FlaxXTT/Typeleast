@@ -3,13 +3,21 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- 听写使用纯文本粘贴，短暂使用剪贴板后恢复原内容。
-- 已打开的窗口重新获得焦点或从 Dock 恢复时跳过首页遮罩。
+- Fn + 空格打开 Harness EQ 转盘，调用已导入的 Skill 或 MCP。外圈热区扩大，选中后会提示松开两键调用。
+- 在设置里导入、分类和归档 Skill。手动整理会给出行内名称建议，可以替换或永久拒绝这条建议。
+- 新手引导先演示常用快捷键和输出，最后再提供模型、API Key 和系统权限配置。
+- 新增 Vocabulary 页面，可管理热词和替换规则。Conference 支持配置豆包录音文件识别模型 2.0。
+- 听写整理保留问句和反问语气，更好地处理自我纠正。普通文本输出保留段落和编号。
+- Cadence 悬停显示每日使用情况，首页统计卡边框更轻。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Dictation uses standard plain-text paste and restores the previous clipboard shortly afterward.
-- Refocusing or restoring an open window skips the Home overlay.
+- Open the Harness EQ wheel with Fn + Space to invoke imported Skills and MCPs. Larger outer hit areas make selection easier, and a hint shows when to release both keys.
+- Import, organize, and archive Skills in Settings. Manual organization suggests names inline so you can accept or permanently decline them.
+- Onboarding demos show common shortcuts and example output before model, API key, and permission setup.
+- Vocabulary manages hotwords and replacements. Conference supports Doubao Recording File Recognition 2.0.
+- Dictation cleanup preserves questions and rhetorical tone, handles spoken corrections, and keeps paragraphs and numbering in plain-text output.
+- Cadence shows daily usage on hover, and the Home statistics cards have lighter outlines.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

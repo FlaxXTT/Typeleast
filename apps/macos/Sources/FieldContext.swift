@@ -210,10 +210,25 @@ enum FieldContextReader {
                 return element
             }
         }
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else { return nil }
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let matchingFrontmost = frontmost?.bundleIdentifier == bundleId ? frontmost : nil
+        guard let app = matchingFrontmost ?? NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
+            return nil
+        }
         let target = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(target, 0.25)
         return copy(target, kAXFocusedUIElementAttribute)
+    }
+
+    /// A quick check for text delivered to the field that already has focus.
+    static func hasSecureFocus(processID: pid_t) -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        let target = AXUIElementCreateApplication(processID)
+        AXUIElementSetMessagingTimeout(target, 0.12)
+        guard let focus: AXUIElement = copy(target, kAXFocusedUIElementAttribute) else { return false }
+        AXUIElementSetMessagingTimeout(focus, 0.12)
+        let subrole: String? = copy(focus, kAXSubroleAttribute)
+        return subrole == kAXSecureTextFieldSubrole as String
     }
 
     /// The reminder asks only about editability. It never retrieves text or its selection.

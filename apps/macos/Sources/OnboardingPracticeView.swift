@@ -1,160 +1,153 @@
 import SwiftUI
-import AppKit
-import QuartzCore
 
-/// 试说一句: the same recording pill as in daily use. Click it or press the dictation key to
-/// start; ✓ finishes, ✕ cancels. The result is shown here only.
 struct OnboardingPracticeView: View {
-    @EnvironmentObject var model: AppModel
+    @EnvironmentObject private var model: AppModel
     @ObservedObject var practice: OnboardingPracticeController
+    let demo: OnboardingDemo
+    @State private var skillHovered = false
 
     var body: some View {
-        VStack(spacing: 18) {
-            Text(L10n.text("试说一句")).font(InterfaceTypography.localized(24, weight: .bold))
-            Text(L10n.text("按 {0} 或点下面的录音条，读这句话。", model.hotkeyLabel))
-                .font(InterfaceTypography.localized(14)).foregroundColor(Theme.secondary).multilineTextAlignment(.center)
-            Text(practice.sample)
-                .font(InterfaceTypography.localized(15, weight: .medium)).multilineTextAlignment(.center)
-                .padding(.horizontal, 18).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
-                .fixedSize(horizontal: false, vertical: true)
-            PracticePill(practice: practice)
-                .environment(\.colorScheme, .dark)
-                .padding(.top, 4)
-            if !practice.status.isEmpty {
-                Text(practice.status).font(InterfaceTypography.localized(14, weight: .medium))
-                    .foregroundColor(practice.needsReview ? Theme.warning : (practice.complete ? Theme.success : Theme.secondary))
-                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-            }
-            ForEach(Array(PracticeResultRow.rows(raw: practice.raw, output: practice.output, needsReview: practice.needsReview).enumerated()), id: \.offset) { _, row in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text(row.title)).font(Theme.captionFont).foregroundColor(Theme.secondary)
-                    Text(row.text).font(InterfaceTypography.localized(14)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 15) {
+            Text(demo.title).font(Theme.sectionTitleFont)
+            Keycap(label: demo.shortcutLabel(in: model.settings), large: true)
+            Text(instruction)
+                .font(InterfaceTypography.localized(14)).foregroundStyle(Theme.secondary)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            if demo == .selectionTranslation {
+                Button(action: practice.selectExample) {
+                    sample.background(practice.selectionHighlighted ? Theme.accent.opacity(0.16) : Theme.card,
+                                      in: RoundedRectangle(cornerRadius: 7))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .circular).fill(Theme.card))
+                .buttonStyle(FlatActionButtonStyle())
+                .accessibilityAddTraits(practice.selectionHighlighted ? .isSelected : [])
+            } else if demo.usesSpeech {
+                sample
+                PracticePill(practice: practice)
+                    .font(InterfaceTypography.localized(13, weight: .medium))
+                    .foregroundStyle(.white)
             }
+            if practice.showingSkill {
+                VStack(spacing: 5) {
+                    Image(systemName: "circle.hexagongrid").font(.system(size: 22, weight: .medium))
+                    Text(demo.sample).font(Theme.rowFont)
+                }
+                .frame(width: 100, height: 100)
+                .background(Circle().fill(skillHovered ? Theme.selection : Theme.card))
+                .overlay(Circle().strokeBorder(Theme.border))
+                .onHover { skillHovered = $0 }
+                .onDisappear { skillHovered = false }
+                .accessibilityElement(children: .combine)
+            }
+            outputField
+            Text(L10n.text("这是演示。示例只写在这个窗口。"))
+                .font(Theme.captionFont).foregroundStyle(Theme.secondary)
         }
-        .onAppear { practice.acceptsShortcut = true }
-        .onDisappear { practice.acceptsShortcut = false; practice.cancel() }
+        .frame(maxWidth: 555)
+    }
+
+    private var instruction: String {
+        if demo == .skill, demo.binding(in: model.settings).fnChord == .space {
+            return L10n.text("按住 Fn 和空格打开 Harness EQ，移到想用的 Skill，再松开两键调用。")
+        }
+        return demo.instruction
+    }
+
+    private var sample: some View {
+        Text(demo.sample).font(Theme.rowFont)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .multilineTextAlignment(.center)
+    }
+
+    private var outputField: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label(demo == .selectionTranslation ? L10n.text("翻译面板") : L10n.text("练习输入框"),
+                  systemImage: demo == .selectionTranslation ? "character.bubble" : "text.cursor")
+                .font(Theme.captionFont).foregroundStyle(Theme.secondary)
+            Text(practice.output.isEmpty ? L10n.text("示例结果会显示在这里。") : practice.output)
+                .font(Theme.rowFont)
+                .foregroundStyle(practice.output.isEmpty ? Theme.secondary : Theme.ink)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border))
+        .accessibilityIdentifier("onboarding-demo-output")
     }
 }
 
-/// Practice and desktop dictation use the same native capsule and animation engine.
+/// An inline SwiftUI capsule keeps the animated demo inside the guide's layout.
 private struct PracticePill: View {
     @ObservedObject var practice: OnboardingPracticeController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
-        if practice.phase == .idle {
-            Button(action: practice.toggle) {
-                HStack(spacing: 10) {
-                    Image(systemName: "waveform").font(.system(size: 14, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
-                    Text(practice.complete ? L10n.text("再试一次") : L10n.text("点这里开始"))
-                        .font(InterfaceTypography.localized(12, weight: .medium)).padding(.trailing, 12)
-                }
-                .foregroundColor(.white)
-                .padding(3)
-                .background(Capsule().fill(LinearGradient(
-                    colors: [Color(nsColor: VoiceBarPalette.surfaceTop), Color(nsColor: VoiceBarPalette.surfaceBottom)],
-                    startPoint: .top, endPoint: .bottom)))
-                .overlay(Capsule().stroke(Color(nsColor: VoiceBarPalette.edge), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-        } else {
-            PracticeVoiceBar(practice: practice).frame(width: 240, height: PillView.height)
-        }
-    }
-}
-
-private struct PracticeVoiceBar: NSViewRepresentable {
-    let practice: OnboardingPracticeController
-    func makeNSView(context: Context) -> PracticeVoiceBarHost { PracticeVoiceBarHost(practice: practice) }
-    func updateNSView(_ view: PracticeVoiceBarHost, context: Context) { view.applyPhase() }
-    static func dismantleNSView(_ view: PracticeVoiceBarHost, coordinator: ()) { view.stopAnimation() }
-}
-
-/// Audio ticks redraw the capsule without publishing frames through the onboarding tree.
-private final class PracticeVoiceBarHost: NSView {
-    private weak var practice: OnboardingPracticeController?
-    private let pill = PillView(frame: NSRect(x: 0, y: 0, width: 118, height: PillView.height))
-    private var phase: AppPhase?
-    private var model = RecordingBarModel()
-    private var timer: Timer?
-    private var lastFrame = ProcessInfo.processInfo.systemUptime
-    private var sampleTime: Double = 0
-
-    init(practice: OnboardingPracticeController) {
-        self.practice = practice
-        super.init(frame: NSRect(x: 0, y: 0, width: 240, height: PillView.height))
-        pill.limitSeconds = 40
-        pill.onCancel = { [weak practice] in practice?.cancel() }
-        pill.onStop = { [weak practice] in practice?.stop() }
-        addSubview(pill)
-        applyPhase()
-    }
-    required init?(coder: NSCoder) { fatalError("Practice voice bar is created in code") }
-    deinit { timer?.invalidate() }
-
-    func applyPhase() {
-        guard let practice, phase != practice.phase else { return }
-        phase = practice.phase
-        sampleTime = 0
-        pill.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    @ViewBuilder var body: some View {
         switch practice.phase {
-        case .recording: model.showRecording(destination: "tutorial")
-        case .starting: model.showThinking(detail: L10n.text("正在打开麦克风…"), startingMicrophone: true)
-        case .thinking: model.showThinking(detail: L10n.text("正在整理…"))
-        case .idle: model.hide()
+        case .idle, .starting:
+            Button {
+                if let shortcut = practice.mode?.shortcut { practice.handle(shortcut) }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform").accessibilityHidden(true)
+                    Text(L10n.text(practice.complete ? "再试一次" : "开始练习"))
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(surface)
+            }
+            .buttonStyle(FlatActionButtonStyle())
+        case .recording:
+            HStack(spacing: 3) {
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion)) { _ in
+                    HStack(spacing: 3) {
+                        ForEach(0..<9) { index in
+                            let width = 1 - abs(Double(index) - 4) * 0.16
+                            let time = reduceMotion ? 0 : practice.elapsed
+                            let wave = 0.45 + 0.55 * abs(sin(time * 6 - Double(index) * 0.55))
+                            Capsule().fill(Color.white)
+                                .frame(width: 2, height: 3 + CGFloat(wave * width) * 17)
+                        }
+                    }
+                    .frame(width: 48, height: 24)
+                    .accessibilityHidden(true)
+                }
+                Button(action: practice.stop) {
+                    Image(systemName: "stop.fill").font(.system(size: 9, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(Color.white.opacity(0.15)))
+                }
+                .buttonStyle(FlatActionButtonStyle(feedback: .fixed))
+                .accessibilityLabel(L10n.text("结束录音"))
+            }
+            .padding(.leading, 10).padding(.trailing, 7)
+            .frame(height: 34)
+            .background(surface)
+        case .thinking:
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion)) { timeline in
+                HStack(spacing: 7) {
+                    Text("Thinking")
+                    HStack(spacing: 3) {
+                        ForEach(0..<5) { index in
+                            let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                            Circle().fill(Color.white.opacity(0.85))
+                                .frame(width: 3, height: 3)
+                                .offset(y: CGFloat(sin(time * 6 - Double(index) * 0.65)) * 3)
+                        }
+                    }
+                    .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(surface)
+            }
         }
-        pill.model = model
-        needsLayout = true
     }
 
-    override func layout() {
-        super.layout()
-        let width = pill.presentationWidth
-        let height = pill.presentationHeight
-        let frame = NSRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
-        guard pill.frame != frame else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = pill.reduceMotion || window == nil ? 0 : 0.20
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.05, 0.6, 0.4, 0.95)
-            pill.animator().setFrameOrigin(frame.origin)
-            pill.animator().setFrameSize(frame.size)
-        }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        stopAnimation()
-        guard window != nil else { return }
-        lastFrame = ProcessInfo.processInfo.systemUptime
-        let interval = pill.reduceMotion ? VoiceCaptureMeter.interval : 1.0 / 60.0
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.tick() }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-    }
-
-    func stopAnimation() { timer?.invalidate(); timer = nil }
-
-    private func tick() {
-        guard let practice else { stopAnimation(); return }
-        let now = ProcessInfo.processInfo.systemUptime
-        sampleTime += min(0.1, max(0, now - lastFrame))
-        lastFrame = now
-        if practice.phase == .recording, sampleTime >= VoiceCaptureMeter.interval {
-            sampleTime.formTruncatingRemainder(dividingBy: VoiceCaptureMeter.interval)
-            let oldWidth = PillView.width(for: model, limit: 40)
-            model.update(level: practice.voiceLevel, elapsed: practice.elapsed)
-            pill.model = model
-            pill.receiveLevel(model.level, at: now)
-            if oldWidth != PillView.width(for: model, limit: 40) { needsLayout = true }
-        }
-        let wasHoldingWidth = pill.holdsRecordingWidth
-        pill.advance(at: now)
-        if wasHoldingWidth && !pill.holdsRecordingWidth { needsLayout = true }
+    private var surface: some View {
+        Capsule()
+            .fill(LinearGradient(colors: [Color(nsColor: VoiceBarPalette.surfaceTop), Color(nsColor: VoiceBarPalette.surfaceBottom)],
+                                 startPoint: .top, endPoint: .bottom))
+            .overlay(Capsule().strokeBorder(Color(nsColor: VoiceBarPalette.edge), lineWidth: 0.5))
     }
 }

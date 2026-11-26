@@ -27,38 +27,36 @@ enum FnChord: UInt32 {
     }
 }
 
-/// Pure tap recogniser: Fn down, Fn up within a short window, nothing else pressed.
+/// One event-driven decision window for a bare Fn press or a configured chord.
 struct FnTapDetector {
-    /// Longer holds are treated as "the user is doing something else with Fn".
-    static let maxTapSeconds: TimeInterval = 0.6
+    static let decisionSeconds: TimeInterval = 2
 
-    private(set) var isDown = false
-    private var downAt: Date?
+    private var downAt: TimeInterval?
     private var spoiled = false
-    var canHold: Bool { isDown && !spoiled }
+    var isDown: Bool { downAt != nil }
 
-    /// Fn went down. Another modifier already held spoils the tap (⌃Fn, ⌘Fn …).
-    mutating func fnDown(at time: Date, otherModifiersHeld: Bool) {
-        isDown = true
+    static func inDecisionWindow(from down: TimeInterval?, to eventTime: TimeInterval) -> Bool {
+        guard let down else { return false }
+        let elapsed = eventTime - down
+        return elapsed >= 0 && elapsed <= decisionSeconds
+    }
+
+    func allowsChord(at time: TimeInterval) -> Bool {
+        Self.inDecisionWindow(from: downAt, to: time)
+    }
+
+    mutating func fnDown(at time: TimeInterval, otherModifiersHeld: Bool) {
         downAt = time
         spoiled = otherModifiersHeld
     }
 
-    /// Any other key or modifier while Fn is held turns the press into a chord.
     mutating func otherInput() {
         if isDown { spoiled = true }
     }
 
-    /// Fn went up. Returns true when that completes a clean tap.
-    mutating func fnUp(at time: Date) -> Bool {
-        defer {
-            isDown = false
-            downAt = nil
-            spoiled = false
-        }
-        guard isDown, let started = downAt, !spoiled else { return false }
-        let held = time.timeIntervalSince(started)
-        return held >= 0 && held <= FnTapDetector.maxTapSeconds
+    mutating func fnUp(at time: TimeInterval) -> Bool {
+        defer { self = FnTapDetector() }
+        return !spoiled && allowsChord(at: time)
     }
 }
 
@@ -103,31 +101,108 @@ private let fnSpaceCallback: CGEventTapCallBack = { _, type, event, context in
     return filter.consumes(type, event: event) ? nil : Unmanaged.passUnretained(event)
 }
 
-/// Filter only the configured Space chord. The tap thread never waits on the UI.
-private final class FnSpaceFilter {
-    let pressed: () -> Void
-    private let lock = NSLock()
-    private var eventTap: CFMachPort?
-    private var allowed = false
-    private var held = false
-    private var consumedDuringFn = false
-
-    init(pressed: @escaping () -> Void) { self.pressed = pressed }
-
-    func setAllowed(_ allowed: Bool) {
-        lock.withLock { self.allowed = allowed }
+struct FnSpaceGesture {
+    enum Result: Equatable {
+        case pass, consumed, pressed, released(consumingSpace: Bool)
     }
 
-    func endFnGesture() -> Bool {
-        lock.withLock {
-            defer { consumedDuringFn = false }
-            return consumedDuringFn
+    private enum Hold { case idle, spaceDown, fnOnly }
+    private var hold = Hold.idle
+    private var fnDownAt: TimeInterval?
+    private var reservedForShift = false
+    private var consumedDuringFn = false
+
+    mutating func fnChanged(down: Bool, at time: TimeInterval) -> Result {
+        if down {
+            if fnDownAt == nil {
+                fnDownAt = time
+                reservedForShift = false
+                if hold != .idle { consumedDuringFn = true }
+            }
+        } else {
+            fnDownAt = nil
+            if hold == .fnOnly {
+                hold = .idle
+                return .released(consumingSpace: false)
+            }
+        }
+        return .pass
+    }
+
+    mutating func spaceChanged(down: Bool, repeated: Bool, canStart: Bool,
+                               otherModifiersHeld: Bool, at time: TimeInterval) -> Result {
+        switch hold {
+        case .spaceDown:
+            guard !down else { return .consumed }
+            if fnDownAt != nil {
+                hold = .fnOnly
+                return .consumed
+            }
+            hold = .idle
+            return .released(consumingSpace: true)
+        case .fnOnly:
+            if down && !repeated { hold = .spaceDown }
+            return .consumed
+        case .idle:
+            guard canStart, down, !repeated, !otherModifiersHeld, !reservedForShift, !consumedDuringFn,
+                  FnTapDetector.inDecisionWindow(from: fnDownAt, to: time) else { return .pass }
+            hold = .spaceDown
+            consumedDuringFn = true
+            return .pressed
         }
     }
 
+    mutating func reserveForShift() -> Bool {
+        guard hold == .idle, !consumedDuringFn else { return false }
+        reservedForShift = true
+        return true
+    }
+
+    mutating func endFnGesture() -> Bool {
+        defer { consumedDuringFn = false }
+        return consumedDuringFn
+    }
+
+    mutating func cancel() -> Bool {
+        let wasHeld = hold != .idle
+        self = FnSpaceGesture()
+        return wasHeld
+    }
+}
+
+/// Filter only the configured Space chord. The tap thread never waits on the UI.
+private final class FnSpaceFilter {
+    let pressed: () -> Void
+    let released: () -> Void
+    let cancelled: () -> Void
+    private let lock = NSLock()
+    private var eventTap: CFMachPort?
+    private var allowed = false
+    private var gesture = FnSpaceGesture()
+
+    init(pressed: @escaping () -> Void, released: @escaping () -> Void, cancelled: @escaping () -> Void) {
+        self.pressed = pressed
+        self.released = released
+        self.cancelled = cancelled
+    }
+
+    func setAllowed(_ allowed: Bool) {
+        lock.withLock {
+            guard self.allowed != allowed else { return }
+            self.allowed = allowed
+            cancelGesture()
+        }
+    }
+
+    func endFnGesture() -> Bool { lock.withLock { gesture.endFnGesture() } }
+
+    var isRunning: Bool { lock.withLock { eventTap != nil } }
+    func reserveForShift() -> Bool { lock.withLock { gesture.reserveForShift() } }
+
     func start() {
         guard eventTap == nil else { return }
-        let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) |
+            (1 << CGEventType.flagsChanged.rawValue)
         guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
                                           options: .defaultTap, eventsOfInterest: mask,
                                           callback: fnSpaceCallback, userInfo: Unmanaged.passUnretained(self).toOpaque())
@@ -148,8 +223,7 @@ private final class FnSpaceFilter {
         let tap = lock.withLock {
             let tap = eventTap
             eventTap = nil
-            held = false
-            consumedDuringFn = false
+            cancelGesture()
             return tap
         }
         if let tap { CFMachPortInvalidate(tap) }
@@ -158,25 +232,47 @@ private final class FnSpaceFilter {
     func consumes(_ type: CGEventType, event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             lock.withLock {
-                held = false
+                cancelGesture()
                 if type == .tapDisabledByTimeout, let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
             }
             return false
         }
-        guard event.getIntegerValueField(.keyboardEventKeycode) == Int64(FnChord.space.rawValue) else { return false }
+        let key = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
+        let time = Double(event.timestamp) / 1_000_000_000
+        return process(key: key, flags: flags, isModifierEvent: type == .flagsChanged,
+                       down: type == .keyDown, repeated: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+                       canStart: true, at: time)
+    }
+
+    func process(key: Int64, flags: NSEvent.ModifierFlags, isModifierEvent: Bool, down: Bool,
+                 repeated: Bool, canStart: Bool, at time: TimeInterval) -> Bool {
+        let gestureKey = isModifierEvent ? Int64(FnKeyMonitor.keyCode) : Int64(FnChord.space.rawValue)
+        guard key == gestureKey else { return false }
         return lock.withLock {
-            if held {
-                if type == .keyUp { held = false }
-                return true
+            let result: FnSpaceGesture.Result
+            if isModifierEvent {
+                result = gesture.fnChanged(down: flags.contains(.function), at: time)
+            } else {
+                result = gesture.spaceChanged(down: down, repeated: repeated,
+                    canStart: canStart && allowed,
+                    otherModifiersHeld: !flags.intersection(FnChord.standardModifiers).isEmpty, at: time)
             }
-            guard allowed && type == .keyDown && FnChord.matches(.space, flags: flags),
-                  event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return false }
-            held = true
-            consumedDuringFn = true
-            DispatchQueue.main.async(execute: pressed)
-            return true
+            switch result {
+            case .pass: return false
+            case .consumed: return true
+            case .pressed:
+                DispatchQueue.main.async(execute: pressed)
+                return true
+            case .released(let consumingSpace):
+                DispatchQueue.main.async(execute: released)
+                return consumingSpace
+            }
         }
+    }
+
+    private func cancelGesture() {
+        if gesture.cancel() { DispatchQueue.main.async(execute: cancelled) }
     }
 }
 
@@ -189,8 +285,8 @@ final class FnKeyMonitor {
 
     /// Called after a clean tap with the input source that was active when Fn went down.
     var onTap: ((String?) -> Void)?
-    var onHold: (() -> Bool)?
-    var onHoldEnd: (() -> Void)?
+    var onSpaceRelease: (() -> Void)?
+    var onSpaceCancel: (() -> Void)?
     var capturingShortcut = false {
         didSet {
             if capturingShortcut != oldValue {
@@ -205,15 +301,15 @@ final class FnKeyMonitor {
     private var sourceAtDown: String?
     private var bareFnEnabled = false
     private var chords: [FnChord: () -> Void] = [:]
-    private var eatsSpace = false
     private var triggeredChord = false
-    private var holdWork: DispatchWorkItem?
-    private var heldDictation = false
-    private lazy var spaceFilter = FnSpaceFilter { [weak self] in
+    private lazy var spaceFilter = FnSpaceFilter(pressed: { [weak self] in
         guard let self, !self.capturingShortcut else { return }
-        self.detector.otherInput()
-        _ = self.trigger(.space)
-    }
+        self.chords[.space]?()
+    }, released: { [weak self] in
+        self?.onSpaceRelease?()
+    }, cancelled: { [weak self] in
+        self?.onSpaceCancel?()
+    })
 
     var isRunning: Bool { !monitors.isEmpty }
 
@@ -227,7 +323,7 @@ final class FnKeyMonitor {
         guard bareFnEnabled || !chords.isEmpty else { stop(); return }
         spaceFilter.setAllowed(!capturingShortcut && chords[.space] != nil)
         if chords[.space] != nil && AXIsProcessTrusted() { spaceFilter.start() }
-        else { spaceFilter.stop() }
+        else if spaceFilter.isRunning { spaceFilter.stop() }
         guard monitors.isEmpty else { return }
         let events: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] event in
@@ -242,83 +338,62 @@ final class FnKeyMonitor {
         spaceFilter.stop()
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors.removeAll()
-        eatsSpace = false
         resetGesture()
     }
 
     private func resetGesture() {
-        holdWork?.cancel()
-        holdWork = nil
-        if heldDictation { onHoldEnd?() }
-        heldDictation = false
         detector = FnTapDetector()
         sourceAtDown = nil
         triggeredChord = false
     }
 
     private func forward(_ event: NSEvent, canConsume: Bool) -> Bool {
-        if event.type == .flagsChanged {
-            handleFlags(key: Int64(event.keyCode), flags: event.modifierFlags)
-            return true
+        let key = Int64(event.keyCode)
+        let down = event.type == .keyDown
+        let modifier = event.type == .flagsChanged
+        if !spaceFilter.isRunning,
+           spaceFilter.process(key: key, flags: event.modifierFlags, isModifierEvent: modifier,
+                               down: down, repeated: down && event.isARepeat,
+                               canStart: canConsume && event.modifierFlags.contains(.function),
+                               at: event.timestamp), canConsume { return false }
+        if modifier {
+            handleFlags(key: key, flags: event.modifierFlags, at: event.timestamp)
+        } else if down && !capturingShortcut {
+            detector.otherInput()
         }
-        return forwardKey(Int64(event.keyCode), flags: event.modifierFlags, down: event.type == .keyDown,
-                          repeated: event.type == .keyDown && event.isARepeat, canConsume: canConsume)
+        return true
     }
 
-    private func handleFlags(key: Int64, flags: NSEvent.ModifierFlags) {
+    private func handleFlags(key: Int64, flags: NSEvent.ModifierFlags, at time: TimeInterval) {
         guard !capturingShortcut else { return }
         if key != Int64(Self.keyCode) {
             detector.otherInput()
             if key == Int64(FnChord.leftShift.rawValue), FnChord.matches(.leftShift, flags: flags) {
-                _ = trigger(.leftShift)
+                triggerShift(at: time)
             }
         } else if flags.contains(.function) {
             guard !detector.isDown else { return }
             triggeredChord = false
             sourceAtDown = bareFnEnabled ? InputSourceProbe.currentID() : nil
-            detector.fnDown(at: Date(), otherModifiersHeld: !flags.intersection(FnChord.standardModifiers).isEmpty)
-            if bareFnEnabled, FnTapGate.currentDelay == 0, detector.canHold {
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self, self.detector.canHold, !self.triggeredChord else { return }
-                    self.heldDictation = self.onHold?() == true
-                }
-                holdWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + FnTapDetector.maxTapSeconds, execute: work)
-            }
+            detector.fnDown(at: time, otherModifiersHeld: !flags.intersection(FnChord.standardModifiers).isEmpty)
             if (flags.rawValue & 0x06) == 0x02, FnChord.matches(.leftShift, flags: flags) {
-                _ = trigger(.leftShift)
+                triggerShift(at: time)
             }
         } else {
-            let cleanTap = detector.fnUp(at: Date())
+            let cleanTap = detector.fnUp(at: time)
             let usedSpace = spaceFilter.endFnGesture()
             defer { resetGesture() }
-            guard !heldDictation, bareFnEnabled && cleanTap && !usedSpace else { return }
+            guard bareFnEnabled, cleanTap, !triggeredChord, !usedSpace else { return }
             let action = onTap
             let source = sourceAtDown
             DispatchQueue.main.async { action?(source) }
         }
     }
 
-    private func forwardKey(_ key: Int64, flags: NSEvent.ModifierFlags, down: Bool,
-                            repeated: Bool, canConsume: Bool) -> Bool {
-        let isSpace = key == Int64(FnChord.space.rawValue)
-        if isSpace && eatsSpace && canConsume {
-            if !down { eatsSpace = false }
-            return false
-        }
-        guard !capturingShortcut && down else { return true }
-        detector.otherInput()
-        guard canConsume && isSpace && !repeated && FnChord.matches(.space, flags: flags),
-              trigger(.space) else { return true }
-        eatsSpace = true
-        return false
-    }
-
-    @discardableResult
-    private func trigger(_ chord: FnChord) -> Bool {
-        guard !heldDictation, !triggeredChord, let action = chords[chord] else { return false }
+    private func triggerShift(at time: TimeInterval) {
+        guard !triggeredChord, let action = chords[.leftShift],
+              detector.allowsChord(at: time), spaceFilter.reserveForShift() else { return }
         triggeredChord = true
         DispatchQueue.main.async(execute: action)
-        return true
     }
 }

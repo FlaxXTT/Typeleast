@@ -17,37 +17,63 @@ extension OnlineASRProvider {
 }
 
 struct OnlineASRSettings: View {
+    var dictationOnly = false
     @EnvironmentObject private var model: AppModel
+    @State private var showsVocabularyTables = false
 
     private var cloudProviders: [OnlineASRProvider] {
         let dictation = model.settings.onlineASRProvider
+        if dictationOnly { return dictation == .local ? [] : [dictation] }
         let meeting = model.settings.meetingASRProvider
         return (dictation == meeting ? [dictation] : [dictation, meeting]).filter { $0 != .local }
     }
 
     var body: some View {
-        SettingsSection(title: L10n.text("语音识别来源")) {
+        SettingsSection(title: L10n.text("语音识别来源"), tiltOnHover: true) {
             SettingRow(title: L10n.text("听写模型"),
                        detail: dictationUploadDetail) {
                 ASRProviderPicker(selection: model.setting(\.onlineASRProvider))
             }
-            SettingRow(title: L10n.text("会议模型"),
-                       detail: model.settings.meetingASRProvider == .local ? nil : L10n.text("录音结束或导入后上传，可能按用量计费。")) {
-                ASRProviderPicker(selection: model.setting(\.meetingASRProvider), localLabel: "MOSS · " + L10n.text("本地"))
+            if !dictationOnly {
+                SettingRow(title: L10n.text("会议模型"),
+                           detail: model.settings.meetingASRProvider == .local ? nil : L10n.text("录音结束或导入后上传，可能按用量计费。")) {
+                    ASRProviderPicker(selection: model.setting(\.meetingASRProvider), localLabel: "MOSS · " + L10n.text("本地"),
+                                      doubaoLabel: DoubaoMeetingASR.modelName)
+                }
             }
             ForEach(cloudProviders, id: \.self) { provider in
                 OnlineASRCredentials(provider: provider)
-                if provider == .doubao {
+                if provider == .doubao && !dictationOnly {
                     ToggleRow(title: L10n.text("豆包语义顺滑"),
                               detail: L10n.text("在识别时去除中文和英文的语气词与重复。"),
                               isOn: model.setting(\.doubaoSpeechSmoothing))
-                    let title = L10n.text("豆包热词")
-                    SettingRow(title: title, detail: L10n.text("每行一个词，随录音发给豆包。")) {
-                        CapsuleTextEditor(text: model.setting(\.doubaoHotwords), placeholder: L10n.text("人名、品牌或术语"))
-                            .accessibilityLabel(title)
-                            .frame(width: 225, height: 52)
+                    Button(L10n.text("管理词表")) {
+                        model.settingsPresented = false
+                        model.navigate(to: .vocabulary)
+                    }
+                    .buttonStyle(FlatActionButtonStyle())
+                    .foregroundStyle(Theme.accent)
+                    DisclosureGroup(L10n.text("豆包控制台词表"), isExpanded: $showsVocabularyTables) {
+                        vocabularyTable(L10n.text("热词表 ID"), consolePath: "hotword",
+                                        value: model.setting(\.doubaoHotwordTableID))
+                        vocabularyTable(L10n.text("替换词表 ID"), consolePath: "correctword",
+                                        value: model.setting(\.doubaoReplacementTableID))
                     }
                 }
+            }
+        }
+    }
+
+    private func vocabularyTable(_ title: String, consolePath: String, value: Binding<String>) -> some View {
+        SettingRow(title: title, detail: nil) {
+            HStack(spacing: 8) {
+                Link(destination: URL(string: "https://console.volcengine.com/speech/" + consolePath)!) {
+                    Image(systemName: "arrow.up.right.square").accessibilityLabel(L10n.text("打开豆包控制台"))
+                }
+                TextField(title, text: value)
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 225)
             }
         }
     }
@@ -64,15 +90,25 @@ struct OnlineASRSettings: View {
 struct ASRProviderPicker: View {
     @Binding var selection: OnlineASRProvider
     var localLabel: String? = nil
+    var doubaoLabel: String? = nil
 
     var body: some View {
         Picker("", selection: $selection) {
             ForEach(OnlineASRProvider.allCases, id: \.self) { option in
-                Text(option == .local ? localLabel ?? option.label : option.label).tag(option)
+                Text(label(for: option)).tag(option)
             }
         }
         .labelsHidden()
-        .frame(width: 225)
+        .frame(width: doubaoLabel == nil ? 225 : 285)
+        .hoverFeedback(.fixed)
+    }
+
+    private func label(for option: OnlineASRProvider) -> String {
+        switch option {
+        case .local: return localLabel ?? option.label
+        case .doubao: return doubaoLabel ?? option.label
+        case .funASR: return option.label
+        }
     }
 }
 
@@ -147,6 +183,7 @@ private struct OnlineASRCredentials: View {
         let provider = provider
         let key = keyDraft
         let workspace = workspaceDraft
+        let tables = model.settings.doubaoVocabularyTables
         saveMessage = ""
         testMessage = ""
         testFailed = false
@@ -155,7 +192,7 @@ private struct OnlineASRCredentials: View {
                 let credential = key.isEmpty ? (KeychainStore.read(account: provider.keychainAccount) ?? "") : key
                 try Task.checkCancellation()
                 return try await OnlineASR.testConnection(configuration: OnlineASRConfiguration(
-                    provider: provider, apiKey: credential, workspaceID: workspace
+                    provider: provider, apiKey: credential, workspaceID: workspace, doubaoTables: tables
                 ))
             }
             do {

@@ -184,7 +184,7 @@ struct QuantityReviewView: View {
                         .font(Theme.captionFont).foregroundColor(Theme.secondary)
                 }
                 Spacer()
-                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, symbolSize: 12, action: dismiss)
+                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, symbolSize: 12, feedback: .fixed, action: dismiss)
                     .accessibilityLabel(L10n.text("关闭"))
             }
             Divider().overlay(Theme.border)
@@ -216,7 +216,7 @@ struct QuantityReviewView: View {
                     Text(resultLabel).font(InterfaceTypography.localized(13, weight: .semibold))
                     Spacer()
                     Button(L10n.text("编辑结果")) { focus = ReviewEditFocus(quote: nil) }
-                        .buttonStyle(.link).font(Theme.captionFont).foregroundColor(Theme.accent)
+                        .buttonStyle(FlatActionButtonStyle()).font(Theme.captionFont).foregroundColor(Theme.accent)
                 }
                 ReviewTextEditor(text: $editedCandidate, quotes: issues.map(\.candidate), focus: focus)
                     .accessibilityLabel(resultLabel)
@@ -249,7 +249,7 @@ struct QuantityReviewView: View {
                 Spacer()
                 if ReviewEditFocus.uniqueRange(of: issue.candidate, in: editedCandidate) != nil {
                     Button(L10n.text("定位修改")) { focus = ReviewEditFocus(quote: issue.candidate) }
-                        .buttonStyle(.link).font(Theme.captionFont).foregroundColor(Theme.accent)
+                        .buttonStyle(FlatActionButtonStyle()).font(Theme.captionFont).foregroundColor(Theme.accent)
                 }
             }
             HStack(alignment: .top, spacing: 12) {

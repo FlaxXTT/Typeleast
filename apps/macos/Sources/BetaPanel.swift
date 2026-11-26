@@ -226,6 +226,6 @@ private struct ChoiceChipStyle: ButtonStyle {
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(Capsule(style: .circular).fill(selected ? Theme.accent : Theme.card))
             .overlay(Capsule(style: .circular).stroke(Theme.border))
-            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.capsuleRadius))
+            .modifier(ControlMotion(pressed: configuration.isPressed, cornerRadius: Theme.capsuleRadius, feedback: .fixed))
     }
 }

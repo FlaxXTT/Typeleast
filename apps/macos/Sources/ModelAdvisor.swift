@@ -116,7 +116,7 @@ struct ModelRecommendationCard: View {
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary).frame(width: 22, height: 22).contentShape(Rectangle())
                 }
-                .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius))
+                .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius, feedback: .fixed))
                 .help(L10n.text("关闭"))
             }
             switch state {
@@ -143,11 +143,13 @@ struct ModelRecommendationCard: View {
                     }
                     if recommendation.hasSupportedAdvice, let source = recommendation.capabilitySourceURL {
                         Link(L10n.text("产品设置参考：{0}", source.host ?? ""), destination: source)
+                            .hoverFeedback(.compact)
                             .font(InterfaceTypography.localized(12)).foregroundColor(.secondary)
                             .lineLimit(1).truncationMode(.middle)
                     }
                     if recommendation.hasSupportedAdvice, let source = recommendation.capabilityModelSourceURL {
                         Link(L10n.text("模型能力参考：{0}", source.host ?? ""), destination: source)
+                            .hoverFeedback(.compact)
                             .font(InterfaceTypography.localized(12)).foregroundColor(.secondary)
                             .lineLimit(1).truncationMode(.middle)
                     }

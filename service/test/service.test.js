@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { VoicePolishService } from "../lib/service.js";
 import { BRIEF_CLEANUP_PROMPT, CLEANUP_PROMPT, MINIMAL_CLEANUP_PROMPT } from "../lib/prompts/cleanup.js";
+import { dictationFormatInstruction } from "../lib/dictation-format.js";
 import { readdirSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -108,6 +109,35 @@ test("short cleanup progress only starts when either input path invokes the mode
   assert.equal(service.taskProgress("raw-only").stage, "waiting");
 });
 
+test("explicit speech retractions reach short cleanup and its fallback as final wording only", async () => {
+  const rawText = "A A A B B B 啊说错了说错了，应该是 C C C 。";
+  const model = fakeModel('{"text":"C。","corrections":[]}');
+  const service = makeService({ model });
+  const request = { rawText, llm: ROUTE, shortCleanup: { maxUnits: 25, fullAbove: 100 } };
+  const result = await service.polish(request);
+  assert.equal(result.raw, rawText);
+  assert.equal(result.text, "C。");
+  assert.equal(JSON.parse(model.calls[0].body.messages[1].content).raw_asr_transcript, "C。");
+  assert.equal((await service.polish({ ...request, llm: undefined })).text, "C。");
+  assert.equal((await service.polish({ ...request, skipCleanup: true })).text, rawText);
+  assert.equal((await makeService({ model: fakeModel("", { status: 503 }) }).polish(request)).text, "C。");
+});
+
+test("corrections keep surrounding instructions, and quoted corrections are still content", async () => {
+  const service = makeService();
+  const result = await service.polish({ rawText: "先准备材料，等15分钟，说错了，应该是25分钟，然后出门。", language: "zh" });
+  assert.equal(result.text, "先准备材料，等25分钟，然后出门。");
+  const quoted = "他说：“A 说错了，应该是 B。”";
+  assert.equal((await service.polish({ rawText: quoted })).text, quoted);
+  const reported = "他刚才说错了，应该是周四。";
+  assert.equal((await service.polish({ rawText: reported })).text, reported);
+  const model = fakeModel('{"text":"请把文件交给王芳。"}');
+  const interpreted = await makeService({ model }).polish({ rawText: "请把文件交给李明，说错了，应该是王芳。",
+    llm: ROUTE, shortCleanup: { maxUnits: 25, fullAbove: 100 } });
+  assert.match(model.calls[0].body.messages[0].content, /explicit spoken correction/u);
+  assert.equal(interpreted.text, "请把文件交给王芳。");
+});
+
 test('language conversion uses the recognizer\'s effective language, not an unsupported saved hint', async () => {
   const recognizer = { transcribe: async () => ({ text: '会社の設定', language: 'auto', detectedLanguage: null }) };
   const service = makeService({ recognizer });
@@ -173,7 +203,7 @@ test("saving the ASR Engineering prompt changes the next dictation on both recog
   const currentPrompt = () => model.calls.at(-1).body.messages[0].content;
 
   await service.polish(input);
-  assert.equal(currentPrompt(), CLEANUP_PROMPT);
+  assert.equal(currentPrompt(), CLEANUP_PROMPT + dictationFormatInstruction(false));
 
   await writeFile(file, "  Preserve the original paragraph breaks.  ");
   await service.polish({ ...input, profile: "研究者", fieldContext: { before: "项目邮件" } });
@@ -193,7 +223,7 @@ test("saving the ASR Engineering prompt changes the next dictation on both recog
 
   await rm(file);
   await service.polish(input);
-  assert.equal(currentPrompt(), CLEANUP_PROMPT);
+  assert.equal(currentPrompt(), CLEANUP_PROMPT + dictationFormatInstruction(false));
 });
 
 test("the brief prompt reloads from its own file for both recognition paths", async (t) => {
@@ -208,7 +238,7 @@ test("the brief prompt reloads from its own file for both recognition paths", as
   const input = { rawText, llm: ROUTE, shortCleanup };
 
   await service.polish(input);
-  assert.equal(currentPrompt(), BRIEF_CLEANUP_PROMPT);
+  assert.equal(currentPrompt(), BRIEF_CLEANUP_PROMPT + dictationFormatInstruction(false));
 
   await writeFile(file, "Keep the speaker's pauses as short sentences.");
   await service.polish({ ...input, profile: "Private profile", fieldContext: { before: "Private cursor context" } });
@@ -227,7 +257,7 @@ test("the brief prompt reloads from its own file for both recognition paths", as
   for (const restored of [BRIEF_CLEANUP_PROMPT, "  \n "]) {
     await writeFile(file, restored);
     await service.polish(input);
-    assert.equal(currentPrompt(), BRIEF_CLEANUP_PROMPT);
+    assert.equal(currentPrompt(), BRIEF_CLEANUP_PROMPT + dictationFormatInstruction(false));
   }
 });
 
@@ -242,11 +272,42 @@ test("a success reply inserts its text; corrections and intention come back for 
   assert.equal(result.intention, "1. 修复显存溢出");
 });
 
-test("redundant punctuation the model keeps is removed; code and quotes are not touched", async () => {
+test("punctuation cleanup preserves the literal code and quotes while dropping generated backticks", async () => {
   const reply = JSON.stringify({ status: "success", text: "禁止二级标题。，话术要简明。，运行 `a.,b` 和“好，。”" });
   const service = makeService({ model: fakeModel(reply) });
   const result = await service.polish({ rawText: "禁止二级标题", llm: ROUTE });
-  assert.equal(result.text, "禁止二级标题。话术要简明。运行 `a.,b` 和“好，。”");
+  assert.equal(result.text, "禁止二级标题。话术要简明。运行 a.,b 和“好，。”");
+});
+
+test("ordinary dictation strips generated Markdown from the Harness eq requirements without losing numbering or multiplication", async () => {
+  const rawText = "扫描界面的展示与交互，第一，来源标识用图标；第二，列表形式保留长滚动列表；第三，左下角的元素稍大。Harness EQ 导入时删除拖入 Skill、Markdown 和 MCP 配置下方的小字。用 2 * 3 做计算示例。";
+  const modelDraft = [
+    "## 扫描界面的展示与交互", "",
+    "1. **来源标识**：用图标展示来源。",
+    "2. **列表形式**：保留长滚动列表。",
+    "3. **页面调整**：放大左下角元素。", "",
+    "### Harness EQ 导入",
+    "- **具体修改**：删除拖入 Skill、Markdown 和 MCP 配置下方的小字。",
+    "- 用 \x602 * 3\x60 做计算示例。",
+  ].join("\n");
+  const model = fakeModel(JSON.stringify({ text: modelDraft }));
+  const service = makeService({ model });
+  const result = await service.polish({ rawText, llm: ROUTE });
+  assert.equal(result.fallback, false);
+  assert.match(model.calls[0].body.messages[0].content, /Return paste-ready plain text/);
+  assert.equal(result.text, [
+    "扫描界面的展示与交互", "",
+    "1. 来源标识：用图标展示来源。",
+    "2. 列表形式：保留长滚动列表。",
+    "3. 页面调整：放大左下角元素。", "",
+    "Harness EQ 导入",
+    "• 具体修改：删除拖入 Skill、Markdown 和 MCP 配置下方的小字。",
+    "• 用 2 * 3 做计算示例。",
+  ].join("\n"));
+  const handoff = await service.polish({ rawText: rawText + "请整理后发给另一个 AI。", llm: ROUTE });
+  assert.match(handoff.text, /[*][*]来源标识[*][*]/);
+  const specificallyPlain = await service.polish({ rawText: rawText + "发给另一个 AI。禁止整理输出使用 Markdown 格式。", llm: ROUTE });
+  assert.equal(specificallyPlain.text, result.text);
 });
 
 test("the description of the user's work is built from history items in one call", async () => {
@@ -474,7 +535,7 @@ test("three-tier dictation uses a separate prompt at 25, 26–100, and 101", asy
     const body = model.calls[0].body;
     assert.equal(body.thinking.type, units <= 100 ? "disabled" : "enabled");
     assert.equal(body.reasoning_effort, units <= 100 ? undefined : "low");
-    if (units === 25) assert.equal(body.messages[0].content, MINIMAL_CLEANUP_PROMPT);
+    if (units === 25) assert.equal(body.messages[0].content, MINIMAL_CLEANUP_PROMPT + dictationFormatInstruction(false));
     else {
       assert.match(body.messages[0].content, units <= 100 ? /Number only distinct/ : /numbered points/);
     }

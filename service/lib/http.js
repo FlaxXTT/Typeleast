@@ -15,6 +15,7 @@ import { WavError } from "./wav.js";
 import { normalizeFieldContext, parseFieldContext } from "./context.js";
 import { completeOpenAI, normalizeRoute, parseRouteHeader, probeThinking } from "./openai-compat.js";
 import { MAX_MEETING_BYTES } from "./tasks/meeting.js";
+import { organizeSpeaks } from "./tasks/speak.js";
 
 
 export const ROUTE_PREFIX = "/api/voice-polish";
@@ -315,6 +316,18 @@ export function createHandler(options) {
         // The history items are only read here to write the description; nothing is stored.
         const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
         reply(res, 200, await service.buildProfile({ llm: normalizeRoute(body.llm), items: body.items, signal: controller.signal }));
+        return;
+      }
+
+      if (route === "/speak/organize" && req.method === "POST") {
+        const body = JSON.parse((await readBody(req, MAX_JSON_BYTES)).toString("utf8") || "{}");
+        try {
+          reply(res, 200, await organizeSpeaks({ items: body.items, route: normalizeRoute(body.llm),
+            language: body.language, classifyOnly: body.classifyOnly === true, includePreview: body.includePreview === true,
+            complete: options => service.complete(options), signal: controller.signal }));
+        } catch {
+          reply(res, 200, { items: [] });
+        }
         return;
       }
 

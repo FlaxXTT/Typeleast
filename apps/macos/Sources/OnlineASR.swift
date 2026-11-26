@@ -4,12 +4,18 @@ enum OnlineASRProvider: String, CaseIterable, Sendable {
     case local, doubao, funASR
 }
 
+struct DoubaoVocabularyTables: Sendable {
+    var hotwords = ""
+    var replacements = ""
+}
+
 struct OnlineASRConfiguration: Sendable {
     let provider: OnlineASRProvider
     let apiKey: String
     let workspaceID: String
     var doubaoSpeechSmoothing = true
     var doubaoHotwords = ""
+    var doubaoTables = DoubaoVocabularyTables()
 }
 
 struct OnlineASRUtterance: Sendable {
@@ -22,6 +28,7 @@ struct OnlineASRUtterance: Sendable {
 struct OnlineASRTranscript: Sendable {
     var text: String
     var utterances: [OnlineASRUtterance] = []
+    var temporaryAudioCleanupFailed = false
 }
 
 /// Each take has its own stop boundary. The recorder already stores the PCM for history.
@@ -318,7 +325,8 @@ enum OnlineASR {
         return request
     }
 
-    static func doubaoRequest(language: String, meeting: Bool, speechSmoothing: Bool, hotwords: String = "") -> [String: Any] {
+    static func doubaoRequest(language: String, meeting: Bool, speechSmoothing: Bool, hotwords: String = "",
+                              tables: DoubaoVocabularyTables = .init()) -> [String: Any] {
         var audio: [String: Any] = ["format": "pcm", "codec": "raw", "rate": 16_000, "bits": 16, "channel": 1]
         let locales = ["zh": "zh-CN", "en": "en-US", "yue": "yue-CN", "ja": "ja-JP", "ko": "ko-KR"]
         if let locale = locales[language] { audio["language"] = locale }
@@ -327,14 +335,16 @@ enum OnlineASR {
             "enable_ddc": speechSmoothing && ["auto", "zh", "en"].contains(language),
             "result_type": "full"
         ]
-        var seen = Set<String>()
-        let words = hotwords.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .prefix(5_000)
+        let words = Vocabulary.hotwords(from: hotwords).prefix(5_000)
+        var corpus: [String: String] = [:]
         if !words.isEmpty, let context = try? json(["hotwords": words.map { ["word": $0] }]) {
-            options["corpus"] = ["context": String(decoding: context, as: UTF8.self)]
+            corpus["context"] = String(decoding: context, as: UTF8.self)
         }
+        let boostID = tables.hotwords.trimmingCharacters(in: .whitespacesAndNewlines)
+        let correctID = tables.replacements.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !boostID.isEmpty { corpus["boosting_table_id"] = boostID }
+        if !correctID.isEmpty { corpus["correct_table_id"] = correctID }
+        if !corpus.isEmpty { options["corpus"] = corpus }
         if meeting {
             options["show_utterances"] = true
             options["enable_speaker_info"] = true
@@ -345,7 +355,8 @@ enum OnlineASR {
     private static func beginDoubao(_ socket: Socket, language: String, meeting: Bool,
                                     configuration: OnlineASRConfiguration) async throws -> (result: DoubaoEnvelope.Result?, last: Bool) {
         let request = doubaoRequest(language: language, meeting: meeting,
-                                    speechSmoothing: configuration.doubaoSpeechSmoothing, hotwords: configuration.doubaoHotwords)
+                                    speechSmoothing: configuration.doubaoSpeechSmoothing, hotwords: configuration.doubaoHotwords,
+                                    tables: configuration.doubaoTables)
         try await socket.send(.data(doubaoFrame(type: 0x10, serialization: 0x10,
                                                payload: json(request))))
         return try await doubaoResult(socket)

@@ -100,13 +100,27 @@ struct InsightsPanel: View {
     @EnvironmentObject var model: AppModel
     var animationsReady = true
 
-    private func figures(height: CGFloat, gap: CGFloat) -> some View {
+    private func figures(width: CGFloat, height: CGFloat, gap: CGFloat) -> some View {
         let stats = animationsReady ? model.stats : nil
-        return LazyVGrid(columns: [GridItem(.flexible(), spacing: gap), GridItem(.flexible())], spacing: gap) {
-            Figure(value: stats.map { Double($0.words) }, format: .count, label: "Words dictated", height: height)
-            Figure(value: stats?.savedSeconds, format: .duration, label: "Time saved", height: height)
-            Figure(value: stats.map { Double($0.wordsPerMinute) }, format: .speed, label: "Average speed", height: height)
-            Figure(value: stats?.speakingSeconds, format: .duration, label: "Total dictation time", height: height)
+        let columnGap = min(width, gap)
+        let columnWidth = (width - columnGap) / 2
+        return Grid(horizontalSpacing: columnGap, verticalSpacing: gap) {
+            GridRow {
+                Figure(value: stats.map { Double($0.words) }, format: .count,
+                       label: "Words dictated", height: height)
+                    .frame(width: columnWidth)
+                Figure(value: stats?.savedSeconds, format: .duration,
+                       label: "Time saved", height: height, openEdge: .trailing)
+                    .frame(width: columnWidth)
+            }
+            GridRow {
+                Figure(value: stats.map { Double($0.wordsPerMinute) }, format: .speed,
+                       label: "Average speed", height: height)
+                    .frame(width: columnWidth)
+                Figure(value: stats?.speakingSeconds, format: .duration,
+                       label: "Total dictation time", height: height, openEdge: .trailing)
+                    .frame(width: columnWidth)
+            }
         }
         .id(model.homePresentationID)
     }
@@ -133,7 +147,7 @@ struct InsightsPanel: View {
                     Spacer()
                 }
                 .frame(height: headerHeight)
-                figures(height: tileHeight, gap: tileGap)
+                figures(width: geometry.size.width, height: tileHeight, gap: tileGap)
                 ActivityCard(animationsReady: animationsReady)
                     .id(model.homePresentationID)
                     .frame(height: activityHeight)
@@ -171,53 +185,80 @@ enum InsightFormat {
     }
 }
 
-private enum InsightTypography {
-    static let number = Font.system(size: 32, weight: .medium, design: .serif).monospacedDigit()
-    static let numberTracking: CGFloat = -0.9
-    static let unit = Font.system(size: 12)
-    static let label = Font.system(size: Theme.homeSecondarySize)
-}
-
 /// One metric tile with a large figure, a smaller unit and a label.
 struct Figure: View {
     let value: Double?
     let format: InsightFormat
     let label: String
     let height: CGFloat
+    var openEdge: HorizontalEdge = .leading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let shape = RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular)
+        let outline = InsightTileOutline(openEdge: openEdge)
+        let typeScale = min(1, max(0.05, height / 68))
+        VStack(alignment: .leading, spacing: 6 * typeScale) {
             CountUpReadout(value, animateOnAppear: true) { number in
                 let parts = format.parts(for: number)
-                HStack(alignment: .firstTextBaseline, spacing: 11) {
-                    ForEach(parts.indices, id: \.self) { index in
-                        let part = parts[index]
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            (Text(verbatim: part.digits).font(InsightTypography.number)
-                                + Text(verbatim: part.suffix).font(.system(size: 21, weight: .medium, design: .serif)))
-                                .tracking(InsightTypography.numberTracking)
-                                .lineLimit(1).minimumScaleFactor(0.6)
-                            if !part.unit.isEmpty {
-                                Text(verbatim: part.unit)
-                                    .font(InsightTypography.unit)
-                                    .foregroundStyle(Theme.ink.opacity(0.8))
-                                    .lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                        }
-                    }
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(parts.map { $0.digits + $0.suffix + " " + $0.unit }.joined(separator: " "))
+                readout(parts, scale: typeScale)
+                    .lineLimit(1).minimumScaleFactor(0.4)
+                    .accessibilityLabel(parts.map { $0.digits + $0.suffix + " " + $0.unit }.joined(separator: " "))
             }
             Text(verbatim: label)
-                .font(InsightTypography.label)
-                .lineLimit(1).minimumScaleFactor(0.85)
+                .font(.system(size: Theme.homeSecondarySize * typeScale))
+                .lineLimit(1).minimumScaleFactor(0.6)
                 .foregroundColor(Theme.homeLabel)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 16 * typeScale)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: height)
-        .background(RoundedRectangle(cornerRadius: Theme.homeMetricRadius, style: .circular).fill(Theme.tile))
+        .hoverCard(Theme.homeTileSurface, radius: Theme.homeMetricRadius, edgeHighlightShape: AnyShape(outline))
+        .clipShape(shape)
+        .overlay {
+            outline
+                .stroke(Theme.homeMetricBorder, style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func readout(_ parts: [InsightFormat.Part], scale: CGFloat) -> Text {
+        let number = Font.system(size: 32 * scale, weight: .medium, design: .serif).monospacedDigit()
+        let suffix = Font.system(size: 21 * scale, weight: .medium, design: .serif)
+        let unit = Font.system(size: 12 * scale)
+        return parts.enumerated().reduce(Text(verbatim: "")) { result, item in
+            let (index, part) = item
+            let gap = Text(verbatim: index == 0 ? "" : "\u{2002}").font(.system(size: 22 * scale))
+            let digits = Text(verbatim: part.digits).font(number).kerning(-0.9 * scale)
+            let suffixText = Text(verbatim: part.suffix).font(suffix).kerning(-0.9 * scale)
+            let unitText = Text(verbatim: part.unit.isEmpty ? "" : "\u{2004}" + part.unit)
+                .font(unit).foregroundColor(Theme.homeInk.opacity(0.8))
+            return result + gap + digits + suffixText + unitText
+        }
+    }
+}
+
+private struct InsightTileOutline: Shape {
+    let openEdge: HorizontalEdge
+
+    func path(in rect: CGRect) -> Path {
+        let bounds = rect.insetBy(dx: 0.5, dy: 0.5)
+        guard bounds.width > 0, bounds.height > 0 else { return Path() }
+        let radius = min(Theme.homeMetricRadius, min(bounds.width, bounds.height) / 2)
+        let left = bounds.minX, right = bounds.maxX
+        let top = bounds.minY, bottom = bounds.maxY
+        let end = bottom - radius
+        var outline = Path()
+        outline.move(to: CGPoint(x: left, y: end))
+        outline.addArc(tangent1End: CGPoint(x: left, y: bottom), tangent2End: CGPoint(x: right, y: bottom), radius: radius)
+        outline.addArc(tangent1End: CGPoint(x: right, y: bottom), tangent2End: CGPoint(x: right, y: top), radius: radius)
+        outline.addArc(tangent1End: CGPoint(x: right, y: top), tangent2End: CGPoint(x: left, y: top), radius: radius)
+        outline.addArc(tangent1End: CGPoint(x: left, y: top), tangent2End: CGPoint(x: left, y: end), radius: radius)
+
+        if openEdge == .trailing {
+            return outline.applying(CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: 2 * bounds.midX, ty: 0))
+        }
+        return outline
     }
 }
 
@@ -226,8 +267,8 @@ struct HomeDotGrid: View {
     var body: some View {
         HomeDotPattern()
             .background {
-                LinearGradient(colors: [Theme.homeBackdrop, Theme.window], startPoint: .bottomLeading, endPoint: .topTrailing)
-                    .overlay(LinearGradient(colors: [.clear, Theme.window.opacity(0.3)], startPoint: .top, endPoint: .bottom))
+                EllipticalGradient(colors: [Theme.homeWindow, Theme.homeBackdrop],
+                                   center: UnitPoint(x: 0.58, y: 0.38), startRadiusFraction: 0.15)
             }
     }
 }
@@ -365,12 +406,14 @@ final class HoverShareButton: NSButton {
         let next = hovering && !pickerOpen
         guard self.hovering != next else { return }
         self.hovering = next
+        setControlLift(next ? 1 : 0)
         needsDisplay = true
     }
 
     func setPickerOpen(_ open: Bool) {
         pickerOpen = open
         hovering = false
+        setControlLift(0)
         highlight(false)
         needsDisplay = true
     }
@@ -380,11 +423,11 @@ final class HoverShareButton: NSButton {
         let capsule = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
         let pressed = isHighlighted && !pickerOpen
         if pressed || (hovering && window?.isKeyWindow == true) {
-            NSColor(Theme.cardHover).setFill()
+            NSColor(Theme.controlHover).setFill()
             capsule.fill()
         }
 
-        let ink = NSColor(Theme.ink)
+        let ink = NSColor(Theme.homeInk)
         let label = NSAttributedString(string: title,
                                        attributes: [.font: font ?? InterfaceTypography.localizedAppKit(16, weight: .medium),
                                                     .foregroundColor: ink])
@@ -460,6 +503,7 @@ struct ActivityCard: View {
     var animationsReady = true
     @State private var weekOffset = 0
     @State private var animation: (target: Reveal, startedAt: Date)?
+    @State private var hover: Hover?
 
     private let dayColumn: CGFloat = 24
     private let navigationHeight: CGFloat = 18
@@ -469,6 +513,11 @@ struct ActivityCard: View {
         let ready: Bool
         let reduced: Bool
         let presentation: Int
+    }
+
+    private struct Hover {
+        let cell: ActivityHoverGrid.Cell
+        let idleWord: String?
     }
 
     var body: some View {
@@ -482,7 +531,7 @@ struct ActivityCard: View {
             Text(verbatim: "Cadence")
                 .font(.system(size: 24, weight: .medium, design: .serif))
                 .tracking(-0.45)
-                .foregroundColor(Theme.ink)
+                .foregroundColor(Theme.homeInk)
                 .frame(height: 28)
                 .padding(.horizontal, 7)
                 .accessibilityAddTraits(.isHeader)
@@ -519,6 +568,10 @@ struct ActivityCard: View {
                     navigation(log: log, range: range, calendar: calendar)
                         .frame(width: dayColumn + width)
                         .offset(y: navigationY)
+                    if let hover, let log, revealReady, !model.settingsPresented {
+                        hoverTip(for: hover, log: log,
+                                 size: CGSize(width: dayColumn + width, height: geo.size.height))
+                    }
                 }
                 .frame(width: dayColumn + width, height: geo.size.height, alignment: .topLeading)
                 .frame(maxWidth: .infinity)
@@ -538,7 +591,12 @@ struct ActivityCard: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: Theme.homeActivityRadius, style: .circular).fill(Theme.tile))
+        .foregroundStyle(Theme.homeInk)
+        .hoverCard(Theme.homeTileSurface, radius: Theme.homeActivityRadius)
+        .onDisappear { hover = nil }
+        .onChange(of: model.settingsPresented) { _, _ in hover = nil }
+        .onChange(of: model.activityRevision) { _, _ in hover = nil }
+        .onReceive(HoverFeedbackReset.events) { _ in hover = nil }
         .onChange(of: reveal, initial: true) { _, target in
             animation = target.ready && !target.reduced ? (target, Date()) : nil
         }
@@ -567,7 +625,55 @@ struct ActivityCard: View {
     private func track(log: ActivityLog?, range: ActivityRange, columnStep: CGFloat, cell: CGFloat,
                        rowStep: CGFloat, navigationY: CGFloat, elapsed: Double) -> some View {
         ActivityTrack(log: log, range: range, columnStep: columnStep, cell: cell, rowStep: rowStep,
-                      navigationY: navigationY, elapsed: elapsed, position: Double(weekOffset))
+                      navigationY: navigationY, elapsed: elapsed, position: Double(weekOffset),
+                      hoveredDate: hover?.cell.date,
+                      onHover: { cell in updateHover(cell, log: log) },
+                      hoverEnabled: !model.settingsPresented && !model.homePresentationSuspended)
+    }
+
+    private func updateHover(_ cell: ActivityHoverGrid.Cell?, log: ActivityLog?) {
+        guard hover?.cell != cell else { return }
+        guard let cell, let log else {
+            hover = nil
+            return
+        }
+        let word: String?
+        if hover?.cell.date == cell.date {
+            word = hover?.idleWord
+        } else {
+            word = log.day(cell.date).dictations == 0 ? model.cadenceIdleWords.next() : nil
+        }
+        hover = Hover(cell: cell, idleWord: word)
+    }
+
+    private func hoverTip(for hover: Hover, log: ActivityLog, size: CGSize) -> some View {
+        let day = log.day(hover.cell.date)
+        let tipSize = CGSize(width: min(148, size.width), height: 55)
+        let frame = ActivityHoverGrid.tipFrame(for: hover.cell.frame.offsetBy(dx: dayColumn, dy: 0), size: tipSize, in: size)
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: ActivityTrack.dateLabel(hover.cell.date))
+                .font(.system(size: 11)).foregroundStyle(Theme.homeLabel)
+            if let word = hover.idleWord {
+                Text(verbatim: word).font(.system(size: 14, weight: .medium, design: .serif))
+                    .foregroundStyle(Theme.homeInk)
+            } else {
+                Text(verbatim: ActivityTrack.tokenLabel(day))
+                    .font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(Theme.homeInk)
+            }
+            Text(verbatim: ActivityTrack.activityLabel(day))
+                .font(.system(size: 11)).foregroundStyle(Theme.homeLabel)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .padding(.horizontal, 10)
+        .frame(width: frame.width, height: frame.height, alignment: .leading)
+        .background(Theme.homeTile, in: shape)
+        .shadow(color: .black.opacity(0.16), radius: 8, y: 4)
+        .offset(x: frame.minX, y: frame.minY)
+        .zIndex(1)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private func navigation(log: ActivityLog?, range: ActivityRange, calendar: Calendar) -> some View {
@@ -586,14 +692,100 @@ struct ActivityCard: View {
             .disabled(weekOffset >= 0)
             .help(L10n.text("较新的活动"))
         }
-        .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.homeLabel).buttonStyle(.plain)
+        .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.homeLabel)
+        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.smallControlRadius, feedback: .compact))
     }
 
     private func move(_ weeks: Int) {
+        hover = nil
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.64)) {
             weekOffset = min(0, weekOffset + weeks)
         }
     }
+}
+
+struct CadenceIdleWords {
+    private static let words = [
+        "Leisure", "Comfort", "Repose", "Respite", "Ease", "Calm", "Serenity",
+        "Stillness", "Solace", "Pause", "Lull", "Hush", "Quiet", "Rest", "Peace",
+        "Breather", "Daydream", "Downtime", "Tranquility", "Unwind",
+    ]
+    private var remaining: [String] = []
+    private var lastWord: String?
+
+    mutating func next() -> String {
+        if remaining.isEmpty {
+            remaining = Self.words.shuffled()
+            if remaining.last == lastWord {
+                remaining.swapAt(0, remaining.count - 1)
+            }
+        }
+        let word = remaining.removeLast()
+        lastWord = word
+        return word
+    }
+}
+
+struct ActivityHoverGrid {
+    struct Cell: Equatable {
+        let date: Date
+        let frame: CGRect
+    }
+
+    let range: ActivityRange
+    let columnStep: CGFloat
+    let rowStep: CGFloat
+    let cellSize: CGFloat
+    let position: Double
+
+    func cell(at point: CGPoint, calendar: Calendar) -> Cell? {
+        guard columnStep > 0, rowStep > 0, cellSize > 0, point.x >= 0, point.y >= 0,
+              point.x < CGFloat(range.weekCount - 1) * columnStep + cellSize,
+              point.y < 6 * rowStep + cellSize else { return nil }
+        let firstWeek = position - Double(range.weekCount - 1)
+        let week = Int(floor(firstWeek + point.x / columnStep))
+        let row = Int(floor(point.y / rowStep))
+        let frame = CGRect(x: (Double(week) - firstWeek) * columnStep, y: CGFloat(row) * rowStep,
+                           width: cellSize, height: cellSize)
+        guard frame.contains(point),
+              let date = calendar.date(byAdding: .day, value: 7 * week + row, to: range.lastWeek),
+              date <= range.today, position < 0 || date >= range.firstDay else { return nil }
+        return Cell(date: date, frame: frame)
+    }
+
+    static func tipFrame(for cell: CGRect, size: CGSize, in grid: CGSize) -> CGRect {
+        let gap: CGFloat = 7
+        let x = min(max(0, cell.midX - size.width / 2), max(0, grid.width - size.width))
+        let above = cell.minY - gap - size.height
+        let y = above >= 0 ? above : min(cell.maxY + gap, max(0, grid.height - size.height))
+        return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
+}
+
+private struct ActivityHoverSurface: NSViewRepresentable {
+    let onPoint: (CGPoint?) -> Void
+
+    func makeNSView(context: Context) -> ActivityHoverView { ActivityHoverView() }
+    func updateNSView(_ view: ActivityHoverView, context: Context) { view.onPoint = onPoint }
+}
+
+/// One tracking rectangle covers the grid and keeps hover independent of the animated cell layers.
+final class ActivityHoverView: NSView {
+    var onPoint: (CGPoint?) -> Void = { _ in }
+    private var area: NSTrackingArea?
+    override var isFlipped: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area { removeTrackingArea(area) }
+        let next = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(next)
+        area = next
+    }
+
+    override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
+    override func mouseMoved(with event: NSEvent) { onPoint(convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { onPoint(nil) }
 }
 
 enum RhythmPeriod: String, CaseIterable {
@@ -685,6 +877,8 @@ struct ActiveDaysReadout: View {
 }
 
 private struct ActivityTrack: View, Animatable {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     static let scrollWeeks = 4
     static let preferredColumnStep: CGFloat = 22
     static let columnGap: CGFloat = 3
@@ -700,6 +894,12 @@ private struct ActivityTrack: View, Animatable {
     let navigationY: CGFloat
     let elapsed: Double
     var position: Double
+    let hoveredDate: Date?
+    var onHover: (ActivityHoverGrid.Cell?) -> Void
+    var hoverEnabled: Bool
+
+    private var faceSize: CGFloat { cell * 0.82 }
+    private var outlineWidth: CGFloat { colorScheme == .light ? 1 : 0.75 }
 
     var animatableData: Double {
         get { position }
@@ -726,23 +926,37 @@ private struct ActivityTrack: View, Animatable {
                 let offscreen = x <= -cell || x >= CGFloat(weeks) * columnStep
                 let column = max(0, week + weeks - 1)
                 let motion = HeatmapMotion.sample(elapsed: elapsed, column: column)
-                ForEach(0..<7, id: \.self) { row in
-                    if let day = calendar.date(byAdding: .day, value: row, to: date) {
+                VStack(spacing: 0) {
+                    ForEach(0..<7, id: \.self) { row in
+                        let day = calendar.date(byAdding: .day, value: row, to: date) ?? date
                         let depth = HeatmapMotion.depth(elapsed: elapsed, column: column, row: row)
                         cellView(date: day, calendar: calendar, region: region, motion: motion, depth: depth)
-                            .offset(x: x, y: CGFloat(row) * rowStep)
-                            .accessibilityHidden(offscreen)
+                            .frame(width: cell, height: cell)
+                            .frame(height: row == 6 ? cell : rowStep, alignment: .top)
                     }
                 }
-                if week <= 0, let label = monthLabel(weekStart: date, calendar: calendar) {
-                    InterfaceTypography.text(label, size: 11).foregroundColor(Theme.homeLabel)
-                        .fixedSize()
-                        .offset(x: x, y: navigationY + 2)
-                        .accessibilityHidden(offscreen)
+                .overlay(alignment: .topLeading) {
+                    if week <= 0, let label = monthLabel(weekStart: date, calendar: calendar) {
+                        InterfaceTypography.text(label, size: 11).foregroundColor(Theme.homeLabel)
+                            .fixedSize()
+                            .offset(y: navigationY + 2)
+                    }
                 }
+                .offset(x: x)
+                .accessibilityHidden(offscreen)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .topLeading) {
+            if log != nil && hoverEnabled {
+                let grid = ActivityHoverGrid(range: range, columnStep: columnStep, rowStep: rowStep, cellSize: cell, position: position)
+                ActivityHoverSurface { point in
+                    onHover(point.flatMap { grid.cell(at: $0, calendar: calendar) })
+                }
+                .frame(width: CGFloat(weeks - 1) * columnStep + cell, height: 6 * rowStep + cell)
+                .accessibilityHidden(true)
+            }
+        }
     }
 
     @ViewBuilder
@@ -751,28 +965,36 @@ private struct ActivityTrack: View, Animatable {
             let face = Group {
                 if date <= range.today && (position < 0 || date >= range.firstDay) {
                     let day = log.day(date)
-                    let description = tooltip(date, day)
+                    let description = Self.dateLabel(date) + " · " + Self.activityLabel(day)
+                        + (day.dictations > 0 ? " · " + Self.tokenLabel(day) : "")
                     let level = ActivityLog.level(day.dictations)
                     let shade = level == 0 ? range.emptyShade(for: date, calendar: calendar, region: region) : 0
-                    Self.square(level, size: cell, emptyShade: shade)
+                    let firstOutlinedShade = Theme.heatEmptyShades.count - (colorScheme == .light ? 2 : 1)
+                    let hovering = date == hoveredDate
+                    Self.square(level, size: faceSize, emptyShade: shade)
+                        .shadow(color: .black.opacity(hovering ? 0.18 : level > 0 ? 0.12 : 0), radius: 1, y: 1)
                         .overlay {
-                            if level == 0 && shade == Theme.heatEmptyShades.indices.last {
+                            if hovering || (level == 0 && shade >= firstOutlinedShade) {
+                                let rim = level > 0 ? Theme.homeInk.opacity(0.30) : Theme.accent.opacity(0.45)
                                 RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
-                                    .strokeBorder(Theme.border, lineWidth: 1)
+                                    .strokeBorder(hovering ? rim : Theme.heatWhiteBorder, lineWidth: outlineWidth)
                                     .allowsHitTesting(false)
                             }
                         }
-                        .help(description).accessibilityLabel(description)
+                        .scaleEffect(hovering && !reduceMotion ? 1.07 : 1)
+                        .offset(y: hovering && !reduceMotion ? -0.75 : 0)
+                        .animation(reduceMotion ? nil : .easeOut(duration: hovering ? 0.11 : 0.14), value: hovering)
+                        .accessibilityLabel(description)
                 } else {
                     RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
-                        .strokeBorder(Theme.border, lineWidth: 1)
-                        .frame(width: cell, height: cell)
+                        .strokeBorder(Theme.heatWhiteBorder, lineWidth: outlineWidth)
+                        .frame(width: faceSize, height: faceSize)
                         .accessibilityHidden(true)
                 }
             }
             .overlay {
                 if motion.cover > 0 {
-                    Self.square(0, size: cell).opacity(motion.cover)
+                    Self.square(0, size: faceSize).opacity(motion.cover)
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
@@ -784,7 +1006,7 @@ private struct ActivityTrack: View, Animatable {
                     .background {
                         RoundedRectangle(cornerRadius: Theme.heatCellRadius)
                             .fill(.black.opacity(0.28 * depth))
-                            .frame(width: cell, height: cell)
+                            .frame(width: faceSize, height: faceSize)
                             .blur(radius: 2 * depth)
                             .offset(x: depth, y: 2 * depth)
                             .allowsHitTesting(false)
@@ -794,12 +1016,12 @@ private struct ActivityTrack: View, Animatable {
                 face
             }
         } else {
-            Self.square(0, size: cell).accessibilityHidden(true)
+            Self.square(0, size: faceSize).accessibilityHidden(true)
         }
     }
 
     static func square(_ level: Int, size: CGFloat, emptyShade: Int = 0) -> some View {
-        RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .circular)
+        RoundedRectangle(cornerRadius: Theme.heatCellRadius, style: .continuous)
             .fill(level == 0 ? Theme.heatEmptyShades[emptyShade] : Theme.heat[min(3, level - 1)])
             .frame(width: size, height: size)
     }
@@ -812,11 +1034,20 @@ private struct ActivityTrack: View, Animatable {
         return startsMonth.formatted(Self.englishMonth)
     }
 
-    private func tooltip(_ date: Date, _ day: ActivityDay) -> String {
-        let when = date.formatted(Self.englishMonth.day())
-        return day.dictations == 0
-            ? when + " · " + L10n.text("没有活动")
-            : when + " · " + L10n.text("{0} 次 · {1} 字", day.dictations, day.words)
+    static func dateLabel(_ date: Date) -> String { date.formatted(englishMonth.day()) }
+
+    static func activityLabel(_ day: ActivityDay) -> String {
+        guard day.dictations > 0 else { return "No activity" }
+        let count = L10n.formattedNumber(NSNumber(value: day.dictations), language: "en")
+        let words = L10n.formattedNumber(NSNumber(value: day.words), language: "en")
+        let unit = day.dictations == 1 ? "dictation" : "dictations"
+        return "\(count) \(unit) · \(words) chars"
+    }
+
+    static func tokenLabel(_ day: ActivityDay) -> String {
+        let tokens = day.estimatedTokens
+        let count = L10n.formattedNumber(NSNumber(value: tokens), language: "en")
+        return count + (tokens == 1 ? " token" : " tokens")
     }
 }
 

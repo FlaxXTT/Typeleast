@@ -355,7 +355,7 @@ private func dashboardCountRenderingTests() {
         HStack(spacing: 0) {
             Figure(value: words, format: .count, label: "Words dictated", height: size.height)
                 .frame(width: columnWidth)
-            Figure(value: seconds, format: .duration, label: "Time saved", height: size.height)
+            Figure(value: seconds, format: .duration, label: "Time saved", height: size.height, openEdge: .trailing)
                 .frame(width: columnWidth)
             ActiveDaysReadout(value: activeDays)
                 .frame(width: columnWidth)
@@ -421,6 +421,17 @@ private func dashboardCountRenderingTests() {
           finalWords == snapshot(words) && finalTime == snapshot(time))
     check("the rendered active day count settles", finalActive != nil && finalActive != zeroActive &&
           finalActive == snapshot(active))
+
+    let leadingEdge = NSRect(x: 0, y: 18, width: 10, height: size.height - 36)
+    let trailingEdge = leadingEdge.offsetBy(dx: time.maxX - leadingEdge.width, dy: 0)
+    let edges = [leadingEdge, trailingEdge]
+    let startingBorders = edges.map(snapshot)
+    view.rootView = figures(words: 9.1e18, seconds: 9.1e18, activeDays: 20, presentation: 3)
+    RunLoop.current.run(until: Date().addingTimeInterval(CountUpTransition.duration + 0.15))
+    check("very long counts and durations still render in their tiles",
+          finalWords != nil && finalTime != nil && finalWords != snapshot(words) && finalTime != snapshot(time))
+    check("longer readouts leave both outside borders fixed and clear of text",
+          startingBorders.allSatisfy { $0 != nil } && startingBorders == edges.map(snapshot))
 }
 
 func performanceRegressionTests() {

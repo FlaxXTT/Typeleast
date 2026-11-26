@@ -43,7 +43,7 @@ test('ignores non-Chinese and mixed Japanese or Korean utterances', () => {
   assert.equal(hasQuantityUnitConflict('三页', '三月', 'en'), false, 'explicit non-Chinese mode is respected');
 });
 
-test('unsafe cleanup is held with both versions, and an older client sees no insertable text', async () => {
+test('an unsafe unit edit quietly delivers the original', async () => {
   const service = new VoicePolishService({
     recognizer: { transcribe: async () => ({ text: '' }) },
     fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: 'ok', text: '报告周四发，不超过三月。' }) }, finish_reason: 'stop' }] }) }),
@@ -52,11 +52,11 @@ test('unsafe cleanup is held with both versions, and an older client sees no ins
   });
   const raw = '报告周三发，不对，改为周四，不超过三页。';
   const result = await service.polish({ rawText: raw, task: 'dictation', llm: { baseURL: 'https://api.example.com/v1', model: 'test', apiKey: 'fictional-key' } });
-  assert.equal(result.text, '');
-  assert.equal(result.raw, '');
+  assert.equal(result.text, raw);
+  assert.equal(result.raw, raw);
   assert.equal(result.fallback, true);
   assert.equal(result.reason, 'quantity-conflict');
-  assert.deepEqual(result.qualityReview, { kind: 'quantity', original: raw, candidate: '报告周四发，不超过三月。', issues: [{ kind: 'change', source: '三页', candidate: '三月' }] });
+  assert.equal(result.qualityReview, undefined);
 });
 
 test('valid normalisation is still delivered', async () => {
@@ -72,7 +72,7 @@ test('valid normalisation is still delivered', async () => {
   assert.equal(result.qualityReview, undefined);
 });
 
-test('the recognition-to-cleanup path keeps both review choices and nothing insertable', async () => {
+test('the recognition-to-cleanup path delivers the original without a review dialog', async () => {
   const original = '报告周三发，不对，改为周四，不超过三页。';
   const service = new VoicePolishService({
     recognizer: { transcribe: async () => ({ text: original }) },
@@ -86,13 +86,13 @@ test('the recognition-to-cleanup path keeps both review choices and nothing inse
   audio.writeUInt32LE(16000, 24); audio.writeUInt32LE(32000, 28); audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34);
   audio.write('data', 36); audio.writeUInt32LE(3200, 40);
   const result = await service.transcribeAndPolish({ audio, task: 'dictation', llm: { baseURL: 'https://api.example.com/v1', model: 'test', apiKey: 'fictional-key' } });
-  assert.equal(result.text, '');
-  assert.equal(result.raw, '');
+  assert.equal(result.text, original);
+  assert.equal(result.raw, original);
   assert.equal(result.fallbackReason, 'quantity-conflict');
-  assert.deepEqual(result.qualityReview, { kind: 'quantity', original, candidate: '报告周四发，不超过三月。', issues: [{ kind: 'change', source: '三页', candidate: '三月' }] });
+  assert.equal(result.qualityReview, undefined);
 });
 
-test('review offers the actual configured Chinese writing variant', async () => {
+test('the quiet fallback still follows the configured Chinese writing variant', async () => {
   const service = new VoicePolishService({
     recognizer: { transcribe: async () => ({ text: '' }) },
     fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: 'ok', text: '报告不超过三月。' }) }, finish_reason: 'stop' }] }) }),
@@ -100,10 +100,9 @@ test('review offers the actual configured Chinese writing variant', async () => 
     logger: { warn() {}, info() {}, debug() {} },
   });
   const result = await service.polish({ rawText: '报告不超过三页。', task: 'dictation', language: 'zh', variants: 'zh=tw', llm: { baseURL: 'https://api.example.com/v1', model: 'test', apiKey: 'fictional-key' } });
-  assert.equal(result.text, '');
-  assert.equal(result.raw, '');
-  assert.equal(result.qualityReview.original, '报告不超过三页。');
-  assert.equal(result.qualityReview.candidate, '報告不超過三月。');
+  assert.equal(result.text, '報告不超過三頁。');
+  assert.equal(result.raw, '报告不超过三页。');
+  assert.equal(result.qualityReview, undefined);
 });
 
 test('translation is held when the reviewer detects changed content', async () => {
@@ -146,6 +145,8 @@ test('routine wording, unchanged constraints and length alone do not start a cle
     ['我们明天会把报告发给大家的。', '我们明天会把报告发给大家。'],
     ['这个草稿请不要发出去。', '这个草稿请不要发送。'],
     ['预算为1000元。', '预算为1,000元。'],
+    ['周三还是周五交付，暂不确定。还要准备一份报告。', '1. 交付日是周三还是周五，暂不确定。\n2. 还要准备一份报告。'],
+    ['“现在开始。”', '“现在开始。”'],
     [long, long.replace('稍后会', '稍后将')],
   ]) {
     const { result, reviewCalls } = await cleanupWithReviewer(original, edited, new Error('review should not run'));
@@ -173,13 +174,14 @@ test('an unavailable or unsupported cleanup review quietly uses the original', a
   }
 });
 
-test('a specific material change holds cleanup with both exact snippets', async () => {
+test('a specific material change uses the original without requesting a decision', async () => {
   const issue = { kind: 'change', source: '100元', candidate: '120元' };
   const { result, reviewCalls } = await cleanupWithReviewer(
     '预算为100元。', '预算为120元。', JSON.stringify({ ok: false, issues: [issue] }),
   );
   assert.equal(reviewCalls, 1);
-  assert.equal(result.text, '');
-  assert.equal(result.raw, '');
-  assert.deepEqual(result.qualityReview.issues, [issue]);
+  assert.equal(result.text, '预算为100元。');
+  assert.equal(result.raw, '预算为100元。');
+  assert.equal(result.reason, 'fact-review');
+  assert.equal(result.qualityReview, undefined);
 });

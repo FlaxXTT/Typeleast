@@ -1157,6 +1157,27 @@ final class ServiceClient {
         }
     }
 
+    func classifySpeaksSync(_ items: [SpeakDraft], llm: LLMRoute, language: String, includePreview: Bool) throws -> [SpeakCategory] {
+        struct Request: Encodable {
+            let items: [SpeakDraft]
+            let llm: LLMRoute
+            let language: String
+            let classifyOnly = true
+            let includePreview: Bool
+        }
+        struct Reply: Decodable { let items: [SpeakCategory] }
+        return try withPortRetry {
+            try withTokenRetry { token in
+                let body = try JSONEncoder().encode(Request(items: items, llm: llm, language: language, includePreview: includePreview))
+                let request = try makeRequest(path: "/api/voice-polish/speak/organize", method: "POST", token: token,
+                                              headers: ["content-type": "application/json"], body: body, timeout: 28)
+                let (data, response) = try performSync(request, timeout: 28)
+                guard response.statusCode == 200 else { throw httpError(response, data) }
+                return try JSONDecoder().decode(Reply.self, from: data).items
+            }
+        }
+    }
+
     func listModelsSync(route: LLMRoute) throws -> [String] {
         try modelCatalogSync(route: route).map(\.id)
     }
@@ -1179,6 +1200,24 @@ final class ServiceClient {
 }
 
 /// A model reached with the user's own key over the OpenAI-compatible protocol.
+struct SpeakDraft: Codable {
+    let id: String
+    let body: String
+    let currentName: String?
+}
+
+struct SpeakWheelPreview: Codable {
+    let icon: String?
+    let summary: String?
+}
+
+struct SpeakCategory: Decodable {
+    let id: String
+    let category: String
+    let preview: SpeakWheelPreview?
+    let suggestedName: String?
+}
+
 struct LLMRoute: Codable, Equatable {
     var baseURL: String
     var model: String

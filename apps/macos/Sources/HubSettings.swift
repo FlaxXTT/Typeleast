@@ -87,7 +87,7 @@ struct SettingsPage: View {
                             .fill(selected ? Theme.selection : .clear))
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(FlatActionButtonStyle())
+                    .buttonStyle(FlatActionButtonStyle(feedback: .compact))
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
                 Spacer()
@@ -100,23 +100,29 @@ struct SettingsPage: View {
                     Text(category.title).font(Theme.sectionTitleFont)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 36).padding(.top, 44).padding(.bottom, 16)
-                    HubScrollView(key: category.rawValue, memory: scrollMemory, showsProgress: false) {
-                        LazyVStack(alignment: .leading, spacing: 16) {
-                            switch category {
-                            case .dictation: shortcuts; language; audio; cleanup
-                            case .translation: translationShortcut; selectionTranslation
-                            case .prompts: promptFiles
-                            case .models:
-                                if model.credentialsLocked {
-                                    SettingsSection { CredentialUnlockRow() }
+                    if category == .tools {
+                        AgentToolLibraryView()
+                            .padding(.horizontal, 36).padding(.bottom, 24)
+                    } else {
+                        HubScrollView(key: category.rawValue, memory: scrollMemory, showsProgress: false) {
+                            LazyVStack(alignment: .leading, spacing: 16) {
+                                switch category {
+                                case .dictation: shortcuts; language; audio; cleanup
+                                case .translation: translationShortcut; selectionTranslation
+                                case .prompts: promptFiles
+                                case .models:
+                                    if model.credentialsLocked {
+                                        SettingsSection { CredentialUnlockRow() }
+                                    }
+                                    OnlineASRSettings()
+                                    speech
+                                    ModelSection()
+                                case .general: general; privacy; permissions; updates; advanced
+                                case .tools: EmptyView()
                                 }
-                                OnlineASRSettings()
-                                speech
-                                ModelSection()
-                            case .general: general; privacy; permissions; updates; advanced
                             }
+                            .padding(.horizontal, 36).padding(.bottom, 24)
                         }
-                        .padding(.horizontal, 36).padding(.bottom, 24)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -129,7 +135,7 @@ struct SettingsPage: View {
         .background(Theme.tile)
         .background(RoundedWindowMarker(radius: Theme.settingsRadius))
         .overlay(alignment: .topLeading) {
-            IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, action: onClose)
+            IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, feedback: .fixed, action: onClose)
                 .accessibilityLabel(L10n.text("关闭"))
                 .padding(.leading, 14)
                 .padding(.top, 10)
@@ -169,9 +175,6 @@ struct SettingsPage: View {
                     HotkeyField(slot: .alt, activeSlot: $activeHotkeySlot)
                 }
             }
-            SettingRow(title: L10n.text("提示词模式"), detail: nil) {
-                HotkeyField(slot: .assistant, activeSlot: $activeHotkeySlot)
-            }
             SettingRow(title: L10n.text("粘贴上一条"), detail: nil) {
                 HotkeyField(slot: .pasteLast, activeSlot: $activeHotkeySlot)
             }
@@ -195,7 +198,7 @@ struct SettingsPage: View {
             SettingRow(title: L10n.text("翻译成"), detail: nil) {
                 Picker(L10n.text("翻译成"), selection: model.setting(\.translateTarget)) {
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }.labelsHidden().frame(width: 180)
+                }.labelsHidden().frame(width: 180).hoverFeedback(.fixed)
             }
         }
     }
@@ -208,7 +211,7 @@ struct SettingsPage: View {
                 Picker(L10n.text("首选译文语言"), selection: model.setting(\.selectionTranslateTarget)) {
                     Text(L10n.text("跟随快捷键设置")).tag("")
                     ForEach(TranslateLanguage.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }.labelsHidden().frame(width: 180)
+                }.labelsHidden().frame(width: 180).hoverFeedback(.fixed)
                     .disabled(!model.settings.selectionTranslate)
             }
         }
@@ -221,8 +224,6 @@ struct SettingsPage: View {
             if model.settings.dictationCleanupEnabled { shortDictationSettings }
             ToggleRow(title: L10n.text("参考光标附近的文字"), detail: nil,
                       isOn: model.setting(\.readFieldContext))
-            ToggleRow(title: L10n.text("提示词模式推荐模型"), detail: L10n.text("生成提示词后联网推荐。"),
-                      isOn: model.setting(\.recommendModel))
         }
     }
 
@@ -234,14 +235,14 @@ struct SettingsPage: View {
                     Text(mode.label).tag(mode)
                 }
             }
-            .labelsHidden().frame(width: 180)
+            .labelsHidden().frame(width: 180).hoverFeedback(.fixed)
         }
         if settings.shortDictationMode == .smallModel {
             SettingRow(title: L10n.text("小模型服务商"), detail: L10n.text("使用在「模型」中配置的接口和 Key。")) {
                 Picker("", selection: model.setting(\.shortDictationProvider)) {
                     ForEach(LLMPreset.all) { Text($0.name).tag($0.id) }
                 }
-                .labelsHidden().frame(width: 180)
+                .labelsHidden().frame(width: 180).hoverFeedback(.fixed)
             }
             SettingRow(title: L10n.text("小模型 ID"), detail: L10n.text("小模型不可用时直接输出。")) {
                 TextField(L10n.text("模型 ID"), text: model.setting(\.shortDictationModel))
@@ -264,13 +265,7 @@ struct SettingsPage: View {
                 PromptFileRow(kind: .translation, title: L10n.text("翻译提示词"),
                               detail: L10n.text("{{to}} 代表目标语言。"))
             }
-            SettingsSection(title: L10n.text("提示词模式")) {
-                PromptFileRow(kind: .promptClarify, title: L10n.text("澄清问题"))
-                Divider()
-                PromptFileRow(kind: .promptBreakdown, title: L10n.text("拆解选中的提示词"))
-                Divider()
-                PromptFileRow(kind: .promptDraft, title: L10n.text("生成最终提示词"))
-            }
+
         }
     }
 
@@ -300,13 +295,14 @@ struct SettingsPage: View {
                 .disabled(onDevice && model.speech?.canSetLanguage != true)
                 .labelsHidden()
                 .frame(width: 150)
+                .hoverFeedback(.fixed)
             }
             SettingRow(title: L10n.text("中文字形"),
                        detail: onDevice && model.speech?.modelId == "mlx-fun-asr-nano-bf16"
                         ? L10n.text("此模型不会确认听写语言。选择中文时应用繁体；听写日语请选日语，以免只有汉字的日文被转换。自动模式不转换。") : nil) {
                 Picker("", selection: model.setting(\.zhVariant)) {
                     ForEach(ChineseVariant.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }.labelsHidden().frame(width: 150)
+                }.labelsHidden().frame(width: 150).hoverFeedback(.fixed)
             }
         }
     }
@@ -321,6 +317,7 @@ struct SettingsPage: View {
                     Button(meter.running ? L10n.text("停止") : L10n.text("测试麦克风")) {
                         if meter.running { meter.stop() } else { meter.start(deviceUID: Settings.shared.inputDeviceUID) }
                     }
+                    .buttonStyle(SecondaryButtonStyle(feedback: meter.running ? .fixed : .standard))
                     Picker("", selection: model.setting(\.inputDeviceUID, then: {
                         // Switching device restarts a test that is already running, never starts one.
                         if meter.running { meter.start(deviceUID: Settings.shared.inputDeviceUID) }
@@ -330,6 +327,7 @@ struct SettingsPage: View {
                     }
                     .labelsHidden()
                     .frame(width: 190)
+                    .hoverFeedback(.fixed)
                 }
             }
             ToggleRow(title: L10n.text("提示音"), detail: nil, isOn: model.setting(\.soundEnabled))
@@ -344,7 +342,7 @@ struct SettingsPage: View {
                     Text(L10n.text("跟随系统")).tag("system")
                     Text("简体中文").font(Theme.rowFont).tag("zh-Hans")
                     Text("English").tag("en")
-                }.labelsHidden().frame(width: 150)
+                }.labelsHidden().frame(width: 150).hoverFeedback(.fixed)
             }
             SettingRow(title: L10n.text("外观"), detail: nil) {
                 HStack(spacing: 2) {
@@ -442,7 +440,7 @@ struct SettingsPage: View {
                     Text(L10n.text("自动（GitHub 慢时用镜像）")).tag("auto")
                     Text(L10n.text("只用 GitHub")).tag("github")
                     Text(L10n.text("镜像优先")).tag("mirror")
-                }.labelsHidden().frame(width: 220)
+                }.labelsHidden().frame(width: 220).hoverFeedback(.fixed)
             }
             if let version = model.health?.version {
                 InterfaceTypography.text(L10n.text("服务版本 ") + version, size: 11)
@@ -512,10 +510,10 @@ private extension EnvironmentValues {
 
 struct SettingsSection<Content: View>: View {
     var title: String? = nil
+    var tiltOnHover = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        let border = RoundedRectangle(cornerRadius: Theme.listGroupRadius, style: .circular)
         VStack(alignment: .leading, spacing: 8) {
             if let title {
                 InterfaceTypography.text(title, size: 14, weight: .semibold).foregroundColor(Theme.secondary)
@@ -525,8 +523,7 @@ struct SettingsSection<Content: View>: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(border.fill(Theme.card))
-                .overlay(border.strokeBorder(Theme.border, lineWidth: 1))
+                .hoverCard(Theme.card, radius: Theme.listGroupRadius, border: Theme.border, enabled: tiltOnHover)
         }
     }
 }
@@ -607,7 +604,7 @@ struct StateSwitchStyle: ToggleStyle {
             }
             .contentShape(Capsule(style: .circular))
         }
-        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.capsuleRadius))
+        .buttonStyle(FlatActionButtonStyle(cornerRadius: Theme.capsuleRadius, feedback: .fixed))
         .accessibilityRepresentation {
             Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
         }
@@ -660,7 +657,7 @@ private struct PermissionRow: View {
 // MARK: - shortcut recorder
 
 enum HotkeySlot {
-    case main, alt, pasteLast, translate, assistant
+    case main, alt, pasteLast, translate
 
     /// The registration slot name (AppDelegate.registerHotKeys).
     var name: String {
@@ -669,7 +666,6 @@ enum HotkeySlot {
         case .alt: return "alt"
         case .pasteLast: return "pasteLast"
         case .translate: return "translate"
-        case .assistant: return "assistant"
         }
     }
 
@@ -679,7 +675,6 @@ enum HotkeySlot {
         case .alt: return \.hotkeyAlt
         case .pasteLast: return \.hotkeyPasteLast
         case .translate: return \.hotkeyTranslate
-        case .assistant: return \.hotkeyAssistant
         }
     }
 }
@@ -784,8 +779,8 @@ struct HotkeyField: View {
         if event.keyCode == FnKeyMonitor.keyCode {
             if event.modifierFlags.contains(.function) {
                 let otherModifiers = event.modifierFlags.intersection(FnChord.standardModifiers)
-                fnTap.fnDown(at: Date(), otherModifiersHeld: !otherModifiers.isEmpty)
-            } else if fnTap.fnUp(at: Date()), slot == .main || slot == .alt {
+                fnTap.fnDown(at: event.timestamp, otherModifiersHeld: !otherModifiers.isEmpty)
+            } else if fnTap.fnUp(at: event.timestamp), slot == .main || slot == .alt {
                 save(.fnDefault)
             }
         } else {
@@ -851,12 +846,13 @@ struct ModelSection: View {
     var body: some View {
         let capabilities = LLMThinkingCache().capabilities(for: settings.llmBaseURL)
         let thinking = capabilities[settings.llmModel.lowercased()]
-        SettingsSection(title: L10n.text("整理模型")) {
+        SettingsSection(title: L10n.text("整理模型"), tiltOnHover: true) {
                 SettingRow(title: L10n.text("服务商"), detail: nil) {
                     HStack(spacing: 8) {
                         if !preset.keyPage.isEmpty, !keyLocked, !keySaved, let url = URL(string: preset.keyPage) {
                             Link(L10n.text(preset.needsKey ? "获取 API Key" : "官网"), destination: url)
                                 .font(Theme.captionFont)
+                                .hoverFeedback(.compact)
                         }
                         Picker("", selection: Binding(get: { settings.llmPresetID }, set: { id in
                             settings.llmPresetID = id
@@ -866,6 +862,7 @@ struct ModelSection: View {
                         }
                         .labelsHidden()
                         .frame(width: 220)
+                        .hoverFeedback(.fixed)
                     }
                 }
                 SettingRow(title: L10n.text("接口地址"), detail: LLMPreset.isAllowedBaseURL(settings.llmBaseURL) ? nil : L10n.text("需要 https（本机可用 http://127.0.0.1）")) {
@@ -883,7 +880,7 @@ struct ModelSection: View {
                             Button(normalizedKeyDraft.isEmpty && keySaved ? L10n.text("删除") : L10n.text("保存")) {
                                 saveKey(deleting: normalizedKeyDraft.isEmpty && keySaved)
                             }
-                            .buttonStyle(SecondaryButtonStyle())
+                            .buttonStyle(SecondaryButtonStyle(feedback: normalizedKeyDraft.isEmpty && keySaved ? .fixed : .standard))
                             .disabled(keyLoading || (normalizedKeyDraft.isEmpty && !keySaved))
                         }
                         .disabled(keyLocked)
@@ -906,6 +903,7 @@ struct ModelSection: View {
                                 }
                             }
                             .frame(width: 70)
+                            .hoverFeedback(.fixed)
                         }
                         Button(L10n.text("获取列表")) { fetchModels() }
                             .buttonStyle(SecondaryButtonStyle())
@@ -928,7 +926,7 @@ struct ModelSection: View {
                                 Text(Self.effortLabel(effort)).tag(effort)
                             }
                         }
-                        .labelsHidden().frame(width: 180)
+                        .labelsHidden().frame(width: 180).hoverFeedback(.fixed)
                     }
                 }
                 ToggleRow(title: L10n.text("服务故障时自动切换"), detail: L10n.text("文字会发给备用服务商。"), isOn: model.setting(\.automaticProviderFallback))
@@ -1171,6 +1169,7 @@ private struct PromptFileRow: View {
                     Button(L10n.text("恢复默认…")) { restoring = true }
                 }
                 .menuStyle(.borderlessButton)
+                .hoverFeedback()
                 .accessibilityLabel(L10n.text("编辑 {0}", title))
             }
             if let message {

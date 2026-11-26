@@ -681,7 +681,7 @@ struct SelectionBubbleView: View {
                     }
                     .accessibilityLabel(copyLabel)
                 }
-                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, symbolSize: 12, action: close)
+                IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 28, symbolSize: 12, feedback: .fixed, action: close)
                     .accessibilityLabel(L10n.text("关闭"))
             }
             switch state {

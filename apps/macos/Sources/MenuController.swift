@@ -18,7 +18,6 @@ struct MenuState {
 }
 
 protocol MenuActionTarget: AnyObject {
-    func menuSetStrength(_ code: String)
     func menuToggleDictation()
     func menuCancelDictation()
     func menuPasteLast()
@@ -76,9 +75,6 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(cancelItem)
         pasteItem = item(L10n.text("粘贴上一条"), #selector(onPasteLast))
         menu.addItem(pasteItem)
-        let assistant = item(L10n.text("提示词模式"), #selector(onMode(_:)))
-        assistant.representedObject = "promptbeta"
-        menu.addItem(assistant)
         hintItem = item("", nil)
         hintItem.isEnabled = false
         menu.addItem(hintItem)
@@ -160,9 +156,6 @@ final class MenuController: NSObject, NSMenuDelegate {
         return flat.count <= n ? flat : String(flat.prefix(n)) + "…"
     }
 
-    @objc private func onMode(_ sender: NSMenuItem) {
-        if let code = sender.representedObject as? String { target?.menuSetStrength(code) }
-    }
     @objc private func onToggle() { target?.menuToggleDictation() }
     @objc private func onCheckForUpdates() { target?.menuCheckForUpdates() }
     @objc private func onCancel() { target?.menuCancelDictation() }

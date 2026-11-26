@@ -117,7 +117,7 @@ struct UpdateProgressView: View {
                     Text(title).font(InterfaceTypography.localized(20, weight: .semibold))
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
-                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24, action: close)
+                    IconButton(symbol: "xmark", help: L10n.text("关闭"), size: 24, feedback: .fixed, action: close)
                 }
                 content
                 buttons

@@ -45,11 +45,11 @@ struct HubNoticeStack: View {
                     Text(notice.message).font(InterfaceTypography.localized(14)).foregroundColor(Theme.ink)
                     if notice.undo != nil {
                         Button(L10n.text("撤销")) { feedback.dismiss(notice.id, undo: true) }
-                            .buttonStyle(.plain).foregroundColor(Theme.accent)
+                            .buttonStyle(FlatActionButtonStyle(feedback: .compact)).foregroundColor(Theme.accent)
                     }
                     Button { feedback.dismiss(notice.id) } label: {
                         Image(systemName: "xmark").font(.system(size: 10)).foregroundColor(Theme.tertiary)
-                    }.buttonStyle(.plain).help(L10n.text("关闭"))
+                    }.buttonStyle(FlatActionButtonStyle(feedback: .fixed)).help(L10n.text("关闭"))
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.card))

@@ -7,7 +7,7 @@ import Combine
 enum AppPhase { case idle, starting, recording, thinking }
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
-    case general, dictation, translation, prompts, models
+    case general, dictation, translation, prompts, models, tools
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .translation: return L10n.text("翻译设置")
         case .prompts: return L10n.text("个性化")
         case .models: return L10n.text("模型")
+        case .tools: return L10n.harnessTitle
         }
     }
 
@@ -28,19 +29,21 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .translation: return "translate"
         case .prompts: return "doc.text"
         case .models: return "cpu"
+        case .tools: return "text.bubble"
         }
     }
 }
 
 enum HubPage: String, CaseIterable, Identifiable {
-    case home, history, meetings, settings
+    case home, history, vocabulary, meetings, settings
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .home: return L10n.text("首页")
-        case .history: return L10n.text("历史")
-        case .meetings: return L10n.text("会议")
+        case .home: return "Home"
+        case .history: return "History"
+        case .vocabulary: return "Vocabulary"
+        case .meetings: return "Conference"
         case .settings: return L10n.settingTitle
         }
     }
@@ -49,6 +52,7 @@ enum HubPage: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house"
         case .history: return "clock.arrow.circlepath"
+        case .vocabulary: return "text.book.closed"
         case .meetings: return "person.2"
         case .settings: return "gearshape"
         }
@@ -57,8 +61,6 @@ enum HubPage: String, CaseIterable, Identifiable {
 
 /// What the windows may ask the app to do. Implemented by AppDelegate.
 protocol AppActions: AnyObject {
-    func setCleanupMode(_ code: String)
-    func startAssistant()
     /// The onboarding's 拆解一段示例提示词: opens 提示词模式 on a sample prompt.
     func breakdownSample()
     func toggleDictation()
@@ -88,8 +90,6 @@ protocol AppActions: AnyObject {
     func checkForUpdates(interactive: Bool)
 }
 
-extension AppActions { func startAssistant() { setCleanupMode("promptbeta") } }
-
 final class AppModel: ObservableObject {
     static let shared = AppModel()
 
@@ -97,6 +97,7 @@ final class AppModel: ObservableObject {
 
     @Published var page: HubPage = .home
     @Published var sidebarBrandPalette = SidebarBrandPalette.random()
+    var cadenceIdleWords = CadenceIdleWords()
     @Published var settingsCategory: SettingsCategory = .general
     @Published var settingsPresented = false
     @Published var selectedHistoryID: String?
@@ -279,12 +280,6 @@ final class AppModel: ObservableObject {
     var hotkeyLabel: String {
         let main = settings.hotkeyMain
         return main.isFn ? "fn" : HotKeyCentre.describe(keyCode: main.keyCode, modifiers: main.modifiers)
-    }
-
-    /// 提示词模式's key, or "" when it has none.
-    var assistantLabel: String {
-        let key = settings.hotkeyAssistant
-        return key.enabled ? HotKeyCentre.describe(keyCode: key.keyCode, modifiers: key.modifiers) : ""
     }
 
     var modelSummary: String {

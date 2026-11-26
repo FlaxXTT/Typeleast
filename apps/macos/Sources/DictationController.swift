@@ -149,10 +149,7 @@ final class DictationController {
         }
     }
 
-    /// The key that answers 提示词模式's questions, as shown to the user.
-    private var assistantKeyLabel: String {
-        model.assistantLabel.isEmpty ? L10n.text("继续补充按钮") : model.assistantLabel
-    }
+    private var assistantKeyLabel: String { L10n.text("继续补充按钮") }
 
     @discardableResult
     func startHeldShortcut() -> Bool {
@@ -262,11 +259,12 @@ final class DictationController {
             let language = settings.recognitionLanguage(for: model.speech?.modelId)
             let smoothing = settings.doubaoSpeechSmoothing
             let hotwords = settings.doubaoHotwords
+            let tables = settings.doubaoVocabularyTables
             let maxSeconds = recorder.maxSeconds
             let result = Task.detached(priority: .userInitiated) {
                 let key = KeychainStore.read(account: OnlineASRProvider.doubao.keychainAccount) ?? ""
                 let config = OnlineASRConfiguration(provider: .doubao, apiKey: key, workspaceID: "",
-                                                    doubaoSpeechSmoothing: smoothing, doubaoHotwords: hotwords)
+                                                    doubaoSpeechSmoothing: smoothing, doubaoHotwords: hotwords, doubaoTables: tables)
                 return try await OnlineASR.transcribeLive(audio: audio, maxSeconds: maxSeconds,
                                                           language: language, configuration: config)
             }
@@ -560,6 +558,7 @@ final class DictationController {
             let workspaceID = settings.funASRWorkspaceID
             let speechSmoothing = settings.doubaoSpeechSmoothing
             let hotwords = asrProvider == .doubao ? settings.doubaoHotwords : ""
+            let tables = settings.doubaoVocabularyTables
             let ticket = client.generationTicket()
             if !ordinaryDictation { recordingBar.showThinking(detail: L10n.text("正在识别…")) }
             onlineASRTask = Task.detached(priority: .userInitiated) {
@@ -569,7 +568,8 @@ final class DictationController {
                         let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
                         try Task.checkCancellation()
                         let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID,
-                                                                   doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords)
+                                                                   doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords,
+                                                                   doubaoTables: tables)
                         return try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
                     }
                     let spoken: String
@@ -853,7 +853,7 @@ final class DictationController {
                 self.applyState()
             } else if insert {
                 let counts = DictationStats.countWords(selected)
-                ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: entry.seconds,
+                ActivityLog.shared.record(words: counts.cjk + counts.latin, latinWords: counts.latin, seconds: entry.seconds,
                                           typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
                 self.insertText(selected, fallback: isOriginal, entryId: historyID,
                                 appBundleId: entry.app ?? "", field: field, showsCapsule: showsCapsule,
@@ -910,6 +910,7 @@ final class DictationController {
             let animatePaste = insert && resp.beta == nil && resp.qualityReview == nil && !resp.noiseSuspected
                 && !resp.insertableText.isEmpty && recordingBar.canAnimatePaste
             let keepsHistory = Self.keepsHistory(translateTo: translateTo ?? preview?.target, response: resp)
+            let quietNoise = resp.noiseSuspected && keepsHistory && strength != VoiceStrength.promptbeta.rawValue
             func saveToHistory(_ entry: LocalHistoryEntry) -> String? {
                 guard keepsHistory else { return nil }
                 var entry = entry
@@ -920,7 +921,7 @@ final class DictationController {
             }
             if resp.insertableText.isEmpty && resp.beta == nil && resp.qualityReview == nil && !resp.noiseSuspected {
                 take?.cancel()
-            } else if resp.qualityReview == nil && !animatePaste {
+            } else if resp.qualityReview == nil && !animatePaste && !quietNoise {
                 take?.done()
             }
             if !usesOnlineASR {
@@ -962,7 +963,17 @@ final class DictationController {
                 entry.task = resp.task
                 entry.variants = variants
                 entry.translated = translateTo
-                _ = saveToHistory(entry)
+                let historyID = saveToHistory(entry)
+                if quietNoise {
+                    let notice = historyID != nil
+                        ? L10n.text("这段录音没听清，未粘贴。可在历史里查看。")
+                        : L10n.text("这段录音没听清，未粘贴。")
+                    if let take { take.failed(notice) }
+                    else { showRequestResult(notice, true) }
+                    setHint(notice, warning: true)
+                    applyState()
+                    return
+                }
                 showRequestResult(L10n.text("识别结果待查看，未自动输入"), true)
                 setHint(L10n.text("请查看识别原文，或忽略后重新说。"), warning: true)
                 presentReviewedCandidate(ReviewedRequest(text: candidate, repeated: repeated, appBundleId: appBundleId,
@@ -989,7 +1000,10 @@ final class DictationController {
                 if pending.copyResult { insert = false; copied = true }
                 beta.clear()
             }
-            let text = resp.insertableText
+            let spoken = resp.insertableText
+            let text = keepsHistory && strength != VoiceStrength.promptbeta.rawValue && resp.beta == nil
+                ? Vocabulary.applying(settings.vocabularyReplacements, to: spoken)
+                : spoken
             var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
                                           language: language, strength: strength,
                                           raw: resp.raw, text: text, fallback: resp.fallback,
@@ -1034,7 +1048,7 @@ final class DictationController {
             setHint(resp.fallback ? failedHint : nil, warning: resp.fallback)
             if insert {
                 let counts = DictationStats.countWords(text)
-                ActivityLog.shared.record(words: counts.cjk + counts.latin, seconds: seconds,
+                ActivityLog.shared.record(words: counts.cjk + counts.latin, latinWords: counts.latin, seconds: seconds,
                                           typingSeconds: Double(counts.cjk) + Double(counts.latin) * 1.5)
                 let deliver = { [weak self] in
                     self?.insertText(text, fallback: resp.fallback, entryId: historyID, appBundleId: appBundleId, field: field,
@@ -1089,7 +1103,7 @@ final class DictationController {
     // MARK: insertion
 
     func insertText(_ text: String, fallback: Bool, entryId: String?, appBundleId: String, field: FocusedField?,
-                    showsCapsule: Bool = true, offersHistoryRecovery: Bool = true) {
+                    showsCapsule: Bool = true, offersHistoryRecovery: Bool = true, showsDeliveryErrors: Bool = false) {
         let generation = progressID
         let text = Delivery.prepare(text, appBundleId: appBundleId, field: field)
         Delivery.deliver(text, appBundleId: appBundleId, field: field, onWaiting: { [weak self] _ in
@@ -1107,7 +1121,7 @@ final class DictationController {
             case .pasted(let result):
                 if !result.ok {
                     self.notPasted(entryId, L10n.text("未能写入"), result.message,
-                                   showsCapsule: showsCapsule, offersHistoryRecovery: offersHistoryRecovery)
+                                   showsCapsule: showsCapsule || showsDeliveryErrors, offersHistoryRecovery: offersHistoryRecovery)
                     return
                 }
                 self.setHint(result == .pasted ? (fallback ? self.hint : nil) : result.message)
@@ -1115,10 +1129,10 @@ final class DictationController {
                 self.applyState()
             case .appChanged:
                 self.notPasted(entryId, L10n.text("没有回到原应用"), L10n.text("等了一会儿没有回到原来的应用，未粘贴。"),
-                               showsCapsule: showsCapsule, offersHistoryRecovery: offersHistoryRecovery)
+                               showsCapsule: showsCapsule || showsDeliveryErrors, offersHistoryRecovery: offersHistoryRecovery)
             case .fieldLost:
                 self.notPasted(entryId, L10n.text("没有回到原输入框"), L10n.text("等了一会儿没有回到原来的输入框，未粘贴。"),
-                               showsCapsule: showsCapsule, offersHistoryRecovery: offersHistoryRecovery)
+                               showsCapsule: showsCapsule || showsDeliveryErrors, offersHistoryRecovery: offersHistoryRecovery)
             case .superseded:
                 if let id = entryId { HistoryStore.shared.update(id: id) { $0.inserted = false } }
             }

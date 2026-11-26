@@ -56,6 +56,7 @@ struct SpeechModelOptions: View {
                             Text(ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)).font(Theme.captionFont)
                             if item.bytes > 0 {
                                 Button(L10n.text("删除")) { partialOnly = false; deletion = item }
+                                    .buttonStyle(SecondaryButtonStyle(feedback: .fixed))
                                     .disabled(item.active || catalog.operation?.running == true || model.phase != .idle)
                             }
                         }
@@ -65,6 +66,7 @@ struct SpeechModelOptions: View {
                                 Spacer()
                                 Text(ByteCountFormatter.string(fromByteCount: Int64(item.partialBytes), countStyle: .file)).font(Theme.captionFont)
                                 Button(L10n.text("清理")) { partialOnly = true; deletion = item }
+                                    .buttonStyle(SecondaryButtonStyle(feedback: .fixed))
                                     .disabled(catalog.operation?.running == true || model.phase != .idle)
                             }
                         }
@@ -102,6 +104,7 @@ struct SpeechModelOptions: View {
                 if entry.installed { Text(L10n.text("已下载")) }
                 if !entry.sourceUrl.isEmpty, let url = URL(string: entry.sourceUrl) {
                     Link(L10n.text("模型来源与下载"), destination: url)
+                        .hoverFeedback(.compact)
                 }
             }.font(Theme.captionFont).foregroundColor(Theme.secondary)
             if let op = operation {
@@ -113,6 +116,7 @@ struct SpeechModelOptions: View {
                         }
                         if op.phase != "committing" {
                             Button(L10n.text("取消")) { model.actions?.manageSpeechModel(id: entry.id, download: false, cancel: true) }
+                                .hoverFeedback(.fixed)
                         }
                     }.font(Theme.captionFont)
                 } else if op.phase == "error" {
