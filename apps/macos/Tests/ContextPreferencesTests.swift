@@ -48,6 +48,29 @@ func contextPreferencesTests() {
     checkEq("an unreadable route does not claim to use a different microphone", recordingInputName(nil), nil)
 
     let demo = OnboardingPracticeController(recordingHold: 0, processingHold: 0)
+    typealias Readiness = OnboardingReadiness
+    checkEq("first dictation waits for the local model download",
+            Readiness.Speech.local(serviceRunning: true, status: SpeechStatus(providerId: "fixture", ready: false, phase: "downloading"),
+                                   operation: nil), .downloading)
+    checkEq("the setup distinguishes a missing local model from one being prepared",
+            Readiness.Speech.local(serviceRunning: true, status: SpeechStatus(providerId: "fixture", ready: false, phase: "missing-model"),
+                                   operation: nil), .missingModel)
+    checkEq("the setup checks a locked Keychain before suggesting cloud dictation",
+            Readiness.Speech.cloud(locked: true, hasKey: true), .keyLocked)
+    checkEq("the setup distinguishes a saved cloud key from a tested connection",
+            Readiness.Speech.cloud(locked: false, hasKey: true), .savedKey)
+    checkEq("first dictation sends the user to the missing microphone permission",
+            Readiness(speech: .ready, microphone: false, writing: true, shortcut: "Fn").next, .microphone)
+    checkEq("first dictation waits for cross-app writing permission",
+            Readiness(speech: .savedKey, microphone: true, writing: false, shortcut: "Fn").next, .writing)
+    checkEq("first dictation waits for an enabled shortcut",
+            Readiness(speech: .ready, microphone: true, writing: true, shortcut: nil).next, .shortcut)
+    checkEq("first dictation can start without a cleanup model",
+            Readiness(speech: .ready, microphone: true, writing: true, shortcut: "Fn").next, nil)
+    checkEq("a conflicting shortcut can fall back to an enabled alternate",
+            Readiness.shortcutLabel(main: .optionSpaceDefault, alternate: .fnDefault, problems: ["main": "Conflict"]), "Fn")
+    checkEq("a conflicting shortcut with no alternate is unavailable",
+            Readiness.shortcutLabel(main: .optionSpaceDefault, alternate: .unset, problems: ["main": "Conflict"]), nil)
     checkEq("onboarding teaches all four workflows", OnboardingDemo.allCases.count, 4)
     checkEq("onboarding shows the default dictation shortcut", OnboardingDemo.dictation.shortcutLabel(in: settings), "Fn")
     checkEq("onboarding shows the default translation chord", OnboardingDemo.voiceTranslation.shortcutLabel(in: settings), "Fn + Left Shift")

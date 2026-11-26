@@ -77,13 +77,13 @@ model's source and license are shown there and listed in [THIRD-PARTY-NOTICES.md
 TypeLeast has no telemetry, analytics, crash reporting or advertising, and no account. It transfers data over the
 network only in these cases:
 
-- **Speech recognition is local.** Audio is recognized on the computer by the bundled local service and never
-  uploaded. Recordings are deleted after recognition, unless the user turns on keeping recordings for retries:
-  they are then stored encrypted on the computer and deleted about five minutes later (when the app quits,
-  after the computer wakes, or at the next launch after a crash).
-- **Model recommendation in Prompt mode (optional, macOS).** After a prompt is written, the local service reads the
-  public model page of the vendor of the app being typed into. That request carries none of the user's content. The
-  prompt and the page then go to the user's own language model provider. It can be turned off in Settings.
+- **Speech recognition.** With local recognition, audio is processed on the computer. With cloud recognition,
+  audio goes to the selected provider. Doubao dictation streams while recording. Alibaba Cloud dictation
+  uploads after recording. Doubao conference recognition submits recorded or imported audio via the
+  private TOS bucket configured by the user. If the user keeps recordings for retry, the temporary local
+  copies are encrypted and retained for about five minutes.
+- **GitHub imports in Harness EQ (macOS).** When the user opens an import link, TypeLeast reads public GitHub
+  metadata and downloads the files selected for import. Local scanning runs on the user's computer.
 - **Text cleanup (optional).** The recognized text goes to the provider configured by the user. When backup
   providers are enabled, a failed request can be sent to one of those providers. The current Mac client can also
   send the user's selected text, explicitly enabled cursor context and a short profile derived from history.
@@ -105,8 +105,8 @@ network only in these cases:
   `TypeLeast/<version>` user agent). The Windows installed version installs updates automatically
   unless this is turned off in 设置 → 服务与更新.
 
-The current Mac cleanup service does not use the retired dictionary or automatic vocabulary replacement pipeline.
-Its history-derived profile is a separate feature described above. Speech audio remains local. The local service
+Vocabulary replacement rules are applied locally to dictation and conference transcripts. The history-derived
+profile is a separate feature described above. The local service
 listens on `127.0.0.1`; the Mac app uses the port reported through its managed child's private startup pipe, never
 an endpoint substituted in `runtime.json`. API keys are stored in the macOS Keychain (Windows: Credential Manager).
 

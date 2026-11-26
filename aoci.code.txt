@@ -6,9 +6,10 @@
 AGENTS.md[SC4S]: F:约定Codex通过AOCI读取和维护项目认知 | R:- | A:AGENTS.md托管区块 | S:-
 CHANGELOG.md[SV4L]: F:按版本记录 TypeLeast 的功能、修复和分发变更 | R:code:.github/release-notes.md | A:版本标题与日期 | S:-
 LICENSE[SS4M]: F:保存项目的GPL第三版许可原文 | R:code:THIRD-PARTY-NOTICES.md | A:GNU GPL v3 | S:-
-README.md[SG5M]: F:介绍 TypeLeast 听写、Harness EQ 调用与归档、平台支持和问题报告贡献者 | R:code:apps/macos/README.md,code:apps/windows/README.md,code:docs/CODE_SIGNING_POLICY.md,code:service/lib/agent-library.js | A:下载、Skill 归档提示词、签名政策、开发与问题报告入口 | S:归档副本独立可调用后才由用户授权移除指定原件。
+README.md[SG5T]: F:用中文介绍 macOS 听写、三种快捷键、首次试用及 Harness EQ | R:code:README.en.md,code:docs/user-guide.md,code:docs/CODE_SIGNING_POLICY.md,code:service/lib/agent-library.js | A:下载、使用指南、Skill 归档提示词、项目链接和问题报告贡献者 | S:归档副本独立可调用后才由用户授权移除指定原件。
 THIRD-PARTY-NOTICES.md[SS4T]: F:汇总随包交付组件、Agent 配置解析依赖和按需下载模型的第三方声明 | R:code:LICENSE,code:service/package.json | A:随包资源与下载依赖 | S:-
 wrangler.jsonc[OV4T]: F:为Cloudflare部署声明静态资源输出 | R:code:site/build.sh | A:Workers静态站配置 | S:-
+README.en.md[SU5T]: F:用英文介绍 macOS 听写、三种快捷键和首次使用 | R:code:README.md,code:docs/user-guide.en.md,code:docs/CODE_SIGNING_POLICY.md | A:下载、使用指南、Skill 归档提示词和问题报告入口 | S:只有校验归档副本可以独立调用并获得授权后，才移走指定原件。
 
 ===/<repository>/.github/===
 release-notes-windows.md[SV3T]: F:提供历史Windows安装包与变更的发布文字 | R:code:apps/windows/package.ps1 | A:分架构安装说明 | S:-
@@ -53,7 +54,7 @@ ActivityCard.swift[DU7L]: F:渲染 Instinct 统计、分享及 Cadence 周格和
 ActivityLog.swift[PD7S]: F:持久化每日口述次数、字数与耗时并从字数推算 Token | R:code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/History.swift,code:apps/macos/Sources/DictationController.swift | A:ActivityLog.record、seedIfNeeded、clear、ActivityDay.estimatedTokens | S:新录音只在原活动记录附带英文词数，旧记录缺字段时按中日韩系数。没有独立用量账本，清空活动直接清空派生数字。
 AppDelegate+Dictation.swift[EB4T]: F:选择快捷键翻译的输入，并转发日常听写或引导演示 | R:code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/Onboarding.swift,code:apps/macos/Sources/SelectionTranslator.swift | A:TranslationShortcutAction.resolve、toggleDictation、cancelDictation、pasteLast | S:有选区的翻译与语音翻译走独立目标语言。引导窗聚焦时快捷操作不会调用外部输入流程。
 AppDelegate+SpeechModels.swift[AB5T]: F:把模型下载、取消和清理请求交给后台服务 | R:code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/AppDelegate.swift | A:manageSpeechModel、clearSpeechModelStorage | S:-
-AppDelegate.swift[EW8L]: F:编排应用生命周期、录音翻译、凭据解锁及 Harness EQ 调用 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/TouchIDVault.swift,code:apps/macos/Sources/AgentToolLibrary.swift,code:apps/macos/Sources/FnKey.swift,code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/Onboarding.swift | A:AppActions、MenuActionTarget | S:引导窗聚焦先接管听写、翻译和调用快捷键。Fn+Space 两键全松才交付。MCP 仅后台检查原进程是否聚焦密码框，复核前台和圆环代次后投递。自动解锁只请求指纹；手动恢复后合并待存历史。
+AppDelegate.swift[EW8L]: F:编排应用生命周期、录音翻译、凭据解锁及 Harness EQ 调用 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/TouchIDVault.swift,code:apps/macos/Sources/AgentToolLibrary.swift,code:apps/macos/Sources/FnKey.swift,code:apps/macos/Sources/Onboarding.swift,code:apps/macos/Sources/RecordingHints.swift | A:AppActions、MenuActionTarget | S:引导窗聚焦先接管快捷键；真实试听先结束引导再打开文本编辑。Fn+Space 两键全松才交付。MCP 在后台检查密码框，投递前复核前台和圆环代次。自动解锁只请求指纹；手动恢复后合并待存历史。
 AppIconArtwork.swift[DU5S]: F:绘制 Dock、界面及入场遮罩复用的五柱标记 | R:code:docs/APP_ICON.md,code:apps/macos/Sources/HomeEntryTransition.swift | A:AppIconArtwork.draw、image、Surface | S:waveformOnly 只画柱体，无原生图标底板。
 AppModel.swift[AD6M]: F:管理主窗口导航、录音、菜单、设置、引导及凭据解锁共享状态 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/ActivityLog.swift,code:apps/macos/Sources/ActivityCard.swift | A:AppModel、AppActions、AppPhase、HubPage、SettingsCategory | S:主侧栏四个固定英文名称独立于界面语言，历史读取失败和钥匙串锁定分别报告。
 AppWindowStyle.swift[IU6S]: F:固定原生窗口尺寸并配置圆角、拖拽区和标题栏按钮 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/SettingsWindow.swift | A:fixSize、round、WindowDragRegion | S:需保留灰色缩放控制外观并隔开窗口按钮与拖拽区
@@ -80,7 +81,7 @@ HubWindow.swift[AU7M]: F:管理主窗口、侧栏导航、独立设置面板和�
 IdleBar.swift[DU6M]: F:提供桌面收起态语音条、悬停展开及启动入口 | R:code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:IdleBarView | S:使用非激活面板，让外部文档保留焦点
 Inserter.swift[IU8M]: F:通过目标应用的标准粘贴动作交付纯文本，并提供显式剪贴板操作 | R:code:apps/macos/Sources/Delivery.swift,code:apps/macos/Sources/FieldContext.swift | A:Inserter.insert、snapshot、restore、copySelection | S:只在剪贴板仍属于本次写入时恢复快照；发送系统粘贴事件前复核目标仍在前台。检查安全输入和辅助功能授权。
 InstanceLock.swift[RR4T]: F:使用文件描述符持有进程级单实例锁 | R:code:apps/macos/Sources/AppDelegate.swift | A:InstanceLock.acquire | S:崩溃关闭描述符时释放锁
-L10n.swift[CL6L]: F:提供界面本地化及数字格式化 | R:code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/AgentToolLibrary.swift,code:apps/macos/Sources/MeetingPage.swift,code:apps/macos/Sources/VocabularyPage.swift,code:apps/macos/Sources/TouchIDVault.swift,code:apps/macos/Sources/OnboardingPractice.swift | A:L10n.text、harnessTitle、formattedNumber | S:语言启动时确定；忽略仅用于快捷圆环的管理文案，会议权限包含钥匙串解锁提示。
+L10n.swift[CL6L]: F:提供界面本地化及数字格式化 | R:code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/AgentToolLibrary.swift,code:apps/macos/Sources/MeetingPage.swift,code:apps/macos/Sources/VocabularyPage.swift,code:apps/macos/Sources/TouchIDVault.swift,code:apps/macos/Sources/Onboarding.swift | A:L10n.text、harnessTitle、formattedNumber | S:界面语言启动时确定。会议权限和引导检查清单均区分钥匙串状态；保存云识别 Key 的文案提示实际试听。
 LLMSettings.swift[IS8L]: F:管理模型服务预设、地址规则、目录和钥匙串凭据 | R:code:apps/macos/Sources/TouchIDVault.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/LLMThinkingCapability.swift | A:LLMPreset、KeychainStore、migrateToTouchID | S:普通运行禁用旧钥匙串密码交互；迁移须获明确授权，全量验证后启用指纹钥匙串并保留旧条目。
 LearnedToast.swift[DU5S]: F:显示短暂的可撤销转录取消提示 | R:code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/RecordingBar.swift | A:LearnedToast.show、finish、LearnedToastView | S:卡片自行绘制圆角和内描边；替换、撤销或到期各自收尾。
 LoadingMotion.swift[DU5S]: F:提供骨架扫光、不确定进度及伸缩圆弧动画 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/UpdateProgressWindow.swift | A:SkeletonWave、LoadingLinearProgress、LoadingCircularProgress | S:动画时钟局限于视图，不通过全局模型发布帧
@@ -92,7 +93,7 @@ MenuController.swift[EU5S]: F:维护状态栏菜单的听写、权限、更新�
 ModelAdvisor.swift[AA6S]: F:为已交付提示词查询目标工具的模型建议并呈现卡片与来源链接 | R:code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/Motion.swift,code:service/lib/tasks/model-recommend.js | A:ModelAdvisor.recommend、ModelCardState、ModelRecommendationCard | S:建议卡单独显示，不改写已交付提示词。
 Motion.swift[CU4S]: F:为 SwiftUI 和 AppKit 控件提供悬停、按压及复制反馈 | R:code:apps/macos/Sources/Theme.swift,code:apps/macos/Sources/WindowHoverEffects.swift,code:apps/macos/Sources/HubScrollView.swift | A:HoverFeedbackReset、ControlHoverFeedback、ControlMotion、setControlLift | S:磁吸局部位移限两点且保留命中框。控件进入与退出通知窗口，鼠标在控件上时卡片回正。
 NoiseReviewPanel.swift[DU6M]: F:呈现异常识别、整理及翻译审核，提供差异对照、定位和编辑 | R:code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/ServiceClient.swift,code:apps/macos/Sources/SelectableText.swift,code:apps/macos/Sources/Motion.swift | A:NoiseReviewPanel、QuantityReviewPanel、ReviewEditFocus | S:同一历史编号复用审核窗。只定位唯一片段。按来源显示面板、复制或插入，确认前不交付。
-Onboarding.swift[AU6M]: F:先展示实时快捷键并依次演示口述、两类翻译和 Skill 调用，最后集中配置 | R:code:apps/macos/Sources/OnboardingPractice.swift,code:apps/macos/Sources/OnboardingPracticeView.swift,code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/OnlineASRSettings.swift,code:apps/macos/Sources/SpeechModelOptions.swift | A:OnboardingWindowController、OnboardingView、OnboardingSetupView | S:引导窗聚焦才接管快捷键，换页和关闭丢弃演示结果。配置可跳过；模型与系统权限操作只在末页，Return 不触发末页离开。
+Onboarding.swift[AU6L]: F:演示口述、语音翻译、选词翻译和 Skill 调用，集中引导首次设置和真实试听 | R:code:apps/macos/Sources/OnboardingPractice.swift,code:apps/macos/Sources/OnboardingPracticeView.swift,code:apps/macos/Sources/OnlineASRSettings.swift,code:apps/macos/Sources/SpeechModelOptions.swift,code:apps/macos/Sources/AppDelegate.swift | A:OnboardingWindowController、OnboardingView、OnboardingReadiness、OnboardingExit | S:只有引导窗聚焦才接管快捷键，离开演示即清理状态。按识别、麦克风、写入权限、快捷键排序补齐首项，整理可选。云端 Key 已保存只表示可以试用，Return 不触发末页离开。
 OnboardingPractice.swift[AB6S]: F:提供四种新手演示的固定样例、实际快捷键说明及演示状态 | R:code:apps/macos/Sources/OnboardingPracticeView.swift,code:apps/macos/Sources/Onboarding.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/FnKey.swift | A:OnboardingDemo、OnboardingPracticeController | S:练习不接触模型、麦克风、系统剪贴板或其他应用的输入。Fn+Space 演示在两键释放后写入，换页取消过期回调。
 OnboardingPracticeView.swift[DU4S]: F:呈现与当前绑定对应的演示说明、模拟胶囊、练习框及选词面板 | R:code:apps/macos/Sources/OnboardingPractice.swift,code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/Theme.swift | A:OnboardingPracticeView | S:胶囊只复用日常颜色，动画由独立 SwiftUI 视图绘制，避免混合 AppKit 布局。跟随减少动态效果选项；结果仅显示在演示容器。
 OnlineASR.swift[IN8L]: F:提供云端语音识别、流式听写及共享请求配置 | R:code:apps/macos/Sources/DictationController.swift,code:apps/macos/Sources/OnlineASRSettings.swift,code:apps/macos/Sources/DoubaoMeetingASR.swift,code:apps/macos/Sources/Vocabulary.swift | A:OnlineASRProvider、OnlineASRConfiguration、OnlineASRTranscript、DoubaoVocabularyTables、transcribe | S:豆包听写优先取 WebSocket 最终结果。编辑后的热词与请求共用提取规则，可同控制台词表 ID 一并发送。
@@ -124,7 +125,7 @@ VoiceVisualization.swift[KH7S]: F:从归一化人声音量生成双峰与十柱�
 Wav.swift[CH6S]: F:读写客户端和服务共用的规范PCM WAV | R:code:apps/macos/Sources/Recorder.swift,code:service/lib/wav.js | A:Wav.header、wrap、parse、isCanonical | S:接口要求16kHz单声道PCM16，固定头和时长上限要与服务一致
 main.swift[ER6T]: F:处理旧交接与指纹迁移子命令并启动 AppKit | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/InstanceLock.swift,code:apps/macos/Sources/LLMSettings.swift | A:TypeLeast 应用入口 | S:迁移持实例锁且只有明确参数才允许旧交互；正常应用忽略失效子进程管道的 SIGPIPE
 TouchIDVault.swift[PS8M]: F:用 Touch ID 保护 TypeLeast 专用钥匙串，并在解锁流程中按需恢复系统指纹 | R:code:apps/macos/Sources/LLMSettings.swift,code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/L10n.swift | A:TouchIDVault.provision、unlock、read、write | S:HPKE 与 Secure Enclave 包装专用钥匙串口令。仅显式允许且系统确认锁定时恢复指纹，销毁恢复上下文后最多重试一次指纹。新库经指纹读回才写入选择标记，访问完毕重新锁定。
-RecordingHints.swift[DU7M]: F:管理首次就绪卡和连续键入后的听写提示 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:RecordingHints、TypingHintWindow、TypingReminderPill | S:两项权限齐备后才统计按键时间，不读取内容。短提示使用录音胶囊的高度与配色，显示实际快捷键，鼠标穿透并自动收起。首次卡保留确认。
+RecordingHints.swift[DU7M]: F:管理首次就绪卡、连续键入后的提示及推荐应用打开流程 | R:code:apps/macos/Sources/AppDelegate.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/FieldContext.swift,code:apps/macos/Sources/RecordingBar.swift,code:apps/macos/Sources/VoiceBarGeometry.swift | A:RecordingHints、openRecommendation、TypingHintWindow、TypingReminderPill | S:两项权限齐备后才统计按键时间且不读内容。推荐应用打开成功才安排提示，失败回调回到主线程。短提示与胶囊同高、显示实际按键、鼠标穿透并自动收起。
 ThemeRevealOverlay.swift[DU6S]: F:把旧主题截图按窗口布局切分并依次淡出，处理减少动态效果和窗口关闭 | R:code:apps/macos/Sources/HubThemeReveal.swift,code:apps/macos/Sources/HubPages.swift,code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/Theme.swift | A:ThemeRevealOverlay、ThemeRevealLayout、afterAppearanceRender、reveal | S:边界按截图像素对齐。浅色从左至右，深色反向。两区和三区窗口共用首尾开始时间。旧截图不拦截输入，减少动态效果时整体短淡化。
 VoiceCaptureMeter.swift[KH7S]: F:把输入 PCM 的人声频带转换为扣除底噪的归一化音量 | R:code:apps/macos/Sources/Recorder.swift | A:VoiceCaptureMeter、append、level、interval | S:按原采样率选择109至1094赫兹的频点，每50毫秒计算一次2048点频谱。频点做0.7平滑再平均三帧；动态底噪和余量在0.25次幂增强之前扣除。状态只由当前录音回调写入。
 EngineLogo.swift[IU5T]: F:匹配语音或整理模型的品牌并绘制随包图标 | R:code:apps/macos/Sources/OnlineASR.swift,code:apps/macos/Resources/EngineLogos/SOURCES.md | A:EngineBrand.speech、cleanup、EngineLogo | S:整理先按模型家族判定，再按发布者或服务商回退。
@@ -139,7 +140,7 @@ Vocabulary.swift[KB6T]: F:提取豆包热词并按文字边界与句内条件执
 VocabularyPage.swift[DU6M]: F:在 Vocabulary 页管理豆包热词与本机替换 | R:code:apps/macos/Sources/AppModel.swift,code:apps/macos/Sources/Settings.swift,code:apps/macos/Sources/Vocabulary.swift,code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/HubFeedback.swift | A:VocabularyPage | S:页面与导航共用固定英文名。热词沿用已有的豆包字段；替换可附同句条件。撤销删除会合并最新条目，避免覆盖后续编辑。
 
 ===/<repository>/apps/macos/Tests/===
-ContextPreferencesTests.swift[TS4S]: F:覆盖离线引导与胶囊布局、独立选词语言、输入设备名及历史文本测量 | R:code:apps/macos/Sources/OnboardingPracticeView.swift,code:apps/macos/Sources/AudioDevices.swift,code:apps/macos/Sources/Settings.swift | A:contextPreferencesTests | S:在宿主窗口驱动胶囊状态，无模型验证示例和过期结果隔离；输入命名使用模拟设备。
+ContextPreferencesTests.swift[TS4S]: F:验证离线引导演示、首次听写状态、选词语言、设备命名和历史文本测量 | R:code:apps/macos/Sources/OnboardingPracticeView.swift,code:apps/macos/Sources/Onboarding.swift,code:apps/macos/Sources/AudioDevices.swift | A:contextPreferencesTests | S:用模拟模型、凭据和设备验证缺项顺序、冲突键回退和迟到演示隔离。
 MeetingTests.swift[TB4M]: F:验证会议导入、配置、转写和主侧栏标题 | R:code:apps/macos/Sources/Meeting.swift,code:apps/macos/Sources/DoubaoMeetingASR.swift,code:apps/macos/Sources/Vocabulary.swift | A:meetingTests、doubaoFileMeetingTests | S:覆盖词表条件和边界、会议替换后的说话人与时间戳，以及四个侧栏英文标签。上传、轮询和删除采用模拟接口。
 PerformanceRegressionTests.swift[TP4L]: F:验证首页窗口、统计渲染、主题切换、取消提示及译文几何 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/ActivityCard.swift,code:apps/macos/Sources/SelectionTranslator.swift | A:performanceRegressionTests、dashboardMotionTests、dashboardWindowTests、dashboardCountRenderingTests | S:两列统计卡在不同一侧开边，动画结束后比较外缘像素以核对长读数没有挤出卡片。
 SettingsScrollTests.swift[TU4M]: F:验证设置分类切换与重开时真实滚动视图的行为 | R:code:apps/macos/Sources/HubSettings.swift,code:apps/macos/Sources/HubScrollView.swift | A:settingsScrollTests | S:系统状态隔离，等待后台反馈提交后才断言；测试不注册系统登录项。
@@ -176,7 +177,7 @@ render.sh[XU4T]: F:构建离屏原生界面截图工具 | R:code:apps/macos/Tool
 main.swift[XB4T]: F:通过会议控制器处理样本并输出转录和界面图 | R:code:apps/macos/Tools/meeting-check.sh,code:apps/macos/Sources/Meeting.swift | A:会议检查程序入口 | S:-
 
 ===/<repository>/apps/macos/Tools/render/===
-main.swift[XU4M]: F:用示例数据渲染首页、设置、引导及录音条图片 | R:code:apps/macos/Tools/render.sh,code:apps/macos/Sources/HubPages.swift,code:apps/macos/Sources/RecordingBar.swift | A:snapshot、离屏PNG目录 | S:独立默认项域；录音快照用静态波形。
+main.swift[XU4M]: F:用示例数据渲染首页、设置、引导及录音条供视觉核对 | R:code:apps/macos/Tools/render.sh,code:apps/macos/Sources/Onboarding.swift,code:apps/macos/Sources/RecordingBar.swift | A:snapshot、离屏 PNG 目录 | S:在独立默认项域及隔离数据目录生成图片；录音快照用静态波形。
 
 ===/<repository>/apps/macos/scripts/===
 RemoveCITrust.swift[OS4T]: F:删除CI临时证书正向信任效果 | R:code:apps/macos/scripts/remove-ci-trust.sh | A:证书信任清理入口 | S:受限运行环境下不阻塞等待授权界面
@@ -299,7 +300,7 @@ TypeLeast.iss[OV5T]: F:为Windows按用户安装、卸载和可选重启 | R:cod
 ===/<repository>/docs/===
 APP_ICON.md[SU4T]: F:说明 TypeLeast 图标、声波比例和导出流程 | R:code:apps/macos/Sources/AppIconArtwork.swift,code:apps/macos/scripts/make-icon.swift | A:系统与界面图标复现步骤 | S:-
 ASR术语与常用英语词对照.md[SB3T]: F:记录口述中术语与同音英文的判断边界 | R:code:service/lib/prompts/cleanup.md | A:术语语境规则 | S:-
-CODE_SIGNING_POLICY.md[SS5S]: F:说明签名发布职责、安装更新和各模式隐私边界 | R:code:.github/workflows/release.yml,code:apps/macos/Sources/Updater.swift,code:apps/macos/Sources/OnlineASR.swift | A:签名、隐私与系统变更政策 | S:-
+CODE_SIGNING_POLICY.md[SS5S]: F:说明签名发布、安装更新、钥匙串身份和各模式的隐私边界 | R:code:.github/workflows/release.yml,code:apps/macos/Sources/Updater.swift,code:apps/macos/Sources/OnlineASR.swift,code:docs/user-guide.md | A:签名、隐私与系统变更政策 | S:豆包听写边录边传；云端会议经用户配置的私有桶提交录音。Harness EQ 本地扫描与公开 GitHub 导入的数据路径不同。
 HUB_UI.md[SU4S]: F:记载主窗、首页、设置、滚动和动效设计 | R:code:apps/macos/Sources/HubWindow.swift,code:apps/macos/Sources/HubPages.swift | A:macOS主窗设计规范 | S:-
 SCROLLING.md[SU4T]: F:说明Mac原生滚动、被动装饰和阅读位置保留 | R:code:apps/macos/Sources/HubScrollView.swift,code:apps/macos/Sources/MeetingPage.swift | A:滚动交互原则 | S:-
 SELECTION_TRANSLATION.md[SS5T]: F:记录Mac被动划词的触发、超时和外发条件 | R:code:apps/macos/Sources/SelectionTranslator.swift,code:apps/macos/Sources/FieldContext.swift | A:选区确认与翻译提示行为 | S:-
@@ -318,6 +319,8 @@ windows-parity.md[SQ4S]: F:跟踪Windows与Mac的功能对齐及分阶段验收 
 统一听写与需求助手.md[SB5T]: F:定义听写与需求助手入口、任务身份和HTTP交付 | R:code:service/lib/dictation-task.js,code:service/lib/http.js | A:任务HTTP契约 | S:-
 设置与提示词模式-验证记录.md[SQ3T]: F:记录设置和提示词模式验证及交付边界 | R:code:apps/macos/Sources/HubSettings.swift,code:service/lib/tasks/assistant.js | A:设置与提示词行为记录 | S:-
 语音模型与精度.md[SB4T]: F:说明语音模型产地、精度与本地导入范围 | R:code:service/lib/asr-catalog.json,code:service/lib/local-models.js | A:模型来源、导入和后端说明 | S:-
+user-guide.en.md[SU5T]: F:用英文解释安装、首次听写、模型选择、词表、会议和 Harness EQ | R:code:README.en.md,code:docs/user-guide.md,code:docs/CODE_SIGNING_POLICY.md,code:apps/macos/README.md | A:配置和排查流程、隐私、旧版下载及演示存档 | S:豆包会议需要私有桶；清理模型可稍后配置，保留录音时重试副本有短暂寿命。
+user-guide.md[SU5T]: F:说明 macOS 安装、首次听写、模型选择、词表、会议和 Harness EQ | R:code:README.md,code:docs/user-guide.en.md,code:docs/CODE_SIGNING_POLICY.md,code:apps/macos/README.md | A:配置和排查流程、隐私、旧版下载及演示存档 | S:豆包会议需要私有桶；录音上传时机取决于识别服务。保存 Skill 来源时必须核对归档副本才能移走原件。
 
 ===/<repository>/docs/media/===
 film-long.en.vtt[SL2T]: F:为官网长演示片提供英语字幕时间轴 | R:code:site/index.html | A:WebVTT字幕轨 | S:-

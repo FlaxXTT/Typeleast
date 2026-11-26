@@ -214,7 +214,7 @@ for dark in [false, true] {
                  name: "hub-" + page.rawValue, dark: dark)
     }
 }
-snapshot(NSHostingView(rootView: OnboardingView(practice: OnboardingPracticeController(), finish: {}).environmentObject(model)), size: NSSize(width: 600, height: 560),
+snapshot(NSHostingView(rootView: OnboardingView(practice: OnboardingPracticeController(), finish: { _ in }).environmentObject(model)), size: NSSize(width: 940, height: 610),
          name: "onboarding-welcome", dark: false)
 
 // The pill in each look, drawn on a grey backdrop.

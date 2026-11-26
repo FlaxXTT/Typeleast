@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-18T17:19:15Z",
-  "updated_at": "2026-11-26T06:24:08Z",
+  "updated_at": "2026-11-26T11:21:28Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -57,11 +57,17 @@
       "size": 34674,
       "normalized_sha256": "fb981668c18a279e285fc4d83fba1e836cc84dd4daa73c9697d3cfd2d8aca6e0"
     },
+    "README.en.md": {
+      "role": "index",
+      "sha256": "c66961687b1e5fd208d97630c4f3e6ca789a7f554cebf27dd3c56e983a11def2",
+      "size": 4693,
+      "normalized_sha256": "c66961687b1e5fd208d97630c4f3e6ca789a7f554cebf27dd3c56e983a11def2"
+    },
     "README.md": {
       "role": "index",
-      "sha256": "8179917411410cfaabb70ed99afbffa1b1e2c2357d2cbc98c5d19ede5baca09f",
-      "size": 18199,
-      "normalized_sha256": "8179917411410cfaabb70ed99afbffa1b1e2c2357d2cbc98c5d19ede5baca09f"
+      "sha256": "741e2f2c291defb51dd5ebb8b3a1f239d6a67b07c46e679cb266f6634594ebe0",
+      "size": 4351,
+      "normalized_sha256": "741e2f2c291defb51dd5ebb8b3a1f239d6a67b07c46e679cb266f6634594ebe0"
     },
     "THIRD-PARTY-NOTICES.md": {
       "role": "index",
@@ -71,9 +77,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "8d518b520a7d3da6a955c132ff12c7156a3377b157bc06c304659f561cdcfa0a",
-      "size": 101104,
-      "normalized_sha256": "8d518b520a7d3da6a955c132ff12c7156a3377b157bc06c304659f561cdcfa0a"
+      "sha256": "4b2638c403a4a8adb79520bb1628f049110028de50015d6094c3631cf5396514",
+      "size": 102622,
+      "normalized_sha256": "4b2638c403a4a8adb79520bb1628f049110028de50015d6094c3631cf5396514"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -254,9 +260,9 @@
     },
     "apps/macos/Sources/AppDelegate.swift": {
       "role": "index",
-      "sha256": "a9474100976b379453cbad8b3a88a5f86bf072e87c8b246a26004ad3ccf0a8e1",
-      "size": 53793,
-      "normalized_sha256": "a9474100976b379453cbad8b3a88a5f86bf072e87c8b246a26004ad3ccf0a8e1"
+      "sha256": "b12d7f095a5eb41dedba53081ccb2bff3754b6f3b2bedc0563b3faa18ba955b8",
+      "size": 54159,
+      "normalized_sha256": "b12d7f095a5eb41dedba53081ccb2bff3754b6f3b2bedc0563b3faa18ba955b8"
     },
     "apps/macos/Sources/AppIconArtwork.swift": {
       "role": "index",
@@ -440,9 +446,9 @@
     },
     "apps/macos/Sources/L10n.swift": {
       "role": "index",
-      "sha256": "a9484a0aef82b283782345f449299beaef7ce5d2691604e4913ce7edcc2f2e27",
-      "size": 73508,
-      "normalized_sha256": "a9484a0aef82b283782345f449299beaef7ce5d2691604e4913ce7edcc2f2e27"
+      "sha256": "27ff178f3d511d7bc052b22b7566711bbe4970f79417a8423190294364d42098",
+      "size": 74809,
+      "normalized_sha256": "27ff178f3d511d7bc052b22b7566711bbe4970f79417a8423190294364d42098"
     },
     "apps/macos/Sources/LLMSettings.swift": {
       "role": "index",
@@ -518,9 +524,9 @@
     },
     "apps/macos/Sources/Onboarding.swift": {
       "role": "index",
-      "sha256": "ab8d7d3aa94ffa73623bcb353537b32057e2e6f0b7b1aabe74f874f4ab61c87e",
-      "size": 11359,
-      "normalized_sha256": "ab8d7d3aa94ffa73623bcb353537b32057e2e6f0b7b1aabe74f874f4ab61c87e"
+      "sha256": "fe3c18474231cb71d84b2729969aad26ec0a4ed6a7f6a83a9448b4c669592f12",
+      "size": 18909,
+      "normalized_sha256": "fe3c18474231cb71d84b2729969aad26ec0a4ed6a7f6a83a9448b4c669592f12"
     },
     "apps/macos/Sources/OnboardingPractice.swift": {
       "role": "index",
@@ -560,9 +566,9 @@
     },
     "apps/macos/Sources/RecordingHints.swift": {
       "role": "index",
-      "sha256": "1fe364314a3635b0009bc6e16860db514ef06caed8cb99ecb0d8b253e34c1fd7",
-      "size": 14105,
-      "normalized_sha256": "1fe364314a3635b0009bc6e16860db514ef06caed8cb99ecb0d8b253e34c1fd7"
+      "sha256": "f531ce1952e0d5a4c6e2956bb12df1f3f5718001bcb9aed9de5b34406f46a2d3",
+      "size": 14255,
+      "normalized_sha256": "f531ce1952e0d5a4c6e2956bb12df1f3f5718001bcb9aed9de5b34406f46a2d3"
     },
     "apps/macos/Sources/RecordingOverlayHost.swift": {
       "role": "index",
@@ -758,9 +764,9 @@
     },
     "apps/macos/Tests/ContextPreferencesTests.swift": {
       "role": "index",
-      "sha256": "99a8031b0aa9912e35f03182869534caf96580db72314cfa94caf42ac6c91d5a",
-      "size": 7236,
-      "normalized_sha256": "99a8031b0aa9912e35f03182869534caf96580db72314cfa94caf42ac6c91d5a"
+      "sha256": "1571cd392dc3835e49705257fd4ce5fffb20fd9effc1292aa2068c6f0b7c491a",
+      "size": 9248,
+      "normalized_sha256": "1571cd392dc3835e49705257fd4ce5fffb20fd9effc1292aa2068c6f0b7c491a"
     },
     "apps/macos/Tests/MeetingTests.swift": {
       "role": "index",
@@ -908,9 +914,9 @@
     },
     "apps/macos/Tools/render/main.swift": {
       "role": "index",
-      "sha256": "ce9c3d7150ac665787699394de64e8466c2febf82ca18567bd53174db562f378",
-      "size": 18465,
-      "normalized_sha256": "ce9c3d7150ac665787699394de64e8466c2febf82ca18567bd53174db562f378"
+      "sha256": "7fb6d5f52bb271111ce75331a058cf28cf52e7d3b6317f7a9e9aa6f7f744f4d1",
+      "size": 18471,
+      "normalized_sha256": "7fb6d5f52bb271111ce75331a058cf28cf52e7d3b6317f7a9e9aa6f7f744f4d1"
     },
     "apps/macos/TypeLeast.entitlements": {
       "role": "index",
@@ -1611,9 +1617,9 @@
     },
     "docs/CODE_SIGNING_POLICY.md": {
       "role": "index",
-      "sha256": "54d09321121fc97e4ea41ab45e59014d5e7e0b353a4b0931b514535834762ed3",
-      "size": 9811,
-      "normalized_sha256": "54d09321121fc97e4ea41ab45e59014d5e7e0b353a4b0931b514535834762ed3"
+      "sha256": "dd4a38399e880bfe11e00c57b52e872cdab2a9cd88c7c1830c06743f4d4a3b44",
+      "size": 9716,
+      "normalized_sha256": "dd4a38399e880bfe11e00c57b52e872cdab2a9cd88c7c1830c06743f4d4a3b44"
     },
     "docs/HUB_UI.md": {
       "role": "index",
@@ -1842,6 +1848,18 @@
       "role": "index",
       "sha256": "b3ae8daa73b3a1d98a262adc0a24f9685c032381ba1024dc14fd79ca430021f3",
       "size": 188733
+    },
+    "docs/user-guide.en.md": {
+      "role": "index",
+      "sha256": "443dbda8772154827339a8a838598aba40321585c7f6dc8b4c347ca1dee6975e",
+      "size": 6128,
+      "normalized_sha256": "443dbda8772154827339a8a838598aba40321585c7f6dc8b4c347ca1dee6975e"
+    },
+    "docs/user-guide.md": {
+      "role": "index",
+      "sha256": "7c7662e1629dcc20043293931cad7eb690e91c04e29a1ae9f228115a8e7ef1ab",
+      "size": 5600,
+      "normalized_sha256": "7c7662e1629dcc20043293931cad7eb690e91c04e29a1ae9f228115a8e7ef1ab"
     },
     "docs/v1.16.0-验证记录.md": {
       "role": "index",

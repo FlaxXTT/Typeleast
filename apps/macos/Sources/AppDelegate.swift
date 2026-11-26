@@ -1043,7 +1043,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func openSetupSettings() { hub.show(page: .settings) }
 
     func showOnboarding() {
-        onboarding.onFinish = { [weak self] in self?.finishOnboarding() }
+        onboarding.onFinish = { [weak self] exit in
+            guard let self else { return }
+            self.finishOnboarding()
+            if exit == .tryDictation {
+                self.recordingHints.openRecommendation("com.apple.TextEdit", onFailure: {
+                    HubFeedback.shared.show(L10n.text("未能打开文本编辑。你可以在任一空白输入框里试试听写。"))
+                })
+            }
+        }
         onboarding.show()
     }
 
