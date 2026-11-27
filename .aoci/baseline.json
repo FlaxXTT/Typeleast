@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-18T17:19:15Z",
-  "updated_at": "2026-11-27T08:32:18Z",
+  "updated_at": "2026-11-27T08:45:07Z",
   "files": {
     ".gitattributes": {
       "role": "index",
@@ -77,9 +77,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "832cda15530009fa8d030fe0c01616388edf9ff240d1d1b5e65a46ad01f02a5d",
-      "size": 104632,
-      "normalized_sha256": "832cda15530009fa8d030fe0c01616388edf9ff240d1d1b5e65a46ad01f02a5d"
+      "sha256": "04e74f3fd67342387001cb28fe2dea622d47eacbd9e2472c7539be3783d4dc43",
+      "size": 104674,
+      "normalized_sha256": "04e74f3fd67342387001cb28fe2dea622d47eacbd9e2472c7539be3783d4dc43"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -764,9 +764,9 @@
     },
     "apps/macos/Tests/ContextPreferencesTests.swift": {
       "role": "index",
-      "sha256": "1571cd392dc3835e49705257fd4ce5fffb20fd9effc1292aa2068c6f0b7c491a",
-      "size": 9248,
-      "normalized_sha256": "1571cd392dc3835e49705257fd4ce5fffb20fd9effc1292aa2068c6f0b7c491a"
+      "sha256": "f31b836ff0af87d3c28a3325402b2f7b42917957b1651d030e382eec32a8293c",
+      "size": 9422,
+      "normalized_sha256": "f31b836ff0af87d3c28a3325402b2f7b42917957b1651d030e382eec32a8293c"
     },
     "apps/macos/Tests/MeetingTests.swift": {
       "role": "index",

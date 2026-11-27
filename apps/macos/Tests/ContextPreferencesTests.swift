@@ -75,7 +75,12 @@ func contextPreferencesTests() {
     checkEq("onboarding shows the default dictation shortcut", OnboardingDemo.dictation.shortcutLabel(in: settings), "Fn")
     checkEq("onboarding shows the default translation chord", OnboardingDemo.voiceTranslation.shortcutLabel(in: settings), "Fn + Left Shift")
     checkEq("onboarding shows the default Skill chord", OnboardingDemo.skill.shortcutLabel(in: settings), "Fn + Space")
-    func waitForDemo() { RunLoop.current.run(until: Date().addingTimeInterval(0.025)) }
+    func waitForDemo() {
+        let deadline = Date().addingTimeInterval(2)
+        while !demo.complete, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+    }
     demo.enter(.dictation)
     demo.handle(.translation)
     check("an unrelated shortcut cannot start the wrong demo", !demo.busy)
@@ -112,7 +117,7 @@ func contextPreferencesTests() {
     demo.enter(.voiceTranslation)
     demo.playExample()
     demo.enter(nil)
-    waitForDemo()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.025))
     check("leaving the demo discards an in-flight result and clears shortcut interception", demo.mode == nil && !demo.busy && demo.output.isEmpty)
 
     var response = DictateResponse()
