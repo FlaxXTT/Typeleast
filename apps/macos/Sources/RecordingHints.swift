@@ -112,11 +112,17 @@ final class RecordingHints {
         permissionsChanged()
     }
 
-    func openRecommendation(_ bundle: String) {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return }
+    func openRecommendation(_ bundle: String, onFailure: (() -> Void)? = nil) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else {
+            onFailure?()
+            return
+        }
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { [weak self] app, error in
-            guard app != nil, error == nil else { return }
-            DispatchQueue.main.async { self?.scheduleRecommendation(bundle) }
+            let opened = app != nil && error == nil
+            DispatchQueue.main.async {
+                if opened { self?.scheduleRecommendation(bundle) }
+                else { onFailure?() }
+            }
         }
     }
 

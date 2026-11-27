@@ -1,16 +1,27 @@
 const markdownRequest = /(?:用|使用|采用|写成|输出为)\s*markdown\b|\b(?:use|format (?:it |this )?as|write (?:it |this )?in|return (?:it |this )?as)\s+markdown\b/iu;
 const plainRequest = /纯文本|純文字|纯文字|(?:别|不(?:要|用|许)|禁止)[^。！？，,.!\n]{0,16}markdown\b|\b(?:plain text|no markdown|without markdown|don.t use markdown)\b/iu;
 const aiHandoff = /(?:发给|發給|交给|交給|提供给|提供給|贴给|貼給)\s*(?:另一个|另一個|一个|一個|其他|下一个|下一個)\s*(?:AI|大(?:语言|語言)?模型|语言模型|語言模型)|\b(?:send|pass|give|paste|hand (?:it |this )?off)\b[^.!?\n]{0,80}\b(?:to another (?:AI|language model)|to the next (?:AI|language model))\b/iu;
+const namedAgent = String.raw`(?:Claude(?:[ \t]+Code)?|Codex|Cursor(?:[ \t]+Agent)?)(?![\w-])`;
+const namedAgentHandoff = new RegExp(
+  String.raw`(?:^|[。！？.!?；;，,\n])\s*(?:请|請)?(?:帮我|幫我)?\s*(?:` +
+  String.raw`(?:把|将|將)(?:[这這]段(?:[话話]|口述)?|[这這]份文字|我的口述)\s*` +
+  String.raw`(?:整理[后後]|整理好再)?\s*(?:[发發交贴貼][给給])\s*${namedAgent}` +
+  String.raw`|(?:[写寫]成|整理成|改成|生成|[这這]是)\s*(?:一[段份条條]\s*)?(?:给|給|供)\s*${namedAgent}` +
+  String.raw`\s*(?:用\s*)?的\s*(?:提示[词詞]|任[务務][说說]明|指令))` +
+  String.raw`|(?:^|[.!?;,\n])\s*(?:please\s+)?(?:write|draft|prepare|format|turn)\b[^.!?\n]{0,60}\b(?:prompt|task brief|instructions?)\s+for\s+${namedAgent}`,
+  "iu",
+);
 
 export function dictationUsesMarkdown(source) {
-  return !plainRequest.test(source) && (markdownRequest.test(source) || aiHandoff.test(source));
+  return !plainRequest.test(source) && (markdownRequest.test(source) || aiHandoff.test(source) || namedAgentHandoff.test(source));
 }
 
 const plainInstruction = "\n\nReturn paste-ready plain text in the JSON text field. Keep numbered lists and paragraphs. Omit Markdown formatting. Preserve meaningful symbols, including operators.";
 const markdownInstruction = "\n\nThis request explicitly calls for Markdown or an AI handoff. Use Markdown only if it helps the requested structure.";
+const spokenSymbolInstruction = " Keep typed symbols already present in the transcript. When the speaker clearly dictates a symbol to type, render the symbol instead of its name. Use ASCII for #, @ and !. Keep symbol names in ordinary discussion, preserve 或 as a conjunction, and use ∨ or || only when the mathematical or code notation is explicit. Render a clearly dictated numeric superscript with superscript digits unless the speaker requests source notation.";
 
 export function dictationFormatInstruction(markdown) {
-  return markdown ? markdownInstruction : plainInstruction;
+  return (markdown ? markdownInstruction : plainInstruction) + spokenSymbolInstruction;
 }
 
 const fenced = /^[ \t]*(?:\x60{3,}|~{3,})[^\r\n]*\r?\n([\s\S]*?)^[ \t]*(?:\x60{3,}|~{3,})[ \t]*(?=\r?$)/gmu;

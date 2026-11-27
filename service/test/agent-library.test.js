@@ -127,8 +127,10 @@ test("GitHub Skill import previews the repository, pins the commit, and copies o
   assert.match(local, /\/library\/skill-sources\//u);
   assert.equal(await readFile(local, "utf8"), source.replace("license: MIT\n", ""));
   assert.equal(await readFile(join(dirname(local), "references", "notes.md"), "utf8"), "Review notes");
-  assert.equal((await run({ action: "invoke", items: [skill.id] })).text,
-    "First read " + JSON.stringify(local) + ", then read any needed dependencies relative to that file's directory.");
+  const invoked = await run({ action: "invoke", items: [skill.id] });
+  assert.match(invoked.text, /^Skill: Draft review\nPurpose: /u);
+  assert.ok(invoked.text.endsWith("\nSource: " + JSON.stringify(local)));
+  assert.doesNotMatch(invoked.text, /Review notes/u);
   assert.ok(!remote.observed.some(link => link.startsWith("https://raw.") && link.includes("/other/")));
   assert.equal((await run(request)).importedFiles.duplicates, 1);
   await assert.rejects(readFile(file(".codex/skills/review/SKILL.md")), { code: "ENOENT" });
@@ -399,7 +401,7 @@ test("manual Skill organization suggests display names and remembers both review
   assert.ok(reviewed.every(item => !item.suggestedName && item.folderCategory === "analysis"));
   assert.equal((await run({ action: "list", surface: "wheel" })).items[0].name, names[0]);
   assert.equal((await run({ action: "invoke", items: [ids[0]] })).text, "Rewrite a draft in plain language.");
-  assert.match((await run({ action: "invoke", items: [ids[1]] })).text, /First read .+research\/SKILL\.md/u);
+  assert.match((await run({ action: "invoke", items: [ids[1]] })).text, /Source: .+research\/SKILL\.md/u);
   assert.equal(await read(standalone), source);
   assert.equal(await read(bundle), linked);
 });
@@ -408,7 +410,7 @@ test("reference Skills can be classified and invoke their manifest with instruct
   const { file, write, read, run } = await fixture(t);
   const bundle = "helper folder/SKILL.md";
   const body = "BODY_SENTINEL. Read [guide](references/guide.md).";
-  await write(bundle, "---\nname: helper\nallowed-tools: Read\n---\n" + body);
+  await write(bundle, "---\nname: helper\ndescription: Check a draft against a guide\nallowed-tools: Read\n---\n" + body);
   await write("helper folder/references/guide.md", "DEPENDENCY_SENTINEL");
   await write("standalone.md", "Write a concise title.");
   await write("skipped.md", "Skip this.");
@@ -428,13 +430,15 @@ test("reference Skills can be classified and invoke their manifest with instruct
   const reference = items.find(item => item.importMode === "reference");
   assert.equal((await run({ action: "invoke", items: commit.speakIds })).text, "Write a concise title.");
   const invoked = await run({ action: "invoke", items: [reference.id] });
-  assert.equal(invoked.text, "First read " + JSON.stringify(linked.path) +
-    ", then read any needed dependencies relative to that file's directory.");
+  assert.equal(invoked.text, "Skill: helper\nPurpose: Check a draft against a guide\n" +
+    "Usage: Read the source first and follow its workflow for the current task. " +
+    "Open only the dependencies needed, relative to the source file's directory.\n" +
+    "Source: " + JSON.stringify(linked.path));
   assert.equal((await run({ action: "paste", items: [reference.id] })).text, invoked.text);
   const preview = await run({ action: "preview-skills", items: [reference.id, ...commit.speakIds] });
   assert.match(preview.text, /BODY_SENTINEL/u);
   assert.match(preview.text, /Write a concise title\./u);
-  assert.doesNotMatch(preview.text, /First read|DEPENDENCY_SENTINEL/u);
+  assert.doesNotMatch(preview.text, /Purpose:|DEPENDENCY_SENTINEL/u);
   assert.deepEqual(preview.omitted, []);
   assert.doesNotMatch(invoked.text, /BODY_SENTINEL|DEPENDENCY_SENTINEL/u);
   assert.doesNotMatch(await read("library/data.json"), /BODY_SENTINEL|Skip this/u);
@@ -450,7 +454,8 @@ test("reference Skills can be classified and invoke their manifest with instruct
   const classified = (await run({ action: "list" })).items.find(item => item.id === reference.id);
   assert.equal(classified.folderCategory, "research");
   assert.equal(classified.importMode, "reference");
-  assert.equal((await run({ action: "invoke", items: [reference.id] })).text, invoked.text);
+  const afterOrganization = await run({ action: "invoke", items: [reference.id] });
+  assert.equal(afterOrganization.text, invoked.text.replace("Check a draft against a guide", "Look up guidance"));
   await rm(file(bundle));
   assert.equal((await run({ action: "invoke", items: [reference.id] })).error, "skill-source-unavailable");
   assert.deepEqual(await run({ action: "preview-skills", items: [reference.id] }), { text: "", omitted: [reference.name] });
@@ -628,11 +633,13 @@ test("packaged Skill copies drop unused licensing metadata and keep linked resou
   assert.equal(await readFile(join(dirname(stored), "references/guide.md"), "utf8"), "Supporting material.");
   await assert.rejects(readFile(join(dirname(stored), "LICENSE")), { code: "ENOENT" });
   assert.deepEqual(await readFile(path), originalPackage);
-  assert.equal((await run({ action: "invoke", items: [item.id] })).text,
-    "First read " + JSON.stringify(stored) + ", then read any needed dependencies relative to that file's directory.");
+  const invoked = await run({ action: "invoke", items: [item.id] });
+  assert.match(invoked.text, /^Skill: example\nPurpose: See the source for this Skill's purpose\./u);
+  assert.ok(invoked.text.endsWith("\nSource: " + JSON.stringify(stored)));
+  assert.doesNotMatch(invoked.text, /Supporting material|Read \[guide\]/u);
 });
 
-test("hover edits on a linked Skill update its original and the invocation snapshot", async t => {
+test("linked Skills keep the invocation short after hover edits to the original", async t => {
   const { file, write, read, run } = await fixture(t);
   const source = "\uFEFF---\nname: My tool\n---\nRead [guide](references/guide.md).\n";
   await write("helper/SKILL.md", source);
@@ -641,12 +648,19 @@ test("hover edits on a linked Skill update its original and the invocation snaps
   await run({ action: "confirm-import", paths, token: importPreview.token, modes: { [paths[0]]: "full" } });
   const [item] = (await run({ action: "list" })).items;
   const items = [item.id];
+  assert.equal(item.importMode, "linked");
+  const initial = await run({ action: "invoke", items });
+  assert.match(initial.text, /^Skill: My tool\nPurpose: .*\nUsage: /u);
+  assert.ok(initial.text.endsWith("\nSource: " + JSON.stringify(paths[0])));
+  assert.doesNotMatch(initial.text, /Read \[guide\]/u);
   const preview = await run({ action: "skill-preview", items });
   assert.equal(preview.text, source);
   const next = source + "Follow the naming rules.\n";
   assert.ok((await run({ action: "save-skill-edit", items, revision: preview.revision, text: next })).revision);
   assert.equal(await read("helper/SKILL.md"), next);
-  assert.match((await run({ action: "invoke", items })).text, /Follow the naming rules/u);
+  assert.equal((await run({ action: "skill-preview", items })).text, next);
+  assert.deepEqual(await run({ action: "invoke", items }), initial);
+  assert.deepEqual(await run({ action: "paste", items }), { text: initial.text, omitted: [] });
 });
 
 test("confirming a changed preview writes nothing, and changing to reference drops prior bundled text", async t => {
@@ -666,10 +680,13 @@ test("confirming a changed preview writes nothing, and changing to reference dro
   await confirm(current.token, "full");
   const [{ id, importMode }] = (await run({ action: "list" })).items;
   assert.equal(importMode, "linked");
-  assert.ok((await run({ action: "invoke", items: [id] })).text.endsWith(text));
+  assert.match(await read("library/data.json"), /revised outline/u);
+  const linked = await run({ action: "invoke", items: [id] });
+  assert.doesNotMatch(linked.text, /revised outline/u);
   await confirm(current.token, "reference");
   assert.doesNotMatch(await read("library/data.json"), /revised outline/u);
   assert.equal((await run({ action: "list" })).items[0].id, id);
+  assert.deepEqual(await run({ action: "invoke", items: [id] }), linked);
 });
 
 test("manual scan finds and de-duplicates installed Skills, then imports only selected results", async t => {

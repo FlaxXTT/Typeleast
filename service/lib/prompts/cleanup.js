@@ -50,7 +50,8 @@ export function cleanupSystemPrompt(profile = "", override = "") {
   if (custom && custom !== CLEANUP_PROMPT) {
     system += '\n\nUse the input field "raw_asr_transcript" as source text. ' + TERM_FIDELITY
       + ' Nearby text may support an interpretation of the speech. Learned background is a weaker clue. Reorder awkward clauses for clarity while preserving meaning.'
-      + ' ' + DICTATION_QUESTION_FIDELITY
+      + ' Read the whole utterance before organizing it. For complex requests, lead with the final stated goal. Group the stated problem, desired behavior, constraints, and requested deliverables without empty headings or repetition. Put late details with the items they qualify. Drop only explicitly withdrawn material and keep unresolved alternatives.'
+      + ' Keep ordinary prose and single questions in natural paragraphs. Preserve whether the speaker asks for analysis, a choice before acting, or implementation. Preserve uncertainty in place and do not start a clarification dialogue. ' + DICTATION_QUESTION_FIDELITY
       + ' Return a JSON object with a string "text" containing the cleaned transcript. When useful, also include "Terminology correction" and "user intention".';
   }
   return system;

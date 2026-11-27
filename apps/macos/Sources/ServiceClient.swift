@@ -448,6 +448,7 @@ struct DictateResponse: Codable, Equatable {
     /// A suspiciously noisy recording is held for explicit review, never pasted automatically.
     var noiseSuspected: Bool = false
     var noiseCandidate: String?
+    var recognitionLanguage: String?
     var qualityReview: QualityReview?
     var model: String?
     var provider: String?
@@ -464,7 +465,7 @@ struct DictateResponse: Codable, Equatable {
     var betaQuestions: [String] { beta?.sessionId == nil ? [] : (beta?.questions ?? []) }
 
     enum CodingKeys: String, CodingKey {
-        case task, requestId, text, raw, fallback, fallbackReason, offerFailover, switchedProvider, noiseSuspected, noiseCandidate, qualityReview, model, provider, ms, beta, translated, translationProgress, corrections, intention
+        case task, requestId, text, raw, fallback, fallbackReason, offerFailover, switchedProvider, noiseSuspected, noiseCandidate, recognitionLanguage, qualityReview, model, provider, ms, beta, translated, translationProgress, corrections, intention
     }
     init() {}
     init(text: String, raw: String, fallback: Bool) {
@@ -484,6 +485,7 @@ struct DictateResponse: Codable, Equatable {
         switchedProvider = lenient(c, Bool.self, .switchedProvider) ?? false
         noiseSuspected = lenient(c, Bool.self, .noiseSuspected) ?? false
         noiseCandidate = lenient(c, String.self, .noiseCandidate)
+        recognitionLanguage = lenient(c, String.self, .recognitionLanguage)
         qualityReview = lenient(c, QualityReview.self, .qualityReview)
         model = lenient(c, String.self, .model)
         provider = lenient(c, String.self, .provider)
@@ -898,13 +900,14 @@ final class ServiceClient {
                      fieldContext: Data? = nil, llm: LLMRoute? = nil, betaSession: String? = nil,
                      translateTo: String? = nil, variants: String? = nil, profile: String = "", baseline: String? = nil, translatePrompt: String? = nil, hasConfiguredBackups: Bool = false,
                      skipCleanup: Bool = false, shortCleanup: ShortDictationCleanup? = nil,
+                     recognitionOnly: Bool = false, speechModelID: String? = nil, generationTicket: Int? = nil,
                      onProgress: ((TaskProgress) -> Void)? = nil, onCleanupStart: (() -> Void)? = nil) throws -> DictateResponse {
-        let generation = epoch()
+        let generation = generationTicket ?? epoch()
         return try withPortRetry { try dictateOnce(wav: wav, language: language, appBundleId: appBundleId,
                                             strength: strength, fieldContext: fieldContext,
                                             llm: llm, betaSession: betaSession,
                                             translateTo: translateTo, variants: variants, profile: profile, baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups,
-                                            skipCleanup: skipCleanup, shortCleanup: shortCleanup, onProgress: onProgress,
+                                            skipCleanup: skipCleanup, shortCleanup: shortCleanup, recognitionOnly: recognitionOnly, speechModelID: speechModelID, onProgress: onProgress,
                                             onCleanupStart: onCleanupStart, generation: generation) }
     }
 
@@ -984,7 +987,8 @@ final class ServiceClient {
 
     private func dictateOnce(wav: Data, language: String, appBundleId: String, strength: String,
                              fieldContext: Data?, llm: LLMRoute?, betaSession: String?,
-                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, skipCleanup: Bool, shortCleanup: ShortDictationCleanup?, onProgress: ((TaskProgress) -> Void)?, onCleanupStart: (() -> Void)?, generation: Int) throws -> DictateResponse {
+                             translateTo: String?, variants: String?, profile: String, baseline: String?, translatePrompt: String?, hasConfiguredBackups: Bool, skipCleanup: Bool, shortCleanup: ShortDictationCleanup?,
+                             recognitionOnly: Bool, speechModelID: String?, onProgress: ((TaskProgress) -> Void)?, onCleanupStart: (() -> Void)?, generation: Int) throws -> DictateResponse {
         try withTokenRetry { token in
             let requestID = UUID().uuidString
             var headers: [String: String] = [
@@ -1004,14 +1008,16 @@ final class ServiceClient {
             if let betaSession { headers["x-voice-beta-session"] = betaSession }
             if let translateTo { headers["x-voice-translate"] = translateTo }
             if let variants { headers["x-voice-variants"] = variants }
+            if recognitionOnly { headers["x-voice-recognition-only"] = "1" }
+            if let speechModelID, !speechModelID.isEmpty { headers["x-voice-speech-model"] = speechModelID }
             // Prompt Beta makes up to four model calls in one request.
             let timeout = strength == "promptbeta" ? max(dictateTimeout, 300) : dictateTimeout
             let payload = ServiceClient.dictateBody(wav: wav, profile: profileFilter(profile), baseline: baseline, translatePrompt: translatePrompt, hasConfiguredBackups: hasConfiguredBackups, skipCleanup: skipCleanup, shortCleanup: shortCleanup)
             headers["x-voice-meta-bytes"] = String(payload.metaBytes)
             let req = try makeRequest(path: "/api/voice-polish/dictate", method: "POST",
                                       token: token, headers: headers, body: payload.body, timeout: timeout)
-            let timer = watchTaskProgress(requestID: requestID, token: token, generation: generation,
-                                          onProgress: onProgress, onCleanupStart: onCleanupStart)
+            let timer = recognitionOnly ? nil : watchTaskProgress(requestID: requestID, token: token, generation: generation,
+                                                                  onProgress: onProgress, onCleanupStart: onCleanupStart)
             defer { timer?.cancel() }
             let (data, resp) = try performSync(req, timeout: timeout,generation:generation)
             guard resp.statusCode == 200 else { throw httpError(resp, data) }

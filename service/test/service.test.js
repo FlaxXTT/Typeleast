@@ -279,6 +279,42 @@ test("punctuation cleanup preserves the literal code and quotes while dropping g
   assert.equal(result.text, "禁止二级标题。话术要简明。运行 a.,b 和“好，。”");
 });
 
+test("explicit spoken symbols render locally and ordinary mentions remain text", async () => {
+  const model = fakeModel("Unused.");
+  const service = makeService({ model });
+  const cases = [
+    ["井号。", "#"], ["输入一个艾特。", "@"], ["感叹号。", "!"], ["上标二。", "²"], ["逻辑或。", "∨"],
+    ["逻辑或符号。", "∨"], ["双竖线。", "||"], ["脱字符。", "^"], ["井号、艾特、感叹号", "# @ !"],
+    ["开会，感叹号。", "开会!"], ["开会结尾加感叹号。", "开会!"],
+    ["A 逻辑或 B", "A ∨ B"], ["写 x 上标 2", "写 x²"], ["C 上标 -23", "C⁻²³"],
+    ["井号空格 发布说明", "# 发布说明"], ["井号 27", "#27"],
+    ["艾特小王，请看一下。", "@小王，请看一下。"], ["hello 艾特 example.com", "hello@example.com"],
+    ["或", "或"], ["茶或咖啡都可以。", "茶或咖啡都可以。"], ["看一下井号键。", "看一下井号键。"],
+    ["艾特一下小王。", "艾特一下小王。"], ["上标格式用来写指数。", "上标格式用来写指数。"],
+    ["这里有一个标点符号，感叹号。", "这里有一个标点符号，感叹号。"],
+    ["保留“感叹号”二字和 `井号`。", "保留“感叹号”二字和 `井号`。"],
+  ];
+  for (const [rawText, expected] of cases) {
+    const result = await service.polish({ rawText, llm: ROUTE, skipCleanup: true });
+    assert.equal(result.text, expected, rawText);
+    assert.equal(result.raw, rawText);
+  }
+  assert.equal((await service.polish({ rawText: "上标三", llm: ROUTE })).text, "³");
+  assert.equal(model.calls.length, 0);
+});
+
+test("cleanup preserves explicitly dictated symbols even when the model drops them", async () => {
+  const rawText = "井号空格 发布说明\n逻辑或\n逻辑或";
+  const model = fakeModel(JSON.stringify({ text: "发布说明\n∨" }));
+  const service = makeService({ model, recognizer: fakeRecognizer(rawText) });
+  const result = await service.transcribeAndPolish({ audio: wavOfSilence(), llm: ROUTE });
+  assert.equal(result.text, "# 发布说明\n∨\n∨");
+  assert.equal(result.raw, rawText);
+  assert.match(model.calls[0].body.messages[0].content, /clearly dictates a symbol/u);
+  assert.match(model.calls[0].body.messages[1].content, /# 发布说明/u);
+  assert.equal((await service.polish({ rawText: "开会，感叹号。", task: "dictation" })).text, "开会!");
+});
+
 test("ordinary dictation strips generated Markdown from the Harness eq requirements without losing numbering or multiplication", async () => {
   const rawText = "扫描界面的展示与交互，第一，来源标识用图标；第二，列表形式保留长滚动列表；第三，左下角的元素稍大。Harness EQ 导入时删除拖入 Skill、Markdown 和 MCP 配置下方的小字。用 2 * 3 做计算示例。";
   const modelDraft = [
@@ -542,6 +578,7 @@ test("three-tier dictation uses a separate prompt at 25, 26–100, and 101", asy
     assert.match(body.messages[0].content, /fix (?:clear|likely) ASR errors|repair ASR errors supported by context/i);
     assert.match(body.messages[0].content, /local grammar|make their logic clear|logic easy to follow/i);
     assert.equal(body.messages[0].content.includes("test profile"), units > 100);
+    assert.equal(body.messages[0].content.includes("Read the full utterance before choosing a structure"), units > 100);
   }
 });
 
@@ -727,6 +764,30 @@ test("transcribeAndPolish runs local recognition then cleanup and reports both t
   assert.equal(result.fallback, false);
   assert.ok(result.ms.total >= 0);
   assert.equal(typeof result.ms.transcribe, "number");
+});
+
+test("recognition-only requests preserve the transcript, language, and noise review before cleanup", async () => {
+  const calls = [];
+  const recognizer = fakeRecognizer();
+  let noiseSuspected = false;
+  recognizer.transcribe = async (audio, language, signal, modelId) => {
+    calls.push(modelId);
+    return { text: "test transcript", language: "auto", detectedLanguage: "en", noiseSuspected };
+  };
+  const model = fakeModel("unused");
+  const service = makeService({ recognizer, model });
+  const request = { audio: wavOfSilence(), recognitionOnly: true, speechModelId: "fixture-local", llm: ROUTE };
+  const result = await service.transcribeAndPolish(request);
+  assert.equal(result.raw, "test transcript");
+  assert.equal(result.recognitionLanguage, "en");
+  assert.equal(result.ms.polish, 0);
+  noiseSuspected = true;
+  const review = await service.transcribeAndPolish(request);
+  assert.equal(review.raw, "");
+  assert.equal(review.noiseCandidate, "test transcript");
+  assert.equal(review.noiseSuspected, true);
+  assert.deepEqual(calls, ["fixture-local", "fixture-local"]);
+  assert.equal(model.calls.length, 0);
 });
 
 test("a recogniser that is still loading is reported as speech-not-ready", async () => {

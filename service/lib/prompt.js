@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 /** Bump when what the model receives changes meaningfully. */
-export const PROMPT_VERSION = "2026-11-25.1-dictation+assistant+translate";
+export const PROMPT_VERSION = "2026-11-26.1-dictation+assistant+translate";
 
 const previousCleanupHash = "8cf928f110167c30c9ed8d2ccbcf47823ac9335a5fa487a34524825c3a76f85b";
 

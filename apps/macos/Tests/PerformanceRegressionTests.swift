@@ -256,9 +256,20 @@ private func pageTransitionRenderingTests() {
 }
 
 private func homeEntryMaskTests() {
+    let barIndices = AppIconArtwork.barRatios.indices
+    func visibleBars(at time: Double) -> [Int] {
+        barIndices.filter { HomeEntryReveal.bar(at: $0, elapsed: time).opacity > 0 }
+    }
+    checkEq("the waveform starts with only the left bar visible", visibleBars(at: 45), [0])
+    checkEq("the waveform reveals bars in order before reaching the right edge", visibleBars(at: 140), [0, 1, 2])
+    check("each bar grows slightly past its height before settling", HomeEntryReveal.bar(at: 0, elapsed: 165).scale > 1)
+    check("all five bars are settled before the white overlay fades", barIndices.allSatisfy {
+        let pose = HomeEntryReveal.bar(at: $0, elapsed: 417)
+        return pose.scale == 1 && pose.opacity == 1
+    })
     var covered = false
-    func home(_ request: Int?) -> some View {
-        HomeEntryTransition(request: request) { isCovered in
+    func home(_ request: Int?, startupCovered: Bool = false) -> some View {
+        HomeEntryTransition(request: request, startupCovered: startupCovered) { isCovered in
             Text("Home").onChange(of: isCovered, initial: true) { _, value in covered = value }
         }
     }
@@ -293,6 +304,15 @@ private func homeEntryMaskTests() {
     check("returning to Home plays the mask even with the same window presentation", waitFor { covered })
     view.rootView = home(nil)
     check("leaving Home dismisses an in-flight mask", waitFor { !covered })
+
+    view.rootView = home(2, startupCovered: true)
+    let waitingForShell = waitFor { covered }
+    RunLoop.current.run(until: Date().addingTimeInterval(0.7))
+    check("startup holds the Home animation even after the normal reveal duration", waitingForShell && covered)
+    view.rootView = home(2)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+    check("the startup handoff starts a fresh waveform reveal", covered)
+    check("Home becomes available after the startup reveal fades", waitFor { !covered })
 }
 
 private func cancelledTranscriptionToastTests() {

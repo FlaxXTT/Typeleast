@@ -609,9 +609,14 @@ function mcpInvocation(item) {
 function skillInvocation(item) {
   if (isIndependentSpeak(item)) return item.body;
   const path = item.sources.find(source => source.agent === "manual").path;
-  const reference = "First read " + JSON.stringify(path) +
-    ", then read any needed dependencies relative to that file's directory.";
-  return item.importMode === "linked" ? reference + "\n\n" + item.body : reference;
+  const purpose = label(item.wheelPreview?.summary) || label(item.description) || "See the source for this Skill's purpose.";
+  return [
+    "Skill: " + label(skillDisplayName(item)),
+    "Purpose: " + purpose,
+    "Usage: Read the source first and follow its workflow for the current task. " +
+      "Open only the dependencies needed, relative to the source file's directory.",
+    "Source: " + JSON.stringify(path),
+  ].join("\n");
 }
 
 async function canInvoke(item) {

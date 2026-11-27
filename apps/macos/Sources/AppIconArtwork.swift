@@ -91,22 +91,29 @@ enum AppIconArtwork {
             : CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize)
         if surface != .waveformOnly { drawEnclosure(in: context, tile: tile) }
 
-        // The 61.8% scale sets the bar dimensions. The gap is adjusted separately,
-        // with the resulting waveform centred in the tile.
+        for (index, bar) in waveformBars(in: tile).enumerated() {
+            context.setFillColor(waveformColor(at: index))
+            context.addPath(CGPath(roundedRect: bar, cornerWidth: bar.width / 2,
+                                  cornerHeight: bar.width / 2, transform: nil))
+            context.fillPath()
+        }
+    }
+
+    static func waveformBars(in tile: CGRect) -> [CGRect] {
         let waveformWidth = tile.width * waveformOccupancy
         let barWidth = waveformWidth * 112 / 680
         let gap = waveformWidth * 30 / 680 * barGapScale
         let maximumHeight = tile.height * waveformOccupancy
         let totalWidth = CGFloat(barRatios.count) * barWidth + CGFloat(barRatios.count - 1) * gap
-        for (index, ratio) in barRatios.enumerated() {
+        return barRatios.enumerated().map { index, ratio in
             let height = maximumHeight * ratio
-            let bar = CGRect(x: tile.midX - totalWidth / 2 + CGFloat(index) * (barWidth + gap),
-                             y: tile.midY - height / 2, width: barWidth, height: height)
-            context.setFillColor(colour(index == barRatios.count - 1 ? 0x1F5DF2 : waveformInk))
-            context.addPath(CGPath(roundedRect: bar, cornerWidth: barWidth / 2,
-                                  cornerHeight: barWidth / 2, transform: nil))
-            context.fillPath()
+            return CGRect(x: tile.midX - totalWidth / 2 + CGFloat(index) * (barWidth + gap),
+                          y: tile.midY - height / 2, width: barWidth, height: height)
         }
+    }
+
+    static func waveformColor(at index: Int) -> CGColor {
+        colour(index == barRatios.count - 1 ? 0x1F5DF2 : waveformInk)
     }
 
     private static func drawEnclosure(in context: CGContext, tile: CGRect) {

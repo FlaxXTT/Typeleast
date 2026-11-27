@@ -480,7 +480,7 @@ struct HistoryPage: View {
     private func matchesFilter(_ entry: LocalHistoryEntry) -> Bool {
         switch filter {
         case .all: return true
-        case .polished: return !entry.fallback
+        case .polished: return !entry.fallback && entry.recognitionFailure == nil
         case .raw: return entry.fallback
         }
     }
@@ -671,6 +671,11 @@ struct HistoryRow: View {
         entry.strength != "promptbeta" && retryAvailable
     }
 
+    private var retryTitle: String? {
+        if entry.canRetryCleanup { return L10n.text("重试整理") }
+        return canRetry ? L10n.text("用这段录音重试") : nil
+    }
+
     private var mode: VoiceStrength? {
         guard ["prompt", "concise", "promptbeta", "promptbrief", "promptify", "conservative", "maximal"].contains(entry.strength) else { return nil }
         return VoiceStrength.stored(entry.strength)
@@ -688,6 +693,14 @@ struct HistoryRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 if model.retryingHistoryID == entry.id {
                     SkeletonWave(height: 24)
+                } else if let failure = entry.recognitionFailure {
+                    Text(failure.kind.message)
+                        .font(Theme.rowFont).foregroundColor(Theme.warning)
+                    if !compact, let retryTitle {
+                        Button(retryTitle) { model.actions?.retryEntry(id: entry.id) }
+                            .buttonStyle(FlatActionButtonStyle()).foregroundColor(Theme.accent)
+                            .disabled(model.phase != .idle)
+                    }
                 } else if entry.displayText.isEmpty || compact {
                     Text(entry.qualityReview != nil ? L10n.text("待确认")
                          : entry.displayText.isEmpty ? L10n.text("（没有识别到内容）") : entry.displayText)
@@ -746,17 +759,20 @@ struct HistoryRow: View {
                         IconButton(symbol: "pencil.line", help: L10n.text("查看并确认"), symbolSize: 14) {
                             model.actions?.reviewEntry(id: entry.id)
                         }
-                    } else {
+                    } else if entry.recognitionFailure == nil {
                         IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? L10n.text("已复制") : L10n.text("复制"), symbolSize: 14) { copy(raw: false) }
+                    } else {
+                        Color.clear.frame(width: 32, height: 32).accessibilityHidden(true)
                     }
                     if !compact {
-                        if entry.qualityReview == nil {
+                        if entry.qualityReview == nil, entry.recognitionFailure == nil {
                             IconButton(symbol: "text.quote", help: L10n.text("复制原话"), symbolSize: 14) { copy(raw: true) }
                         } else {
                             Color.clear.frame(width: 32, height: 32).accessibilityHidden(true)
                         }
-                        if canRetry {
-                            IconButton(symbol: "arrow.clockwise", help: L10n.text("用这段录音重试"), symbolSize: 14) { model.actions?.retryEntry(id: entry.id) }
+                        if entry.recognitionFailure == nil, let retryTitle {
+                            IconButton(symbol: "arrow.clockwise", help: retryTitle, symbolSize: 14) { model.actions?.retryEntry(id: entry.id) }
+                                .disabled(model.phase != .idle)
                         } else {
                             Color.clear.frame(width: 32, height: 32).accessibilityHidden(true)
                         }
@@ -779,16 +795,19 @@ struct HistoryRow: View {
         .onSubmit { selectOrExpand() }
         .resetCopyFeedback($copyFeedback)
         .contextMenu {
-            Button(L10n.text("复制")) { copy(raw: false) }
-            Button(L10n.text("复制原话")) { copy(raw: true) }
+            if entry.recognitionFailure == nil {
+                Button(L10n.text("复制")) { copy(raw: false) }
+                Button(L10n.text("复制原话")) { copy(raw: true) }
+            }
+            if !compact, let retryTitle {
+                Button(retryTitle) { model.actions?.retryEntry(id: entry.id) }.disabled(model.phase != .idle)
+            }
             if !compact { Button(L10n.text("删除"), role: .destructive) { model.actions?.deleteEntry(id: entry.id) } }
         }
         .task(id: entry.audioPath) {
             retryAvailable = false
-            guard !compact, entry.strength != "promptbeta", let path = entry.audioPath else { return }
-            let available = await Task.detached(priority: .utility) {
-                FileManager.default.fileExists(atPath: path)
-            }.value
+            guard !compact, entry.audioPath != nil else { return }
+            let available = await Task.detached(priority: .utility) { entry.retryAudioURL() != nil }.value
             guard !Task.isCancelled else { return }
             retryAvailable = available
         }
@@ -833,7 +852,9 @@ private struct HistoryDetail: View {
                         Text(Formatters.dayTitle(entry.ts) + " · " + Formatters.time.string(from: entry.ts))
                             .font(InterfaceTypography.localized(11)).foregroundColor(Theme.tertiary)
                     }
-                    if let review = entry.qualityReview {
+                    if let failure = entry.recognitionFailure {
+                        detailText(failure.provider.label, failure.kind.message)
+                    } else if let review = entry.qualityReview {
                         detailText(L10n.text("原始识别"), review.original)
                         detailText(L10n.text("待核对整理结果"), review.candidate)
                     } else {
@@ -848,11 +869,16 @@ private struct HistoryDetail: View {
                 if entry.qualityReview != nil {
                     Button(L10n.text("查看并确认")) { model.actions?.reviewEntry(id: entry.id) }
                         .buttonStyle(PrimaryButtonStyle())
-                } else {
+                } else if entry.recognitionFailure == nil {
                     Button(copyFeedback != nil ? L10n.text("已复制") : L10n.text("复制")) {
                         model.actions?.copyEntry(id: entry.id, raw: false)
                         copyFeedback = UUID()
                     }.buttonStyle(PrimaryButtonStyle())
+                }
+                if entry.canRetryCleanup || (entry.recognitionFailure != nil && entry.retryAudioURL() != nil) {
+                    Button(L10n.text(entry.canRetryCleanup ? "重试整理" : "用这段录音重试")) {
+                        model.actions?.retryEntry(id: entry.id)
+                    }.buttonStyle(SecondaryButtonStyle()).disabled(model.phase != .idle)
                 }
                 Spacer()
                 IconButton(symbol: "trash", help: L10n.text("删除"), role: .destructive) {
