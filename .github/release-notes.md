@@ -3,21 +3,19 @@ TypeLeast：按一下，说话。再按一下，文字写到光标处。
 ## 本次更新 / What is new
 
 <!-- typeleast-update:zh -->
-- Fn + 空格打开 Harness EQ 转盘，调用已导入的 Skill 或 MCP。外圈热区扩大，选中后会提示松开两键调用。
-- 在设置里导入、分类和归档 Skill。手动整理会给出行内名称建议，可以替换或永久拒绝这条建议。
-- 新手引导先演示常用快捷键和输出，最后再提供模型、API Key 和系统权限配置。
-- 新增 Vocabulary 页面，可管理热词和替换规则。Conference 支持配置豆包录音文件识别模型 2.0。
-- 听写整理保留问句和反问语气，更好地处理自我纠正。普通文本输出保留段落和编号。
-- Cadence 悬停显示每日使用情况，首页统计卡边框更轻。
+- 首页开屏采用「声纹」。五柱从左到右依次伸展并轻弹，随后淡出到首页。
+- 长口述自动理清目标、限制和交付事项。普通 Fn 听写整理完成后直接粘贴到光标处。
+- 明确口述的符号可转为 #、@、! 等字符，并保留普通语句中的词义。
+- 听写遇到临时识别错误时，用同一模型和原录音重试一次。仍失败时，可按现有设置在 History 找回录音或已识别的文字。
+- 带依赖的 Skill 调用会附上名称、用途、用法和本机 SKILL.md 路径。
 <!-- /typeleast-update -->
 
 <!-- typeleast-update:en -->
-- Open the Harness EQ wheel with Fn + Space to invoke imported Skills and MCPs. Larger outer hit areas make selection easier, and a hint shows when to release both keys.
-- Import, organize, and archive Skills in Settings. Manual organization suggests names inline so you can accept or permanently decline them.
-- Onboarding demos show common shortcuts and example output before model, API key, and permission setup.
-- Vocabulary manages hotwords and replacements. Conference supports Doubao Recording File Recognition 2.0.
-- Dictation cleanup preserves questions and rhetorical tone, handles spoken corrections, and keeps paragraphs and numbering in plain-text output.
-- Cadence shows daily usage on hover, and the Home statistics cards have lighter outlines.
+- The Home logo reveals its five bars from left to right with a subtle bounce before the overlay fades.
+- Long dictation organizes goals, constraints, and deliverables. The standard Fn shortcut pastes the result at the cursor.
+- Explicitly dictated symbols can appear as #, @, or !, while ordinary references keep their meaning.
+- Temporary recognition failures retry once with the same model and recording. History can preserve the audio or recovered text according to your settings.
+- Linked Skills include their name, purpose, usage, and local SKILL.md path when invoked.
 <!-- /typeleast-update -->
 
 ## 安装 / Installation

@@ -796,7 +796,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
         s.hotkeySummary = model.hotkeyLabel
         let paste = settings.hotkeyPasteLast
         s.pasteLastSummary = paste.enabled ? HotKeyCentre.describe(keyCode: paste.keyCode, modifiers: paste.modifiers) : ""
-        s.hasLast = HistoryStore.shared.last != nil
+        s.hasLast = HistoryStore.shared.lastPasteCandidate?.displayText.isEmpty == false
         menuController.apply(s)
     }
 
@@ -979,18 +979,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuActionTarget, AppA
     func reviewEntry(id: String) { dictation.reviewHistoryEntry(id: id) }
 
     func retryEntry(id: String) {
-        guard let e = HistoryStore.shared.entries.first(where: { $0.id == id }), e.strength != "promptbeta",
-              let path = e.audioPath, FileManager.default.fileExists(atPath: path) else {
-            setHint(L10n.text("录音已删除（保留 5 分钟）"), warning: true)
-            applyState()
-            return
-        }
-        guard phase == .idle else { return }
-        // A retry from the window copies the result rather than pasting into the window.
-        model.retryingHistoryID = id
-        dictation.sendToServer(audioURL: URL(fileURLWithPath: path), appBundleId: e.app ?? "", language: e.language,
-                     strength: e.strength, keepAudioPath: path, seconds: e.seconds, field: nil, insert: false,
-                     translateTo: e.translated)
+        dictation.retryHistoryEntry(id: id)
     }
 
     func deleteEntry(id: String) {

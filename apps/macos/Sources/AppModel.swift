@@ -104,6 +104,7 @@ final class AppModel: ObservableObject {
     @Published var retryingHistoryID: String?
     /// Starts a Home entrance when it becomes visible in the foreground.
     @Published var homePresentationID = 0
+    @Published var homeStartupMaskVisible = false
     @Published var homePresentationSuspended = false
     @Published private(set) var history: [LocalHistoryEntry] = []
     @Published private(set) var historyUnavailable = false

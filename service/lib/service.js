@@ -31,6 +31,7 @@ import { TRANSLATE_LANGUAGES } from "./prompts/translate.js";
 import { applyVariants, parseVariants } from "./variants.js";
 import { runDictation, runShortDictation, shortDictationUnits } from "./tasks/dictation.js";
 import { resolveSelfCorrections } from "./self-correction.js";
+import { keepsSpokenSymbols, renderSpokenSymbols } from "./spoken-symbols.js";
 import { runTranslation } from "./tasks/translation.js";
 import { AssistantSessions } from "./tasks/assistant.js";
 import { buildProfile } from "./tasks/profile.js";
@@ -153,12 +154,16 @@ export class VoicePolishService {
     const started = Date.now();
     const originalText = String(request.rawText ?? "").trim();
     const skipCleanup = taskKind === "dictation" && request.skipCleanup === true;
-    if (!skipCleanup && Array.from(originalText).length > TEXT_LIMIT) return this.recordAndReturn(request,{
-      task:taskKind,raw:originalText,text:tidy(originalText).text,fallback:true,reason:'text-too-long',ms:timing(started,0),
-    });
+    const overLimit = !skipCleanup && Array.from(originalText).length > TEXT_LIMIT;
     const strength = canonicalStrength(request.strength ?? this.strength);
-    const correction = taskKind === "dictation" && !skipCleanup ? resolveSelfCorrections(originalText) : null;
-    const rawText = correction?.text ?? originalText;
+    const correction = taskKind === "dictation" && !skipCleanup && !overLimit ? resolveSelfCorrections(originalText) : null;
+    const corrected = correction?.text ?? originalText;
+    const rendered = taskKind === "dictation" ? renderSpokenSymbols(corrected) : null;
+    const rawText = rendered?.text ?? corrected;
+    if (rendered?.required.length) request.spokenSymbols = rendered;
+    if (overLimit) return this.recordAndReturn(request, {
+      task: taskKind, raw: originalText, text: tidy(rawText).text, fallback: true, reason: "text-too-long", ms: timing(started, 0),
+    });
     const base = {
       task: taskKind,
       raw: originalText,
@@ -175,7 +180,7 @@ export class VoicePolishService {
       if (strength === "promptbeta") return { ...base, text: "", fallback: true, reason: "empty-transcript" };
       return await this.recordAndReturn(request, { ...base, fallback: true, reason: "empty-transcript" });
     }
-    if (skipCleanup) {
+    if (skipCleanup || (request.spokenSymbols && !/[\p{L}\p{Nd}]/u.test(rawText))) {
       return await this.recordAndReturn(request, base);
     }
     const policy = request.shortCleanup;
@@ -317,6 +322,15 @@ export class VoicePolishService {
 
   /** Finish one polish attempt: every exit path of polish() goes through here. */
   async recordAndReturn(request, result) {
+    const symbols = request.spokenSymbols;
+    if (symbols && !result.qualityReview && !keepsSpokenSymbols(result.text, symbols.required)) {
+      // Explicit formatting survives a model that rewrites or drops it.
+      result.text = symbols.text;
+      result.fallback = true;
+      result.reason ??= "spoken-symbols";
+      delete result.corrections;
+      delete result.intention;
+    }
     // The written variant (繁體) is the last step, so the history and the inserted text agree.
     // It is for Chinese only: a translation into another language is never converted.
     const target = Object.hasOwn(TRANSLATE_LANGUAGES, request.translateTo ?? "") ? request.translateTo : null;
@@ -376,7 +390,7 @@ export class VoicePolishService {
         throw error;
       }
       this.setProgress(request.requestId,{stage:"recognizing",completed:0,total:0});
-      const spoken = await this.transcribe(audio, language, request.signal);
+      const spoken = await this.transcribe(audio, language, request.signal, request.speechModelId);
       const reviewReason = spoken.noiseSuspected && spoken.text.trim() ? 'suspected-noise'
         : hasRepetitionLoop(spoken.text) ? 'recognition-repetition' : null;
       if (reviewReason) {
@@ -391,6 +405,14 @@ export class VoicePolishService {
         this.stats.fallback += 1;
         this.stats.lastMs = result.ms.total;
         return result;
+      }
+      if (request.recognitionOnly) {
+        const total = Date.now() - started;
+        this.setProgress(request.requestId, { stage: "complete", completed: 1, total: 1 });
+        this.stats.dictations += 1;
+        this.stats.lastMs = total;
+        return { task: "dictation", text: spoken.text, raw: spoken.text, recognitionLanguage: spoken.language,
+          ms: { transcribe: Math.round(spoken.ms), polish: 0, total } };
       }
       if (request.translateTo && spoken.text) {
         const characters = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(spoken.text)].length;
@@ -458,12 +480,12 @@ export class VoicePolishService {
    * Recognise the audio locally. When the model is not loaded yet this throws
    * speech-not-ready (and loading starts), so the app can say so honestly.
    */
-  async transcribe(audio, language, signal) {
+  async transcribe(audio, language, signal, speechModelId) {
     const started = Date.now();
     const deadline = createDeadline(signal,300000);
     try {
       deadline.signal.throwIfAborted();
-      const spoken = await this.recognizer.transcribe(audio, language, deadline.signal);
+      const spoken = await this.recognizer.transcribe(audio, language, deadline.signal, speechModelId);
       deadline.signal.throwIfAborted();
       // Some recognizers cannot honor an older saved language hint. Use the
       // language actually sent to the recognizer, not the stale request, when

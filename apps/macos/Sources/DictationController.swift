@@ -42,9 +42,20 @@ final class DictationController {
         let unregisterEscape: () -> Void
         let showSettings: () -> Void
         let scheduleHealthRetry: () -> Void
+        var copyRetryResult: (String) -> Void = { Inserter.shared.setString($0) }
     }
     private let host: Host
-    init(host: Host) { self.host = host }
+    private let historyOverride: HistoryStore?
+    private let recognizeOnline: (Data, String, OnlineASRConfiguration) async throws -> String
+
+    init(host: Host, history: HistoryStore? = nil,
+         recognizeOnline: @escaping (Data, String, OnlineASRConfiguration) async throws -> String = OnlineASR.transcribe) {
+        self.host = host
+        historyOverride = history
+        self.recognizeOnline = recognizeOnline
+    }
+
+    private var history: HistoryStore { historyOverride ?? .shared }
     private var settings: Settings { host.settings }
     private var client: ServiceClient { host.client }
     private var model: AppModel { host.model }
@@ -75,7 +86,7 @@ final class DictationController {
     private var captureTake: RecordingBar.Take?
     private var captureRequest: UUID?
     private var heldShortcut = false
-    private var onlineASRTask: Task<Void, Never>?
+    private var dictationTask: Task<Void, Never>?
     private var doubaoCapture: (audio: DoubaoLiveAudio, language: String, result: Task<String, Error>)?
     private var pendingAssistant = false
     /// 提示词模式's draft copied from a browser, whose fields Accessibility cannot read.
@@ -423,8 +434,8 @@ final class DictationController {
             updateIdleBar()
         case .thinking:
             progressID = UUID()
-            onlineASRTask?.cancel()
-            onlineASRTask = nil
+            dictationTask?.cancel()
+            dictationTask = nil
             client.cancelGeneration()
             translationPanel.hide()
             unregisterEscape(); stopTick()
@@ -466,6 +477,31 @@ final class DictationController {
         target == nil && settings.keepAudio24h && settings.historyRetention.seconds != 0
     }
 
+    func retryHistoryEntry(id: String) {
+        guard phase == .idle else { return }
+        guard let entry = history.entries.first(where: { $0.id == id }) else { return }
+        let audio = entry.retryAudioURL()
+        if entry.canRetryCleanup {
+            model.retryingHistoryID = id
+            sendToServer(audioURL: nil, appBundleId: entry.app ?? "", language: entry.language,
+                         strength: entry.strength, keepAudioPath: nil, seconds: entry.seconds, field: nil, insert: false,
+                         retryEntryID: id, recoveringFailure: true, recognizedText: entry.raw)
+            return
+        }
+        guard let audio else {
+            HubFeedback.shared.show(L10n.text("录音已删除（保留 5 分钟）"))
+            return
+        }
+        if let failure = entry.recognitionFailure, failure.provider != settings.onlineASRProvider {
+            HubFeedback.shared.show(L10n.text("请先切回 {0}，再重试这段录音。", failure.provider.label))
+            return
+        }
+        model.retryingHistoryID = id
+        sendToServer(audioURL: audio, appBundleId: entry.app ?? "", language: entry.language,
+                     strength: entry.strength, keepAudioPath: audio.path, seconds: entry.seconds, field: nil, insert: false,
+                     translateTo: entry.translated, retryEntryID: id, recoveringFailure: entry.recognitionFailure != nil)
+    }
+
     static func thinkingActivity(strength: String, translateTo: String?) -> RecordingBarModel.ThinkingActivity {
         if translateTo != nil { return .translation }
         if strength == VoiceStrength.promptbeta.rawValue { return .prompt }
@@ -485,15 +521,16 @@ final class DictationController {
         target == nil && response.translated == nil && response.task != "translation"
     }
 
-    func sendToServer(audioURL: URL, appBundleId: String, language: String, strength: String,
+    func sendToServer(audioURL: URL?, appBundleId: String, language: String, strength: String,
                       keepAudioPath: String?, seconds: Double?, field: FocusedField?,
                       insert: Bool, deleteWhenDone: Bool = false, betaSession: String? = nil,
                       translateTo: String? = nil, baseline: String? = nil, take: RecordingBar.Take? = nil,
-                      liveDoubao: Task<String, Error>? = nil, stoppedAt: TimeInterval? = nil) {
+                      liveDoubao: Task<String, Error>? = nil, stoppedAt: TimeInterval? = nil,
+                      retryEntryID: String? = nil, recoveringFailure: Bool = false, recognizedText: String? = nil) {
         phase = .thinking
         registerEscape()
         let ordinaryDictation = translateTo == nil && strength != VoiceStrength.promptbeta.rawValue
-        let skipCleanup = ordinaryDictation && !settings.dictationCleanupEnabled
+        let skipCleanup = ordinaryDictation && !settings.dictationCleanupEnabled && recognizedText == nil
         let shortCleanup = ordinaryDictation ? settings.shortDictationCleanup : nil
         // The field's text goes to the model's provider only when the user turned that on.
         let context = !skipCleanup && settings.readFieldContext ? field?.context.encoded() : nil
@@ -508,10 +545,12 @@ final class DictationController {
         let canFailOver = llm != nil && settings.hasConfiguredBackupProviders
         let effectiveLanguage = previousBeta?.language ?? language
         let variants = previousBeta == nil ? settings.variantsHeader : previousBeta?.variants
-        let profile = skipCleanup ? "" : HistoryStore.shared.profile
+        let profile = skipCleanup ? "" : history.profile
         let ownPrompt = translateTo == nil ? nil : settings.customTranslatePrompt
         let asrProvider = liveDoubao == nil ? settings.onlineASRProvider : .doubao
         let usesOnlineASR = asrProvider != .local
+        let selectedModel = model.speechCatalog?.activeModelId
+        let speechModelID = usesOnlineASR ? nil : (selectedModel?.isEmpty == false ? selectedModel : model.speech?.modelId)
         let progressID = UUID(); self.progressID = progressID
         let observesCleanup = ordinaryDictation && !skipCleanup && (llm != nil || shortCleanup?.route != nil)
         let onCleanupStart = observesCleanup ? certificationObserver(generation: progressID) : nil
@@ -521,8 +560,8 @@ final class DictationController {
                 self.recordingBar.showThinking(detail: progress.label)
             }
         }
-        let complete: (Result<DictateResponse, Error>) -> Void = { [weak self] outcome in
-            if deleteWhenDone { try? FileManager.default.removeItem(at: audioURL) }
+        let complete: (Result<DictateResponse, Error>, String) -> Void = { [weak self] outcome, recognizedLanguage in
+            if deleteWhenDone, let audioURL { try? FileManager.default.removeItem(at: audioURL) }
             DispatchQueue.main.async {
                 guard let self, self.progressID == progressID else {
                     if let path = keepAudioPath, !path.hasSuffix(".sealed") {
@@ -535,104 +574,133 @@ final class DictationController {
                     let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
                     DiagnosticsLog.write("doubao.live-text-ready", ["ms": String(ms)])
                 }
-                self.onlineASRTask = nil
-                self.withBackupIfNeeded(outcome, generation: progressID, language: effectiveLanguage, strength: strength,
+                self.dictationTask = nil
+                self.withBackupIfNeeded(outcome, generation: progressID, language: recognizedLanguage, strength: strength,
                                         translateTo: translateTo, variants: variants, profile: profile, context: context,
                                         baseline: baseline, appBundleId: appBundleId, translatePrompt: ownPrompt,
-                                        currentRoute: llm, betaSession: betaSession) { resolved, usedRoute in
-                self.finishRequest(resolved, appBundleId: appBundleId, language: effectiveLanguage, strength: strength,
+                                        currentRoute: llm, betaSession: betaSession, preserveTranscriptOnFailure: ordinaryDictation) { resolved, usedRoute in
+                self.finishRequest(resolved, appBundleId: appBundleId, language: recognizedLanguage, strength: strength,
                                    audioPath: keepAudioPath, seconds: seconds, field: field, insert: insert, llm: usedRoute ?? llm, variants: variants,
                                    betaSession: betaSession, betaInfo: previousBeta?.info, translateTo: translateTo, baseline: baseline,
                                    reviewContext: context, reviewProfile: profile, reviewTranslatePrompt: ownPrompt,
-                                   usesOnlineASR: usesOnlineASR, take: take)
+                                   usesOnlineASR: usesOnlineASR, take: take, failedRecognition: ordinaryDictation ? asrProvider : nil,
+                                   speechModelID: speechModelID, retryEntryID: retryEntryID, recoveringFailure: recoveringFailure)
                 }
             }
         }
         let readAudio = {
+            guard let audioURL else { throw CocoaError(.fileNoSuchFile) }
             let data = try HistorySeal.readAudio(audioURL)
             guard data.count <= Wav.maxBytes else { throw ServiceError.transport(L10n.text("录音超过 24 MiB")) }
             return data
         }
         let client = self.client
-        if usesOnlineASR {
-            let workspaceID = settings.funASRWorkspaceID
-            let speechSmoothing = settings.doubaoSpeechSmoothing
-            let hotwords = asrProvider == .doubao ? settings.doubaoHotwords : ""
-            let tables = settings.doubaoVocabularyTables
-            let ticket = client.generationTicket()
-            if !ordinaryDictation { recordingBar.showThinking(detail: L10n.text("正在识别…")) }
-            onlineASRTask = Task.detached(priority: .userInitiated) {
-                do {
-                    let transcribeRecording = {
-                        try Task.checkCancellation()
-                        let apiKey = KeychainStore.read(account: asrProvider.keychainAccount) ?? ""
-                        try Task.checkCancellation()
-                        let configuration = OnlineASRConfiguration(provider: asrProvider, apiKey: apiKey, workspaceID: workspaceID,
-                                                                   doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords,
-                                                                   doubaoTables: tables)
-                        return try await OnlineASR.transcribe(wav: readAudio(), language: effectiveLanguage, configuration: configuration)
-                    }
-                    let spoken: String
-                    if let liveDoubao {
-                        spoken = try await OnlineASR.finishLiveDoubao(live: {
-                            let text = try await withTaskCancellationHandler {
-                                try await liveDoubao.value
-                            } onCancel: {
-                                liveDoubao.cancel()
-                            }
-                            if let stoppedAt {
-                                let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
-                                DiagnosticsLog.write("doubao.live-asr-final", ["ms": String(ms)])
-                            }
-                            return text
-                        }, replay: transcribeRecording, onFailure: { code, retrying in
-                            DiagnosticsLog.write(retrying ? "doubao.live-asr-retry" : "doubao.live-asr-failed", ["code": code])
-                        })
-                    } else {
-                        spoken = try await transcribeRecording()
-                    }
-                    try Task.checkCancellation()
-                    if skipCleanup && variants == nil {
-                        var response = DictateResponse(text: spoken, raw: spoken, fallback: false)
-                        response.task = "dictation"
-                        response.model = asrProvider.label
-                        complete(.success(response))
-                        return
-                    }
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let outcome = Result {
-                            do {
-                                var response = try client.polishSync(text: spoken, language: effectiveLanguage, strength: strength,
-                                    llm: llm, translateTo: translateTo, variants: variants, profile: profile,
-                                    fieldContext: context, betaSession: betaSession, translatePrompt: ownPrompt, baseline: baseline,
-                                    appHint: appBundleId, generationTicket: ticket, hasConfiguredBackups: canFailOver,
-                                    skipCleanup: skipCleanup, shortCleanup: shortCleanup, onCleanupStart: onCleanupStart)
-                                if response.model == nil { response.model = asrProvider.label }
-                                return response
-                            } catch let error as ServiceError
-                                      where error.serviceUnavailable && translateTo == nil && strength != VoiceStrength.promptbeta.rawValue {
-                                var response = DictateResponse(text: spoken, raw: spoken, fallback: !skipCleanup)
-                                response.task = "dictation"
-                                response.model = asrProvider.label
-                                if !skipCleanup { response.fallbackReason = "local-service-unavailable" }
-                                return response
-                            }
-                        }
-                        complete(outcome)
-                    }
-                } catch {
-                    complete(.failure(error))
-                }
-            }
-        } else {
+        let ticket = client.generationTicket()
+        if !usesOnlineASR && !ordinaryDictation {
             DispatchQueue.global(qos: .userInitiated).async {
                 complete(Result {
                     try client.dictateSync(wav: readAudio(), language: effectiveLanguage, appBundleId: appBundleId,
                         strength: strength, fieldContext: context, llm: llm, betaSession: betaSession,
                         translateTo: translateTo, variants: variants, profile: profile, baseline: baseline,
                         translatePrompt: ownPrompt, hasConfiguredBackups: canFailOver, skipCleanup: skipCleanup,
-                        shortCleanup: shortCleanup, onProgress: onProgress, onCleanupStart: onCleanupStart)
-                })
+                        shortCleanup: shortCleanup, generationTicket: ticket,
+                        onProgress: onProgress, onCleanupStart: onCleanupStart)
+                }, effectiveLanguage)
+            }
+            return
+        }
+        let workspaceID = settings.funASRWorkspaceID
+        let speechSmoothing = settings.doubaoSpeechSmoothing
+        let hotwords = asrProvider == .doubao ? settings.doubaoHotwords : ""
+        let tables = settings.doubaoVocabularyTables
+        let recognizeOnline = self.recognizeOnline
+        if !ordinaryDictation { recordingBar.showThinking(detail: L10n.text("正在识别…")) }
+        dictationTask = Task.detached(priority: .userInitiated) {
+            do {
+                try Task.checkCancellation()
+                let wav = liveDoubao == nil && recognizedText == nil ? try readAudio() : nil
+                var cloudConfiguration: OnlineASRConfiguration?
+                let origin = asrProvider.label
+                let rawResponse: (String) -> DictateResponse = { text in
+                    var response = DictateResponse(text: text, raw: text, fallback: false)
+                    response.task = "dictation"
+                    response.model = origin
+                    return response
+                }
+                let transcribeRecording = {
+                    try Task.checkCancellation()
+                    // Use the same bytes for both attempts. For a live stream read the WAV only if replay is needed.
+                    let audio = try wav ?? readAudio()
+                    if usesOnlineASR {
+                        let configuration = cloudConfiguration ?? OnlineASRConfiguration(provider: asrProvider,
+                            apiKey: KeychainStore.read(account: asrProvider.keychainAccount) ?? "", workspaceID: workspaceID,
+                            doubaoSpeechSmoothing: speechSmoothing, doubaoHotwords: hotwords, doubaoTables: tables)
+                        cloudConfiguration = configuration
+                        try Task.checkCancellation()
+                        return try await rawResponse(recognizeOnline(audio, effectiveLanguage, configuration))
+                    }
+                    return try client.dictateSync(wav: audio, language: effectiveLanguage, appBundleId: appBundleId,
+                        strength: strength, recognitionOnly: true, speechModelID: speechModelID, generationTicket: ticket)
+                }
+                let recognize = {
+                    guard let liveDoubao else { return try await transcribeRecording() }
+                    let text = try await withTaskCancellationHandler {
+                        try await liveDoubao.value
+                    } onCancel: { liveDoubao.cancel() }
+                    if let stoppedAt {
+                        let ms = Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000)
+                        DiagnosticsLog.write("doubao.live-asr-final", ["ms": String(ms)])
+                    }
+                    return rawResponse(text)
+                }
+                let recognized: DictateResponse
+                if let recognizedText {
+                    recognized = rawResponse(recognizedText)
+                } else if retryEntryID != nil {
+                    recognized = try await recognize()
+                } else {
+                    recognized = try await OnlineASR.retryRecording(provider: asrProvider, initial: recognize,
+                        replay: transcribeRecording, onFailure: { code, retrying in
+                            let prefix = liveDoubao == nil ? "dictation.asr" : "doubao.live-asr"
+                            DiagnosticsLog.write(prefix + (retrying ? "-retry" : "-failed"), ["code": code])
+                        })
+                }
+                let recognizedLanguage = recognized.recognitionLanguage ?? effectiveLanguage
+                try Task.checkCancellation()
+                if recognized.noiseSuspected || (ordinaryDictation && recognized.raw.isEmpty) {
+                    complete(.success(recognized), recognizedLanguage)
+                    return
+                }
+                let spoken = recognized.raw
+                do {
+                    var response = try client.polishSync(text: spoken, language: recognizedLanguage, strength: strength,
+                        llm: llm, translateTo: translateTo, variants: variants, profile: profile,
+                        fieldContext: context, betaSession: betaSession, translatePrompt: ownPrompt, baseline: baseline,
+                        appHint: appBundleId, generationTicket: ticket, hasConfiguredBackups: canFailOver,
+                        skipCleanup: skipCleanup, shortCleanup: shortCleanup, onCleanupStart: onCleanupStart)
+                    if response.model == nil { response.model = recognized.model ?? origin }
+                    if ordinaryDictation, response.qualityReview == nil, !response.noiseSuspected {
+                        if response.task == nil { response.task = "dictation" }
+                        if response.insertableText.isEmpty, !spoken.isEmpty {
+                            response.fallback = true
+                            response.fallbackReason = "cleanup-unavailable"
+                        }
+                        if response.raw.isEmpty { response.raw = spoken }
+                    }
+                    if let transcribe = recognized.ms?.transcribe {
+                        response.ms = MSBreakdown(transcribe: transcribe, polish: response.ms?.polish,
+                            total: transcribe + (response.ms?.total ?? 0))
+                    }
+                    complete(.success(response), recognizedLanguage)
+                } catch where ordinaryDictation && !spoken.isEmpty {
+                    try Task.checkCancellation()
+                    var fallback = recognized
+                    fallback.fallback = !skipCleanup || variants != nil
+                    if fallback.fallback { fallback.fallbackReason = "cleanup-unavailable" }
+                    complete(.success(fallback), recognizedLanguage)
+                }
+            } catch {
+                complete(.failure(error), effectiveLanguage)
             }
         }
     }
@@ -643,7 +711,7 @@ final class DictationController {
                                     profile: String, context: Data?, baseline: String?, appBundleId: String,
                                     translatePrompt: String?, currentRoute: LLMRoute?, betaSession: String? = nil,
                                     source: String? = nil, originalText: String? = nil, betaSkip: Bool = false,
-                                    showsCapsule: Bool = true,
+                                    showsCapsule: Bool = true, preserveTranscriptOnFailure: Bool = false,
                                     completion: @escaping (Result<DictateResponse, Error>, LLMRoute?) -> Void) {
         guard case .success(let response) = outcome, response.offerFailover else { completion(outcome, nil); return }
         let isAssistant = strength == VoiceStrength.promptbeta.rawValue
@@ -669,6 +737,13 @@ final class DictationController {
             }
             DispatchQueue.main.async {
                 guard self.progressID == generation else { return }
+                if preserveTranscriptOnFailure, !response.raw.isEmpty {
+                    let answer = try? retried.get()
+                    if answer == nil || (answer?.insertableText.isEmpty == true && answer?.qualityReview == nil && answer?.noiseSuspected == false) {
+                        completion(outcome, nil)
+                        return
+                    }
+                }
                 let selected: LLMRoute?
                 if case .success(let answer) = retried, answer.switchedProvider {
                     selected = routes.first { route in
@@ -884,7 +959,9 @@ final class DictationController {
                        llm: LLMRoute? = nil, variants: String? = nil, copyResult: Bool = false,
                        betaSession: String? = nil, betaInfo: BetaInfo? = nil, translateTo: String? = nil, baseline: String? = nil,
                        reviewContext: Data? = nil, reviewProfile: String = "", reviewTranslatePrompt: String? = nil,
-                       usesOnlineASR: Bool = false, take: RecordingBar.Take? = nil, preview: TranslationPreview? = nil) {
+                       usesOnlineASR: Bool = false, take: RecordingBar.Take? = nil, preview: TranslationPreview? = nil,
+                       failedRecognition: OnlineASRProvider? = nil, speechModelID: String? = nil,
+                       retryEntryID: String? = nil, recoveringFailure: Bool = false) {
         let insert = insert && preview == nil
         unregisterEscape()
         captureTake = nil
@@ -893,7 +970,7 @@ final class DictationController {
             guard let self, preview == nil, take == nil, self.progressID == generation, self.phase == .idle else { return }
             self.recordingBar.showResult(text, warning: warning)
         }
-        // A failed request or Beta question does not retain an untracked raw recording.
+        // Retained audio is sealed before a History row owns it.
         defer {
             if let path = audioPath, !path.hasSuffix(".sealed") {
                 try? FileManager.default.removeItem(atPath: path)
@@ -914,7 +991,14 @@ final class DictationController {
             func saveToHistory(_ entry: LocalHistoryEntry) -> String? {
                 guard keepsHistory else { return nil }
                 var entry = entry
-                let history = HistoryStore.shared
+                if recoveringFailure, let retryEntryID {
+                    guard let previous = history.entries.first(where: { $0.id == retryEntryID }) else { return nil }
+                    entry.id = previous.id
+                    entry.ts = previous.ts
+                    entry.audioPath = previous.audioPath
+                    history.update(id: previous.id) { $0 = entry }
+                    return entry.id
+                }
                 entry.audioPath = audioPath.flatMap { Self.retainAudioForHistory($0, canPersist: history.persistenceProblem == nil) }
                 history.add(entry)
                 return entry.id
@@ -1069,7 +1153,7 @@ final class DictationController {
                     deliver()
                 }
             } else {
-                Inserter.shared.setString(text)
+                host.copyRetryResult(text)
                 showRequestResult(text, resp.fallback)
                 setHint(copied ? L10n.text("提示词已复制") : L10n.text("重试完成，结果已复制"))
                 applyState()
@@ -1087,9 +1171,23 @@ final class DictationController {
             }
             DiagnosticsLog.write("dictate.fail", ["error": d?.description ?? error.localizedDescription,
                                                   "ownKey": settings.activeLLMRoute == nil ? "no" : "yes"])
-            if d?.serviceUnavailable == true {
+            let classification = failedRecognition.map { OnlineASR.recognitionFailure(error, provider: $0) }
+            let kind = classification?.kind
+            if d?.serviceUnavailable == true, kind != .configuration {
                 serviceUp = false
                 scheduleHealthRetry()
+            }
+            if let provider = failedRecognition, let classification, classification.kind != .cancelled {
+                DiagnosticsLog.write("dictation.asr.final-failure", ["code": classification.code, "status": provider.rawValue])
+                let retained = saveRecognitionFailure(classification.kind, provider: provider, speechModelID: speechModelID,
+                    audioPath: audioPath, appBundleId: appBundleId, language: language, strength: strength, seconds: seconds,
+                    retryEntryID: retryEntryID)
+                let notice = retained ? L10n.text("听写失败，可在历史中重试") : classification.kind.message
+                if let take { take.failed(notice) }
+                else { showRequestResult(notice, true) }
+                setHint(notice, warning: true)
+                applyState()
+                return
             }
             let notice = usesOnlineASR || serviceUp ? L10n.text("听写失败") : L10n.text("本地服务未就绪")
             if let take { take.failed(notice) }
@@ -1098,6 +1196,32 @@ final class DictationController {
             setHint(L10n.text("听写失败：") + (d?.description ?? error.localizedDescription), warning: true)
             applyState()
         }
+    }
+
+    private func saveRecognitionFailure(_ kind: RecognitionFailure, provider: OnlineASRProvider,
+                                        speechModelID: String?, audioPath: String?, appBundleId: String,
+                                        language: String, strength: String, seconds: Double?, retryEntryID: String?) -> Bool {
+        guard settings.historyRetention.seconds != 0 else { return false }
+        let failure = FailedDictation(kind: kind, provider: provider)
+        if let retryEntryID {
+            guard let previous = history.entries.first(where: { $0.id == retryEntryID }) else { return false }
+            // A failed retry of an older successful entry leaves its text intact.
+            if previous.recognitionFailure != nil {
+                history.update(id: retryEntryID) { $0.recognitionFailure = failure }
+            }
+            return previous.retryAudioURL() != nil
+        }
+        let retained = audioPath.flatMap {
+            Self.retainAudioForHistory($0, canPersist: settings.keepAudio24h && history.persistenceProblem == nil)
+        }
+        var entry = LocalHistoryEntry(id: HistoryStore.newID(), ts: Date(), app: appBundleId,
+                                      language: language, strength: strength, raw: "", text: "", fallback: false,
+                                      fallbackReason: nil, model: speechModelID ?? provider.label, msTotal: nil,
+                                      audioPath: retained, inserted: false, seconds: seconds)
+        entry.task = "dictation"
+        entry.recognitionFailure = failure
+        history.add(entry)
+        return retained != nil
     }
 
     // MARK: insertion
@@ -1161,7 +1285,7 @@ final class DictationController {
 
     /// "Paste last transcript": re-insert the newest entry at the cursor.
     func pasteLast() {
-        guard phase == .idle, let last = HistoryStore.shared.last, !last.displayText.isEmpty else {
+        guard phase == .idle, let last = history.lastPasteCandidate, !last.displayText.isEmpty else {
             NSSound.beep()
             return
         }

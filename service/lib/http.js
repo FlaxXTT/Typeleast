@@ -87,6 +87,7 @@ function classify(error) {
     case "invalid-audio":
     case "audio-too-large":
       return { status: 400, code };
+    case "speech-model-changed":
     case "model-busy":
     case "model-not-installed":
     case "meeting-cancelled":
@@ -356,6 +357,8 @@ export function createHandler(options) {
         }
         const audio = body.subarray(metaBytes);
         const result = await service.transcribeAndPolish({
+          recognitionOnly: req.headers["x-voice-recognition-only"] === "1",
+          speechModelId: typeof req.headers["x-voice-speech-model"] === "string" ? req.headers["x-voice-speech-model"] : undefined,
           skipCleanup: meta.skipCleanup === true,
           shortCleanup: meta.shortCleanup,
           profile: typeof meta.profile === "string" ? meta.profile : "",

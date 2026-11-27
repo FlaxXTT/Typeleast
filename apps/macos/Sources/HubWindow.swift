@@ -100,6 +100,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         mask.autoresizingMask = [.width, .height]
         container.view.addSubview(mask)
         startupMask = mask
+        model.homeStartupMaskVisible = true
 
         let window = NSWindow(contentViewController: container)
         window.title = "TypeLeast"
@@ -149,6 +150,7 @@ final class HubWindowController: NSObject, NSWindowDelegate {
         maskTimeout = nil
         startupMask?.removeFromSuperview()
         startupMask = nil
+        model.homeStartupMaskVisible = false
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -208,7 +210,8 @@ struct HubRootView: View {
     }
 
     var body: some View {
-        HomeEntryTransition(request: homeEntryRequest) { covered in
+        HomeEntryTransition(request: homeEntryRequest,
+                            startupCovered: model.homeStartupMaskVisible && model.page == .home) { covered in
             content(homeCovered: covered)
                 .windowHoverEffects(enabled: !covered && !model.settingsPresented)
         }

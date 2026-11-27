@@ -4,6 +4,11 @@ import Foundation
 // History.swift - local history of dictations, sealed row by row in SQLite (HistoryDatabase), kept for the user's
 // chosen retention (Forever / 1 year / 1 month / 1 week / 24 hours / Never).
 
+struct FailedDictation: Codable, Equatable {
+    let kind: RecognitionFailure
+    let provider: OnlineASRProvider
+}
+
 struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     var id: String
     var ts: Date
@@ -31,6 +36,19 @@ struct LocalHistoryEntry: Codable, Equatable, Identifiable {
     /// An undecided quantity check is sealed with the existing history payload.
     /// It is never returned by displayText or paste-last until the user chooses.
     var qualityReview: QualityReview? = nil
+    var recognitionFailure: FailedDictation? = nil
+
+    var canRetryCleanup: Bool {
+        guard fallback, task == "dictation", qualityReview == nil, !raw.isEmpty, let reason = fallbackReason else { return false }
+        return ["cleanup-unavailable", "local-service-unavailable", "no-api-key", "fact-check-unavailable"].contains(reason)
+            || reason.hasPrefix("model-error:")
+    }
+
+    func retryAudioURL(now: Date = Date()) -> URL? {
+        guard strength != "promptbeta", now.timeIntervalSince(ts) < HistoryStore.audioLifetime,
+              let audioPath, FileManager.default.fileExists(atPath: audioPath) else { return nil }
+        return URL(fileURLWithPath: audioPath)
+    }
 
     var title: String {
         let t = text.isEmpty ? raw : text
@@ -410,6 +428,7 @@ final class HistoryStore {
     }
 
     var last: LocalHistoryEntry? { entries.first }
+    var lastPasteCandidate: LocalHistoryEntry? { entries.first { $0.recognitionFailure == nil } }
 
     func add(_ e: LocalHistoryEntry) {
         entries.insert(e, at: 0)

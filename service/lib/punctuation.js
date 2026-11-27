@@ -26,7 +26,7 @@ function clean(s) {
 }
 export function mapOutsideLiterals(text, transform) {
  const source=String(text??'');let out='',from=0;
- for(const m of source.matchAll(literals)){out+=transform(source.slice(from,m.index))+m[0];from=m.index+m[0].length;}
+ for(const m of source.matchAll(literals)){out+=transform(source.slice(from,m.index),m[0])+m[0];from=m.index+m[0].length;}
  return out+transform(source.slice(from));
 }
 

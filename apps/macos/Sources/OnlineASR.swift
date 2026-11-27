@@ -1,7 +1,22 @@
 import Foundation
 
-enum OnlineASRProvider: String, CaseIterable, Sendable {
+enum OnlineASRProvider: String, CaseIterable, Codable, Sendable {
     case local, doubao, funASR
+}
+
+enum RecognitionFailure: String, Codable {
+    case temporary, configuration, rateLimited, audio, unknown, cancelled
+
+    var message: String {
+        switch self {
+        case .temporary: return L10n.text("语音识别暂时不可用")
+        case .configuration: return L10n.text("请检查语音识别模型或授权")
+        case .rateLimited: return L10n.text("语音识别请求过于频繁")
+        case .audio: return L10n.text("录音格式或长度不受支持")
+        case .unknown: return L10n.text("听写失败")
+        case .cancelled: return L10n.text("已取消")
+        }
+    }
 }
 
 struct DoubaoVocabularyTables: Sendable {
@@ -71,7 +86,7 @@ final class DoubaoLiveAudio: @unchecked Sendable {
 }
 
 enum OnlineASR {
-    private enum Failure: LocalizedError {
+    enum Failure: LocalizedError {
         case missingKey, invalidWorkspace, invalidAudio, invalidResponse, timedOut
         case rejected(String)
 
@@ -132,58 +147,99 @@ enum OnlineASR {
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The finished WAV is still available if a live connection breaks before it returns a transcript.
-    static func finishLiveDoubao(live: () async throws -> String,
-                                 replay: () async throws -> String,
-                                 onFailure: (_ code: String, _ retrying: Bool) -> Void) async throws -> String {
+    /// Retry with the same route once. The caller owns the WAV and supplies the
+    /// replay operation, which can replace a failed live stream.
+    static func retryRecording<T>(provider: OnlineASRProvider, initial: () async throws -> T,
+                                  replay: () async throws -> T,
+                                  onFailure: (_ code: String, _ retrying: Bool) -> Void) async throws -> T {
         try Task.checkCancellation()
         do {
-            return try await live()
+            return try await initial()
         } catch {
             try Task.checkCancellation()
-            let failure = liveFailure(error)
-            onFailure(failure.code, failure.retry)
-            guard failure.retry else { throw error }
+            let failure = recognitionFailure(error, provider: provider)
+            let retrying = failure.kind == .temporary
+            onFailure(failure.code, retrying)
+            guard retrying else { throw error }
             try Task.checkCancellation()
             return try await replay()
         }
     }
 
-    private static func liveFailure(_ error: Error) -> (code: String, retry: Bool) {
+    static func recognitionFailure(_ error: Error, provider: OnlineASRProvider) -> (kind: RecognitionFailure, code: String) {
+        if error is CancellationError { return (.cancelled, "cancelled") }
         if let failure = error as? Failure {
             switch failure {
-            case .timedOut: return ("timeout", true)
-            case .missingKey: return ("missing-key", false)
-            case .invalidWorkspace: return ("invalid-workspace", false)
-            case .invalidAudio: return ("invalid-audio", false)
-            case .invalidResponse: return ("invalid-response", false)
+            case .timedOut: return (.temporary, "timeout")
+            case .missingKey: return (.configuration, "missing-key")
+            case .invalidWorkspace: return (.configuration, "invalid-workspace")
+            case .invalidAudio: return (.audio, "invalid-audio")
+            case .invalidResponse: return (.unknown, "invalid-response")
             case .rejected(let status):
+                if provider == .doubao {
+                    switch status {
+                    case "55000000", "55000001", "55000031", "55001010", "45000081":
+                        return (.temporary, "rejected-" + status)
+                    case "45000002", "45000151": return (.audio, "rejected-" + status)
+                    default: break
+                    }
+                }
+                if provider == .funASR {
+                    switch status {
+                    case "InternalAsrError", "InternalError", "InternalError.Timeout":
+                        return (.temporary, status)
+                    default: break
+                    }
+                }
                 switch status {
-                case "401", "403": return ("authorization", false)
-                case "429": return ("rate-limit", false)
-                case "500", "502", "503", "504": return ("http-" + status, true)
-                default: return (Int(status).map { "rejected-" + String($0) } ?? "rejected", false)
+                case "401", "403": return (.configuration, "authorization")
+                case "429": return (.rateLimited, "rate-limit")
+                case "500", "502", "503", "504": return (.temporary, "http-" + status)
+                default: return (.unknown, Int(status).map { "rejected-" + String($0) } ?? "rejected")
                 }
             }
         }
-        if error is CancellationError { return ("cancelled", false) }
+        if provider == .local, let error = error as? ServiceError {
+            switch error {
+            case .transport("cancelled"): return (.cancelled, "cancelled")
+            case .transport: return (.temporary, "local-transport")
+            case .http(let status, let code, _):
+                switch code {
+                case "speech-not-ready", "model-not-installed", "invalid-model", "speech-model-changed":
+                    return (.configuration, code ?? "model-not-ready")
+                case "model-failed", "model-load-failed", "model-timeout":
+                    return (.temporary, code ?? "model-failed")
+                case "invalid-audio", "audio-too-large", "payload-too-large":
+                    return (.audio, code ?? "invalid-audio")
+                default: break
+                }
+                switch status {
+                case 401, 403: return (.configuration, "authorization")
+                case 429: return (.rateLimited, "rate-limit")
+                case 502, 503, 504: return (.temporary, "http-" + String(status))
+                default: return (.unknown, "http-" + String(status))
+                }
+            default: return (.unknown, "local-error")
+            }
+        }
         if let code = (error as? URLError)?.code {
             switch code {
-            case .timedOut: return ("timeout", true)
+            case .timedOut: return (.temporary, "timeout")
             case .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .dnsLookupFailed, .notConnectedToInternet:
-                return ("connection", true)
-            case .cancelled: return ("cancelled", false)
-            default: return ("url" + String(code.rawValue), false)
+                return (.temporary, "connection")
+            case .userAuthenticationRequired: return (.configuration, "authorization")
+            case .cancelled: return (.cancelled, "cancelled")
+            default: return (.unknown, "url" + String(code.rawValue))
             }
         }
         if let code = (error as? POSIXError)?.code {
             switch code {
-            case .ETIMEDOUT: return ("timeout", true)
-            case .ECONNRESET, .ECONNABORTED, .ENOTCONN, .EPIPE: return ("connection", true)
-            default: return ("posix-" + String(code.rawValue), false)
+            case .ETIMEDOUT: return (.temporary, "timeout")
+            case .ECONNRESET, .ECONNABORTED, .ENOTCONN, .EPIPE: return (.temporary, "connection")
+            default: return (.unknown, "posix-" + String(code.rawValue))
             }
         }
-        return ("other", false)
+        return (.unknown, "other")
     }
 
     private static func recognize(wav: Data, language: String, configuration: OnlineASRConfiguration,
@@ -549,7 +605,7 @@ enum OnlineASR {
         guard event.header.taskID.caseInsensitiveCompare(id) == .orderedSame else { throw Failure.invalidResponse }
         if event.header.event == "task-failed" {
             let code = event.header.errorCode ?? "ASR_ERROR"
-            let safeCode = code.range(of: #"^[A-Za-z0-9_-]{1,48}$"#, options: .regularExpression) != nil
+            let safeCode = code.range(of: #"^[A-Za-z0-9_.-]{1,48}$"#, options: .regularExpression) != nil
             throw Failure.rejected(safeCode ? code : "ASR_ERROR")
         }
         return event

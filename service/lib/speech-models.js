@@ -140,10 +140,11 @@ export class SpeechModels {
     if (this.mlxOnly && model.engine !== 'mlx' && model.id !== MEETING_MODEL_ID) throw fail('invalid-model', 'this Mac requires an MLX speech model');
     return model;
   }
-  transcribe(audio, language, signal) { return this.enqueue(() => {
+  transcribe(audio, language, signal, expectedModelId) { return this.enqueue(() => {
     if (this.closed) throw fail('speech-not-ready', 'speech service is closed');
     if (!this.localEnabled) throw fail('speech-not-ready', 'local speech recognition is disabled');
     if (!this.activeId) throw fail('speech-not-ready', 'select a speech model first');
+    if (expectedModelId && this.activeId !== expectedModelId) throw fail('speech-model-changed', 'the selected speech model changed');
     return this.current.transcribe(audio, language, signal);
   }); }
   /** The engine for meetings, kept apart from the dictation model and its queue. */

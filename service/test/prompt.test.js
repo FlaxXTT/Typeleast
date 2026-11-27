@@ -5,6 +5,7 @@ import { CLEANUP_PROMPT, briefCleanupSystemPrompt, cleanupSystemPrompt, minimalC
 import { directTranslatePrompt, TRANSLATE_PROMPT, translateBatches, translateUserMessage } from "../lib/prompts/translate.js";
 import { buildUserMessage, HARNESS_ADDENDUM_MARKER, PROMPT_SOURCES, PROMPT_VERSION, systemPromptFor } from "../lib/prompt.js";
 import { PROFILE_PROMPT, profileMessage, readProfile } from "../lib/prompts/profile.js";
+import { dictationUsesMarkdown } from "../lib/dictation-format.js";
 
 test("the dictation prompt is the maintainer's cleanup.md, verbatim", () => {
   assert.deepEqual(PROMPT_SOURCES, ["typeleast"]);
@@ -34,6 +35,37 @@ test("custom dictation prompts also retain the question and rhetorical tone rule
     assert.match(prompt, /keep direct and rhetorical questions as questions/iu);
     assert.match(prompt, /keep statements of uncertainty as statements/iu);
   }
+});
+
+test("only full cleanup asks for a complete task outline, including with a customized prompt", () => {
+  for (const prompt of [cleanupSystemPrompt(), cleanupSystemPrompt("", "Keep my wording concise.")]) {
+    assert.match(prompt, /read the full utterance|read the whole utterance/iu);
+    assert.match(prompt, /problem.*desired behavior.*constraints.*deliverables/iu);
+    assert.match(prompt, /(?:omit|without) empty (?:headings|sections)/iu);
+    assert.match(prompt, /keep ordinary prose and single questions in natural paragraphs/iu);
+    assert.match(prompt, /analy[sz]e|analysis/iu);
+    assert.match(prompt, /before acting|wait for a choice/iu);
+  }
+  for (const prompt of [minimalCleanupSystemPrompt(), briefCleanupSystemPrompt()]) {
+    assert.doesNotMatch(prompt, /desired behavior.*deliverables/iu);
+  }
+});
+
+test("named Agent handoffs allow Markdown only when the dictated draft is explicitly for the Agent", () => {
+  for (const input of [
+    "请把这段话整理后发给 Claude Code。",
+    "请整理成给 Codex 的提示词。",
+    "这是给 Cursor Agent 的任务说明。",
+    "Draft a prompt for Codex.",
+  ]) assert.equal(dictationUsesMarkdown(input), true, input);
+  for (const input of [
+    "我想使用 Claude Code 构建软件。",
+    "Cursor 和 Codex 的输入框都能粘贴吗？",
+    "我昨天把这段话发给 Codex。",
+    "他说「把这段发给 Codex」，我还没发。",
+    "把这段发给 Codex，但使用纯文本。",
+    "这是给 ClaudeCloud 的指令。",
+  ]) assert.equal(dictationUsesMarkdown(input), false, input);
 });
 
 test("only the cursor context rides in the addendum", () => {

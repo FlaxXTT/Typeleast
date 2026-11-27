@@ -355,8 +355,23 @@ let server = try StubServer { req in
     }
     if req.path == "/api/voice-polish/models" { return .json(modelCatalogJSON) }
     if req.path.hasPrefix("/api/voice-polish/models/") { return .json("{\"ok\":true,\"phase\":\"accepted\"}", status: 202) }
-    if req.path == "/api/voice-polish/polish" { return .json(dictateJSON) }
+    if req.path == "/api/voice-polish/polish" {
+        if state.mode == "recovery-cleanup-fails" {
+            return .json(#"{"error":"fixture cleanup unavailable","code":"fixture"}"#, status: 503)
+        }
+        if let request = (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any],
+           request["skipCleanup"] as? Bool == true, let text = request["text"] as? String,
+           let response = try? JSONSerialization.data(withJSONObject: ["task": "dictation", "raw": text, "text": text]) {
+            return .json(String(decoding: response, as: UTF8.self))
+        }
+        return .json(dictateJSON)
+    }
     if req.path.hasPrefix("/api/voice-polish/dictate") {
+        if state.mode == "recovery-cleanup-fails" {
+            guard req.header("x-voice-recognition-only") == "1",
+                  req.header("x-voice-speech-model") == "fixture-local" else { return .json("{}", status: 400) }
+            return .json(#"{"task":"dictation","text":"Original local transcript.","raw":"Original local transcript.","recognitionLanguage":"en"}"#)
+        }
         if state.mode == "slow-generation" { Thread.sleep(forTimeInterval:1) }
         if state.mode == "dictateError" {
             return .json("{\"error\":\"speech not ready\",\"code\":\"speech_not_ready\"}", status: 503)
@@ -1177,7 +1192,7 @@ do {
             var attempts = 0
             let outcome: Result<String, Error>
             do {
-                let text = try await OnlineASR.finishLiveDoubao(live: {
+                let text = try await OnlineASR.retryRecording(provider: .doubao, initial: {
                     if let error { throw error }
                     return "live transcript"
                 }, replay: {
@@ -1195,7 +1210,7 @@ do {
         }
         var attempts = 0
         do {
-            _ = try await OnlineASR.finishLiveDoubao(live: { throw URLError(.networkConnectionLost) }, replay: {
+            _ = try await OnlineASR.retryRecording(provider: .doubao, initial: { throw URLError(.networkConnectionLost) }, replay: {
                 attempts += 1
                 throw URLError(.timedOut)
             }, onFailure: { _, _ in })
@@ -2302,6 +2317,141 @@ do {
     if let copied { try FileManager.default.removeItem(atPath: copied) }
     checkEq("deleting the new entry's audio leaves the prior recording intact", try? Data(contentsOf: original), bytes)
 } catch { check("review retry audio is isolated", false, String(describing: error)) }
+
+// Exercise the same controller that receives a stopped recording and handles History's retry button.
+do {
+    let suite = "typeleast.tests.dictation-recovery"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    removeTestHistoryDB(suite)
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let savedKeys = KeychainStore.stub
+    KeychainStore.stub = [:]
+    HistorySeal.reset()
+    defer {
+        defaults.removePersistentDomain(forName: suite)
+        removeTestHistoryDB(suite)
+        try? FileManager.default.removeItem(at: folder)
+        KeychainStore.stub = savedKeys
+        HistorySeal.reset()
+    }
+    let settings = Settings(defaults: defaults, promptDirectory: folder)
+    settings.onlineASRProvider = .doubao
+    settings.dictationCleanupEnabled = false
+    settings.keepAudio24h = true
+    let history = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
+    let model = AppModel(loadCacheImmediately: false)
+    let recorder = Recorder()
+    let bar = RecordingBar()
+    defer {
+        bar.hide()
+        let deadline = Date().addingTimeInterval(2)
+        while bar.isVisible, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+    }
+    let beta = BetaController(host: .init(show: { _, _, _ in }, hide: {}, busy: { _ in }, cancel: { _ in }))
+    let recorded = Wav.wrap(pcm: Data(repeating: 10, count: Recorder.bytesPerSecond * 48))
+    let audio = folder.appendingPathComponent("dsh-voice-test.wav")
+    try recorded.write(to: audio)
+    var copies: [String] = []
+    let lock = NSLock()
+    var replays: [OnlineASRProvider] = []
+    var replayedExactAudio = true
+    let fakeCloud: (Data, String, OnlineASRConfiguration) async throws -> String = { wav, _, config in
+        let attempt = lock.withLock {
+            replays.append(config.provider)
+            replayedExactAudio = replayedExactAudio && wav == recorded
+            return replays.count
+        }
+        if attempt <= 2 { throw OnlineASR.Failure.rejected("55000000") }
+        return "Recovered from the original recording."
+    }
+    let dictation = DictationController(host: .init(settings: settings, client: client, model: model,
+        beta: beta, recorder: recorder, recordingBar: bar, idleBar: IdleBar(),
+        applyState: {}, updateIdleBar: {}, setHint: { _, _ in }, hint: { nil },
+        registerEscape: {}, unregisterEscape: {}, showSettings: {}, scheduleHealthRetry: {},
+        copyRetryResult: { copies.append($0) }), history: history, recognizeOnline: fakeCloud)
+    func settled() -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while dictation.phase != .idle, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.015))
+        }
+        return dictation.phase == .idle
+    }
+    let serviceFailure = Task<String, Error> { throw OnlineASR.Failure.rejected("55000000") }
+    dictation.sendToServer(audioURL: audio, appBundleId: "fixture.editor", language: "auto",
+                           strength: "prompt", keepAudioPath: audio.path, seconds: 48, field: nil,
+                           insert: false, liveDoubao: serviceFailure)
+    check("a failed Doubao recording completes", settled())
+    checkEq("Doubao's 55000000 automatically replays once", lock.withLock { replays }, [.doubao])
+    let failedEntry = try { () throws -> LocalHistoryEntry in
+        guard let entry = history.last, entry.recognitionFailure != nil else { throw CocoaError(.fileReadNoSuchFile) }
+        return entry
+    }()
+    checkEq("the failed row identifies the temporary error", failedEntry.recognitionFailure?.kind, .temporary)
+    checkEq("a failed row does not become Paste Last", history.lastPasteCandidate, nil)
+    let retryFile = failedEntry.retryAudioURL()
+    check("failed audio is encrypted and the plaintext is erased",
+          retryFile?.pathExtension == "sealed" && !FileManager.default.fileExists(atPath: audio.path))
+    checkEq("History can recover the original WAV bytes", retryFile.flatMap { try? HistorySeal.readAudio($0) }, recorded)
+    let reopened = HistoryStore(defaults: defaults, databaseURL: testHistoryDB(suite))
+    checkEq("the encrypted database preserves the failed row and retry target", reopened.last, failedEntry)
+    checkEq("expired recordings cannot start another retry", failedEntry.retryAudioURL(now: failedEntry.ts.addingTimeInterval(300)), nil)
+    settings.onlineASRProvider = .funASR
+    dictation.retryHistoryEntry(id: failedEntry.id)
+    checkEq("changing providers does not re-send saved audio to a different service", lock.withLock { replays.count }, 1)
+    settings.onlineASRProvider = .doubao
+    dictation.retryHistoryEntry(id: failedEntry.id)
+    check("a failed manual retry completes", settled())
+    checkEq("one manual click makes one attempt", lock.withLock { replays.count }, 2)
+    checkEq("a failed manual retry does not extend the timestamp", history.last?.ts, failedEntry.ts)
+    dictation.retryHistoryEntry(id: failedEntry.id)
+    check("the next manual retry completes", settled())
+    checkEq("all attempts use the same recording and service", lock.withLock { replayedExactAudio && replays == [.doubao, .doubao, .doubao] }, true)
+    checkEq("the recovered transcript replaces the failure in the same History row", history.last?.id, failedEntry.id)
+    checkEq("a recovered row is no longer marked failed", history.last?.recognitionFailure, nil)
+    checkEq("the successful manual retry returns the recovered transcript", copies.last, "Recovered from the original recording.")
+    checkEq("retrying never creates duplicate entries", history.entries.count, 1)
+
+    try recorded.write(to: audio)
+    settings.keepAudio24h = false
+    dictation.sendToServer(audioURL: audio, appBundleId: "fixture.editor", language: "auto",
+                           strength: "prompt", keepAudioPath: nil, seconds: 48, field: nil,
+                           insert: false, deleteWhenDone: true,
+                           liveDoubao: Task { throw OnlineASR.Failure.rejected("794001") })
+    check("an unknown error also completes", settled())
+    checkEq("unknown errors respect the disabled recording setting",
+            history.last?.recognitionFailure?.kind, .unknown)
+    checkEq("no retry file is kept when disabled", history.last?.retryAudioURL(), nil)
+    check("the unknown provider error does not auto-replay", lock.withLock { replays.count == 3 })
+
+    settings.onlineASRProvider = .local
+    settings.dictationCleanupEnabled = true
+    state.mode = "recovery-cleanup-fails"
+    defer { state.mode = "health" }
+    model.health = try JSONDecoder().decode(HealthResponse.self, from:
+        Data(#"{"ok":true,"speech":{"providerId":"fixture","ready":true,"phase":"ready","modelId":"fixture-local"}}"#.utf8))
+    try recorded.write(to: audio)
+    dictation.sendToServer(audioURL: audio, appBundleId: "fixture.editor", language: "auto",
+                           strength: "prompt", keepAudioPath: nil, seconds: 48, field: nil,
+                           insert: false, deleteWhenDone: true)
+    check("local recognition followed by a cleanup error completes", settled())
+    checkEq("the local raw transcript survives an unavailable cleanup", history.last?.displayText, "Original local transcript.")
+    checkEq("the recognized language is carried to History", history.last?.language, "en")
+    check("a saved local transcript can retry cleanup without audio", history.last?.canRetryCleanup == true)
+    if let id = history.last?.id {
+        state.mode = "health"
+        let before = state.requestCount
+        dictation.retryHistoryEntry(id: id)
+        check("cleanup can be retried from the saved transcript", settled())
+        checkEq("retrying cleanup updates the existing row", history.last?.id, id)
+        checkEq("retrying cleanup requests only the polish endpoint", state.lastRequest?.path, "/api/voice-polish/polish")
+        checkEq("retrying cleanup sends a single request", state.requestCount - before, 1)
+        checkEq("cleanup retry produces the resulting text", history.last?.displayText, "Polish done.")
+    }
+} catch { check("dictation recovery simulation", false, String(describing: error)) }
 
 // The real local HTTP request preserves each reviewed task and its original context.
 do {

@@ -241,10 +241,16 @@ test("翻译和语言变体：/dictate 读请求头，/polish 读请求体，结
   assert.equal(dictated.status, 200);
   assert.equal(seen[0].translateTo, "en");
   assert.equal(seen[0].variants, "zh=tw,en=gb");
+  assert.equal(seen[0].recognitionOnly, false);
   const polished = await post("/polish", Buffer.from(JSON.stringify({ text: "你好", translateTo: "en", variants: { zh: "hk" } })));
   assert.equal(JSON.parse(polished.body).translated, "en");
   assert.equal(seen[1].translateTo, "en");
   assert.deepEqual(seen[1].variants, { zh: "hk" });
+  await post("/dictate", Buffer.alloc(64), {
+    "x-voice-recognition-only": "1", "x-voice-speech-model": "fixture-local",
+  });
+  assert.equal(seen[2].recognitionOnly, true);
+  assert.equal(seen[2].speechModelId, "fixture-local");
 });
 
 test("身份校验：带启动密钥时 /health 用 HMAC 回答挑战；没有密钥或挑战格式不对时不回答", async () => {
