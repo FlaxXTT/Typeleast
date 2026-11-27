@@ -1,5 +1,9 @@
 <h1 align="center">TypeLeast</h1>
 
+<p align="center">
+  <a href="https://github.com/FlaxXTT/Typeleast/releases/latest"><img src="apps/macos/Resources/BrandIcon.png" width="100" height="100" alt="TypeLeast 软件图标，点击打开下载页"></a>
+</p>
+
 <p align="center">按一下 Fn，说完再按一下。整理好的文字直接写到光标处。</p>
 
 <p align="center">
@@ -21,9 +25,11 @@
 
 ### 41 秒看完
 
-<a href="docs/media/readme/typeleast-overview.mp4"><img src="docs/media/readme/typeleast-overview.jpg" width="400" alt="点击观看 TypeLeast 产品短片，封面是一只在敲键盘的黑猫"></a>
+<p align="center">
+  <a href="docs/media/readme/typeleast-overview.mp4"><img src="docs/media/readme/typeleast-overview.gif" width="840" alt="TypeLeast 41 秒静音循环演示，点击打开带配音的完整版"></a>
+</p>
 
-[观看或下载 MP4（中文配音）](docs/media/readme/typeleast-overview.mp4)
+[观看有声版 MP4](docs/media/readme/typeleast-overview.mp4)
 
 | 按键 | 你可以做什么 |
 | --- | --- |

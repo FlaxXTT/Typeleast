@@ -1,5 +1,9 @@
 <h1 align="center">TypeLeast</h1>
 
+<p align="center">
+  <a href="https://github.com/FlaxXTT/Typeleast/releases/latest"><img src="apps/macos/Resources/BrandIcon.png" width="100" height="100" alt="TypeLeast app icon, linking to the download page"></a>
+</p>
+
 <p align="center">Press Fn, speak, then press again. A clean draft appears at the cursor.</p>
 
 <p align="center">
@@ -21,9 +25,11 @@
 
 ### See it in 41 seconds
 
-<a href="docs/media/readme/typeleast-overview.mp4"><img src="docs/media/readme/typeleast-overview.jpg" width="400" alt="Watch the TypeLeast demo. The cover shows a black cat typing on a keyboard."></a>
+<p align="center">
+  <a href="docs/media/readme/typeleast-overview.mp4"><img src="docs/media/readme/typeleast-overview.gif" width="840" alt="A 41-second silent loop of TypeLeast. Click to open the narrated video."></a>
+</p>
 
-[Watch or download the MP4 (Mandarin narration)](docs/media/readme/typeleast-overview.mp4)
+[Watch the MP4 with Mandarin narration](docs/media/readme/typeleast-overview.mp4)
 
 | Shortcut | What it does |
 | --- | --- |
