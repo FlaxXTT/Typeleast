@@ -6,10 +6,10 @@
 AGENTS.md[SC4S]: F:约定Codex通过AOCI读取和维护项目认知 | R:- | A:AGENTS.md托管区块 | S:-
 CHANGELOG.md[SV4L]: F:按版本记录 TypeLeast 的功能、修复和分发变更 | R:code:.github/release-notes.md | A:2.1.27 版本记录、版本标题和日期 | S:-
 LICENSE[SS4M]: F:保存项目的GPL第三版许可原文 | R:code:THIRD-PARTY-NOTICES.md | A:GNU GPL v3 | S:-
-README.md[SG5T]: F:用中文介绍 macOS 听写、三种快捷键、首次试用及 Harness EQ | R:code:README.en.md,code:docs/user-guide.md,code:docs/CODE_SIGNING_POLICY.md,code:service/lib/agent-library.js | A:下载、使用指南、Skill 归档提示词、项目链接和问题报告贡献者 | S:归档副本独立可调用后才由用户授权移除指定原件。
+README.md[SG5T]: F:以高清首页、录音条动图、短片和快捷键介绍 macOS 听写、翻译与工具调用 | R:code:README.en.md,code:docs/user-guide.md,code:docs/CODE_SIGNING_POLICY.md,code:service/lib/agent-library.js | A:官网、B站、下载、使用指南、Skill归档提示词与报告入口 | S:归档副本独立可调用并获授权后，才将指定原件移至废纸篓。
 THIRD-PARTY-NOTICES.md[SS4T]: F:汇总随包交付组件、Agent 配置解析依赖和按需下载模型的第三方声明 | R:code:LICENSE,code:service/package.json | A:随包资源与下载依赖 | S:-
 wrangler.jsonc[OV4T]: F:为Cloudflare部署声明静态资源输出 | R:code:site/build.sh | A:Workers静态站配置 | S:-
-README.en.md[SU5T]: F:用英文介绍 macOS 听写、三种快捷键和首次使用 | R:code:README.md,code:docs/user-guide.en.md,code:docs/CODE_SIGNING_POLICY.md | A:下载、使用指南、Skill 归档提示词和问题报告入口 | S:只有校验归档副本可以独立调用并获得授权后，才移走指定原件。
+README.en.md[SU5T]: F:以英文配合高清首页、录音条动图和短片介绍 macOS 听写、翻译及 Harness EQ | R:code:README.md,code:docs/user-guide.en.md,code:docs/CODE_SIGNING_POLICY.md | A:官网、B站、下载、使用指南和折叠的 Skill 归档提示词 | S:验证归档副本可独立调用并获授权后，才移走指定原件。
 
 ===/<repository>/.github/===
 release-notes-windows.md[SV3T]: F:提供历史Windows安装包与变更的发布文字 | R:code:apps/windows/package.ps1 | A:分架构安装说明 | S:-

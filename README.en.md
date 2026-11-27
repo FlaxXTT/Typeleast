@@ -1,36 +1,41 @@
-# TypeLeast
+<h1 align="center">TypeLeast</h1>
 
-**Press Fn, speak, then press again. Your words appear at the cursor.**
+<p align="center">Press Fn, speak, then press again. A clean draft appears at the cursor.</p>
 
-TypeLeast is an open-source dictation app for macOS. Write messages and drafts by voice, translate what you say, or insert a Skill into the app you’re using.
+<p align="center">
+  <a href="https://github.com/FlaxXTT/Typeleast/releases/latest"><strong>Download for macOS</strong></a> ·
+  <a href="https://typeleast.promptking.workers.dev/">Website</a> ·
+  <a href="https://www.bilibili.com/video/BV1eQnH6zESN/">Bilibili</a> ·
+  <a href="README.md">简体中文</a>
+</p>
 
-[Download the latest release](https://github.com/FlaxXTT/Typeleast/releases/latest) · [User guide](docs/user-guide.en.md) · [简体中文](README.md)
+<p align="center">
+  <img src="docs/media/readme/typeleast-home.png" width="840" alt="TypeLeast home screen on macOS, showing dictation stats, the activity calendar, shortcuts, and selected models">
+</p>
 
-**Apple silicon · macOS 14 or later**
+<p align="center"><sub>Open source · Apple silicon · macOS 14 or later</sub></p>
 
-![Silent demo with synthesized Mandarin. TypeLeast inserts the corrected meeting time into a text editor after dictation.](docs/media/demo.gif)
+<p align="center">
+  <img src="docs/media/readme/recording-capsule.gif" width="360" alt="The TypeLeast recording capsule responds to speech and pauses">
+</p>
 
-## Three shortcuts
+### See it in 41 seconds
 
-| Default shortcut | What you do | Where the result goes |
-| --- | --- | --- |
-| **Fn** | Press to start dictation, then press again when you finish | At the cursor |
-| **Fn + Left Shift** | With no selection, press to start and stop speaking. With text selected, press once | Spoken translations go at the cursor. Selected-text translations open in a separate panel |
-| **Fn + Space** | Hold both keys to open Harness EQ, hover over an imported item, then release both | The Skill text or invocation instructions go at the cursor |
+<a href="docs/media/readme/typeleast-overview.mp4"><img src="docs/media/readme/typeleast-overview.jpg" width="400" alt="Watch the TypeLeast demo. The cover shows a black cat typing on a keyboard."></a>
 
-You can change the dictation and translation shortcuts in their respective Settings pages.
+[Watch or download the MP4 (Mandarin narration)](docs/media/readme/typeleast-overview.mp4)
 
-## Your first dictation
+| Shortcut | What it does |
+| --- | --- |
+| **Fn** | Dictate and insert the cleaned-up text at the cursor. |
+| **Fn + Left Shift** | Translate selected text, or speak Chinese and insert English. |
+| **Fn + Space** | Hold to open Harness EQ, choose a Skill or MCP entry, then release to insert it. |
 
-1. Download the Apple silicon DMG from the release page and drag TypeLeast into Applications.
-2. Open TypeLeast. Try the built-in examples for dictation, translation, and Skills. On the final page, download a local speech model or enter a key for a cloud speech provider.
-3. Allow Microphone and Accessibility access. In a blank TextEdit document, press **Fn**, say a sentence, and press it again to see the text appear. You can also open TextEdit from **Try dictation** on Home.
+Use a local speech model or bring your own API key. If you enable cloud recognition, cleanup, or translation, the relevant content goes to the provider you choose. [Setup guide](docs/user-guide.en.md) · [Data and privacy](docs/user-guide.en.md#privacy-and-local-data)
 
-Speech recognition is enough for basic dictation. To use AI cleanup or translation, configure a text model under **Settings → Models**. [Setup and troubleshooting](docs/user-guide.en.md)
+### Harness EQ · Archive a Skill
 
-## Invoke and archive Skills with Harness EQ
-
-Import Skills and MCP entries under **Settings → Harness EQ**. Standalone Skills insert their full text. Skills with dependencies insert directions for reading the entry file and its supporting files. MCP entries give the target agent instructions for using the tools it has available.
+Import Skills and MCP entries under **Settings → Harness EQ**. Pick one from the wheel when you need it.
 
 <details>
 <summary>Copy the Skill archival prompt for your agent</summary>
@@ -48,15 +53,8 @@ Report which Skill you archived, what you verified, and whether you moved the or
 
 </details>
 
-## Where your data goes
+---
 
-With local recognition, audio stays on your Mac. With cloud recognition, audio goes to the provider you choose. Cloud cleanup and translation send the applicable text to your configured model. macOS Keychain stores API keys. [Data flow and retention](docs/user-guide.en.md#privacy-and-local-data)
+[Changelog](CHANGELOG.md) · [Legacy downloads](docs/user-guide.en.md#legacy-downloads) · [Build from source](apps/macos/README.md#build-test-package) · [Code signing](docs/CODE_SIGNING_POLICY.md) · [Report an issue](https://github.com/FlaxXTT/Typeleast/issues/new) · [GPL-3.0 license](LICENSE)
 
-## Project links
-
-[Changelog](CHANGELOG.md) · [Legacy downloads](docs/user-guide.en.md#legacy-downloads) · [Build from source](apps/macos/README.md#build-test-package) · [Code signing](docs/CODE_SIGNING_POLICY.md) · [Report an issue](https://github.com/FlaxXTT/Typeleast/issues/new) · [MIT license](LICENSE)
-
-### Issue reporters
-
-- Thanks to [pioneerAlone](https://github.com/pioneerAlone) for the MLX shutdown reproduction steps and logs, and for reporting a cold-start issue. [#107](https://github.com/FlaxXTT/Typeleast/issues/107)
-- Thanks to [tomcatcoffee](https://github.com/tomcatcoffee) for the recording-window crash trace. [#179](https://github.com/FlaxXTT/Typeleast/issues/179)
+Thanks to [pioneerAlone](https://github.com/pioneerAlone) ([#107](https://github.com/FlaxXTT/Typeleast/issues/107)) and [tomcatcoffee](https://github.com/tomcatcoffee) ([#179](https://github.com/FlaxXTT/Typeleast/issues/179)) for their issue reports.

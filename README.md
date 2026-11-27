@@ -1,36 +1,41 @@
-# TypeLeast
+<h1 align="center">TypeLeast</h1>
 
-**按一下 Fn，说完再按一下。文字写到光标处。**
+<p align="center">按一下 Fn，说完再按一下。整理好的文字直接写到光标处。</p>
 
-TypeLeast 是一款开源的 macOS 听写工具。用声音写消息、写文档，也可以在输入框里直接写译文或调用 Skill。
+<p align="center">
+  <a href="https://github.com/FlaxXTT/Typeleast/releases/latest"><strong>下载 macOS 版</strong></a> ·
+  <a href="https://typeleast.promptking.workers.dev/">官网</a> ·
+  <a href="https://www.bilibili.com/video/BV1eQnH6zESN/">B 站视频</a> ·
+  <a href="README.en.md">English</a>
+</p>
 
-[下载最新版](https://github.com/FlaxXTT/Typeleast/releases/latest) · [使用指南](docs/user-guide.md) · [English](README.en.md)
+<p align="center">
+  <img src="docs/media/readme/typeleast-home.png" width="840" alt="TypeLeast 的 macOS 首页，展示听写统计、使用热力图、快捷键和当前模型">
+</p>
 
-**Apple 芯片 Mac · macOS 14 或更新版本**
+<p align="center"><sub>开源 · Apple 芯片 Mac · macOS 14 或更新版本</sub></p>
 
-![静音演示。TypeLeast 听写一段合成语音，将改口后的会议时间写进文本编辑框。](docs/media/demo.gif)
+<p align="center">
+  <img src="docs/media/readme/recording-capsule.gif" width="360" alt="TypeLeast 录音条，波形随说话的轻重和停顿起伏">
+</p>
 
-## 三个快捷键
+### 41 秒看完
 
-| 默认按键 | 操作 | 结果 |
-| --- | --- | --- |
-| **Fn** | 按一下开始听写，说完再按一下 | 文字写到光标处 |
-| **Fn + 左 Shift** | 无选区时按一下开始说话，再按一下结束。有选区时按一次 | 语音译文写到光标处。选词译文在独立面板显示 |
-| **Fn + 空格** | 按住打开 Harness EQ，把鼠标移到已导入的项目，再松开两键 | Skill 正文或调用提示写到光标处 |
+<a href="docs/media/readme/typeleast-overview.mp4"><img src="docs/media/readme/typeleast-overview.jpg" width="400" alt="点击观看 TypeLeast 产品短片，封面是一只在敲键盘的黑猫"></a>
 
-听写与翻译快捷键可在对应的设置页调整。
+[观看或下载 MP4（中文配音）](docs/media/readme/typeleast-overview.mp4)
 
-## 第一次听写
+| 按键 | 你可以做什么 |
+| --- | --- |
+| **Fn** | 说一段话，把整理好的文字写到光标处。 |
+| **Fn + 左 Shift** | 选中文字直接翻译，也可以说中文、贴出英文。 |
+| **Fn + 空格** | 按住打开 Harness EQ，选好 Skill 或 MCP，再松手写入。 |
 
-1. 在发布页下载 Apple 芯片版 DMG，把 TypeLeast 拖进「应用程序」。
-2. 打开 TypeLeast。先用引导里的固定样例了解听写、翻译和 Skill 调用，最后选择语音识别方式。可以下载本地模型，也可以填入云端语音识别服务的 API Key。
-3. 允许麦克风和辅助功能。在「文本编辑」里新建空白文稿，按默认听写键 **Fn** 说一句，再按一次，看看文字是否写入。也可从首页的「试试听写」打开文本编辑。
+语音识别可用本地模型，也可接自己的 API。启用云端识别、整理或翻译时，相应内容会发送给你选的服务商。[安装与配置](docs/user-guide.md) · [数据与隐私](docs/user-guide.md#隐私与本机数据)
 
-基本听写只需配置语音识别。需要 AI 整理或翻译时，再在「设置 → 模型」配置整理模型。[配置与排查](docs/user-guide.md)
+### Harness EQ · Skill 归档
 
-## 用 Harness EQ 调用和归档 Skill
-
-在「设置 → Harness EQ」导入 Skill 或 MCP。调用时，独立 Skill 会写入正文。有依赖的 Skill 会写入如何读取入口和依赖的提示。MCP 会写入调用提示，由目标 Agent 按其可用能力使用。
+在 **设置 → Harness EQ** 导入 Skill 或 MCP，想用时再从转盘里选。
 
 <details>
 <summary>复制给 Agent 的 Skill 归档提示词</summary>
@@ -48,15 +53,8 @@ TypeLeast 是一款开源的 macOS 听写工具。用声音写消息、写文档
 
 </details>
 
-## 数据去哪里
+---
 
-本地识别的音频留在 Mac 上。选用云端识别时，音频会发给你选择的服务商。开启联网整理或翻译后，相应文字会发给已配置的模型服务。API Key 保存在 macOS 钥匙串。[数据流与保留设置](docs/user-guide.md#隐私与本机数据)
+[版本历史](CHANGELOG.md) · [旧版下载](docs/user-guide.md#旧版下载) · [从源码构建](apps/macos/README.md#build-test-package) · [签名说明](docs/CODE_SIGNING_POLICY.md) · [报告问题](https://github.com/FlaxXTT/Typeleast/issues/new) · [GPL-3.0 许可](LICENSE)
 
-## 项目链接
-
-[版本历史](CHANGELOG.md) · [旧版下载](docs/user-guide.md#旧版下载) · [从源码构建](apps/macos/README.md#build-test-package) · [签名说明](docs/CODE_SIGNING_POLICY.md) · [报告问题](https://github.com/FlaxXTT/Typeleast/issues/new) · [MIT 许可](LICENSE)
-
-### 问题报告贡献者
-
-- 感谢 [pioneerAlone](https://github.com/pioneerAlone) 提供 MLX 退出问题的复现步骤及日志，并报告冷启动问题。[#107](https://github.com/FlaxXTT/Typeleast/issues/107)
-- 感谢 [tomcatcoffee](https://github.com/tomcatcoffee) 提供开始录音时浮窗闪退的崩溃堆栈。[#179](https://github.com/FlaxXTT/Typeleast/issues/179)
+感谢问题报告贡献者 [pioneerAlone](https://github.com/pioneerAlone)（[#107](https://github.com/FlaxXTT/Typeleast/issues/107)）和 [tomcatcoffee](https://github.com/tomcatcoffee)（[#179](https://github.com/FlaxXTT/Typeleast/issues/179)）。
